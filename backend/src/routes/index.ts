@@ -1,0 +1,60 @@
+import { Router } from 'express';
+import authRoutes from './auth.js';
+import guardRoutes from './guards.js';
+import clientRoutes from './clients.js';
+import trackingRoutes from './tracking.js';
+import incidentRoutes from './incidents.js';
+import incidentReportRoutes from './incidentReports.js';
+import shiftRoutes from './shifts.js';
+import shiftReportRoutes from './shiftReports.js';
+import settingsRoutes from './settingsRoutes.js';
+import siteRoutes from './sites.js';
+
+const router = Router();
+
+// Health check
+router.get('/health', (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      status: 'ok',
+      time: new Date().toISOString(),
+      environment: process.env.NODE_ENV || 'development',
+    },
+  });
+});
+
+// API routes
+router.use('/auth', authRoutes);
+router.use('/guards', guardRoutes);
+router.use('/clients', clientRoutes);
+router.use('/tracking', trackingRoutes);
+router.use('/incidents', incidentRoutes);
+router.use('/incident-reports', incidentReportRoutes);
+router.use('/shifts', shiftRoutes);
+router.use('/shift-reports', shiftReportRoutes);
+router.use('/settings', settingsRoutes);
+router.use('/sites', siteRoutes);
+
+// Legacy routes for backward compatibility with in-memory server
+router.get('/locations', (req, res) => {
+  res.json({ success: true, data: [] });
+});
+
+router.get('/messages', (req, res) => {
+  res.json({ success: true, data: [] });
+});
+
+router.post('/messages', (req, res) => {
+  res.json({ success: true, data: { id: 'msg-1', ...req.body } });
+});
+
+router.get('/notifications', (req, res) => {
+  res.json({ success: true, data: [] });
+});
+
+router.put('/notifications/:id/read', (req, res) => {
+  res.json({ success: true, data: null });
+});
+
+export default router;

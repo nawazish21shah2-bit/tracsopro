@@ -1,0 +1,267 @@
+import React from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+  StyleSheet,
+} from 'react-native';
+import { useSelector, useDispatch } from 'react-redux';
+import { RootState, AppDispatch } from '../../store';
+import { logoutUser } from '../../store/slices/authSlice';
+import { User, CheckCircle, Briefcase, MapPin, Calendar, Bell, HelpCircle, LogOut, ChevronRight } from 'react-native-feather';
+import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
+
+interface MenuOption {
+  id: string;
+  title: string;
+  icon: React.ReactNode;
+  onPress: () => void;
+}
+
+const ProfileScreen: React.FC = () => {
+  const dispatch = useDispatch<AppDispatch>();
+  const { user } = useSelector((state: RootState) => state.auth);
+
+  const handlePastJobs = () => {
+    Alert.alert('Past Jobs', 'View your completed assignments');
+  };
+
+  const handleAssignedSites = () => {
+    Alert.alert('Assigned Sites', 'View your assigned locations');
+  };
+
+  const handleAttendanceRecord = () => {
+    Alert.alert('Attendance Record', 'View your check-in/check-out history');
+  };
+
+  const handleNotificationSettings = () => {
+    Alert.alert('Notification Settings', 'Manage your notification preferences');
+  };
+
+  const handleContactSupport = () => {
+    Alert.alert('Contact Support', 'Get help from our support team');
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Logout', 
+          style: 'destructive',
+          onPress: () => dispatch(logoutUser())
+        },
+      ]
+    );
+  };
+
+  const menuOptions: MenuOption[] = [
+    {
+      id: '1',
+      title: 'Past Jobs',
+      icon: <CheckCircle width={20} height={20} color="#666666" />,
+      onPress: handlePastJobs,
+    },
+    {
+      id: '2',
+      title: 'Assigned Sites',
+      icon: <MapPin width={20} height={20} color="#666666" />,
+      onPress: handleAssignedSites,
+    },
+    {
+      id: '3',
+      title: 'Attendance Record',
+      icon: <Calendar width={20} height={20} color="#666666" />,
+      onPress: handleAttendanceRecord,
+    },
+    {
+      id: '4',
+      title: 'Notification Settings',
+      icon: <Bell width={20} height={20} color="#666666" />,
+      onPress: handleNotificationSettings,
+    },
+    {
+      id: '5',
+      title: 'Contact Support',
+      icon: <HelpCircle width={20} height={20} color="#666666" />,
+      onPress: handleContactSupport,
+    },
+  ];
+
+  return (
+    <SafeAreaWrapper>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Profile</Text>
+      </View>
+
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Profile Header */}
+        <View style={styles.profileCard}>
+          <View style={styles.profileHeader}>
+            <View style={styles.profileAvatar}>
+              <User width={24} height={24} color="#333333" />
+            </View>
+            <View style={styles.profileInfo}>
+              <Text style={styles.profileName}>
+                {user ? `${user.firstName} ${user.lastName}` : 'Mark Husdon'}
+              </Text>
+              <View style={styles.verifiedRow}>
+                <Text style={styles.verifiedText}>Verified</Text>
+                <View style={styles.verifiedBadge}>
+                  <CheckCircle width={14} height={14} color="#4CAF50" />
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Menu Options */}
+        <View style={styles.menuSection}>
+          {menuOptions.map((option, index) => (
+            <TouchableOpacity
+              key={option.id}
+              style={[
+                styles.menuItem,
+                index === menuOptions.length - 1 && styles.lastMenuItem
+              ]}
+              onPress={option.onPress}
+            >
+              <View style={styles.menuItemLeft}>
+                <View style={styles.menuItemIcon}>{option.icon}</View>
+                <Text style={styles.menuItemTitle}>{option.title}</Text>
+              </View>
+              <ChevronRight width={18} height={18} color="#9AA0A6" />
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Logout Button */}
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <LogOut width={18} height={18} color="#D32F2F" />
+          <Text style={styles.logoutText}> Logout</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </SafeAreaWrapper>
+  );
+};
+
+const styles = StyleSheet.create({
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333333',
+  },
+  content: {
+    flex: 1,
+    backgroundColor: '#F8F9FA',
+    padding: 16,
+  },
+  profileCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 16,
+  },
+  profileHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  profileAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#F0F0F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  profileInfo: {
+    flex: 1,
+  },
+  profileName: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#333333',
+    marginBottom: 4,
+  },
+  verifiedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  verifiedText: {
+    fontSize: 14,
+    color: '#666666',
+    marginRight: 8,
+  },
+  verifiedBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#4CAF50',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuSection: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EFEFEF',
+  },
+  lastMenuItem: {
+    borderBottomWidth: 0,
+  },
+  menuItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  menuItemIcon: {
+    width: 32,
+    alignItems: 'center',
+  },
+  menuItemTitle: {
+    fontSize: 16,
+    color: '#333333',
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  logoutButton: {
+    marginTop: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFEBEE',
+    borderRadius: 12,
+    paddingVertical: 14,
+  },
+  logoutText: {
+    color: '#D32F2F',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+});
+
+export default ProfileScreen;

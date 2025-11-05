@@ -1,0 +1,206 @@
+import React, { useState } from 'react';
+import { View, StatusBar, Alert, ScrollView } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import Button from '../../components/common/Button';
+import AuthHeader from '../../components/auth/AuthHeader';
+import AuthInput from '../../components/auth/AuthInput';
+import PhoneInput from '../../components/auth/PhoneInput';
+import AuthFooter from '../../components/auth/AuthFooter';
+import { AuthStackParamList } from '../../types';
+import { authStyles } from '../../styles/authStyles';
+
+type GuardSignupScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'GuardSignup'>;
+
+interface FormData {
+  fullName: string;
+  email: string;
+  phoneNumber: string;
+  password: string;
+  confirmPassword: string;
+}
+
+interface FormErrors {
+  fullName?: string;
+  email?: string;
+  phoneNumber?: string;
+  password?: string;
+  confirmPassword?: string;
+}
+
+const GuardSignupScreen: React.FC = () => {
+  const navigation = useNavigation<GuardSignupScreenNavigationProp>();
+  
+  const [formData, setFormData] = useState<FormData>({
+    fullName: '',
+    email: '',
+    phoneNumber: '',
+    password: '',
+    confirmPassword: '',
+  });
+  const [errors, setErrors] = useState<FormErrors>({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const validateForm = (): boolean => {
+    const newErrors: FormErrors = {};
+
+    if (!formData.fullName.trim()) {
+      newErrors.fullName = 'Full name is required';
+    }
+
+    if (!formData.email.trim()) {
+      newErrors.email = 'Email is required';
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      newErrors.email = 'Please enter a valid email';
+    }
+
+    if (!formData.phoneNumber.trim()) {
+      newErrors.phoneNumber = 'Phone number is required';
+    } else if (!/^\d{10}$/.test(formData.phoneNumber.replace(/\D/g, ''))) {
+      newErrors.phoneNumber = 'Please enter a valid phone number';
+    }
+
+    if (!formData.password) {
+      newErrors.password = 'Password is required';
+    } else if (formData.password.length < 8) {
+      newErrors.password = 'Password must be at least 8 characters';
+    }
+
+    if (!formData.confirmPassword) {
+      newErrors.confirmPassword = 'Please confirm your password';
+    } else if (formData.password !== formData.confirmPassword) {
+      newErrors.confirmPassword = 'Passwords do not match';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSignup = async () => {
+    if (!validateForm()) return;
+
+    setIsLoading(true);
+    try {
+      // Format phone number with country code
+      const fullPhoneNumber = `+1 ${formData.phoneNumber}`;
+      
+      // Split full name into first and last name
+      const nameParts = formData.fullName.trim().split(' ');
+      const firstName = nameParts[0];
+      const lastName = nameParts.slice(1).join(' ') || firstName;
+
+      // TODO: Call registration API
+      const registrationData = {
+        firstName,
+        lastName,
+        email: formData.email.toLowerCase().trim(),
+        phone: fullPhoneNumber,
+        password: formData.password,
+        role: 'GUARD',
+      };
+
+      console.log('Guard Registration Data:', registrationData);
+      await new Promise<void>(resolve => setTimeout(resolve, 1500));
+
+      navigation.navigate('GuardOTP', { 
+        email: formData.email,
+        isPasswordReset: false 
+      });
+    } catch (error) {
+      Alert.alert('Error', 'Failed to create account. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const updateField = (field: keyof FormData, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: '' }));
+    }
+  };
+
+  const navigateToLogin = () => navigation.navigate('Login');
+
+  return (
+    <View style={authStyles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      
+      <ScrollView 
+        contentContainerStyle={authStyles.scrollContainer}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <AuthHeader title="SIGN UP" />
+
+        <View style={authStyles.form}>
+          <AuthInput
+            icon="person-outline"
+            placeholder="Full Name"
+            value={formData.fullName}
+            onChangeText={(text) => updateField('fullName', text)}
+            error={errors.fullName}
+            autoCapitalize="words"
+          />
+
+          <AuthInput
+            icon="mail-outline"
+            placeholder="Email Address"
+            value={formData.email}
+            onChangeText={(text) => updateField('email', text)}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            error={errors.email}
+          />
+
+          <PhoneInput
+            value={formData.phoneNumber}
+            onChangeText={(text) => updateField('phoneNumber', text)}
+            error={errors.phoneNumber}
+          />
+
+          <AuthInput
+            icon="lock-outline"
+            placeholder="Password"
+            value={formData.password}
+            onChangeText={(text) => updateField('password', text)}
+            secureTextEntry={true}
+            showPassword={showPassword}
+            onTogglePassword={() => setShowPassword(!showPassword)}
+            error={errors.password}
+          />
+
+          <AuthInput
+            icon="lock-outline"
+            placeholder="Confirm Password"
+            value={formData.confirmPassword}
+            onChangeText={(text) => updateField('confirmPassword', text)}
+            error={errors.confirmPassword}
+            secureTextEntry
+            onTogglePassword={() => setShowConfirmPassword(!showConfirmPassword)}
+          />
+        </View>
+
+        <Button
+          title="Continue"
+          onPress={handleSignup}
+          fullWidth
+          size="large"
+          loading={isLoading}
+          style={authStyles.submitButton}
+        />
+
+        <AuthFooter
+          text="Already have an account?"
+          linkText="Login"
+          onLinkPress={navigateToLogin}
+          disabled={isLoading}
+        />
+      </ScrollView>
+    </View>
+  );
+};
+
+export default GuardSignupScreen;
