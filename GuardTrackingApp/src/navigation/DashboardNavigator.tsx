@@ -6,13 +6,14 @@ import GuardHomeScreen from '../screens/dashboard/GuardHomeScreen';
 import MyShiftsScreen from '../screens/dashboard/MyShiftsScreen';
 import ReportsScreen from '../screens/dashboard/ReportsScreen';
 import AvailableShiftsScreen from '../screens/guard/AvailableShiftsScreen';
+import ChatListScreen from '../screens/chat/ChatListScreen';
 import { COLORS } from '../styles/globalStyles';
 import { HomeIcon, ShiftsIcon, ReportsIcon, JobsIcon, ClockIcon } from '../components/ui/AppIcons';
 
 export type DashboardTabParamList = {
   Home: undefined;
-  'Check In': undefined;
   'My Shifts': undefined;
+  Chat: undefined;
   Reports: undefined;
   Jobs: undefined;
 };
@@ -20,7 +21,7 @@ export type DashboardTabParamList = {
 const Tab = createBottomTabNavigator<DashboardTabParamList>();
 
 
-import CheckInScreen from '../screens/dashboard/CheckInScreen';
+import CheckInScreen from '../screens/CheckInScreen';
 
 const DashboardNavigator: React.FC = () => {
   return (
@@ -59,12 +60,12 @@ const DashboardNavigator: React.FC = () => {
         }}
       />
       <Tab.Screen 
-        name="Check In" 
-        component={CheckInScreen}
+        name="Chat" 
+        component={ChatListScreen}
         options={{
           tabBarIcon: ({ color, size, focused }) => (
             <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
-              <ClockIcon size={20} color={focused ? '#1C6CA9' : '#7A7A7A'} />
+              <ReportsIcon size={20} color={focused ? '#1C6CA9' : '#7A7A7A'} />
             </View>
           ),
         }}

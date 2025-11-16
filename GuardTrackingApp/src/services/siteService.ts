@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import { securityManager } from '../utils/security';
+import api from './api';
 
 // Use 10.0.2.2 for Android emulator, localhost for iOS simulator
 const API_BASE_URL = __DEV__ 
@@ -46,7 +48,8 @@ export interface Site {
 class SiteService {
   private async getAuthToken(): Promise<string | null> {
     try {
-      return await AsyncStorage.getItem('authToken');
+      const tokens = await securityManager.getTokens();
+      return tokens?.accessToken || null;
     } catch (error) {
       console.error('Error getting auth token:', error);
       return null;
@@ -92,8 +95,18 @@ class SiteService {
       pages: number;
     };
   }> {
-    const response = await this.makeRequest(`/my-sites?page=${page}&limit=${limit}`);
-    return response.data;
+    try {
+      const resp = await api.getClientSites(page, limit);
+      if (!resp.success) {
+        throw new Error(resp.message || 'Failed to fetch sites');
+      }
+      // The ApiService returns data from backend as response.data.data
+      // which is expected to contain { sites, pagination }
+      return resp.data;
+    } catch (error: any) {
+      // Re-throw with message so callers keep existing error handling
+      throw new Error(error.message || 'Failed to fetch sites');
+    }
   }
 
   // Get site by ID

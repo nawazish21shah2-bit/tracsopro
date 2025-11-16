@@ -1,5 +1,5 @@
 // Reports Screen - Pixel Perfect Figma Implementation
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,14 +9,16 @@ import {
   TextInput,
   Alert,
   StatusBar,
+  RefreshControl,
 } from 'react-native';
-import { globalStyles, COLORS, SPACING } from '../../styles/globalStyles';
-import { AppHeader } from '../../components/ui/AppHeader';
-import { LocationCard } from '../../components/ui/LocationCard';
-import { ActionButton, ActionButtonGroup } from '../../components/ui/ActionButtons';
 import { useNavigation } from '@react-navigation/native';
+import { useDispatch, useSelector } from 'react-redux';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { MenuIcon, BellIcon, MapPinIcon, AlertTriangleIcon, AlertCircleIcon } from '../../components/ui/FeatherIcons';
+import { RootState } from '../../store';
+import { globalStyles, COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS } from '../../styles/globalStyles';
+import { AppScreen, AppCard, AppButton } from '../../components/ui/AppComponents';
+import { AppHeader } from '../../components/ui/AppHeader';
+import { MenuIcon, BellIcon, MapPinIcon, AlertTriangleIcon, AlertCircleIcon, FileTextIcon } from '../../components/ui/FeatherIcons';
 
 type ReportsScreenNavigationProp = StackNavigationProp<any, 'Reports'>;
 
@@ -32,7 +34,17 @@ interface ShiftReport {
 
 const ReportsScreen: React.FC = () => {
   const navigation = useNavigation<ReportsScreenNavigationProp>();
+  const dispatch = useDispatch();
+  
   const [reportText, setReportText] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Redux state
+  const { 
+    activeShift, 
+    loading, 
+    error 
+  } = useSelector((state: RootState) => state.shifts);
   const [submittedReports, setSubmittedReports] = useState<ShiftReport[]>([
     {
       id: '1',
@@ -114,14 +126,18 @@ const ReportsScreen: React.FC = () => {
   };
 
   const renderCurrentShiftCard = () => (
-    <LocationCard
-      location="Ocean View Vila"
-      address="1321 Baker Street, NY"
-      onViewLocation={handleViewLocation}
-      style={styles.currentShiftCard}
-    >
-      <View style={styles.statusBadge}>
-        <Text style={styles.statusText}>Active</Text>
+    <AppCard style={styles.currentShiftCard}>
+      <View style={styles.locationHeader}>
+        <View style={styles.locationInfo}>
+          <MapPinIcon size={20} color={COLORS.primary} />
+          <View style={styles.locationText}>
+            <Text style={styles.locationName}>Ocean View Vila</Text>
+            <Text style={styles.locationAddress}>1321 Baker Street, NY</Text>
+          </View>
+        </View>
+        <View style={styles.statusBadge}>
+          <Text style={styles.statusText}>Active</Text>
+        </View>
       </View>
 
       <Text style={styles.shiftDescription}>
@@ -144,23 +160,24 @@ const ReportsScreen: React.FC = () => {
         textAlignVertical="top"
       />
 
-      <TouchableOpacity style={styles.submitButton} onPress={handleSubmitReport}>
-        <Text style={styles.submitButtonText}>Submit</Text>
-      </TouchableOpacity>
+      <AppButton
+        title="Submit Report"
+        onPress={handleSubmitReport}
+        style={styles.submitButton}
+      />
 
-      <ActionButtonGroup style={styles.actionButtons}>
-        <ActionButton
-          title="Add Incident Report"
-          variant="incident"
-          onPress={handleAddIncidentReport}
-        />
-        <ActionButton
-          title="Emergency Alert"
-          variant="emergency"
-          onPress={handleEmergencyAlert}
-        />
-      </ActionButtonGroup>
-    </LocationCard>
+      <View style={styles.actionButtons}>
+        <TouchableOpacity style={styles.incidentButton} onPress={handleAddIncidentReport}>
+          <AlertTriangleIcon size={16} color={COLORS.primary} style={styles.actionIconMargin} />
+          <Text style={styles.incidentButtonText}>Add Incident Report</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.emergencyButton} onPress={handleEmergencyAlert}>
+          <AlertCircleIcon size={16} color={COLORS.error} style={styles.actionIconMargin} />
+          <Text style={styles.emergencyButtonText}>Emergency Alert</Text>
+        </TouchableOpacity>
+      </View>
+    </AppCard>
   );
 
   const renderSubmittedReports = () => (
@@ -197,15 +214,27 @@ const ReportsScreen: React.FC = () => {
   );
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <AppScreen>
       <AppHeader
         title="My Reports"
         onMenuPress={handleMenuPress}
         onNotificationPress={handleNotificationPress}
       />
       
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              // TODO: Refresh reports data
+              setTimeout(() => setRefreshing(false), 1000);
+            }}
+          />
+        }
+      >
         {renderCurrentShiftCard()}
         {renderSubmittedReports()}
       </ScrollView>
@@ -216,10 +245,10 @@ const ReportsScreen: React.FC = () => {
         onPress={handleAddIncidentReport}
         activeOpacity={0.8}
       >
-        <AlertTriangleIcon size={18} color="#FFFFFF" style={styles.fabIconMargin} />
+        <FileTextIcon size={18} color="#FFFFFF" />
         <Text style={styles.fabText}>New Report</Text>
       </TouchableOpacity>
-    </View>
+    </AppScreen>
   );
 };
 
@@ -466,7 +495,47 @@ const styles = StyleSheet.create({
   fabText: {
     color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+  },
+  actionIconMargin: {
+    marginRight: 8,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 16,
+  },
+  incidentButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3F8FF',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginRight: 8,
+  },
+  incidentButtonText: {
+    color: COLORS.primary,
+    fontSize: 14,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+  },
+  emergencyButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF3F3',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginLeft: 8,
+  },
+  emergencyButtonText: {
+    color: COLORS.error,
+    fontSize: 14,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
 });
 

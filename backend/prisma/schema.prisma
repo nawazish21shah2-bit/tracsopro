@@ -29,7 +29,6 @@ model User {
   incidents     Incident[]
   messages      Message[]
   notifications Notification[]
-  shifts        Shift[]
   reports       Report[]
   shiftReports  ShiftReport[]
   userSettings  UserSettings?
@@ -75,6 +74,8 @@ model Guard {
   shiftApplications ShiftApplication[]
   shiftAssignments  ShiftAssignment[]
   assignmentReports AssignmentReport[]
+  geofenceEvents    GeofenceEvent[]
+  shifts            Shift[]
 
   @@index([userId])
   @@index([employeeId])
@@ -110,6 +111,7 @@ model Client {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   sites Site[]
   shiftPostings ShiftPosting[]
+  shifts Shift[]
 
   @@index([userId])
   @@index([accountType])
@@ -131,6 +133,7 @@ model Site {
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
   shiftPostings ShiftPosting[]
   shiftAssignments ShiftAssignment[]
+  shifts Shift[]
 
   @@index([clientId])
   @@index([isActive])
@@ -448,41 +451,54 @@ enum NotificationType {
 }
 
 model Shift {
-  id        String   @id @default(uuid())
-  guardId   String
-  locationId String?
-  locationName String
-  locationAddress String
-  startTime DateTime
-  endTime   DateTime
-  breakStartTime DateTime?
-  breakEndTime DateTime?
-  status    ShiftStatus @default(SCHEDULED)
-  description String?
-  notes     String?
-  checkInTime DateTime?
-  checkOutTime DateTime?
-  actualDuration Int? // in minutes
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String      @id @default(uuid())
+  guardId           String
+  siteId            String?
+  clientId          String?
+  locationId        String?
+  locationName      String
+  locationAddress   String
+  scheduledStartTime DateTime
+  scheduledEndTime  DateTime
+  actualStartTime   DateTime?
+  actualEndTime     DateTime?
+  status            ShiftStatus @default(SCHEDULED)
+  checkInLocation   Json?       // { latitude, longitude, accuracy, address }
+  checkOutLocation  Json?       // { latitude, longitude, accuracy, address }
+  description       String?
+  notes             String?
+  incidentCount     Int         @default(0)
+  totalBreakTime    Int         @default(0) // in minutes
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
 
-  guard      User         @relation(fields: [guardId], references: [id], onDelete: Cascade)
-  location   Location?    @relation(fields: [locationId], references: [id], onDelete: SetNull)
-  checkpoints ShiftCheckpoint[]
-  shiftReports ShiftReport[]
+  // Relations
+  guard             Guard       @relation(fields: [guardId], references: [id], onDelete: Cascade)
+  site              Site?       @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  client            Client?     @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  location          Location?   @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  shiftBreaks       ShiftBreak[]
+  shiftIncidents    ShiftIncident[]
+  shiftReports      ShiftReport[]
+  checkpoints       ShiftCheckpoint[]
 
   @@index([guardId])
+  @@index([siteId])
+  @@index([clientId])
   @@index([locationId])
   @@index([status])
-  @@index([startTime])
+  @@index([scheduledStartTime])
+  @@index([scheduledEndTime])
 }
 
 enum ShiftStatus {
   SCHEDULED
   IN_PROGRESS
+  ON_BREAK
   COMPLETED
-  MISSED
   CANCELLED
+  NO_SHOW
+  EARLY_END
 }
 
 model ShiftReport {
@@ -718,3 +734,75 @@ enum SupportPriority {
   HIGH
   URGENT
 }
+
+model GeofenceEvent {
+  id          String   @id @default(uuid())
+  guardId     String
+  geofenceId  String
+  eventType   GeofenceEventType
+  latitude    Float
+  longitude   Float
+  accuracy    Float?
+  timestamp   DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  guard Guard @relation(fields: [guardId], references: [id], onDelete: Cascade)
+
+  @@index([guardId])
+  @@index([geofenceId])
+  @@index([eventType])
+  @@index([timestamp])
+}
+
+enum GeofenceEventType {
+  ENTER
+  EXIT
+}
+
+model ShiftBreak {
+  id        String    @id @default(uuid())
+  shiftId   String
+  startTime DateTime
+  endTime   DateTime?
+  breakType BreakType @default(REGULAR)
+  location  Json?     // { latitude, longitude, accuracy }
+  notes     String?
+  createdAt DateTime  @default(now())
+
+  shift Shift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+
+  @@index([shiftId])
+  @@index([startTime])
+}
+
+model ShiftIncident {
+  id          String       @id @default(uuid())
+  shiftId     String
+  incidentType IncidentType
+  severity    IncidentSeverity @default(LOW)
+  title       String
+  description String
+  location    Json?        // { latitude, longitude, accuracy, address }
+  reportedAt  DateTime     @default(now())
+  resolvedAt  DateTime?
+  status      IncidentStatus @default(REPORTED)
+  attachments Json?        // Array of file URLs
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  shift Shift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+
+  @@index([shiftId])
+  @@index([incidentType])
+  @@index([severity])
+  @@index([status])
+  @@index([reportedAt])
+}
+
+enum BreakType {
+  REGULAR
+  LUNCH
+  EMERGENCY
+  UNAUTHORIZED
+}
+

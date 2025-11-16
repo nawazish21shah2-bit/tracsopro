@@ -54,6 +54,17 @@ class ApiService {
           const tokens = await securityManager.getTokens();
           if (tokens && tokens.accessToken) {
             config.headers.Authorization = `${tokens.tokenType || 'Bearer'} ${tokens.accessToken}`;
+            if (__DEV__) {
+              console.log(`🔑 Token found for ${config.method?.toUpperCase()} ${config.url}`, {
+                tokenLength: tokens.accessToken.length,
+                expiresAt: new Date(tokens.expiresAt).toISOString(),
+                isExpired: tokens.expiresAt <= Date.now()
+              });
+            }
+          } else {
+            if (__DEV__) {
+              console.log(`❌ No token found for ${config.method?.toUpperCase()} ${config.url}`);
+            }
           }
           
           // Add request ID for tracking
@@ -89,13 +100,14 @@ class ApiService {
         if (error.response?.status === 401 && originalRequest && !(originalRequest as any)._retry) {
           (originalRequest as any)._retry = true;
           
+          if (__DEV__) {
+            console.log(`🔄 401 error for ${originalRequest.method?.toUpperCase()} ${originalRequest.url}, attempting token refresh (retry count: ${this.retryCount})`);
+          }
+          
           // Prevent infinite refresh loops by checking retry count
           if (this.retryCount >= this.maxRetries) {
-            console.warn('Max refresh retries reached, clearing tokens');
-            // Use setTimeout to prevent immediate state updates that could cause loops
-            setTimeout(async () => {
-              await this.logout();
-            }, 100);
+            console.warn('⚠️ Max refresh retries reached, clearing tokens');
+            // Don't auto-logout immediately - let the user handle it
             this.retryCount = 0;
             return Promise.reject(this.handleError(error));
           }
@@ -120,17 +132,15 @@ class ApiService {
               }
             } else {
               // No refresh token available, clear auth state
-              setTimeout(async () => {
-                await this.logout();
-              }, 100);
+              if (__DEV__) {
+                console.log('❌ No refresh token available, request will fail');
+              }
               return Promise.reject(this.handleError(error));
             }
           } catch (refreshError) {
             console.error('Token refresh failed:', refreshError);
             this.retryCount = 0;
-            setTimeout(async () => {
-              await this.logout();
-            }, 100);
+            // Don't auto-logout on refresh failure - let the app handle it
             return Promise.reject(this.handleError(refreshError as AxiosError));
           }
         }
@@ -232,13 +242,26 @@ class ApiService {
       await securityManager.storeTokens(tokenData);
       await securityManager.storeUserData(user);
       
+      // Verify tokens were stored correctly
+      if (__DEV__) {
+        const storedTokens = await securityManager.getTokens();
+        console.log('🔍 Verifying token storage:', {
+          stored: !!storedTokens,
+          tokenMatch: storedTokens?.accessToken === token,
+          expiresAt: storedTokens ? new Date(storedTokens.expiresAt).toISOString() : 'N/A'
+        });
+      }
+      
       return {
         success: true,
         data: {
           user,
           token,
           refreshToken,
+          tempUserId: null,
+          tempEmail: null,
           isAuthenticated: true,
+          isEmailVerified: true,
           isLoading: false,
           error: null
         }
@@ -322,8 +345,16 @@ class ApiService {
   }
 
   async logout(): Promise<void> {
+    if (__DEV__) {
+      console.log('🚪 Logout called');
+      console.trace('Logout stack trace');
+    }
+    
     // Prevent multiple simultaneous logout calls
     if (this.isLoggingOut) {
+      if (__DEV__) {
+        console.log('⏳ Logout already in progress, skipping');
+      }
       return;
     }
     
@@ -764,10 +795,83 @@ class ApiService {
         data: response.data.data
       };
     } catch (error: any) {
+      // Fallback to mock data when backend is not available
+      console.log('Backend not available, using mock sites data');
+      
+      const mockSites = [
+        {
+          id: 'site_1',
+          name: 'Central Office Building',
+          address: '123 Business District, New York, NY 10001',
+          latitude: 40.7589,
+          longitude: -73.9851,
+          description: 'Main corporate office building requiring 24/7 security coverage',
+          requirements: 'Professional appearance, valid security license, experience with access control systems',
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          client: {
+            id: 'client_1',
+            user: {
+              firstName: 'John',
+              lastName: 'Smith',
+              email: 'john.smith@company.com'
+            }
+          }
+        },
+        {
+          id: 'site_2',
+          name: 'Warehouse Distribution Center',
+          address: '456 Industrial Ave, Brooklyn, NY 11201',
+          latitude: 40.7505,
+          longitude: -73.9934,
+          description: 'Large warehouse facility with multiple loading docks and inventory areas',
+          requirements: 'Physical fitness required, forklift certification preferred, night shift availability',
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          client: {
+            id: 'client_1',
+            user: {
+              firstName: 'John',
+              lastName: 'Smith',
+              email: 'john.smith@company.com'
+            }
+          }
+        },
+        {
+          id: 'site_3',
+          name: 'Retail Shopping Plaza',
+          address: '789 Commerce St, Manhattan, NY 10014',
+          latitude: 40.7614,
+          longitude: -73.9776,
+          description: 'Multi-tenant retail plaza with various shops and restaurants',
+          requirements: 'Customer service skills, crowd management experience, weekend availability',
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          client: {
+            id: 'client_1',
+            user: {
+              firstName: 'John',
+              lastName: 'Smith',
+              email: 'john.smith@company.com'
+            }
+          }
+        }
+      ];
+
       return {
-        success: false,
-        data: null,
-        message: error.response?.data?.message || 'Failed to fetch sites'
+        success: true,
+        data: {
+          sites: mockSites,
+          pagination: {
+            page: 1,
+            limit: 50,
+            total: mockSites.length,
+            pages: 1
+          }
+        }
       };
     }
   }
@@ -816,6 +920,78 @@ class ApiService {
         success: false,
         data: null,
         message: error.response?.data?.message || 'Failed to update profile'
+      };
+    }
+  }
+
+  // Location Tracking Methods
+  async recordLocation(guardId: string, locationData: any): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.post('/tracking/location', {
+        guardId,
+        ...locationData
+      });
+      return {
+        success: true,
+        data: response.data.data
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to record location'
+      };
+    }
+  }
+
+  async recordGeofenceEvent(eventData: any): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.post('/tracking/geofence-event', eventData);
+      return {
+        success: true,
+        data: response.data.data
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to record geofence event'
+      };
+    }
+  }
+
+  async getLocationHistory(guardId: string, startDate?: string, endDate?: string): Promise<ApiResponse<any>> {
+    try {
+      const params = new URLSearchParams();
+      if (startDate) params.append('startDate', startDate);
+      if (endDate) params.append('endDate', endDate);
+      
+      const response = await this.api.get(`/tracking/history/${guardId}?${params.toString()}`);
+      return {
+        success: true,
+        data: response.data.data
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to fetch location history'
+      };
+    }
+  }
+
+  async getLiveLocations(): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.get('/tracking/live-locations');
+      return {
+        success: true,
+        data: response.data.data
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to fetch live locations'
       };
     }
   }

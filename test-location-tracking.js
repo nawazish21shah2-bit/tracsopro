@@ -1,0 +1,573 @@
+// Comprehensive Location Tracking System Test
+const axios = require('axios');
+const { io } = require('socket.io-client');
+
+const BASE_URL = 'http://localhost:3000';
+const API_URL = `${BASE_URL}/api`;
+
+// Test data
+const testGuard = {
+  email: 'guard.test@tracsopro.com',
+  password: 'TestPass123!',
+  firstName: 'Test',
+  lastName: 'Guard',
+  phone: '+1234567890',
+  role: 'GUARD'
+};
+
+const testClient = {
+  email: 'client.test@tracsopro.com',
+  password: 'TestPass123!',
+  firstName: 'Test',
+  lastName: 'Client',
+  phone: '+1234567891',
+  role: 'CLIENT'
+};
+
+let guardToken = null;
+let clientToken = null;
+let guardId = null;
+let clientId = null;
+let guardSocket = null;
+let clientSocket = null;
+
+// Test results
+const testResults = {
+  passed: 0,
+  failed: 0,
+  tests: []
+};
+
+function logTest(name, passed, message = '') {
+  const status = passed ? '✅ PASS' : '❌ FAIL';
+  console.log(`${status}: ${name}${message ? ' - ' + message : ''}`);
+  
+  testResults.tests.push({ name, passed, message });
+  if (passed) {
+    testResults.passed++;
+  } else {
+    testResults.failed++;
+  }
+}
+
+function logSection(title) {
+  console.log(`\n🔍 ${title}`);
+  console.log('='.repeat(50));
+}
+
+async function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Test 1: Health Check
+async function testHealthCheck() {
+  try {
+    const response = await axios.get(`${API_URL}/health`);
+    logTest('Health Check', response.status === 200 && response.data.success);
+    return response.data.success;
+  } catch (error) {
+    logTest('Health Check', false, error.message);
+    return false;
+  }
+}
+
+// Test 2: User Registration and Authentication
+async function testAuthentication() {
+  try {
+    // Register guard
+    const guardRegResponse = await axios.post(`${API_URL}/auth/register`, testGuard);
+    logTest('Guard Registration', guardRegResponse.status === 201);
+    
+    if (guardRegResponse.data.success) {
+      guardId = guardRegResponse.data.data.userId;
+    }
+
+    // Register client
+    const clientRegResponse = await axios.post(`${API_URL}/auth/register`, testClient);
+    logTest('Client Registration', clientRegResponse.status === 201);
+    
+    if (clientRegResponse.data.success) {
+      clientId = clientRegResponse.data.data.userId;
+    }
+
+    // Login guard
+    const guardLoginResponse = await axios.post(`${API_URL}/auth/login`, {
+      email: testGuard.email,
+      password: testGuard.password
+    });
+    logTest('Guard Login', guardLoginResponse.status === 200);
+    
+    if (guardLoginResponse.data.success) {
+      guardToken = guardLoginResponse.data.data.token;
+    }
+
+    // Login client
+    const clientLoginResponse = await axios.post(`${API_URL}/auth/login`, {
+      email: testClient.email,
+      password: testClient.password
+    });
+    logTest('Client Login', clientLoginResponse.status === 200);
+    
+    if (clientLoginResponse.data.success) {
+      clientToken = clientLoginResponse.data.data.token;
+    }
+
+    return guardToken && clientToken;
+  } catch (error) {
+    logTest('Authentication', false, error.message);
+    return false;
+  }
+}
+
+// Test 3: Location Recording API
+async function testLocationRecording() {
+  if (!guardToken || !guardId) {
+    logTest('Location Recording', false, 'No guard token or ID');
+    return false;
+  }
+
+  try {
+    const locationData = {
+      guardId: guardId,
+      latitude: 40.7128,
+      longitude: -74.0060,
+      accuracy: 10.5,
+      batteryLevel: 85,
+      timestamp: Date.now()
+    };
+
+    const response = await axios.post(`${API_URL}/tracking/location`, locationData, {
+      headers: { Authorization: `Bearer ${guardToken}` }
+    });
+
+    logTest('Location Recording', response.status === 201 && response.data.success);
+    return response.data.success;
+  } catch (error) {
+    logTest('Location Recording', false, error.response?.data?.message || error.message);
+    return false;
+  }
+}
+
+// Test 4: Geofence Event Recording
+async function testGeofenceEvents() {
+  if (!guardToken || !guardId) {
+    logTest('Geofence Events', false, 'No guard token or ID');
+    return false;
+  }
+
+  try {
+    const geofenceEventData = {
+      guardId: guardId,
+      geofenceId: 'test-geofence-1',
+      eventType: 'ENTER',
+      location: {
+        latitude: 40.7128,
+        longitude: -74.0060,
+        accuracy: 10.5,
+        timestamp: Date.now()
+      },
+      timestamp: Date.now()
+    };
+
+    const response = await axios.post(`${API_URL}/tracking/geofence-event`, geofenceEventData, {
+      headers: { Authorization: `Bearer ${guardToken}` }
+    });
+
+    logTest('Geofence Event Recording', response.status === 201 && response.data.success);
+    return response.data.success;
+  } catch (error) {
+    logTest('Geofence Event Recording', false, error.response?.data?.message || error.message);
+    return false;
+  }
+}
+
+// Test 5: Location History Retrieval
+async function testLocationHistory() {
+  if (!guardToken || !guardId) {
+    logTest('Location History', false, 'No guard token or ID');
+    return false;
+  }
+
+  try {
+    const response = await axios.get(`${API_URL}/tracking/history/${guardId}`, {
+      headers: { Authorization: `Bearer ${guardToken}` }
+    });
+
+    logTest('Location History Retrieval', response.status === 200 && response.data.success);
+    return response.data.success;
+  } catch (error) {
+    logTest('Location History Retrieval', false, error.response?.data?.message || error.message);
+    return false;
+  }
+}
+
+// Test 6: Live Locations API
+async function testLiveLocations() {
+  if (!clientToken) {
+    logTest('Live Locations API', false, 'No client token');
+    return false;
+  }
+
+  try {
+    const response = await axios.get(`${API_URL}/tracking/live-locations`, {
+      headers: { Authorization: `Bearer ${clientToken}` }
+    });
+
+    logTest('Live Locations API', response.status === 200 && response.data.success);
+    return response.data.success;
+  } catch (error) {
+    logTest('Live Locations API', false, error.response?.data?.message || error.message);
+    return false;
+  }
+}
+
+// Test 7: Real-time Data API
+async function testRealTimeData() {
+  if (!clientToken) {
+    logTest('Real-time Data API', false, 'No client token');
+    return false;
+  }
+
+  try {
+    const response = await axios.get(`${API_URL}/tracking/real-time-data`, {
+      headers: { Authorization: `Bearer ${clientToken}` }
+    });
+
+    logTest('Real-time Data API', response.status === 200 && response.data.success);
+    return response.data.success;
+  } catch (error) {
+    logTest('Real-time Data API', false, error.response?.data?.message || error.message);
+    return false;
+  }
+}
+
+// Test 8: WebSocket Connection (Guard)
+async function testGuardWebSocket() {
+  return new Promise((resolve) => {
+    if (!guardToken || !guardId) {
+      logTest('Guard WebSocket Connection', false, 'No guard token or ID');
+      resolve(false);
+      return;
+    }
+
+    guardSocket = io(BASE_URL, {
+      transports: ['websocket'],
+      timeout: 5000,
+    });
+
+    let authenticated = false;
+
+    guardSocket.on('connect', () => {
+      guardSocket.emit('authenticate', {
+        token: guardToken,
+        userId: guardId,
+        role: 'GUARD'
+      });
+    });
+
+    guardSocket.on('authenticated', (data) => {
+      if (data.success) {
+        authenticated = true;
+        logTest('Guard WebSocket Connection', true);
+        resolve(true);
+      } else {
+        logTest('Guard WebSocket Connection', false, 'Authentication failed');
+        resolve(false);
+      }
+    });
+
+    guardSocket.on('authentication_error', (data) => {
+      logTest('Guard WebSocket Connection', false, data.message);
+      resolve(false);
+    });
+
+    guardSocket.on('connect_error', (error) => {
+      logTest('Guard WebSocket Connection', false, error.message);
+      resolve(false);
+    });
+
+    // Timeout after 10 seconds
+    setTimeout(() => {
+      if (!authenticated) {
+        logTest('Guard WebSocket Connection', false, 'Connection timeout');
+        resolve(false);
+      }
+    }, 10000);
+  });
+}
+
+// Test 9: WebSocket Connection (Client)
+async function testClientWebSocket() {
+  return new Promise((resolve) => {
+    if (!clientToken || !clientId) {
+      logTest('Client WebSocket Connection', false, 'No client token or ID');
+      resolve(false);
+      return;
+    }
+
+    clientSocket = io(BASE_URL, {
+      transports: ['websocket'],
+      timeout: 5000,
+    });
+
+    let authenticated = false;
+
+    clientSocket.on('connect', () => {
+      clientSocket.emit('authenticate', {
+        token: clientToken,
+        userId: clientId,
+        role: 'CLIENT'
+      });
+    });
+
+    clientSocket.on('authenticated', (data) => {
+      if (data.success) {
+        authenticated = true;
+        logTest('Client WebSocket Connection', true);
+        resolve(true);
+      } else {
+        logTest('Client WebSocket Connection', false, 'Authentication failed');
+        resolve(false);
+      }
+    });
+
+    clientSocket.on('authentication_error', (data) => {
+      logTest('Client WebSocket Connection', false, data.message);
+      resolve(false);
+    });
+
+    clientSocket.on('connect_error', (error) => {
+      logTest('Client WebSocket Connection', false, error.message);
+      resolve(false);
+    });
+
+    // Timeout after 10 seconds
+    setTimeout(() => {
+      if (!authenticated) {
+        logTest('Client WebSocket Connection', false, 'Connection timeout');
+        resolve(false);
+      }
+    }, 10000);
+  });
+}
+
+// Test 10: Real-time Location Broadcasting
+async function testLocationBroadcasting() {
+  return new Promise((resolve) => {
+    if (!guardSocket || !clientSocket) {
+      logTest('Location Broadcasting', false, 'WebSocket connections not established');
+      resolve(false);
+      return;
+    }
+
+    let locationReceived = false;
+
+    // Client listens for location updates
+    clientSocket.on('guard_location_update', (data) => {
+      if (data.guardId === guardId) {
+        locationReceived = true;
+        logTest('Location Broadcasting', true);
+        resolve(true);
+      }
+    });
+
+    // Guard sends location update
+    const locationUpdate = {
+      guardId: guardId,
+      latitude: 40.7589,
+      longitude: -73.9851,
+      accuracy: 8.2,
+      timestamp: Date.now(),
+      batteryLevel: 80
+    };
+
+    guardSocket.emit('location_update', locationUpdate);
+
+    // Timeout after 5 seconds
+    setTimeout(() => {
+      if (!locationReceived) {
+        logTest('Location Broadcasting', false, 'Location update not received');
+        resolve(false);
+      }
+    }, 5000);
+  });
+}
+
+// Test 11: Geofence Event Broadcasting
+async function testGeofenceBroadcasting() {
+  return new Promise((resolve) => {
+    if (!guardSocket || !clientSocket) {
+      logTest('Geofence Broadcasting', false, 'WebSocket connections not established');
+      resolve(false);
+      return;
+    }
+
+    let geofenceEventReceived = false;
+
+    // Client listens for geofence events
+    clientSocket.on('geofence_event', (data) => {
+      if (data.guardId === guardId) {
+        geofenceEventReceived = true;
+        logTest('Geofence Broadcasting', true);
+        resolve(true);
+      }
+    });
+
+    // Guard sends geofence event
+    const geofenceEvent = {
+      guardId: guardId,
+      geofenceId: 'test-site-1',
+      eventType: 'EXIT',
+      location: {
+        latitude: 40.7589,
+        longitude: -73.9851,
+        accuracy: 8.2,
+        timestamp: Date.now()
+      },
+      timestamp: Date.now()
+    };
+
+    guardSocket.emit('geofence_event', geofenceEvent);
+
+    // Timeout after 5 seconds
+    setTimeout(() => {
+      if (!geofenceEventReceived) {
+        logTest('Geofence Broadcasting', false, 'Geofence event not received');
+        resolve(false);
+      }
+    }, 5000);
+  });
+}
+
+// Test 12: Emergency Alert System
+async function testEmergencyAlert() {
+  return new Promise((resolve) => {
+    if (!guardSocket || !clientSocket) {
+      logTest('Emergency Alert System', false, 'WebSocket connections not established');
+      resolve(false);
+      return;
+    }
+
+    let emergencyReceived = false;
+
+    // Client listens for emergency alerts
+    clientSocket.on('emergency_alert', (data) => {
+      if (data.guardId === guardId) {
+        emergencyReceived = true;
+        logTest('Emergency Alert System', true);
+        resolve(true);
+      }
+    });
+
+    // Guard sends emergency alert
+    const emergencyAlert = {
+      guardId: guardId,
+      location: {
+        latitude: 40.7589,
+        longitude: -73.9851,
+        accuracy: 8.2,
+        timestamp: Date.now(),
+        batteryLevel: 75
+      },
+      message: 'Test emergency alert'
+    };
+
+    guardSocket.emit('emergency_alert', emergencyAlert);
+
+    // Timeout after 5 seconds
+    setTimeout(() => {
+      if (!emergencyReceived) {
+        logTest('Emergency Alert System', false, 'Emergency alert not received');
+        resolve(false);
+      }
+    }, 5000);
+  });
+}
+
+// Cleanup function
+function cleanup() {
+  if (guardSocket) {
+    guardSocket.disconnect();
+  }
+  if (clientSocket) {
+    clientSocket.disconnect();
+  }
+}
+
+// Main test runner
+async function runTests() {
+  console.log('🚀 Starting Location Tracking System Tests');
+  console.log('============================================\n');
+
+  try {
+    // Basic API Tests
+    logSection('BASIC API TESTS');
+    await testHealthCheck();
+    
+    const authSuccess = await testAuthentication();
+    if (!authSuccess) {
+      console.log('\n❌ Authentication failed - skipping remaining tests');
+      return;
+    }
+
+    // Location API Tests
+    logSection('LOCATION API TESTS');
+    await testLocationRecording();
+    await testGeofenceEvents();
+    await testLocationHistory();
+    await testLiveLocations();
+    await testRealTimeData();
+
+    // WebSocket Tests
+    logSection('WEBSOCKET TESTS');
+    const guardWSSuccess = await testGuardWebSocket();
+    const clientWSSuccess = await testClientWebSocket();
+
+    if (guardWSSuccess && clientWSSuccess) {
+      await delay(1000); // Wait for connections to stabilize
+      
+      logSection('REAL-TIME COMMUNICATION TESTS');
+      await testLocationBroadcasting();
+      await testGeofenceBroadcasting();
+      await testEmergencyAlert();
+    }
+
+    // Results Summary
+    logSection('TEST RESULTS SUMMARY');
+    console.log(`Total Tests: ${testResults.passed + testResults.failed}`);
+    console.log(`✅ Passed: ${testResults.passed}`);
+    console.log(`❌ Failed: ${testResults.failed}`);
+    console.log(`Success Rate: ${((testResults.passed / (testResults.passed + testResults.failed)) * 100).toFixed(1)}%`);
+
+    if (testResults.failed > 0) {
+      console.log('\n❌ Failed Tests:');
+      testResults.tests
+        .filter(test => !test.passed)
+        .forEach(test => console.log(`  - ${test.name}: ${test.message}`));
+    }
+
+    console.log('\n🎉 Location Tracking System Test Complete!');
+
+  } catch (error) {
+    console.error('❌ Test runner error:', error.message);
+  } finally {
+    cleanup();
+    process.exit(testResults.failed > 0 ? 1 : 0);
+  }
+}
+
+// Handle process termination
+process.on('SIGINT', () => {
+  console.log('\n🛑 Tests interrupted');
+  cleanup();
+  process.exit(1);
+});
+
+process.on('SIGTERM', () => {
+  console.log('\n🛑 Tests terminated');
+  cleanup();
+  process.exit(1);
+});
+
+// Run tests
+runTests();

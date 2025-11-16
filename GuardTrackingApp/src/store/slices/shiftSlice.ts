@@ -21,6 +21,25 @@ interface ShiftState {
   error: string | null;
   checkInLoading: boolean;
   checkOutLoading: boolean;
+  // Phase 3: Enhanced loading states
+  statisticsLoading: boolean;
+  breakLoading: boolean;
+  incidentLoading: boolean;
+  createShiftLoading: boolean;
+  refreshing: boolean;
+  syncLoading: boolean;
+  // Phase 3: Enhanced data
+  currentBreak: any | null;
+  incidents: any[];
+  notifications: any[];
+  // Phase 3: Error tracking
+  lastSyncTime: string | null;
+  networkStatus: 'online' | 'offline' | 'syncing';
+  errorHistory: Array<{
+    timestamp: string;
+    error: string;
+    action: string;
+  }>;
 }
 
 const initialState: ShiftState = {
@@ -36,9 +55,35 @@ const initialState: ShiftState = {
   error: null,
   checkInLoading: false,
   checkOutLoading: false,
+  // Phase 3: Enhanced loading states
+  statisticsLoading: false,
+  breakLoading: false,
+  incidentLoading: false,
+  createShiftLoading: false,
+  refreshing: false,
+  syncLoading: false,
+  // Phase 3: Enhanced data
+  currentBreak: null,
+  incidents: [],
+  notifications: [],
+  // Phase 3: Error tracking
+  lastSyncTime: null,
+  networkStatus: 'online',
+  errorHistory: [],
 };
 
 // Async Thunks
+export const fetchShiftStatistics = createAsyncThunk(
+  'shift/fetchShiftStatistics',
+  async (params: { startDate?: string; endDate?: string } = {}, { rejectWithValue }) => {
+    try {
+      return await shiftService.getShiftStatistics(params);
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.error || 'Failed to fetch statistics');
+    }
+  }
+);
+
 export const fetchMonthlyStats = createAsyncThunk(
   'shift/fetchMonthlyStats',
   async (_, { rejectWithValue }) => {
@@ -128,6 +173,72 @@ export const checkInToShift = createAsyncThunk(
   }
 );
 
+// Phase 3: Enhanced async thunks
+export const syncAllData = createAsyncThunk(
+  'shift/syncAllData',
+  async (_, { dispatch, rejectWithValue }) => {
+    try {
+      const results = await Promise.allSettled([
+        dispatch(fetchActiveShift()),
+        dispatch(fetchUpcomingShifts()),
+        dispatch(fetchTodayShifts()),
+        dispatch(fetchMonthlyStats()),
+      ]);
+      
+      const errors = results
+        .filter(result => result.status === 'rejected')
+        .map(result => (result as PromiseRejectedResult).reason);
+      
+      if (errors.length > 0) {
+        throw new Error(`Sync partially failed: ${errors.join(', ')}`);
+      }
+      
+      return { syncTime: new Date().toISOString() };
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Sync failed');
+    }
+  }
+);
+
+export const createIncidentReport = createAsyncThunk(
+  'shift/createIncidentReport',
+  async (data: { 
+    shiftId: string; 
+    description: string; 
+    severity: 'low' | 'medium' | 'high'; 
+    photos?: string[];
+    location?: { latitude: number; longitude: number };
+  }, { rejectWithValue }) => {
+    try {
+      return await shiftService.createIncidentReport(data);
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.error || 'Failed to create incident report');
+    }
+  }
+);
+
+export const startBreak = createAsyncThunk(
+  'shift/startBreak',
+  async (data: { shiftId: string; breakType: 'lunch' | 'short' | 'emergency' }, { rejectWithValue }) => {
+    try {
+      return await shiftService.startBreak(data);
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.error || 'Failed to start break');
+    }
+  }
+);
+
+export const endBreak = createAsyncThunk(
+  'shift/endBreak',
+  async (breakId: string, { rejectWithValue }) => {
+    try {
+      return await shiftService.endBreak(breakId);
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.error || 'Failed to end break');
+    }
+  }
+);
+
 export const checkOutFromShift = createAsyncThunk(
   'shift/checkOut',
   async (data: CheckOutRequest, { rejectWithValue }) => {
@@ -136,6 +247,76 @@ export const checkOutFromShift = createAsyncThunk(
       return response.shift;
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.error || 'Failed to check out');
+    }
+  }
+);
+
+// Phase 2: Enhanced Check-in/out with GPS
+export const checkInToShiftWithLocation = createAsyncThunk(
+  'shift/checkInWithLocation',
+  async (data: { shiftId: string; location: { latitude: number; longitude: number; accuracy: number; address?: string } }, { rejectWithValue }) => {
+    try {
+      return await shiftService.checkInToShift(data.shiftId, data.location);
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.error || 'Failed to check in');
+    }
+  }
+);
+
+export const checkOutFromShiftWithLocation = createAsyncThunk(
+  'shift/checkOutWithLocation',
+  async (data: { shiftId: string; location: { latitude: number; longitude: number; accuracy: number; address?: string }; notes?: string }, { rejectWithValue }) => {
+    try {
+      return await shiftService.checkOutFromShift(data.shiftId, data.location, data.notes);
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.error || 'Failed to check out');
+    }
+  }
+);
+
+// Phase 2: Break Management
+export const startShiftBreak = createAsyncThunk(
+  'shift/startBreak',
+  async (data: { shiftId: string; breakType: string; location?: { latitude: number; longitude: number; accuracy: number }; notes?: string }, { rejectWithValue }) => {
+    try {
+      return await shiftService.startBreak(data.shiftId, data.breakType, data.location, data.notes);
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.error || 'Failed to start break');
+    }
+  }
+);
+
+export const endShiftBreak = createAsyncThunk(
+  'shift/endBreak',
+  async (data: { shiftId: string; breakId: string; location?: { latitude: number; longitude: number; accuracy: number }; notes?: string }, { rejectWithValue }) => {
+    try {
+      return await shiftService.endBreak(data.shiftId, data.breakId, data.location, data.notes);
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.error || 'Failed to end break');
+    }
+  }
+);
+
+// Phase 2: Incident Reporting
+export const reportShiftIncident = createAsyncThunk(
+  'shift/reportIncident',
+  async (data: { shiftId: string; incident: { incidentType: string; severity: string; title: string; description: string; location?: { latitude: number; longitude: number; accuracy: number; address?: string }; attachments?: string[] } }, { rejectWithValue }) => {
+    try {
+      return await shiftService.reportIncident(data.shiftId, data.incident);
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.error || 'Failed to report incident');
+    }
+  }
+);
+
+// Phase 2: Create Shift
+export const createNewShift = createAsyncThunk(
+  'shift/createShift',
+  async (data: { locationName: string; locationAddress: string; scheduledStartTime: string; scheduledEndTime: string; description?: string; notes?: string }, { rejectWithValue }) => {
+    try {
+      return await shiftService.createShift(data);
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.error || 'Failed to create shift');
     }
   }
 );

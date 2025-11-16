@@ -7,9 +7,9 @@ const router = Router();
 // All routes require authentication
 router.use(authenticate);
 
-// Guard routes
-router.get('/', guardController.getAllGuards);
-router.get('/:id', guardController.getGuardById);
+// Guard routes - Only admins can view all guards
+router.get('/', authorize('ADMIN'), guardController.getAllGuards);
+router.get('/:id', authorize('ADMIN'), guardController.getGuardById);
 router.put('/profile', guardController.updateGuardProfile); // Guard can update their own profile
 router.put('/:id', authorize('ADMIN'), guardController.updateGuard);
 router.delete('/:id', authorize('ADMIN'), guardController.deleteGuard);

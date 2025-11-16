@@ -399,6 +399,40 @@ export class ClientService {
       },
     };
   }
+
+  async createClientProfile(userId: string, accountType: 'INDIVIDUAL' | 'COMPANY' = 'INDIVIDUAL') {
+    // Check if client profile already exists
+    const existingClient = await prisma.client.findUnique({
+      where: { userId },
+    });
+
+    if (existingClient) {
+      return existingClient;
+    }
+
+    // Create new client profile
+    const client = await prisma.client.create({
+      data: {
+        userId,
+        accountType,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+            role: true,
+          },
+        },
+      },
+    });
+
+    logger.info(`Client profile created for user: ${userId}`);
+    return client;
+  }
 }
 
 const clientService = new ClientService();

@@ -1,6 +1,8 @@
 import app from './app.js';
+import { createServer } from 'http';
 import { connectDatabase, disconnectDatabase } from './config/database.js';
 import { logger } from './utils/logger.js';
+import websocketService from './services/websocketService.js';
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 
@@ -9,12 +11,22 @@ const startServer = async () => {
     // Connect to database
     await connectDatabase();
 
+    // Create HTTP server
+    const server = createServer(app);
+
+    // Initialize WebSocket service
+    websocketService.initialize(server);
+
+    // Start live location broadcast
+    websocketService.startLiveLocationBroadcast();
+
     // Start server
-    const server = app.listen(PORT, () => {
+    server.listen(PORT, () => {
       logger.info(`🚀 Server running on http://localhost:${PORT}`);
       logger.info(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
       logger.info(`🔗 API: http://localhost:${PORT}/api`);
       logger.info(`❤️  Health: http://localhost:${PORT}/api/health`);
+      logger.info(`🌐 WebSocket: ws://localhost:${PORT}`);
     });
 
     // Graceful shutdown

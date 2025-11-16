@@ -1,13 +1,15 @@
-// Push Notification Service
-import { Platform, Alert, Linking } from 'react-native';
+// Enhanced Push Notification Service - Phase 3
+import { Platform, Alert, Linking, AppState } from 'react-native';
 import messaging from '@react-native-firebase/messaging';
 import PushNotification from 'react-native-push-notification';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { store } from '../store';
 import { addNotification } from '../store/slices/notificationSlice';
+import { ErrorHandler } from '../utils/errorHandler';
 
 class NotificationService {
   private isInitialized = false;
+  private shiftReminders: Map<string, number> = new Map();
 
   async initialize() {
     if (this.isInitialized) return;
@@ -22,13 +24,32 @@ class NotificationService {
         console.log('Notification permission granted');
         await this.setupPushNotifications();
         await this.setupBackgroundHandlers();
+        await this.setupShiftReminders();
         this.isInitialized = true;
       } else {
         console.log('Notification permission denied');
+        this.showPermissionAlert();
       }
     } catch (error) {
-      console.error('Error initializing notifications:', error);
+      ErrorHandler.handleError(error, 'notification_initialization');
     }
+  }
+
+  /**
+   * Show permission request alert
+   */
+  private showPermissionAlert() {
+    Alert.alert(
+      'Notifications Disabled',
+      'Enable notifications to receive shift reminders and important updates.',
+      [
+        { text: 'Later', style: 'cancel' },
+        { 
+          text: 'Settings', 
+          onPress: () => Linking.openSettings(),
+        },
+      ]
+    );
   }
 
   private async setupPushNotifications() {
@@ -327,9 +348,158 @@ class NotificationService {
       const authStatus = await messaging().requestPermission();
       return authStatus === messaging.AuthorizationStatus.AUTHORIZED;
     } catch (error) {
-      console.error('Error requesting notification permission:', error);
+      ErrorHandler.handleError(error, 'request_notification_permission');
       return false;
     }
+  }
+
+  /**
+   * Setup shift reminders
+   */
+  private async setupShiftReminders() {
+    try {
+      // Clear existing reminders
+      this.clearAllShiftReminders();
+      
+      // Load upcoming shifts and set reminders
+      // This would typically fetch from your shift service
+      // For now, we'll set up the infrastructure
+    } catch (error) {
+      ErrorHandler.handleError(error, 'setup_shift_reminders', false);
+    }
+  }
+
+  /**
+   * Schedule shift reminder notifications
+   */
+  async scheduleShiftReminder(shift: {
+    id: string;
+    startTime: string;
+    locationName: string;
+    address: string;
+  }) {
+    try {
+      const settings = await this.getNotificationSettings();
+      if (!settings.shiftReminders) return;
+
+      const shiftTime = new Date(shift.startTime);
+      const now = new Date();
+
+      // Schedule reminders at different intervals
+      const reminderTimes = [
+        { minutes: 60, message: '1 hour before shift' },
+        { minutes: 30, message: '30 minutes before shift' },
+        { minutes: 15, message: '15 minutes before shift' },
+      ];
+
+      reminderTimes.forEach(({ minutes, message }) => {
+        const reminderTime = new Date(shiftTime.getTime() - (minutes * 60 * 1000));
+        
+        if (reminderTime > now) {
+          const notificationId = this.generateNotificationId(shift.id, minutes);
+          
+          PushNotification.localNotificationSchedule({
+            id: notificationId,
+            title: 'Shift Reminder',
+            message: `${message} at ${shift.locationName}`,
+            date: reminderTime,
+            soundName: 'default',
+            userInfo: {
+              type: 'shift_reminder',
+              shiftId: shift.id,
+              minutes,
+            },
+          });
+
+          this.shiftReminders.set(`${shift.id}_${minutes}`, notificationId);
+        }
+      });
+    } catch (error) {
+      ErrorHandler.handleError(error, 'schedule_shift_reminder', false);
+    }
+  }
+
+  /**
+   * Cancel shift reminders
+   */
+  async cancelShiftReminders(shiftId: string) {
+    try {
+      const reminderKeys = Array.from(this.shiftReminders.keys())
+        .filter(key => key.startsWith(shiftId));
+
+      reminderKeys.forEach(key => {
+        const notificationId = this.shiftReminders.get(key);
+        if (notificationId) {
+          PushNotification.cancelLocalNotifications({ id: notificationId.toString() });
+          this.shiftReminders.delete(key);
+        }
+      });
+    } catch (error) {
+      ErrorHandler.handleError(error, 'cancel_shift_reminders', false);
+    }
+  }
+
+  /**
+   * Clear all shift reminders
+   */
+  private clearAllShiftReminders() {
+    try {
+      this.shiftReminders.forEach(notificationId => {
+        PushNotification.cancelLocalNotifications({ id: notificationId.toString() });
+      });
+      this.shiftReminders.clear();
+    } catch (error) {
+      ErrorHandler.handleError(error, 'clear_all_shift_reminders', false);
+    }
+  }
+
+  /**
+   * Send immediate notification
+   */
+  async sendImmediateNotification(title: string, message: string, data?: any) {
+    try {
+      PushNotification.localNotification({
+        title,
+        message,
+        soundName: 'default',
+        userInfo: data,
+      });
+    } catch (error) {
+      ErrorHandler.handleError(error, 'send_immediate_notification', false);
+    }
+  }
+
+  /**
+   * Send emergency alert
+   */
+  async sendEmergencyAlert(message: string, location?: { latitude: number; longitude: number }) {
+    try {
+      const settings = await this.getNotificationSettings();
+      if (!settings.emergencyAlerts) return;
+
+      PushNotification.localNotification({
+        id: 'emergency_alert',
+        title: '🚨 EMERGENCY ALERT',
+        message,
+        soundName: 'default',
+        priority: 'max',
+        importance: 'max',
+        userInfo: {
+          type: 'emergency_alert',
+          location,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    } catch (error) {
+      ErrorHandler.handleError(error, 'send_emergency_alert');
+    }
+  }
+
+  /**
+   * Generate unique notification ID
+   */
+  private generateNotificationId(shiftId: string, minutes: number): number {
+    return parseInt(`${shiftId.slice(-4)}${minutes}`.replace(/\D/g, '')) || Math.floor(Math.random() * 10000);
   }
 }
 

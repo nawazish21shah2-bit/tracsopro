@@ -9,6 +9,9 @@ import shiftRoutes from './shifts.js';
 import shiftReportRoutes from './shiftReports.js';
 import settingsRoutes from './settingsRoutes.js';
 import siteRoutes from './sites.js';
+import emergencyRoutes from './emergency.js';
+import paymentRoutes from './payments.js';
+import chatRoutes from './chat.js';
 
 const router = Router();
 
@@ -35,6 +38,9 @@ router.use('/shifts', shiftRoutes);
 router.use('/shift-reports', shiftReportRoutes);
 router.use('/settings', settingsRoutes);
 router.use('/sites', siteRoutes);
+router.use('/emergency', emergencyRoutes);
+router.use('/payments', paymentRoutes);
+router.use('/chat', chatRoutes);
 
 // Legacy routes for backward compatibility with in-memory server
 router.get('/locations', (req, res) => {

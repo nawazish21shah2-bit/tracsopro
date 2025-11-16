@@ -164,7 +164,7 @@ const iconMap = {
   bookmark: Bookmark,
   
   // Media Controls
-  refresh: RefreshCw,
+  refreshCw: RefreshCw,
   rotateCcw: RotateCcw,
   play: Play,
   pause: Pause,
@@ -346,6 +346,14 @@ export const EditIcon: React.FC<Omit<FeatherIconProps, 'name'>> = (props) => (
 
 export const ExternalLinkIcon: React.FC<Omit<FeatherIconProps, 'name'>> = (props) => (
   <FeatherIcon name="externalLink" {...props} />
+);
+
+export const RefreshCwIcon: React.FC<Omit<FeatherIconProps, 'name'>> = (props) => (
+  <FeatherIcon name="refreshCw" {...props} />
+);
+
+export const WifiOffIcon: React.FC<Omit<FeatherIconProps, 'name'>> = (props) => (
+  <FeatherIcon name="wifiOff" {...props} />
 );
 
 export default FeatherIcon;

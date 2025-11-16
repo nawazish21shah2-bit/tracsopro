@@ -7,15 +7,21 @@ import {
   ScrollView,
   TouchableOpacity,
   StatusBar,
-  Image,
+  RefreshControl,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useDispatch, useSelector } from 'react-redux';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { RootState } from '../../store';
+import {
+  fetchTodayShifts,
+  fetchUpcomingShifts,
+  fetchPastShifts,
+} from '../../store/slices/shiftSlice';
 import { MenuIcon, BellIcon, MapPinIcon, AlertTriangleIcon, AlertCircleIcon, CheckCircleIcon, ClockIcon, FileTextIcon } from '../../components/ui/FeatherIcons';
-import { globalStyles, COLORS, SPACING } from '../../styles/globalStyles';
+import { globalStyles, COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS } from '../../styles/globalStyles';
+import { AppScreen, AppCard } from '../../components/ui/AppComponents';
 import { AppHeader } from '../../components/ui/AppHeader';
-import { TabSelector } from '../../components/ui/TabSelector';
-import Logo from '../../assets/images/tracSOpro-logo.png';
 
 type MyShiftsScreenNavigationProp = StackNavigationProp<any, 'MyShifts'>;
 
@@ -52,15 +58,60 @@ interface WeeklyShift {
 
 const MyShiftsScreen: React.FC = () => {
   const navigation = useNavigation<MyShiftsScreenNavigationProp>();
+  const dispatch = useDispatch();
+  
+  const [selectedTab, setSelectedTab] = useState('Today');
   const [activeTab, setActiveTab] = useState<'today' | 'upcoming' | 'past'>('today');
-  const [timer, setTimer] = useState('03:22:32');
+  const [refreshing, setRefreshing] = useState(false);
 
-  const [monthlyStats] = useState<MonthlyStats>({
+  // Redux state
+  const { 
+    todayShifts, 
+    upcomingShifts, 
+    pastShifts, 
+    loading, 
+    error 
+  } = useSelector((state: RootState) => state.shifts);
+
+  // Use Redux data or fallback to mock data
+  const monthlyStats = {
     completedShifts: 21,
     missedShifts: 1,
     totalSites: 5,
     incidentReported: 2,
-  });
+  };
+
+  // Load data on mount
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        await Promise.all([
+          dispatch(fetchTodayShifts() as any),
+          dispatch(fetchUpcomingShifts() as any),
+          dispatch(fetchPastShifts() as any),
+        ]);
+      } catch (error) {
+        console.error('Error loading shifts data:', error);
+      }
+    };
+    loadData();
+  }, [dispatch]);
+
+  // Handler functions
+  const handleMenuPress = () => {
+    // TODO: Implement menu functionality
+  };
+
+  const handleNotificationPress = () => {
+    // TODO: Implement notification functionality
+  };
+
+
+
+  const handleEmergencyAlert = () => {
+    // TODO: Implement emergency alert functionality
+    console.log('Emergency alert');
+  };
 
   const [todayShift] = useState<ShiftData>({
     id: '1',
@@ -75,7 +126,7 @@ const MyShiftsScreen: React.FC = () => {
     timer: '03:22:32',
   });
 
-  const [upcomingShifts] = useState<ShiftData[]>([
+  const [mockUpcomingShifts] = useState<ShiftData[]>([
     {
       id: '2',
       location: 'Ocean View Vila',
@@ -149,17 +200,9 @@ const MyShiftsScreen: React.FC = () => {
     navigation.navigate('AddIncidentReport');
   };
 
-  const handleEmergencyAlert = () => {
-    console.log('Emergency Alert pressed');
-  };
 
-  const handleMenuPress = () => {
-    console.log('Menu pressed');
-  };
 
-  const handleNotificationPress = () => {
-    console.log('Notification pressed');
-  };
+
 
   const renderMonthlyStats = () => (
     <View style={styles.monthlyStatsContainer}>
@@ -247,7 +290,7 @@ const MyShiftsScreen: React.FC = () => {
       {shift.status === 'active' && (
         <>
           <View style={styles.timerContainer}>
-            <Text style={styles.timerText}>{timer}</Text>
+            <Text style={styles.timerText}>{todayShift.timer}</Text>
           </View>
           <Text style={styles.clockedInText}>
             Clocked In at {shift.clockedIn}
@@ -320,6 +363,20 @@ const MyShiftsScreen: React.FC = () => {
     </View>
   );
 
+  // Helper to adapt Redux shift to local ShiftData for UI
+  const toShiftData = (s: any): ShiftData => ({
+    id: s.id,
+    location: s.locationName || s.location || 'Unknown Site',
+    address: s.locationAddress || s.address || '',
+    status: s.status === 'IN_PROGRESS' ? 'active' : (s.status === 'SCHEDULED' ? 'upcoming' : 'completed'),
+    startTime: s.startTime ? new Date(s.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--',
+    endTime: s.endTime ? new Date(s.endTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--',
+    duration: '—',
+    description: s.description || '',
+    clockedIn: s.checkInTime ? new Date(s.checkInTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : undefined,
+    clockedOut: s.checkOutTime ? new Date(s.checkOutTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : undefined,
+  });
+
   const renderContent = () => {
     switch (activeTab) {
       case 'today':
@@ -332,7 +389,11 @@ const MyShiftsScreen: React.FC = () => {
       case 'upcoming':
         return (
           <View>
-            {upcomingShifts.map(renderShiftCard)}
+            {(
+              upcomingShifts && Array.isArray(upcomingShifts) && upcomingShifts.length
+                ? upcomingShifts.map(toShiftData)
+                : mockUpcomingShifts
+            ).map(renderShiftCard)}
           </View>
         );
       case 'past':
@@ -357,12 +418,6 @@ const MyShiftsScreen: React.FC = () => {
       
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {renderMonthlyStats()}
-        <TabSelector
-          tabs={tabs}
-          activeTab={activeTab}
-          onTabPress={(tabId) => setActiveTab(tabId as 'today' | 'upcoming' | 'past')}
-          style={styles.tabsContainer}
-        />
         {renderContent()}
         {renderWeeklySummary()}
       </ScrollView>
@@ -715,6 +770,9 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     marginTop: 40,
+  },
+  actionIconMargin: {
+    marginRight: 8,
   },
 });
 

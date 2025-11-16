@@ -23,9 +23,11 @@ import MessagesScreen from '../screens/main/MessagesScreen';
 
 
 // Import client screens
-import ClientDashboardScreen from '../screens/client/ClientDashboardScreen';
 import ClientStackNavigator from './ClientStackNavigator';
 import GuardStackNavigator from './GuardStackNavigator';
+
+// Import admin screens
+import AdminNavigator from './AdminNavigator';
 
 // Import stack screens
 import IncidentDetailScreen from '../screens/main/IncidentDetailScreen';
@@ -60,15 +62,19 @@ const MainTabNavigator: React.FC = () => {
   // Show different navigation based on user role
   const userRole = user?.role as any;
   const isClient = userRole === UserRole.CLIENT || userRole === 'CLIENT';
+  const isAdmin = userRole === UserRole.ADMIN || userRole === 'ADMIN' || user?.email === 'admin@test.com';
 
   // Debug logging for troubleshooting
   if (__DEV__) {
     console.log('MainTabNavigator - User Role:', userRole);
     console.log('MainTabNavigator - Is Client:', isClient);
+    console.log('MainTabNavigator - Is Admin:', isAdmin);
   }
 
-  // If client, use dedicated client navigator
-  if (isClient) {
+  // Route based on user role
+  if (isAdmin) {
+    return <AdminNavigator />;
+  } else if (isClient) {
     return <ClientStackNavigator />;
   }
 

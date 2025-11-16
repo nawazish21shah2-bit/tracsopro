@@ -14,6 +14,8 @@ import notificationReducer from './slices/notificationSlice';
 import shiftReducer from './slices/shiftSlice';
 import shiftReportReducer from './slices/shiftReportSlice';
 import clientReducer from './slices/clientSlice';
+import emergencyReducer from './slices/emergencySlice';
+import chatReducer from './slices/chatSliceNew';
 
 // Persist configuration
 const persistConfig = {
@@ -33,6 +35,8 @@ const rootReducer = combineReducers({
   shifts: shiftReducer,
   shiftReports: shiftReportReducer,
   client: clientReducer,
+  chat: chatReducer,
+  emergency: emergencyReducer,
 });
 
 // Persisted reducer

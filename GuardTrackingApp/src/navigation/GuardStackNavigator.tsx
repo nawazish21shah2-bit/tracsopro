@@ -4,6 +4,7 @@ import DashboardNavigator from './DashboardNavigator';
 import AvailableShiftsScreen from '../screens/guard/AvailableShiftsScreen';
 import ApplyForShiftScreen from '../screens/guard/ApplyForShiftScreen';
 import CheckInOutScreen from '../screens/guard/CheckInOutScreen';
+import IndividualChatScreen from '../screens/chat/IndividualChatScreen';
 
 export type GuardStackParamList = {
   GuardTabs: undefined;
@@ -11,6 +12,7 @@ export type GuardStackParamList = {
   ShiftDetails: { shiftId: string };
   ApplyForShift: { shiftId: string };
   CheckInOut: { assignmentId: string };
+  ChatScreen: { chatId: string; chatName: string; avatar?: string };
 };
 
 const Stack = createStackNavigator<GuardStackParamList>();
@@ -26,6 +28,7 @@ const GuardStackNavigator: React.FC = () => {
       <Stack.Screen name="AvailableShifts" component={AvailableShiftsScreen} />
       <Stack.Screen name="ApplyForShift" component={ApplyForShiftScreen} />
       <Stack.Screen name="CheckInOut" component={CheckInOutScreen} />
+      <Stack.Screen name="ChatScreen" component={IndividualChatScreen} />
     </Stack.Navigator>
   );
 };

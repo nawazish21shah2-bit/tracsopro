@@ -4,6 +4,7 @@ import { signAccessToken, signRefreshToken, verifyToken, getTokenExpiresIn } fro
 import { UnauthorizedError, ConflictError, ValidationError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 import otpService from './otpService.js';
+import clientService from './clientService.js';
 
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '10');
 const OTP_ENABLED = process.env.OTP_ENABLED !== 'false';
@@ -65,7 +66,7 @@ export class AuthService {
         },
       });
 
-      // Create Guard profile based on role
+      // Create profiles based on role
       if (user.role === 'GUARD') {
         await tx.guard.create({
           data: {
@@ -74,8 +75,14 @@ export class AuthService {
             status: 'ACTIVE',
           },
         });
+      } else if (user.role === 'CLIENT') {
+        await tx.client.create({
+          data: {
+            userId: user.id,
+            accountType: user.accountType || 'INDIVIDUAL',
+          },
+        });
       }
-      // Client profile will be created later after OTP verification
 
       return user;
     });
@@ -129,9 +136,13 @@ export class AuthService {
   async login(data: LoginData) {
     const { email, password } = data;
 
-    // Find user
+    // Find user with profile data
     const user = await prisma.user.findUnique({
       where: { email: email.toLowerCase() },
+      include: {
+        guard: true,
+        client: true,
+      },
     });
 
     if (!user) {
@@ -166,6 +177,15 @@ export class AuthService {
         role: user.role,
         isActive: user.isActive,
         createdAt: user.createdAt,
+        guard: user.guard ? {
+          id: user.guard.id,
+          employeeId: user.guard.employeeId,
+          status: user.guard.status,
+        } : undefined,
+        client: user.client ? {
+          id: user.client.id,
+          accountType: user.client.accountType,
+        } : undefined,
       },
       expiresIn: getTokenExpiresIn(),
     };

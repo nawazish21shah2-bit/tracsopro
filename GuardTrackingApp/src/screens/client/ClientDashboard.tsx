@@ -16,6 +16,7 @@ import { RootState, AppDispatch } from '../../store';
 import { MenuIcon, NotificationIcon, UserIcon, LocationIcon, ReportsIcon, EmergencyIcon } from '../../components/ui/AppIcons';
 import StatsCard from '../../components/client/StatsCard';
 import GuardCard from '../../components/client/GuardCard';
+import InteractiveMapView from '../../components/client/InteractiveMapView';
 import { fetchDashboardStats, fetchMyGuards } from '../../store/slices/clientSlice';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { useNavigation } from '@react-navigation/native';
@@ -125,13 +126,14 @@ const ClientDashboard: React.FC = () => {
           </TouchableOpacity>
         </View>
 
-        {/* Map Section */}
+        {/* Interactive Map Section */}
         <View style={styles.mapContainer}>
           <Text style={styles.sectionTitle}>Live Guards Location</Text>
-          <View style={styles.mapPlaceholder}>
-            <Text style={styles.mapText}>Map View</Text>
-            <Text style={styles.onlineText}>• 5 Online</Text>
-          </View>
+          <InteractiveMapView 
+            height={200}
+            showControls={true}
+            onGuardSelect={(guardId: string) => console.log('Guard selected:', guardId)}
+          />
         </View>
 
         {/* Today's Shifts Summary */}

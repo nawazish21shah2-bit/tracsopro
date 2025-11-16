@@ -11,10 +11,19 @@ import {
   Image,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useDispatch, useSelector } from 'react-redux';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { RootState } from '../../store';
+import {
+  fetchShiftStatistics,
+  fetchActiveShift,
+  fetchUpcomingShifts,
+} from '../../store/slices/shiftSlice';
 import { globalStyles, COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { AppScreen, AppStatCard, AppCard, AppStatGrid } from '../../components/ui/AppComponents';
 import { AppHeader } from '../../components/ui/AppHeader';
+import { LoadingOverlay, ErrorState, NetworkError, InlineLoading } from '../../components/ui/LoadingStates';
+import { ErrorHandler, withRetry } from '../../utils/errorHandler';
 import Logo from '../../assets/images/tracSOpro-logo.png';
 import {
   MenuIcon,
@@ -61,16 +70,27 @@ interface NotificationData {
 
 const GuardHomeScreen: React.FC = () => {
   const navigation = useNavigation<GuardHomeScreenNavigationProp>();
+  const dispatch = useDispatch();
+  
   const [refreshing, setRefreshing] = useState(false);
   const [currentTime, setCurrentTime] = useState('00:00:00');
   
-  // Mock data - replace with actual API calls
-  const [stats] = useState<StatsData>({
+  // Redux state
+  const { 
+    statistics, 
+    activeShift, 
+    upcomingShifts, 
+    loading, 
+    error 
+  } = useSelector((state: RootState) => state.shifts);
+  
+  // Use Redux data or fallback to mock data
+  const stats = statistics || {
     completedShifts: 21,
     missedShifts: 1,
     totalSites: 5,
     incidentReports: 2,
-  });
+  };
 
   const [todayShift] = useState<ShiftData>({
     id: '1',
@@ -127,23 +147,47 @@ const GuardHomeScreen: React.FC = () => {
 
   // Timer for active shift
   useEffect(() => {
+    // Initialize data on component mount
+    initializeData();
+
+    // Timer for current time
     const timer = setInterval(() => {
       const now = new Date();
-      const hours = String(now.getHours()).padStart(2, '0');
-      const minutes = String(now.getMinutes()).padStart(2, '0');
-      const seconds = String(now.getSeconds()).padStart(2, '0');
-      setCurrentTime(`${hours}:${minutes}:${seconds}`);
+      const timeString = now.toLocaleTimeString('en-US', { 
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+      setCurrentTime(timeString);
     }, 1000);
 
     return () => clearInterval(timer);
   }, []);
 
-  const onRefresh = React.useCallback(() => {
+  const initializeData = async () => {
+    try {
+      // Fetch all necessary data with retry logic
+      await withRetry(async () => {
+        await Promise.all([
+          dispatch(fetchActiveShift() as any),
+          dispatch(fetchUpcomingShifts() as any),
+        ]);
+      }, 3, 1000);
+    } catch (error) {
+      ErrorHandler.handleError(error, 'initialize_dashboard_data');
+    }
+  };
+
+  const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      await initializeData();
+    } catch (error) {
+      ErrorHandler.handleError(error, 'refresh_dashboard_data', false);
+    } finally {
       setRefreshing(false);
-    }, 2000);
+    }
   }, []);
 
   const handleCheckIn = () => {
@@ -303,6 +347,24 @@ const GuardHomeScreen: React.FC = () => {
     </View>
   );
 
+  // Show error state if there's an error and no data
+  if (error && !activeShift && !upcomingShifts?.length) {
+    return (
+      <AppScreen>
+        <AppHeader
+          showLogo={true}
+          onMenuPress={handleMenuPress}
+          onNotificationPress={handleNotificationPress}
+        />
+        <ErrorState
+          error={error}
+          onRetry={initializeData}
+          style={styles.errorContainer}
+        />
+      </AppScreen>
+    );
+  }
+
   return (
     <AppScreen>
       <AppHeader
@@ -310,6 +372,13 @@ const GuardHomeScreen: React.FC = () => {
         onMenuPress={handleMenuPress}
         onNotificationPress={handleNotificationPress}
       />
+      
+      {/* Loading overlay for initial load */}
+      <LoadingOverlay
+        visible={loading && !activeShift && !upcomingShifts?.length}
+        message="Loading dashboard..."
+      />
+      
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -318,6 +387,10 @@ const GuardHomeScreen: React.FC = () => {
         }
         showsVerticalScrollIndicator={false}
       >
+        {loading && (activeShift || upcomingShifts?.length) ? (
+          <InlineLoading message="Updating data..." style={styles.inlineLoading} />
+        ) : null}
+        
         {renderStatsSection()}
         {renderTodayShift()}
         {renderNotifications()}
@@ -614,6 +687,15 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.fontSize.xs,
     color: COLORS.success,
     fontWeight: TYPOGRAPHY.fontWeight.medium,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.xl,
+  },
+  inlineLoading: {
+    marginVertical: SPACING.md,
   },
 });
 

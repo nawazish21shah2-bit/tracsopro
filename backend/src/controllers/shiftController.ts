@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
-import shiftService from '../services/shiftService';
-import { ShiftStatus } from '@prisma/client';
+import shiftService from '../services/shiftServiceSimple.js';
+import { ShiftStatus, BreakType, IncidentType, IncidentSeverity } from '@prisma/client';
+import { logger } from '../utils/logger.js';
+import { BadRequestError, NotFoundError } from '../utils/errors.js';
 
 /**
  * @swagger
@@ -481,11 +483,589 @@ export const createShift = async (req: Request, res: Response) => {
     });
 
     res.status(201).json({
+      success: true,
       message: 'Shift created successfully',
-      shift,
+      data: shift,
     });
   } catch (error: any) {
-    console.error('Error creating shift:', error);
-    res.status(400).json({ error: error.message || 'Failed to create shift' });
+    logger.error('Error creating shift:', error);
+    res.status(400).json({ 
+      success: false,
+      error: error.message || 'Failed to create shift' 
+    });
+  }
+};
+
+/**
+ * @swagger
+ * /api/shifts/{id}/check-in:
+ *   post:
+ *     summary: Check in to a shift
+ *     tags: [Shifts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Shift ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - location
+ *             properties:
+ *               location:
+ *                 type: object
+ *                 properties:
+ *                   latitude:
+ *                     type: number
+ *                   longitude:
+ *                     type: number
+ *                   accuracy:
+ *                     type: number
+ *                   address:
+ *                     type: string
+ *     responses:
+ *       200:
+ *         description: Successfully checked in
+ *       400:
+ *         description: Bad request
+ *       404:
+ *         description: Shift not found
+ */
+export const checkInToShift = async (req: Request, res: Response) => {
+  try {
+    const { id: shiftId } = req.params;
+    const guardId = (req as any).user?.guard?.id || (req as any).user?.id;
+    const { location } = req.body;
+
+    if (!guardId) {
+      return res.status(401).json({ 
+        success: false,
+        error: 'Guard not found' 
+      });
+    }
+
+    if (!location || !location.latitude || !location.longitude) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Location data is required for check-in' 
+      });
+    }
+
+    const shift = await shiftService.checkInToShift({
+      shiftId,
+      guardId,
+      location,
+      timestamp: new Date(),
+    });
+
+    res.json({
+      success: true,
+      message: 'Successfully checked in to shift',
+      data: shift,
+    });
+  } catch (error: any) {
+    logger.error('Error checking in to shift:', error);
+    res.status(400).json({ 
+      success: false,
+      error: error.message || 'Failed to check in to shift' 
+    });
+  }
+};
+
+/**
+ * @swagger
+ * /api/shifts/{id}/check-out:
+ *   post:
+ *     summary: Check out from a shift
+ *     tags: [Shifts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Shift ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - location
+ *             properties:
+ *               location:
+ *                 type: object
+ *                 properties:
+ *                   latitude:
+ *                     type: number
+ *                   longitude:
+ *                     type: number
+ *                   accuracy:
+ *                     type: number
+ *                   address:
+ *                     type: string
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Successfully checked out
+ *       400:
+ *         description: Bad request
+ *       404:
+ *         description: Shift not found
+ */
+export const checkOutFromShift = async (req: Request, res: Response) => {
+  try {
+    const { id: shiftId } = req.params;
+    const guardId = (req as any).user?.guard?.id || (req as any).user?.id;
+    const { location, notes } = req.body;
+
+    if (!guardId) {
+      return res.status(401).json({ 
+        success: false,
+        error: 'Guard not found' 
+      });
+    }
+
+    if (!location || !location.latitude || !location.longitude) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Location data is required for check-out' 
+      });
+    }
+
+    const shift = await shiftService.checkOutFromShift({
+      shiftId,
+      guardId,
+      location,
+      timestamp: new Date(),
+      notes,
+    });
+
+    res.json({
+      success: true,
+      message: 'Successfully checked out from shift',
+      data: shift,
+    });
+  } catch (error: any) {
+    logger.error('Error checking out from shift:', error);
+    res.status(400).json({ 
+      success: false,
+      error: error.message || 'Failed to check out from shift' 
+    });
+  }
+};
+
+/**
+ * @swagger
+ * /api/shifts/{id}/start-break:
+ *   post:
+ *     summary: Start a break during shift
+ *     tags: [Shifts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Shift ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - breakType
+ *             properties:
+ *               breakType:
+ *                 type: string
+ *                 enum: [REGULAR, LUNCH, EMERGENCY, UNAUTHORIZED]
+ *               location:
+ *                 type: object
+ *                 properties:
+ *                   latitude:
+ *                     type: number
+ *                   longitude:
+ *                     type: number
+ *                   accuracy:
+ *                     type: number
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Break started successfully
+ *       400:
+ *         description: Bad request
+ */
+export const startBreak = async (req: Request, res: Response) => {
+  try {
+    const { id: shiftId } = req.params;
+    const guardId = (req as any).user?.guard?.id || (req as any).user?.id;
+    const { breakType, location, notes } = req.body;
+
+    if (!guardId) {
+      return res.status(401).json({ 
+        success: false,
+        error: 'Guard not found' 
+      });
+    }
+
+    const shiftBreak = await shiftService.startBreak({
+      shiftId,
+      guardId,
+      breakType: breakType as BreakType,
+      location,
+      notes,
+    });
+
+    res.json({
+      success: true,
+      message: 'Break started successfully',
+      data: shiftBreak,
+    });
+  } catch (error: any) {
+    logger.error('Error starting break:', error);
+    res.status(400).json({ 
+      success: false,
+      error: error.message || 'Failed to start break' 
+    });
+  }
+};
+
+/**
+ * @swagger
+ * /api/shifts/{shiftId}/end-break/{breakId}:
+ *   post:
+ *     summary: End a break during shift
+ *     tags: [Shifts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: shiftId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Shift ID
+ *       - in: path
+ *         name: breakId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Break ID
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               location:
+ *                 type: object
+ *                 properties:
+ *                   latitude:
+ *                     type: number
+ *                   longitude:
+ *                     type: number
+ *                   accuracy:
+ *                     type: number
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Break ended successfully
+ *       400:
+ *         description: Bad request
+ */
+export const endBreak = async (req: Request, res: Response) => {
+  try {
+    const { shiftId, breakId } = req.params;
+    const guardId = (req as any).user?.guard?.id || (req as any).user?.id;
+    const { location, notes } = req.body;
+
+    if (!guardId) {
+      return res.status(401).json({ 
+        success: false,
+        error: 'Guard not found' 
+      });
+    }
+
+    const shiftBreak = await shiftService.endBreak({
+      shiftId,
+      guardId,
+      breakId,
+      location,
+      notes,
+    });
+
+    res.json({
+      success: true,
+      message: 'Break ended successfully',
+      data: shiftBreak,
+    });
+  } catch (error: any) {
+    logger.error('Error ending break:', error);
+    res.status(400).json({ 
+      success: false,
+      error: error.message || 'Failed to end break' 
+    });
+  }
+};
+
+/**
+ * @swagger
+ * /api/shifts/{id}/report-incident:
+ *   post:
+ *     summary: Report an incident during shift
+ *     tags: [Shifts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Shift ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - incidentType
+ *               - severity
+ *               - title
+ *               - description
+ *             properties:
+ *               incidentType:
+ *                 type: string
+ *                 enum: [SECURITY_BREACH, MEDICAL_EMERGENCY, FIRE_ALARM, THEFT, VANDALISM, SUSPICIOUS_ACTIVITY, EQUIPMENT_FAILURE, WEATHER_RELATED, OTHER]
+ *               severity:
+ *                 type: string
+ *                 enum: [LOW, MEDIUM, HIGH, CRITICAL]
+ *               title:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               location:
+ *                 type: object
+ *                 properties:
+ *                   latitude:
+ *                     type: number
+ *                   longitude:
+ *                     type: number
+ *                   accuracy:
+ *                     type: number
+ *                   address:
+ *                     type: string
+ *               attachments:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       201:
+ *         description: Incident reported successfully
+ *       400:
+ *         description: Bad request
+ */
+export const reportIncident = async (req: Request, res: Response) => {
+  try {
+    const { id: shiftId } = req.params;
+    const guardId = (req as any).user?.guard?.id || (req as any).user?.id;
+    const { incidentType, severity, title, description, location, attachments } = req.body;
+
+    if (!guardId) {
+      return res.status(401).json({ 
+        success: false,
+        error: 'Guard not found' 
+      });
+    }
+
+    const incident = await shiftService.reportIncident({
+      shiftId,
+      guardId,
+      incidentType: incidentType as IncidentType,
+      severity: severity as IncidentSeverity,
+      title,
+      description,
+      location,
+      attachments,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Incident reported successfully',
+      data: incident,
+    });
+  } catch (error: any) {
+    logger.error('Error reporting incident:', error);
+    res.status(400).json({ 
+      success: false,
+      error: error.message || 'Failed to report incident' 
+    });
+  }
+};
+
+/**
+ * @swagger
+ * /api/shifts/active:
+ *   get:
+ *     summary: Get guard's active shift
+ *     tags: [Shifts]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Active shift data
+ *       404:
+ *         description: No active shift found
+ */
+export const getActiveShift = async (req: Request, res: Response) => {
+  try {
+    const guardId = (req as any).user?.guard?.id || (req as any).user?.id;
+
+    if (!guardId) {
+      return res.status(401).json({ 
+        success: false,
+        error: 'Guard not found' 
+      });
+    }
+
+    const activeShift = await shiftService.getActiveShift(guardId);
+
+    if (!activeShift) {
+      return res.status(404).json({
+        success: false,
+        message: 'No active shift found',
+      });
+    }
+
+    res.json({
+      success: true,
+      data: activeShift,
+    });
+  } catch (error: any) {
+    logger.error('Error getting active shift:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message || 'Failed to get active shift' 
+    });
+  }
+};
+
+/**
+ * @swagger
+ * /api/shifts/upcoming:
+ *   get:
+ *     summary: Get guard's upcoming shifts
+ *     tags: [Shifts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Number of shifts to return
+ *     responses:
+ *       200:
+ *         description: Upcoming shifts
+ */
+export const getUpcomingShifts = async (req: Request, res: Response) => {
+  try {
+    const guardId = (req as any).user?.guard?.id || (req as any).user?.id;
+    const limit = parseInt(req.query.limit as string) || 10;
+
+    if (!guardId) {
+      return res.status(401).json({ 
+        success: false,
+        error: 'Guard not found' 
+      });
+    }
+
+    const upcomingShifts = await shiftService.getUpcomingShifts(guardId, limit);
+
+    res.json({
+      success: true,
+      data: upcomingShifts,
+    });
+  } catch (error: any) {
+    logger.error('Error getting upcoming shifts:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message || 'Failed to get upcoming shifts' 
+    });
+  }
+};
+
+/**
+ * @swagger
+ * /api/shifts/statistics:
+ *   get:
+ *     summary: Get guard's shift statistics
+ *     tags: [Shifts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start date for statistics
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End date for statistics
+ *     responses:
+ *       200:
+ *         description: Shift statistics
+ */
+export const getShiftStatistics = async (req: Request, res: Response) => {
+  try {
+    const guardId = (req as any).user?.guard?.id || (req as any).user?.id;
+    const { startDate, endDate } = req.query;
+
+    if (!guardId) {
+      return res.status(401).json({ 
+        success: false,
+        error: 'Guard not found' 
+      });
+    }
+
+    const stats = await shiftService.getGuardShiftStats(
+      guardId,
+      startDate ? new Date(startDate as string) : undefined,
+      endDate ? new Date(endDate as string) : undefined
+    );
+
+    res.json({
+      success: true,
+      data: stats,
+    });
+  } catch (error: any) {
+    logger.error('Error getting shift statistics:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message || 'Failed to get shift statistics' 
+    });
   }
 };

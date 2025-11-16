@@ -11,6 +11,7 @@ import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import GuardAppHeader from '../../components/ui/GuardAppHeader';
+import EmergencyButton from '../../components/emergency/EmergencyButton';
 import { GuardStackParamList } from '../../navigation/GuardStackNavigator';
 import {
   Clock,
@@ -140,6 +141,22 @@ const GuardHomeScreen: React.FC = () => {
             <Users width={20} height={20} color="#F59E0B" />,
             '#F59E0B'
           )}
+        </View>
+
+        {/* Emergency Button */}
+        <View style={styles.emergencySection}>
+          <EmergencyButton
+            size="large"
+            onEmergencyTriggered={(alertId) => {
+              Alert.alert(
+                'Emergency Alert Sent',
+                `Emergency alert ${alertId} has been sent to administrators.`,
+                [{ text: 'OK' }]
+              );
+            }}
+          />
+          <Text style={styles.emergencyText}>Emergency Alert</Text>
+          <Text style={styles.emergencySubtext}>Tap for immediate assistance</Text>
         </View>
 
         {/* Current Shift Status */}
@@ -382,6 +399,24 @@ const styles = StyleSheet.create({
   activityTime: {
     fontSize: 11,
     color: '#999999',
+  },
+  emergencySection: {
+    paddingHorizontal: 16,
+    paddingTop: 24,
+    alignItems: 'center',
+  },
+  emergencyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#DC2626',
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  emergencySubtext: {
+    fontSize: 12,
+    color: '#666666',
+    marginTop: 4,
+    textAlign: 'center',
   },
 });
 

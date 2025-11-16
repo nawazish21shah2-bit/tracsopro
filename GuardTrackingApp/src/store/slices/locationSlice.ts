@@ -83,6 +83,72 @@ export const fetchTrackingHistory = createAsyncThunk(
   }
 );
 
+export const recordLocationData = createAsyncThunk(
+  'locations/recordLocationData',
+  async (locationData: {
+    guardId: string;
+    latitude: number;
+    longitude: number;
+    accuracy: number;
+    batteryLevel?: number;
+    timestamp: number;
+  }, { rejectWithValue }) => {
+    try {
+      const response = await apiService.recordLocation(locationData.guardId, locationData);
+      if (response.success) {
+        return { ...locationData, id: response.data.id };
+      } else {
+        return rejectWithValue(response.message || 'Failed to record location');
+      }
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Failed to record location');
+    }
+  }
+);
+
+export const recordGeofenceEvent = createAsyncThunk(
+  'locations/recordGeofenceEvent',
+  async (eventData: {
+    guardId: string;
+    geofenceId: string;
+    eventType: 'ENTER' | 'EXIT';
+    location: {
+      latitude: number;
+      longitude: number;
+      accuracy: number;
+      timestamp: number;
+    };
+    timestamp: number;
+  }, { rejectWithValue }) => {
+    try {
+      const response = await apiService.recordGeofenceEvent(eventData);
+      if (response.success) {
+        return response.data;
+      } else {
+        return rejectWithValue(response.message || 'Failed to record geofence event');
+      }
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Failed to record geofence event');
+    }
+  }
+);
+
+export const getLiveLocations = createAsyncThunk(
+  'locations/getLiveLocations',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await apiService.getLiveLocations();
+      if (response.success) {
+        return response.data;
+      } else {
+        return rejectWithValue(response.message || 'Failed to get live locations');
+      }
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Failed to get live locations');
+    }
+  }
+);
+
 // Location slice
 const locationSlice = createSlice({
   name: 'locations',
@@ -123,6 +189,31 @@ const locationSlice = createSlice({
       state.trackingData = [];
       state.isTracking = false;
       state.error = null;
+    },
+    setGeofenceEvent: (state, action: PayloadAction<{
+      guardId: string;
+      geofenceId: string;
+      eventType: 'ENTER' | 'EXIT';
+      timestamp: number;
+    }>) => {
+      // Handle geofence events in the UI
+      const event = action.payload;
+      // Could trigger notifications or UI updates here
+    },
+    updateLiveLocations: (state, action: PayloadAction<any[]>) => {
+      // Update live locations from WebSocket
+      state.trackingData = action.payload.map((location, index) => ({
+        id: location.guard?.id || index.toString(),
+        guardId: location.guard?.id || '',
+        coordinates: {
+          latitude: location.location?.latitude || 0,
+          longitude: location.location?.longitude || 0,
+        },
+        timestamp: new Date(location.lastUpdate || Date.now()),
+        batteryLevel: location.location?.batteryLevel || 0,
+        isOnline: true,
+        accuracy: location.location?.accuracy || 0,
+      }));
     },
   },
   extraReducers: (builder) => {
@@ -205,6 +296,77 @@ const locationSlice = createSlice({
         state.isLoading = false;
         state.error = action.payload as string;
       });
+
+    // Record location data
+    builder
+      .addCase(recordLocationData.pending, (state) => {
+        state.error = null;
+      })
+      .addCase(recordLocationData.fulfilled, (state, action) => {
+        // Add recorded location to tracking data
+        const trackingData: TrackingData = {
+          id: action.payload.id || Date.now().toString(),
+          guardId: action.payload.guardId,
+          coordinates: {
+            latitude: action.payload.latitude,
+            longitude: action.payload.longitude,
+          },
+          timestamp: new Date(action.payload.timestamp),
+          batteryLevel: action.payload.batteryLevel || 0,
+          isOnline: true,
+          accuracy: action.payload.accuracy,
+        };
+        state.trackingData.push(trackingData);
+        // Keep only last 100 tracking points
+        if (state.trackingData.length > 100) {
+          state.trackingData = state.trackingData.slice(-100);
+        }
+        state.error = null;
+      })
+      .addCase(recordLocationData.rejected, (state, action) => {
+        state.error = action.payload as string;
+      });
+
+    // Record geofence event
+    builder
+      .addCase(recordGeofenceEvent.pending, (state) => {
+        state.error = null;
+      })
+      .addCase(recordGeofenceEvent.fulfilled, (state, action) => {
+        // Geofence event recorded successfully
+        state.error = null;
+      })
+      .addCase(recordGeofenceEvent.rejected, (state, action) => {
+        state.error = action.payload as string;
+      });
+
+    // Get live locations
+    builder
+      .addCase(getLiveLocations.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(getLiveLocations.fulfilled, (state, action) => {
+        state.isLoading = false;
+        // Update tracking data with live locations
+        state.trackingData = action.payload.map((location: any, index: number) => ({
+          id: location.guard?.id || index.toString(),
+          guardId: location.guard?.id || '',
+          coordinates: {
+            latitude: location.location?.latitude || 0,
+            longitude: location.location?.longitude || 0,
+          },
+          timestamp: new Date(location.lastUpdate || Date.now()),
+          batteryLevel: location.location?.batteryLevel || 0,
+          isOnline: true,
+          accuracy: location.location?.accuracy || 0,
+        }));
+        state.error = null;
+      })
+      .addCase(getLiveLocations.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload as string;
+      });
   },
 });
 
@@ -216,6 +378,8 @@ export const {
   addTrackingData, 
   updateTrackingData, 
   clearTrackingData, 
-  clearLocations 
+  clearLocations,
+  setGeofenceEvent,
+  updateLiveLocations
 } = locationSlice.actions;
 export default locationSlice.reducer;
