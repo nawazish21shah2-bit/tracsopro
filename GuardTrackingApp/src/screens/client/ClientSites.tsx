@@ -11,7 +11,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, DrawerActions } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootState, AppDispatch } from '../../store';
 import { MenuIcon, NotificationIcon } from '../../components/ui/AppIcons';
@@ -29,6 +29,7 @@ interface SiteData {
   status: 'Active' | 'Upcoming' | 'Missed';
   shiftTime?: string;
   checkInTime?: string;
+  guardId?: string;
 }
 
 const ClientSites: React.FC = () => {
@@ -39,8 +40,13 @@ const ClientSites: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const handleAddNewSite = () => {
-    navigation.navigate('AddSite');
+  const handleMenuPress = () => {
+    // Open the nearest drawer (global sidebar)
+    (navigation as any).dispatch(DrawerActions.openDrawer());
+  };
+
+  const handleNotificationPress = () => {
+    navigation.navigate('ClientNotifications');
   };
 
   const handleSitePress = (siteId: string) => {
@@ -49,6 +55,16 @@ const ClientSites: React.FC = () => {
 
   const handleMoreOptions = (siteId: string) => {
     console.log('More options for site:', siteId);
+  };
+
+  const handleChatWithGuard = (guardId: string, guardName: string) => {
+    // Navigate to chat screen with guard
+    (navigation as any).navigate('IndividualChatScreen', {
+      chatId: `client_guard_${guardId}`,
+      chatName: guardName,
+      avatar: undefined,
+      context: 'site'
+    });
   };
 
   const fetchSites = async () => {
@@ -84,14 +100,14 @@ const ClientSites: React.FC = () => {
 
   return (
     <SafeAreaWrapper>
-      {/* Header */}
+      {/* Header (read-only for client) */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.menuButton}>
+        <TouchableOpacity style={styles.menuButton} onPress={handleMenuPress}>
           <MenuIcon size={24} color="#333" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Active Sites</Text>
-        <TouchableOpacity style={styles.addButton} onPress={handleAddNewSite}>
-          <Text style={styles.addButtonText}>Add New Site</Text>
+        <Text style={styles.headerTitle}>My Sites</Text>
+        <TouchableOpacity style={styles.menuButton} onPress={handleNotificationPress}>
+          <NotificationIcon size={22} color="#333" />
         </TouchableOpacity>
       </View>
 
@@ -109,7 +125,7 @@ const ClientSites: React.FC = () => {
         ) : sites.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>No sites found</Text>
-            <Text style={styles.emptySubtext}>Add your first site to get started</Text>
+            <Text style={styles.emptySubtext}>Sites are created and managed by your security provider.</Text>
           </View>
         ) : (
           sites.map((site) => {
@@ -118,8 +134,11 @@ const ClientSites: React.FC = () => {
               id: site.id,
               name: site.name,
               address: site.address,
-              guardName: 'No Guard Assigned', // Default value, will be updated when shifts are implemented
-              status: 'Upcoming' as const, // Default status, will be updated based on actual shift data
+              guardName: 'Mark Husdon', // Mock guard name
+              status: 'Active' as const, // Mock active status for demo
+              guardId: 'guard_1', // Mock guard ID for chat functionality
+              shiftTime: '08:00 - 20:00',
+              checkInTime: '08:12 am',
             };
             
             return (
@@ -128,6 +147,7 @@ const ClientSites: React.FC = () => {
                 site={siteData}
                 onPress={() => handleSitePress(site.id)}
                 onMoreOptions={() => handleMoreOptions(site.id)}
+                onChatWithGuard={handleChatWithGuard}
               />
             );
           })

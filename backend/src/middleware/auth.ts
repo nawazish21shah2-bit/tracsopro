@@ -127,3 +127,48 @@ export const optionalAuth = async (
     next();
   }
 };
+
+// Alias for backward compatibility
+export const authenticateToken = authenticate;
+
+// Super Admin specific middleware
+export const requireSuperAdmin = (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): void => {
+  try {
+    if (!req.user) {
+      throw new UnauthorizedError('Authentication required');
+    }
+
+    if (req.user.role !== 'SUPER_ADMIN') {
+      throw new ForbiddenError('Super Admin access required');
+    }
+
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Admin or Super Admin middleware
+export const requireAdmin = (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): void => {
+  try {
+    if (!req.user) {
+      throw new UnauthorizedError('Authentication required');
+    }
+
+    if (!['ADMIN', 'SUPER_ADMIN'].includes(req.user.role)) {
+      throw new ForbiddenError('Admin access required');
+    }
+
+    next();
+  } catch (error) {
+    next(error);
+  }
+};

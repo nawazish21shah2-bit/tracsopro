@@ -23,6 +23,7 @@ interface MenuOption {
 const ProfileScreen: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
+  const isVerified = user?.isActive ?? false;
 
   const handlePastJobs = () => {
     Alert.alert('Past Jobs', 'View your completed assignments');
@@ -111,9 +112,14 @@ const ProfileScreen: React.FC = () => {
                 {user ? `${user.firstName} ${user.lastName}` : 'Mark Husdon'}
               </Text>
               <View style={styles.verifiedRow}>
-                <Text style={styles.verifiedText}>Verified</Text>
-                <View style={styles.verifiedBadge}>
-                  <CheckCircle width={14} height={14} color="#4CAF50" />
+                <Text style={styles.verifiedText}>{isVerified ? 'Verified' : 'Inactive'}</Text>
+                <View
+                  style={[
+                    styles.verifiedBadge,
+                    !isVerified && { backgroundColor: '#B0B0B0' },
+                  ]}
+                >
+                  <CheckCircle width={14} height={14} color={isVerified ? '#4CAF50' : '#FFFFFF'} />
                 </View>
               </View>
             </View>

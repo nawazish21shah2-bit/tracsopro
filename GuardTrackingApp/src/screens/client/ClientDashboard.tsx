@@ -14,7 +14,7 @@ import {
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { MenuIcon, NotificationIcon, UserIcon, LocationIcon, ReportsIcon, EmergencyIcon } from '../../components/ui/AppIcons';
-import StatsCard from '../../components/client/StatsCard';
+import StatsCard from '../../components/ui/StatsCard';
 import GuardCard from '../../components/client/GuardCard';
 import InteractiveMapView from '../../components/client/InteractiveMapView';
 import { fetchDashboardStats, fetchMyGuards } from '../../store/slices/clientSlice';
@@ -84,36 +84,36 @@ const ClientDashboard: React.FC = () => {
           <View style={styles.statsRow}>
             <View style={styles.statsColumn}>
               <StatsCard
-                title="Guards On Duty"
+                label="Guards On Duty"
                 value={dashboardStats?.guardsOnDuty || 0}
-                icon={<UserIcon size={24} color="#2E7D32" />}
-                color="#2E7D32"
+                icon={<UserIcon size={18} color="#2E7D32" />}
+                variant="success"
               />
             </View>
             <View style={styles.statsColumn}>
               <StatsCard
-                title="Missed Shifts"
+                label="Missed Shifts"
                 value={dashboardStats?.missedShifts || 0}
-                icon={<EmergencyIcon size={24} color="#D32F2F" />}
-                color="#D32F2F"
+                icon={<EmergencyIcon size={18} color="#D32F2F" />}
+                variant="danger"
               />
             </View>
           </View>
           <View style={styles.statsRow}>
             <View style={styles.statsColumn}>
               <StatsCard
-                title="Active Sites"
+                label="Active Sites"
                 value={dashboardStats?.activeSites || 0}
-                icon={<LocationIcon size={24} color="#1976D2" />}
-                color="#1976D2"
+                icon={<LocationIcon size={18} color="#1976D2" />}
+                variant="info"
               />
             </View>
             <View style={styles.statsColumn}>
               <StatsCard
-                title="New Reports"
+                label="New Reports"
                 value={dashboardStats?.newReports || 0}
-                icon={<ReportsIcon size={24} color="#FF9500" />}
-                color="#FF9500"
+                icon={<ReportsIcon size={18} color="#FF9500" />}
+                variant="neutral"
               />
             </View>
           </View>

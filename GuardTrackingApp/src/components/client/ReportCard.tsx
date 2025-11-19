@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { PersonIcon } from '../ui/AppIcons';
 import StatusBadge from './StatusBadge';
+import { globalStyles } from '../../styles/globalStyles';
 
 interface ReportCardProps {
   report: {
@@ -14,12 +15,14 @@ interface ReportCardProps {
     description: string;
     status: 'Respond' | 'New' | 'Reviewed';
     checkInTime?: string;
+    guardId?: string;
   };
   onPress?: () => void;
   onRespond?: () => void;
+  onChatWithGuard?: (guardId: string, guardName: string) => void;
 }
 
-const ReportCard: React.FC<ReportCardProps> = ({ report, onPress, onRespond }) => {
+const ReportCard: React.FC<ReportCardProps> = ({ report, onPress, onRespond, onChatWithGuard }) => {
   const getTypeIcon = () => {
     switch (report.type) {
       case 'Medical Emergency':
@@ -51,7 +54,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, onPress, onRespond }) =
   };
 
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={[globalStyles.card, styles.card]} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.header}>
         <View style={styles.typeContainer}>
           <View style={[styles.typeIcon, { backgroundColor: getTypeColor() + '15' }]}>
@@ -88,6 +91,14 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, onPress, onRespond }) =
               <Text style={styles.checkInTime}>Checked In at {report.checkInTime}</Text>
             )}
           </View>
+          {onChatWithGuard && report.guardId && (
+            <TouchableOpacity 
+              style={styles.chatButton}
+              onPress={() => onChatWithGuard(report.guardId!, report.guardName)}
+            >
+              <Text style={styles.chatButtonText}>💬</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -98,18 +109,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, onPress, onRespond }) =
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
   },
   header: {
     flexDirection: 'row',
@@ -204,6 +204,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333333',
     lineHeight: 20,
+  },
+  chatButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#1976D2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  chatButtonText: {
+    fontSize: 16,
   },
 });
 

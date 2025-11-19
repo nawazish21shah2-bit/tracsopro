@@ -14,7 +14,8 @@ import {
   Alert,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
-import { RootState } from '../../store';
+import { RootState, AppDispatch } from '../../store';
+import { logoutUser } from '../../store/slices/authSlice';
 import { globalStyles, COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { 
   UserIcon, 
@@ -48,7 +49,7 @@ interface DashboardMetrics {
 }
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
-  const dispatch = useDispatch();
+  const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
 
   const [metrics, setMetrics] = useState<DashboardMetrics>({
@@ -148,6 +149,32 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
     );
   };
 
+  const handleLogout = async () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Dispatch logout action - this will handle API call, storage cleanup, and navigation
+              await dispatch(logoutUser()).unwrap();
+            } catch (error) {
+              console.error('Logout error:', error);
+              Alert.alert('Error', 'Failed to logout. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const renderHeader = () => (
     <View style={styles.header}>
       <View style={styles.headerLeft}>
@@ -173,6 +200,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
         <TouchableOpacity style={styles.emergencyButton} onPress={handleEmergencyAlert}>
           <EmergencyIcon size={20} color="#FFF" />
         </TouchableOpacity>
+
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <SettingsIcon size={20} color="#FFF" />
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -180,12 +211,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
   const renderMetricsOverview = () => (
     <View style={styles.metricsContainer}>
       <Text style={styles.sectionTitle}>Operations Overview</Text>
-      
+
       <View style={styles.metricsGrid}>
         <View style={styles.metricCard}>
           <View style={styles.metricHeader}>
             <UserIcon size={24} color={COLORS.primary} />
-            <Text style={styles.metricValue}>{metrics.activeGuards}/{metrics.totalGuards}</Text>
+            <Text style={styles.metricValue}>
+              {metrics.activeGuards}/{metrics.totalGuards}
+            </Text>
           </View>
           <Text style={styles.metricLabel}>Active Guards</Text>
           <Text style={styles.metricTrend}>+2 from yesterday</Text>
@@ -194,7 +227,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
         <View style={styles.metricCard}>
           <View style={styles.metricHeader}>
             <LocationIcon size={24} color={COLORS.success} />
-            <Text style={styles.metricValue}>{metrics.activeSites}/{metrics.totalSites}</Text>
+            <Text style={styles.metricValue}>
+              {metrics.activeSites}/{metrics.totalSites}
+            </Text>
           </View>
           <Text style={styles.metricLabel}>Active Sites</Text>
           <Text style={styles.metricTrend}>All operational</Text>
@@ -375,6 +410,14 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
     backgroundColor: COLORS.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoutButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },

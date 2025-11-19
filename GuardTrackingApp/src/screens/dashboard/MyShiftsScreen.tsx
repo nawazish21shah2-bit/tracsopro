@@ -9,7 +9,7 @@ import {
   StatusBar,
   RefreshControl,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, DrawerActions } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootState } from '../../store';
@@ -21,6 +21,7 @@ import {
 import { MenuIcon, BellIcon, MapPinIcon, AlertTriangleIcon, AlertCircleIcon, CheckCircleIcon, ClockIcon, FileTextIcon } from '../../components/ui/FeatherIcons';
 import { globalStyles, COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS } from '../../styles/globalStyles';
 import { AppScreen, AppCard } from '../../components/ui/AppComponents';
+import StatsCard from '../../components/ui/StatsCard';
 import { AppHeader } from '../../components/ui/AppHeader';
 
 type MyShiftsScreenNavigationProp = StackNavigationProp<any, 'MyShifts'>;
@@ -99,7 +100,7 @@ const MyShiftsScreen: React.FC = () => {
 
   // Handler functions
   const handleMenuPress = () => {
-    // TODO: Implement menu functionality
+    (navigation as any).dispatch(DrawerActions.openDrawer());
   };
 
   const handleNotificationPress = () => {
@@ -208,45 +209,34 @@ const MyShiftsScreen: React.FC = () => {
     <View style={styles.monthlyStatsContainer}>
       <Text style={styles.monthlyStatsTitle}>This Month Shifts</Text>
       <View style={styles.statsGrid}>
-        <View style={styles.statItem}>
-          <View style={[styles.statIcon, { backgroundColor: '#E8F5E8' }]}>
-            <CheckCircleIcon size={18} color={'#4CAF50'} />
-          </View>
-          <View style={styles.statTextContainer}> 
-          <Text style={styles.statNumber}>{monthlyStats.completedShifts}</Text>
-          <Text style={styles.statLabel}>Completed{'\n'}Shifts</Text>
-          </View>
-        </View>
-        
-        <View style={styles.statItem}>
-          <View style={[styles.statIcon, { backgroundColor: '#FFEBEE' }]}>
-            <ClockIcon size={18} color={'#EF5350'} />
-          </View>
-          <View style={styles.statTextContainer}> 
-          <Text style={styles.statNumber}>{monthlyStats.missedShifts}</Text>
-          <Text style={styles.statLabel}>Missed{'\n'}Shifts</Text>
-          </View>
-        </View>
-        
-        <View style={styles.statItem}>
-          <View style={[styles.statIcon, { backgroundColor: '#E3F2FD' }]}>
-            <MapPinIcon size={18} color={'#42A5F5'} />
-          </View>
-            <View style={styles.statTextContainer}> 
-          <Text style={styles.statNumber}>{monthlyStats.totalSites}</Text>
-          <Text style={styles.statLabel}>Total{'\n'}Sites</Text>
-          </View>
-        </View>
-        
-        <View style={styles.statItem}>
-          <View style={[styles.statIcon, { backgroundColor: '#F3E5F5' }]}>
-            <FileTextIcon size={18} color={'#9E9E9E'} />
-          </View>
-          <View style={styles.statTextContainer}> 
-          <Text style={styles.statNumber}>{monthlyStats.incidentReported}</Text>
-          <Text style={styles.statLabel}>Incident{'\n'}Reported</Text>
-          </View>
-        </View>
+        <StatsCard
+          label={'Completed\nShifts'}
+          value={monthlyStats.completedShifts}
+          icon={<CheckCircleIcon size={18} color={'#4CAF50'} />}
+          variant="success"
+          style={styles.statItem}
+        />
+        <StatsCard
+          label={'Missed\nShifts'}
+          value={monthlyStats.missedShifts}
+          icon={<ClockIcon size={18} color={'#EF5350'} />}
+          variant="danger"
+          style={styles.statItem}
+        />
+        <StatsCard
+          label={'Total\nSites'}
+          value={monthlyStats.totalSites}
+          icon={<MapPinIcon size={18} color={'#42A5F5'} />}
+          variant="info"
+          style={styles.statItem}
+        />
+        <StatsCard
+          label={'Incident\nReported'}
+          value={monthlyStats.incidentReported}
+          icon={<FileTextIcon size={18} color={'#9E9E9E'} />}
+          variant="neutral"
+          style={styles.statItem}
+        />
       </View>
     </View>
   );

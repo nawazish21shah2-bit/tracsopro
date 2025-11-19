@@ -1,3 +1,4 @@
+
 // Dashboard Navigator
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -7,21 +8,17 @@ import MyShiftsScreen from '../screens/dashboard/MyShiftsScreen';
 import ReportsScreen from '../screens/dashboard/ReportsScreen';
 import AvailableShiftsScreen from '../screens/guard/AvailableShiftsScreen';
 import ChatListScreen from '../screens/chat/ChatListScreen';
-import { COLORS } from '../styles/globalStyles';
-import { HomeIcon, ShiftsIcon, ReportsIcon, JobsIcon, ClockIcon } from '../components/ui/AppIcons';
+import { HomeIcon, ShiftsIcon, ReportsIcon, JobsIcon } from '../components/ui/AppIcons';
 
 export type DashboardTabParamList = {
   Home: undefined;
-  'My Shifts': undefined;
   Chat: undefined;
+  'My Shifts': undefined;
   Reports: undefined;
   Jobs: undefined;
 };
 
 const Tab = createBottomTabNavigator<DashboardTabParamList>();
-
-
-import CheckInScreen from '../screens/CheckInScreen';
 
 const DashboardNavigator: React.FC = () => {
   return (
@@ -33,13 +30,13 @@ const DashboardNavigator: React.FC = () => {
         tabBarStyle: {
           backgroundColor: '#FFFFFF',
           borderTopWidth: 1,
-          borderTopColor: '#E5E7EB',
-          paddingBottom: 6,
-          paddingTop: 6,
-          height: 68,
+          borderTopColor: '#E0F0FA',
+          paddingBottom: 8,
+          paddingTop: 8,
+          height: 70,
         },
         tabBarLabelStyle: {
-          fontSize: 12,
+          fontSize: 10,
           fontWeight: '500',
           marginTop: 4,
         },
@@ -48,55 +45,55 @@ const DashboardNavigator: React.FC = () => {
         },
       }}
     >
-      <Tab.Screen 
-        name="Home" 
+      <Tab.Screen
+        name="Home"
         component={GuardHomeScreen}
         options={{
-          tabBarIcon: ({ color, size, focused }) => (
+          tabBarIcon: ({ focused }) => (
             <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
               <HomeIcon size={20} color={focused ? '#1C6CA9' : '#7A7A7A'} />
             </View>
           ),
         }}
       />
-      <Tab.Screen 
-        name="Chat" 
+      <Tab.Screen
+        name="Chat"
         component={ChatListScreen}
         options={{
-          tabBarIcon: ({ color, size, focused }) => (
+          tabBarIcon: ({ focused }) => (
             <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
               <ReportsIcon size={20} color={focused ? '#1C6CA9' : '#7A7A7A'} />
             </View>
           ),
         }}
       />
-      <Tab.Screen 
-        name="My Shifts" 
+      <Tab.Screen
+        name="My Shifts"
         component={MyShiftsScreen}
         options={{
-          tabBarIcon: ({ color, size, focused }) => (
+          tabBarIcon: ({ focused }) => (
             <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
               <ShiftsIcon size={20} color={focused ? '#1C6CA9' : '#7A7A7A'} />
             </View>
           ),
         }}
       />
-      <Tab.Screen 
-        name="Reports" 
+      <Tab.Screen
+        name="Reports"
         component={ReportsScreen}
         options={{
-          tabBarIcon: ({ color, size, focused }) => (
+          tabBarIcon: ({ focused }) => (
             <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
               <ReportsIcon size={20} color={focused ? '#1C6CA9' : '#7A7A7A'} />
             </View>
           ),
         }}
       />
-      <Tab.Screen 
-        name="Jobs" 
+      <Tab.Screen
+        name="Jobs"
         component={AvailableShiftsScreen}
         options={{
-          tabBarIcon: ({ color, size, focused }) => (
+          tabBarIcon: ({ focused }) => (
             <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
               <JobsIcon size={20} color={focused ? '#1C6CA9' : '#7A7A7A'} />
             </View>
@@ -119,3 +116,4 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(28,108,169,0.2)',
   },
 });
+

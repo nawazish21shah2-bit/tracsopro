@@ -2,6 +2,7 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { User, AuthState, LoginForm, RegisterForm, UserRole } from '../../types';
 import apiService from '../../services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Initial state
 const initialState: AuthState = {
@@ -104,6 +105,15 @@ export const logoutUser = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       await apiService.logout();
+      
+      // Clear local storage
+      await AsyncStorage.multiRemove([
+        'authToken',
+        'refreshToken',
+        'userData',
+        'userRole',
+      ]);
+      
       return null;
     } catch (error: any) {
       return rejectWithValue(error.message || 'Logout failed');

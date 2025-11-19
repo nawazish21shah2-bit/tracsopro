@@ -45,7 +45,7 @@ async function main() {
       firstName: 'Sarah',
       lastName: 'Johnson',
       phone: '+1234567892',
-      role: 'SUPERVISOR',
+      role: 'ADMIN',
     },
   });
 
@@ -59,6 +59,20 @@ async function main() {
       lastName: 'User',
       phone: '+1234567893',
       role: 'ADMIN',
+    },
+  });
+
+  const superAdmin1 = await prisma.user.upsert({
+    where: { email: 'superadmin@test.com' },
+    update: {},
+    create: {
+      email: 'superadmin@test.com',
+      password: await bcrypt.hash('password', 10),
+      firstName: 'Super',
+      lastName: 'Admin',
+      phone: '+1234567894',
+      role: 'SUPER_ADMIN',
+      accountType: 'COMPANY',
     },
   });
 
@@ -81,25 +95,13 @@ async function main() {
     update: {},
     create: {
       userId: guard2.id,
-      employeeId: 'EMP002',
+      employeeId: 'EMP003',
       department: 'Security',
       status: 'ACTIVE',
     },
   });
 
   console.log('✅ Guard profiles created');
-
-  // Create supervisor profile
-  await prisma.supervisor.upsert({
-    where: { userId: supervisor1.id },
-    update: {},
-    create: {
-      userId: supervisor1.id,
-      department: 'Operations',
-    },
-  });
-
-  console.log('✅ Supervisor profile created');
 
   // Create locations
   const location1 = await prisma.location.create({

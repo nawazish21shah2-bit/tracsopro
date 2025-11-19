@@ -3,9 +3,11 @@ import React from 'react';
 import { Text, View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
+import { createDrawerNavigator } from '@react-navigation/drawer';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import { UserRole } from '../types';
+import CustomDrawerContent from './CustomDrawerContent';
 
 // Import dashboard screens
 import GuardHomeScreen from '../screens/dashboard/GuardHomeScreen';
@@ -28,6 +30,7 @@ import GuardStackNavigator from './GuardStackNavigator';
 
 // Import admin screens
 import AdminNavigator from './AdminNavigator';
+import SuperAdminNavigator from './SuperAdminNavigator';
 
 // Import stack screens
 import IncidentDetailScreen from '../screens/main/IncidentDetailScreen';
@@ -45,15 +48,20 @@ export type MainTabParamList = {
 };
 
 export type MainStackParamList = {
-  MainTabs: undefined;
+  RootDrawer: undefined;
   IncidentDetail: { incidentId: string };
   CreateIncident: undefined;
   AddIncidentReport: undefined;
+};
+
+export type MainDrawerParamList = {
+  MainTabs: undefined;
   Settings: undefined;
 };
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 const Stack = createStackNavigator<MainStackParamList>();
+const Drawer = createDrawerNavigator<MainDrawerParamList>();
 
 // Tab Navigator Component
 const MainTabNavigator: React.FC = () => {
@@ -63,16 +71,20 @@ const MainTabNavigator: React.FC = () => {
   const userRole = user?.role as any;
   const isClient = userRole === UserRole.CLIENT || userRole === 'CLIENT';
   const isAdmin = userRole === UserRole.ADMIN || userRole === 'ADMIN' || user?.email === 'admin@test.com';
+  const isSuperAdmin = userRole === 'SUPER_ADMIN' || user?.email === 'superadmin@tracsopro.com';
 
   // Debug logging for troubleshooting
   if (__DEV__) {
     console.log('MainTabNavigator - User Role:', userRole);
     console.log('MainTabNavigator - Is Client:', isClient);
     console.log('MainTabNavigator - Is Admin:', isAdmin);
+    console.log('MainTabNavigator - Is Super Admin:', isSuperAdmin);
   }
 
   // Route based on user role
-  if (isAdmin) {
+  if (isSuperAdmin) {
+    return <SuperAdminNavigator />;
+  } else if (isAdmin) {
     return <AdminNavigator />;
   } else if (isClient) {
     return <ClientStackNavigator />;
@@ -103,26 +115,53 @@ const TabIcon: React.FC<{ name: string; color: string; size: number }> = ({ name
   }
 };
 
+// Global Drawer Navigator wrapping role-based main tabs
+const MainDrawerNavigator: React.FC = () => {
+  const { user } = useSelector((state: RootState) => state.auth);
+  const userRole = user?.role as any;
+  const isClient = userRole === UserRole.CLIENT || userRole === 'CLIENT';
+  const isAdmin = userRole === UserRole.ADMIN || userRole === 'ADMIN' || user?.email === 'admin@test.com';
+  const isSuperAdmin = userRole === 'SUPER_ADMIN' || user?.email === 'superadmin@tracsopro.com';
+
+  let homeLabel = 'Home';
+  if (isSuperAdmin) homeLabel = 'Super Admin Home';
+  else if (isAdmin) homeLabel = 'Admin Home';
+  else if (isClient) homeLabel = 'Client Home';
+  else homeLabel = 'Guard Home';
+
+  return (
+    <Drawer.Navigator
+      screenOptions={{
+        headerShown: false,
+      }}
+      drawerContent={props => <CustomDrawerContent {...props} />}
+    >
+      <Drawer.Screen
+        name="MainTabs"
+        component={MainTabNavigator}
+        options={{ drawerLabel: homeLabel }}
+      />
+      <Drawer.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{ drawerLabel: 'Settings' }}
+      />
+    </Drawer.Navigator>
+  );
+};
+
 // Main Stack Navigator
 const MainNavigator: React.FC = () => {
   return (
     <Stack.Navigator
       screenOptions={{
-        headerShown: true,
-        headerStyle: {
-          backgroundColor: '#007AFF',
-        },
-        headerTintColor: '#ffffff',
-        headerTitleStyle: {
-          fontWeight: 'bold',
-        },
+        headerShown: false,
         gestureEnabled: true,
       }}
     >
       <Stack.Screen
-        name="MainTabs"
-        component={MainTabNavigator}
-        options={{ headerShown: false }}
+        name="RootDrawer"
+        component={MainDrawerNavigator}
       />
       <Stack.Screen
         name="IncidentDetail"
@@ -145,14 +184,6 @@ const MainNavigator: React.FC = () => {
         component={AddIncidentReportScreen}
         options={{
           headerShown: false,
-        }}
-      />
-      <Stack.Screen
-        name="Settings"
-        component={SettingsScreen}
-        options={{
-          title: 'Settings',
-          headerBackTitle: 'Back',
         }}
       />
     </Stack.Navigator>

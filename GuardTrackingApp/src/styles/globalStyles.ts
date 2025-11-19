@@ -30,6 +30,7 @@ export const COLORS = {
   borderLight: '#ACD3F1',
   borderMedium: '#828282',
   borderDark: '#000000',
+  borderCard: '#DCDCDC',
   
   // Status Colors
   success: '#4CAF50',
@@ -372,7 +373,16 @@ export const globalStyles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.lg,
     marginBottom: SPACING.lg,
-    ...SHADOWS.small,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    shadowColor: COLORS.cardShadow,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 3,
   },
   
   cardTitle: {

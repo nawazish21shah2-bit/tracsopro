@@ -33,6 +33,7 @@ model User {
   shiftReports  ShiftReport[]
   userSettings  UserSettings?
   supportTickets SupportTicket[]
+  companyUsers  CompanyUser[]
 
   @@index([email])
   @@index([role])
@@ -42,6 +43,7 @@ enum Role {
   GUARD
   ADMIN
   CLIENT
+  SUPER_ADMIN
 }
 
 enum AccountType {
@@ -76,6 +78,7 @@ model Guard {
   assignmentReports AssignmentReport[]
   geofenceEvents    GeofenceEvent[]
   shifts            Shift[]
+  companyGuards     CompanyGuard[]
 
   @@index([userId])
   @@index([employeeId])
@@ -112,6 +115,7 @@ model Client {
   sites Site[]
   shiftPostings ShiftPosting[]
   shifts Shift[]
+  companyClients CompanyClient[]
 
   @@index([userId])
   @@index([accountType])
@@ -134,6 +138,7 @@ model Site {
   shiftPostings ShiftPosting[]
   shiftAssignments ShiftAssignment[]
   shifts Shift[]
+  companySites CompanySite[]
 
   @@index([clientId])
   @@index([isActive])
@@ -804,5 +809,293 @@ enum BreakType {
   LUNCH
   EMERGENCY
   UNAUTHORIZED
+}
+
+// Super Admin Multi-Tenant Architecture Models
+model SecurityCompany {
+  id                String   @id @default(uuid())
+  name              String
+  registrationNumber String? @unique
+  taxId             String?
+  email             String   @unique
+  phone             String?
+  address           String?
+  city              String?
+  state             String?
+  zipCode           String?
+  country           String?
+  website           String?
+  logo              String?
+  subscriptionPlan  SubscriptionPlan @default(BASIC)
+  subscriptionStatus SubscriptionStatus @default(TRIAL)
+  subscriptionStartDate DateTime @default(now())
+  subscriptionEndDate DateTime?
+  maxGuards         Int      @default(10)
+  maxClients        Int      @default(5)
+  maxSites          Int      @default(10)
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  users             CompanyUser[]
+  guards            CompanyGuard[]
+  clients           CompanyClient[]
+  sites             CompanySite[]
+  subscriptions     Subscription[]
+  billingRecords    BillingRecord[]
+  platformSettings  PlatformSettings[]
+
+  @@index([email])
+  @@index([subscriptionStatus])
+  @@index([isActive])
+}
+
+enum SubscriptionPlan {
+  BASIC
+  PROFESSIONAL
+  ENTERPRISE
+  CUSTOM
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+  EXPIRED
+}
+
+model CompanyUser {
+  id              String   @id @default(uuid())
+  securityCompanyId String
+  userId          String
+  role            CompanyRole @default(EMPLOYEE)
+  permissions     Json?    // Custom permissions object
+  isActive        Boolean  @default(true)
+  joinedAt        DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  securityCompany SecurityCompany @relation(fields: [securityCompanyId], references: [id], onDelete: Cascade)
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([securityCompanyId, userId])
+  @@index([securityCompanyId])
+  @@index([userId])
+  @@index([role])
+}
+
+enum CompanyRole {
+  OWNER
+  ADMIN
+  MANAGER
+  SUPERVISOR
+  EMPLOYEE
+}
+
+model CompanyGuard {
+  id              String   @id @default(uuid())
+  securityCompanyId String
+  guardId         String
+  employeeNumber  String?
+  department      String?
+  salary          Float?
+  hourlyRate      Float?
+  isActive        Boolean  @default(true)
+  assignedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  securityCompany SecurityCompany @relation(fields: [securityCompanyId], references: [id], onDelete: Cascade)
+  guard           Guard           @relation(fields: [guardId], references: [id], onDelete: Cascade)
+
+  @@unique([securityCompanyId, guardId])
+  @@index([securityCompanyId])
+  @@index([guardId])
+}
+
+model CompanyClient {
+  id              String   @id @default(uuid())
+  securityCompanyId String
+  clientId        String
+  contractStartDate DateTime?
+  contractEndDate DateTime?
+  contractValue   Float?
+  paymentTerms    String?
+  isActive        Boolean  @default(true)
+  assignedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  securityCompany SecurityCompany @relation(fields: [securityCompanyId], references: [id], onDelete: Cascade)
+  client          Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([securityCompanyId, clientId])
+  @@index([securityCompanyId])
+  @@index([clientId])
+}
+
+model CompanySite {
+  id              String   @id @default(uuid())
+  securityCompanyId String
+  siteId          String
+  contractDetails Json?    // Contract specific details
+  isActive        Boolean  @default(true)
+  assignedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  securityCompany SecurityCompany @relation(fields: [securityCompanyId], references: [id], onDelete: Cascade)
+  site            Site            @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([securityCompanyId, siteId])
+  @@index([securityCompanyId])
+  @@index([siteId])
+}
+
+model Subscription {
+  id              String   @id @default(uuid())
+  securityCompanyId String
+  plan            SubscriptionPlan
+  status          SubscriptionStatus
+  startDate       DateTime
+  endDate         DateTime?
+  amount          Float
+  currency        String   @default("USD")
+  billingCycle    BillingCycle @default(MONTHLY)
+  paymentMethod   String?
+  stripeSubscriptionId String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  securityCompany SecurityCompany @relation(fields: [securityCompanyId], references: [id], onDelete: Cascade)
+
+  @@index([securityCompanyId])
+  @@index([status])
+  @@index([endDate])
+}
+
+enum BillingCycle {
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+model BillingRecord {
+  id              String   @id @default(uuid())
+  securityCompanyId String
+  subscriptionId  String?
+  type            BillingType
+  description     String
+  amount          Float
+  currency        String   @default("USD")
+  status          BillingStatus @default(PENDING)
+  dueDate         DateTime
+  paidDate        DateTime?
+  paymentMethod   String?
+  invoiceNumber   String?  @unique
+  stripeInvoiceId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  securityCompany SecurityCompany @relation(fields: [securityCompanyId], references: [id], onDelete: Cascade)
+
+  @@index([securityCompanyId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([invoiceNumber])
+}
+
+enum BillingType {
+  SUBSCRIPTION
+  OVERAGE
+  SETUP_FEE
+  PENALTY
+  REFUND
+}
+
+enum BillingStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+  REFUNDED
+}
+
+model PlatformSettings {
+  id              String   @id @default(uuid())
+  securityCompanyId String?
+  key             String
+  value           String
+  category        SettingCategory @default(GENERAL)
+  isGlobal        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  securityCompany SecurityCompany? @relation(fields: [securityCompanyId], references: [id], onDelete: Cascade)
+
+  @@unique([securityCompanyId, key])
+  @@index([securityCompanyId])
+  @@index([category])
+  @@index([isGlobal])
+}
+
+enum SettingCategory {
+  GENERAL
+  SECURITY
+  BILLING
+  NOTIFICATIONS
+  INTEGRATIONS
+  FEATURES
+}
+
+model PlatformAnalytics {
+  id              String   @id @default(uuid())
+  securityCompanyId String?
+  metricType      AnalyticsMetric
+  metricValue     Float
+  dimensions      Json?    // Additional dimensions/filters
+  timestamp       DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([securityCompanyId])
+  @@index([metricType])
+  @@index([timestamp])
+}
+
+enum AnalyticsMetric {
+  ACTIVE_GUARDS
+  ACTIVE_CLIENTS
+  ACTIVE_SITES
+  TOTAL_SHIFTS
+  COMPLETED_SHIFTS
+  INCIDENTS_REPORTED
+  REVENUE
+  SUBSCRIPTION_RENEWALS
+  USER_ENGAGEMENT
+  SYSTEM_PERFORMANCE
+}
+
+model SystemAuditLog {
+  id              String   @id @default(uuid())
+  userId          String?
+  securityCompanyId String?
+  action          String
+  resource        String
+  resourceId      String?
+  oldValues       Json?
+  newValues       Json?
+  ipAddress       String?
+  userAgent       String?
+  timestamp       DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([securityCompanyId])
+  @@index([action])
+  @@index([resource])
+  @@index([timestamp])
 }
 

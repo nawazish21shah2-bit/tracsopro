@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { ArrowLeft, MapPin, Edit3, Plus, Users, Clock } from 'react-native-feather';
+import { ArrowLeft, MapPin, Users, Clock } from 'react-native-feather';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { ClientStackParamList } from '../../navigation/ClientStackNavigator';
 
@@ -100,15 +100,7 @@ const SiteDetailsScreen: React.FC = () => {
     }
   };
 
-  const handleEditSite = () => {
-    // TODO: Navigate to edit site screen
-    console.log('Edit site:', siteId);
-  };
-
-  const handleCreateShift = () => {
-    // TODO: Navigate to create shift screen
-    navigation.navigate('CreateShift', { siteId });
-  };
+  // Clients can view site and related shifts but not edit site or create shifts directly.
 
   const handleShiftPress = (shiftId: string) => {
     // TODO: Navigate to shift details screen
@@ -160,12 +152,8 @@ const SiteDetailsScreen: React.FC = () => {
           <ArrowLeft width={24} height={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Site Details</Text>
-        <TouchableOpacity 
-          style={styles.editButton}
-          onPress={handleEditSite}
-        >
-          <Edit3 width={20} height={20} color="#1C6CA9" />
-        </TouchableOpacity>
+        {/* Clients cannot edit the site */}
+        <View style={styles.editButton} />
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -208,17 +196,10 @@ const SiteDetailsScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Shift Postings */}
+        {/* Shift Postings (view-only for client) */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Shift Postings</Text>
-            <TouchableOpacity 
-              style={styles.createShiftButton}
-              onPress={handleCreateShift}
-            >
-              <Plus width={16} height={16} color="#FFFFFF" />
-              <Text style={styles.createShiftText}>Create Shift</Text>
-            </TouchableOpacity>
           </View>
 
           {shiftPostings.length > 0 ? (
@@ -242,24 +223,13 @@ const SiteDetailsScreen: React.FC = () => {
                       {formatDateTime(shift.startTime)} - {formatDateTime(shift.endTime)}
                     </Text>
                   </View>
-                  
-                  <View style={styles.shiftDetailRow}>
-                    <Text style={styles.hourlyRate}>${shift.hourlyRate}/hour</Text>
-                  </View>
-                  
-                  <View style={styles.shiftDetailRow}>
-                    <Users width={14} height={14} color="#666" />
-                    <Text style={styles.shiftDetailText}>
-                      {shift.applicationsCount} applications
-                    </Text>
-                  </View>
                 </View>
               </TouchableOpacity>
             ))
           ) : (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>No shift postings yet</Text>
-              <Text style={styles.emptyStateSubtext}>Create your first shift posting to get started</Text>
+              <Text style={styles.emptyStateSubtext}>Contact your security provider to schedule shifts for this site.</Text>
             </View>
           )}
         </View>

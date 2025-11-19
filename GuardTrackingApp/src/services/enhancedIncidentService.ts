@@ -69,6 +69,7 @@ class EnhancedIncidentService {
   private voiceRecordings: VoiceRecording[] = [];
   private isRecording: boolean = false;
   private currentRecording: VoiceRecording | null = null;
+  private mockDataInitialized: boolean = false;
 
   /**
    * Initialize service
@@ -77,6 +78,13 @@ class EnhancedIncidentService {
     try {
       await this.loadOfflineIncidents();
       await this.loadVoiceRecordings();
+      
+      // Initialize mock data for admin view if no incidents exist
+      if (this.incidents.length === 0 && !this.mockDataInitialized) {
+        await this.initializeMockAdminData();
+        this.mockDataInitialized = true;
+      }
+      
       console.log('📋 Enhanced Incident Service initialized');
     } catch (error) {
       ErrorHandler.handleError(error, 'incident_service_init');
@@ -536,6 +544,9 @@ class EnhancedIncidentService {
   private async saveOfflineIncidents(): Promise<void> {
     try {
       await AsyncStorage.setItem('offline_incidents', JSON.stringify(this.incidents));
+      if (this.mockDataInitialized) {
+        await AsyncStorage.setItem('mock_data_initialized', 'true');
+      }
     } catch (error) {
       ErrorHandler.handleError(error, 'save_offline_incidents', false);
     }
@@ -550,6 +561,10 @@ class EnhancedIncidentService {
       if (stored) {
         this.incidents = JSON.parse(stored);
       }
+      
+      // Check if mock data was previously initialized
+      const mockInitialized = await AsyncStorage.getItem('mock_data_initialized');
+      this.mockDataInitialized = mockInitialized === 'true';
     } catch (error) {
       ErrorHandler.handleError(error, 'load_offline_incidents', false);
     }
@@ -577,6 +592,230 @@ class EnhancedIncidentService {
       }
     } catch (error) {
       ErrorHandler.handleError(error, 'load_voice_recordings', false);
+    }
+  }
+
+  /**
+   * Initialize comprehensive mock data for admin dashboard
+   */
+  private async initializeMockAdminData(): Promise<void> {
+    try {
+      const mockIncidents: EnhancedIncident[] = [
+        // Critical incidents from the last 24 hours
+        {
+          id: 'incident_001',
+          type: 'security_breach',
+          severity: 'critical',
+          title: 'Unauthorized Access Attempt - Main Entrance',
+          description: 'Multiple failed keycard attempts detected at main entrance. Individual attempted to tailgate behind authorized personnel. Security footage captured. Immediate response required.',
+          voiceTranscription: 'Security breach at main entrance, unauthorized individual attempted entry multiple times, security team responded immediately',
+          location: { latitude: 40.7128, longitude: -74.0060, accuracy: 5, address: 'ABC Corporation HQ, 123 Business Ave' },
+          mediaFiles: [
+            {
+              id: 'media_001',
+              type: 'image',
+              uri: 'file://security_footage_001.jpg',
+              fileName: 'security_breach_evidence.jpg',
+              fileSize: 2048000,
+              mimeType: 'image/jpeg',
+              uploadStatus: 'uploaded',
+              timestamp: Date.now() - 3600000,
+            }
+          ],
+          reportedBy: 'guard_mark_hudson',
+          reportedAt: Date.now() - 3600000, // 1 hour ago
+          status: 'under_review',
+          syncStatus: 'synced',
+          retryCount: 0,
+        },
+        {
+          id: 'incident_002',
+          type: 'medical_emergency',
+          severity: 'high',
+          title: 'Medical Emergency - Lobby Area',
+          description: 'Elderly visitor experienced chest pains and shortness of breath. Emergency services contacted immediately. Paramedics arrived within 8 minutes. Patient stabilized and transported to hospital.',
+          location: { latitude: 40.7589, longitude: -73.9851, accuracy: 3, address: 'XYZ Office Complex, 456 Corporate Blvd' },
+          mediaFiles: [],
+          reportedBy: 'guard_sarah_johnson',
+          reportedAt: Date.now() - 7200000, // 2 hours ago
+          status: 'approved',
+          reviewNotes: 'Excellent response time and proper protocol followed. Well documented.',
+          reviewedBy: 'admin_supervisor',
+          reviewedAt: Date.now() - 3600000,
+          syncStatus: 'synced',
+          retryCount: 0,
+        },
+        {
+          id: 'incident_003',
+          type: 'fire_alarm',
+          severity: 'high',
+          title: 'Fire Alarm Activation - 3rd Floor Electrical Room',
+          description: 'Smoke detected in electrical room triggered building-wide fire alarm. Fire department responded. False alarm caused by overheated equipment. Building evacuated as per protocol.',
+          voiceTranscription: 'Fire alarm activated on third floor, smoke in electrical room, building evacuation in progress, fire department en route',
+          location: { latitude: 40.7505, longitude: -73.9934, accuracy: 2, address: 'Tech Tower, 789 Innovation Dr' },
+          mediaFiles: [
+            {
+              id: 'media_002',
+              type: 'video',
+              uri: 'file://evacuation_footage.mp4',
+              fileName: 'evacuation_procedure.mp4',
+              fileSize: 15728640,
+              mimeType: 'video/mp4',
+              uploadStatus: 'uploaded',
+              duration: 180,
+              timestamp: Date.now() - 14400000,
+            }
+          ],
+          reportedBy: 'guard_james_wilson',
+          reportedAt: Date.now() - 14400000, // 4 hours ago
+          status: 'approved',
+          syncStatus: 'synced',
+          retryCount: 0,
+        },
+        // Medium severity incidents from today
+        {
+          id: 'incident_004',
+          type: 'theft',
+          severity: 'medium',
+          title: 'Suspected Theft - Employee Parking Garage',
+          description: 'Employee reported laptop bag stolen from vehicle in parking garage. Security cameras show suspicious individual near vehicle around estimated time of theft. Police report filed.',
+          location: { latitude: 40.7282, longitude: -74.0776, accuracy: 8, address: 'Corporate Plaza, 321 Business Park Way' },
+          mediaFiles: [
+            {
+              id: 'media_003',
+              type: 'image',
+              uri: 'file://parking_camera_001.jpg',
+              fileName: 'suspect_vehicle_footage.jpg',
+              fileSize: 1536000,
+              mimeType: 'image/jpeg',
+              uploadStatus: 'uploaded',
+              timestamp: Date.now() - 21600000,
+            }
+          ],
+          reportedBy: 'guard_michael_brown',
+          reportedAt: Date.now() - 21600000, // 6 hours ago
+          status: 'pending',
+          syncStatus: 'synced',
+          retryCount: 0,
+        },
+        {
+          id: 'incident_005',
+          type: 'vandalism',
+          severity: 'medium',
+          title: 'Graffiti Vandalism - Exterior Wall',
+          description: 'Graffiti discovered on exterior wall of building. Appears to have occurred overnight. Maintenance team notified for cleanup. Security patrol schedule adjusted.',
+          location: { latitude: 40.7614, longitude: -73.9776, accuracy: 5, address: 'Metro Business Center, 654 Commerce St' },
+          mediaFiles: [
+            {
+              id: 'media_004',
+              type: 'image',
+              uri: 'file://vandalism_001.jpg',
+              fileName: 'graffiti_damage.jpg',
+              fileSize: 2304000,
+              mimeType: 'image/jpeg',
+              uploadStatus: 'uploaded',
+              timestamp: Date.now() - 28800000,
+            }
+          ],
+          reportedBy: 'guard_lisa_garcia',
+          reportedAt: Date.now() - 28800000, // 8 hours ago
+          status: 'under_review',
+          syncStatus: 'synced',
+          retryCount: 0,
+        },
+        // Recent incidents from yesterday
+        {
+          id: 'incident_006',
+          type: 'trespassing',
+          severity: 'medium',
+          title: 'Unauthorized Individual on Premises After Hours',
+          description: 'Motion sensors detected individual in restricted area after business hours. Security responded and found person sleeping in stairwell. Individual removed from premises.',
+          location: { latitude: 40.7420, longitude: -74.0020, accuracy: 4, address: 'Financial District Tower, 987 Wall Street' },
+          mediaFiles: [],
+          reportedBy: 'guard_david_martinez',
+          reportedAt: Date.now() - 86400000, // 24 hours ago
+          status: 'approved',
+          syncStatus: 'synced',
+          retryCount: 0,
+        },
+        {
+          id: 'incident_007',
+          type: 'equipment_failure',
+          severity: 'low',
+          title: 'Security Camera Malfunction - Parking Lot',
+          description: 'Camera #7 in parking lot showing distorted image. IT department notified. Temporary coverage provided by mobile patrol until repair completed.',
+          location: { latitude: 40.7350, longitude: -74.0118, accuracy: 6, address: 'Riverside Office Park, 147 Harbor View Rd' },
+          mediaFiles: [],
+          reportedBy: 'guard_robert_taylor',
+          reportedAt: Date.now() - 93600000, // 26 hours ago
+          status: 'approved',
+          syncStatus: 'synced',
+          retryCount: 0,
+        },
+        // Older incidents for trend analysis
+        {
+          id: 'incident_008',
+          type: 'other',
+          severity: 'low',
+          title: 'Suspicious Package - Reception Area',
+          description: 'Unattended package reported by reception staff. Package inspection revealed forgotten lunch bag. Owner identified and item returned.',
+          location: { latitude: 40.7549, longitude: -73.9840, accuracy: 3, address: 'Midtown Corporate Center, 258 Executive Ave' },
+          mediaFiles: [],
+          reportedBy: 'guard_amanda_white',
+          reportedAt: Date.now() - 172800000, // 48 hours ago
+          status: 'approved',
+          syncStatus: 'synced',
+          retryCount: 0,
+        },
+        // Pending incidents requiring admin attention
+        {
+          id: 'incident_009',
+          type: 'security_breach',
+          severity: 'high',
+          title: 'Attempted Break-in - Loading Dock',
+          description: 'Evidence of attempted forced entry at loading dock discovered during morning patrol. Lock damaged but entry not gained. Police notified and investigating.',
+          voiceTranscription: 'Attempted break-in at loading dock, lock damaged, no entry gained, police investigating, recommend security upgrade',
+          location: { latitude: 40.7200, longitude: -74.0100, accuracy: 7, address: 'Industrial Complex, 741 Manufacturing Blvd' },
+          mediaFiles: [
+            {
+              id: 'media_005',
+              type: 'image',
+              uri: 'file://break_in_attempt.jpg',
+              fileName: 'damaged_lock_evidence.jpg',
+              fileSize: 1843200,
+              mimeType: 'image/jpeg',
+              uploadStatus: 'uploaded',
+              timestamp: Date.now() - 10800000,
+            }
+          ],
+          reportedBy: 'guard_kevin_anderson',
+          reportedAt: Date.now() - 10800000, // 3 hours ago
+          status: 'pending',
+          syncStatus: 'synced',
+          retryCount: 0,
+        },
+        {
+          id: 'incident_010',
+          type: 'medical_emergency',
+          severity: 'medium',
+          title: 'Slip and Fall Incident - Main Lobby',
+          description: 'Visitor slipped on wet floor near entrance during rainstorm. Minor injury to ankle. First aid provided. Incident report completed. Recommend additional wet floor signage.',
+          location: { latitude: 40.7680, longitude: -73.9820, accuracy: 2, address: 'Premium Office Suites, 159 Professional Plaza' },
+          mediaFiles: [],
+          reportedBy: 'guard_jennifer_lee',
+          reportedAt: Date.now() - 5400000, // 1.5 hours ago
+          status: 'pending',
+          syncStatus: 'synced',
+          retryCount: 0,
+        }
+      ];
+
+      this.incidents = mockIncidents;
+      await this.saveOfflineIncidents();
+      
+      console.log('📋 Mock admin data initialized with', mockIncidents.length, 'incidents');
+    } catch (error) {
+      ErrorHandler.handleError(error, 'initialize_mock_admin_data');
     }
   }
 

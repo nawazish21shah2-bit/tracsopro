@@ -8,11 +8,14 @@ import {
   Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useDispatch } from 'react-redux';
 import { StackNavigationProp } from '@react-navigation/stack';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import GuardAppHeader from '../../components/ui/GuardAppHeader';
 import EmergencyButton from '../../components/emergency/EmergencyButton';
 import { GuardStackParamList } from '../../navigation/GuardStackNavigator';
+import { AppDispatch } from '../../store';
+import { logoutUser } from '../../store/slices/authSlice';
 import {
   Clock,
   MapPin,
@@ -20,12 +23,14 @@ import {
   AlertTriangle,
   Calendar,
   Users,
+  LogOut,
 } from 'react-native-feather';
 
 type GuardHomeScreenNavigationProp = StackNavigationProp<GuardStackParamList>;
 
 const GuardHomeScreen: React.FC = () => {
   const navigation = useNavigation<GuardHomeScreenNavigationProp>();
+  const dispatch = useDispatch<AppDispatch>();
 
   const handleNotificationPress = () => {
     Alert.alert('Notifications', 'View your notifications');
@@ -53,6 +58,32 @@ const GuardHomeScreen: React.FC = () => {
 
   const handleNavigateToSupport = () => {
     Alert.alert('Support', 'Navigate to support screen');
+  };
+
+  const handleLogout = async () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Dispatch logout action - this will handle API call, storage cleanup, and navigation
+              await dispatch(logoutUser()).unwrap();
+            } catch (error) {
+              console.error('Logout error:', error);
+              Alert.alert('Error', 'Failed to logout. Please try again.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const renderStatsCard = (
@@ -96,6 +127,10 @@ const GuardHomeScreen: React.FC = () => {
         <TouchableOpacity style={styles.quickActionCard}>
           <AlertTriangle width={24} height={24} color="#EF4444" />
           <Text style={styles.quickActionText}>Report</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.quickActionCard} onPress={handleLogout}>
+          <LogOut width={24} height={24} color="#6B7280" />
+          <Text style={styles.quickActionText}>Logout</Text>
         </TouchableOpacity>
       </View>
     </View>

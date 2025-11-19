@@ -1,3 +1,4 @@
+
 /**
  * Advanced Analytics Dashboard
  * Comprehensive analytics and insights for guard performance and operations
@@ -14,20 +15,17 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
-import { LineChart, BarChart, PieChart } from 'react-native-chart-kit';
+import { LineChart, PieChart } from 'react-native-chart-kit';
 import { AppScreen } from '../../components/common/AppScreen';
 import { AppHeader } from '../../components/common/AppHeader';
 import { AppCard } from '../../components/common/AppCard';
+import StatsCard from '../../components/ui/StatsCard';
 import { LoadingOverlay, ErrorState, InlineLoading } from '../../components/ui/LoadingStates';
-import { 
-  BarChartIcon, 
-  TrendingUpIcon, 
-  ClockIcon, 
+import {
+  ClockIcon,
   MapPinIcon,
   AlertTriangleIcon,
   CheckCircleIcon,
-  UsersIcon,
-  CalendarIcon 
 } from '../../components/ui/FeatherIcons';
 import { globalStyles, COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { RootState } from '../../store';
@@ -98,7 +96,7 @@ const AnalyticsDashboard: React.FC = () => {
   useEffect(() => {
     PerformanceOptimizer.startRenderMeasurement();
     initializeAnalytics();
-    
+
     return () => {
       PerformanceOptimizer.endRenderMeasurement('AnalyticsDashboard');
     };
@@ -108,7 +106,7 @@ const AnalyticsDashboard: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       await withRetry(async () => {
         const data = await fetchAnalyticsData(selectedPeriod);
         setAnalyticsData(data);
@@ -123,10 +121,10 @@ const AnalyticsDashboard: React.FC = () => {
 
   const fetchAnalyticsData = async (period: string): Promise<AnalyticsData> => {
     PerformanceOptimizer.startApiMeasurement('analytics_data');
-    
+
     // Simulate API call - replace with actual API integration
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
+    await new Promise<void>((resolve) => setTimeout(() => resolve(), 1000));
+
     PerformanceOptimizer.endApiMeasurement('analytics_data');
 
     // Mock data - replace with real data from backend
@@ -215,56 +213,42 @@ const AnalyticsDashboard: React.FC = () => {
   const renderMetricCards = () => {
     if (!analyticsData) return null;
 
-    const { shiftMetrics, locationMetrics, incidentMetrics, performanceMetrics } = analyticsData;
+    const { shiftMetrics, locationMetrics, incidentMetrics } = analyticsData;
 
     return (
       <View style={styles.metricsGrid}>
         <View style={styles.metricsRow}>
-          <AppCard style={styles.metricCard}>
-            <View style={styles.metricHeader}>
-              <CheckCircleIcon size={24} color={COLORS.success} />
-              <Text style={styles.metricValue}>{shiftMetrics.completedShifts}</Text>
-            </View>
-            <Text style={styles.metricLabel}>Completed Shifts</Text>
-            <Text style={styles.metricSubtext}>
-              {((shiftMetrics.completedShifts / shiftMetrics.totalShifts) * 100).toFixed(1)}% completion rate
-            </Text>
-          </AppCard>
-
-          <AppCard style={styles.metricCard}>
-            <View style={styles.metricHeader}>
-              <ClockIcon size={24} color={COLORS.primary} />
-              <Text style={styles.metricValue}>{shiftMetrics.averageDuration}h</Text>
-            </View>
-            <Text style={styles.metricLabel}>Avg Duration</Text>
-            <Text style={styles.metricSubtext}>
-              {shiftMetrics.onTimePercentage}% on-time
-            </Text>
-          </AppCard>
+          <StatsCard
+            label="Completed Shifts"
+            value={shiftMetrics.completedShifts}
+            icon={<CheckCircleIcon size={18} color={COLORS.success} />}
+            variant="success"
+            style={styles.metricCard}
+          />
+          <StatsCard
+            label="Avg Duration (h)"
+            value={shiftMetrics.averageDuration.toFixed(1)}
+            icon={<ClockIcon size={18} color={COLORS.primary} />}
+            variant="info"
+            style={styles.metricCard}
+          />
         </View>
 
         <View style={styles.metricsRow}>
-          <AppCard style={styles.metricCard}>
-            <View style={styles.metricHeader}>
-              <MapPinIcon size={24} color={COLORS.info} />
-              <Text style={styles.metricValue}>{locationMetrics.sitesVisited}</Text>
-            </View>
-            <Text style={styles.metricLabel}>Sites Visited</Text>
-            <Text style={styles.metricSubtext}>
-              {locationMetrics.totalDistance}km traveled
-            </Text>
-          </AppCard>
-
-          <AppCard style={styles.metricCard}>
-            <View style={styles.metricHeader}>
-              <AlertTriangleIcon size={24} color={COLORS.warning} />
-              <Text style={styles.metricValue}>{incidentMetrics.totalIncidents}</Text>
-            </View>
-            <Text style={styles.metricLabel}>Incidents</Text>
-            <Text style={styles.metricSubtext}>
-              {incidentMetrics.resolvedIncidents} resolved
-            </Text>
-          </AppCard>
+          <StatsCard
+            label="Sites Visited"
+            value={locationMetrics.sitesVisited}
+            icon={<MapPinIcon size={18} color={COLORS.info} />}
+            variant="info"
+            style={styles.metricCard}
+          />
+          <StatsCard
+            label="Incidents"
+            value={incidentMetrics.totalIncidents}
+            icon={<AlertTriangleIcon size={18} color={COLORS.warning} />}
+            variant="danger"
+            style={styles.metricCard}
+          />
         </View>
       </View>
     );
@@ -274,10 +258,11 @@ const AnalyticsDashboard: React.FC = () => {
     if (!analyticsData) return null;
 
     const { performanceMetrics } = analyticsData;
-    const scoreColor = performanceMetrics.overallRating >= 4.5 
-      ? COLORS.success 
-      : performanceMetrics.overallRating >= 3.5 
-        ? COLORS.warning 
+    const scoreColor =
+      performanceMetrics.overallRating >= 4.5
+        ? COLORS.success
+        : performanceMetrics.overallRating >= 3.5
+        ? COLORS.warning
         : COLORS.error;
 
     return (
@@ -296,40 +281,46 @@ const AnalyticsDashboard: React.FC = () => {
           <View style={styles.performanceMetric}>
             <Text style={styles.performanceLabel}>Attendance</Text>
             <View style={styles.performanceBar}>
-              <View 
+              <View
                 style={[
-                  styles.performanceBarFill, 
-                  { width: `${performanceMetrics.attendanceRate}%` }
-                ]} 
+                  styles.performanceBarFill,
+                  { width: `${performanceMetrics.attendanceRate}%` },
+                ]}
               />
             </View>
-            <Text style={styles.performanceValue}>{performanceMetrics.attendanceRate}%</Text>
+            <Text style={styles.performanceValue}>
+              {performanceMetrics.attendanceRate}%
+            </Text>
           </View>
 
           <View style={styles.performanceMetric}>
             <Text style={styles.performanceLabel}>Punctuality</Text>
             <View style={styles.performanceBar}>
-              <View 
+              <View
                 style={[
-                  styles.performanceBarFill, 
-                  { width: `${performanceMetrics.punctualityScore}%` }
-                ]} 
+                  styles.performanceBarFill,
+                  { width: `${performanceMetrics.punctualityScore}%` },
+                ]}
               />
             </View>
-            <Text style={styles.performanceValue}>{performanceMetrics.punctualityScore}%</Text>
+            <Text style={styles.performanceValue}>
+              {performanceMetrics.punctualityScore}%
+            </Text>
           </View>
 
           <View style={styles.performanceMetric}>
             <Text style={styles.performanceLabel}>Compliance</Text>
             <View style={styles.performanceBar}>
-              <View 
+              <View
                 style={[
-                  styles.performanceBarFill, 
-                  { width: `${performanceMetrics.complianceScore}%` }
-                ]} 
+                  styles.performanceBarFill,
+                  { width: `${performanceMetrics.complianceScore}%` },
+                ]}
               />
             </View>
-            <Text style={styles.performanceValue}>{performanceMetrics.complianceScore}%</Text>
+            <Text style={styles.performanceValue}>
+              {performanceMetrics.complianceScore}%
+            </Text>
           </View>
         </View>
       </AppCard>
@@ -414,19 +405,26 @@ const AnalyticsDashboard: React.FC = () => {
     const { incidentMetrics } = analyticsData;
     const { severityBreakdown } = incidentMetrics;
 
-    const pieData = Object.entries(severityBreakdown).map(([severity, count], index) => ({
-      name: severity.charAt(0).toUpperCase() + severity.slice(1),
-      population: count,
-      color: [COLORS.success, COLORS.warning, COLORS.error, COLORS.textSecondary][index],
-      legendFontColor: COLORS.textPrimary,
-      legendFontSize: 12,
-    }));
+    const pieData = Object.entries(severityBreakdown).map(
+      ([severity, count], index) => ({
+        name: severity.charAt(0).toUpperCase() + severity.slice(1),
+        population: count,
+        color: [
+          COLORS.success,
+          COLORS.warning,
+          COLORS.error,
+          COLORS.textSecondary,
+        ][index],
+        legendFontColor: COLORS.textPrimary,
+        legendFontSize: 12,
+      })
+    );
 
     return (
       <AppCard style={styles.chartCard}>
         <Text style={styles.sectionTitle}>Incident Severity Breakdown</Text>
-        
-        {pieData.some(item => item.population > 0) ? (
+
+        {pieData.some((item) => item.population > 0) ? (
           <PieChart
             data={pieData}
             width={screenWidth - 60}
@@ -441,7 +439,9 @@ const AnalyticsDashboard: React.FC = () => {
           <View style={styles.noDataContainer}>
             <CheckCircleIcon size={48} color={COLORS.success} />
             <Text style={styles.noDataText}>No incidents reported</Text>
-            <Text style={styles.noDataSubtext}>Great job maintaining security!</Text>
+            <Text style={styles.noDataSubtext}>
+              Great job maintaining security!
+            </Text>
           </View>
         )}
       </AppCard>
@@ -473,7 +473,7 @@ const AnalyticsDashboard: React.FC = () => {
   return (
     <AppScreen>
       <AppHeader title="Analytics Dashboard" showBack />
-      
+
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -483,7 +483,10 @@ const AnalyticsDashboard: React.FC = () => {
         showsVerticalScrollIndicator={false}
       >
         {loading && analyticsData && (
-          <InlineLoading message="Updating analytics..." style={styles.inlineLoading} />
+          <InlineLoading
+            message="Updating analytics..."
+            style={styles.inlineLoading}
+          />
         )}
 
         {renderPeriodSelector()}
@@ -548,28 +551,6 @@ const styles = StyleSheet.create({
   },
   metricCard: {
     flex: 1,
-    padding: SPACING.md,
-  },
-  metricHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: SPACING.sm,
-  },
-  metricValue: {
-    fontSize: TYPOGRAPHY.fontSize.xl,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
-    color: COLORS.textPrimary,
-  },
-  metricLabel: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.xs,
-  },
-  metricSubtext: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    color: COLORS.textSecondary,
   },
   performanceCard: {
     padding: SPACING.lg,
@@ -686,3 +667,4 @@ const styles = StyleSheet.create({
 });
 
 export default AnalyticsDashboard;
+

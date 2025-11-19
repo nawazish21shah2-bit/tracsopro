@@ -10,7 +10,7 @@ import {
   RefreshControl,
   Image,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, DrawerActions } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootState } from '../../store';
@@ -20,7 +20,8 @@ import {
   fetchUpcomingShifts,
 } from '../../store/slices/shiftSlice';
 import { globalStyles, COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
-import { AppScreen, AppStatCard, AppCard, AppStatGrid } from '../../components/ui/AppComponents';
+import { AppScreen, AppCard, AppStatGrid } from '../../components/ui/AppComponents';
+import StatsCard from '../../components/ui/StatsCard';
 import { AppHeader } from '../../components/ui/AppHeader';
 import { LoadingOverlay, ErrorState, NetworkError, InlineLoading } from '../../components/ui/LoadingStates';
 import { ErrorHandler, withRetry } from '../../utils/errorHandler';
@@ -211,8 +212,8 @@ const GuardHomeScreen: React.FC = () => {
   };
 
   const handleMenuPress = () => {
-    // Handle menu press
-    console.log('Menu pressed');
+    // Open global drawer menu
+    (navigation as any).dispatch(DrawerActions.openDrawer());
   };
 
   const handleNotificationPress = () => {
@@ -224,36 +225,32 @@ const GuardHomeScreen: React.FC = () => {
     <View style={styles.statsSection}>
       <Text style={styles.sectionTitle}>This Month Shifts</Text>
       <AppStatGrid style={styles.statsGrid}>
-        <AppStatCard
-          number={stats.completedShifts}
+        <StatsCard
           label="Completed Shifts"
+          value={stats.completedShifts}
           icon={<CheckCircleIcon size={18} color={COLORS.success} />}
-          color={COLORS.success}
-          backgroundColor={COLORS.backgroundPrimary}
+          variant="success"
           style={styles.statCard}
         />
-        <AppStatCard
-          number={stats.missedShifts}
+        <StatsCard
           label="Missed Shifts"
-          icon={<ClockIcon size={18} color={COLORS.error} />}
-          color={COLORS.error}
-          backgroundColor={COLORS.backgroundPrimary}
+          value={stats.missedShifts}
+          icon={<AlertTriangleIcon size={18} color={COLORS.error} />}
+          variant="danger"
           style={styles.statCard}
         />
-        <AppStatCard
-          number={stats.totalSites}
+        <StatsCard
           label="Total Sites"
+          value={stats.totalSites}
           icon={<MapPinIcon size={18} color={COLORS.info} />}
-          color={COLORS.info}
-          backgroundColor={COLORS.backgroundPrimary}
+          variant="info"
           style={styles.statCard}
         />
-        <AppStatCard
-          number={stats.incidentReports}
+        <StatsCard
           label="Incident Reported"
+          value={stats.incidentReports}
           icon={<AlertTriangleIcon size={18} color={COLORS.textSecondary} />}
-          color={COLORS.textSecondary}
-          backgroundColor={COLORS.backgroundPrimary}
+          variant="neutral"
           style={styles.statCard}
         />
       </AppStatGrid>

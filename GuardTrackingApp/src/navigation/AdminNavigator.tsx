@@ -96,10 +96,10 @@ const AdminTabNavigator: React.FC = () => {
           }
           
           return (
-            <View style={styles.tabIconContainer}>
+            <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
               <IconComponent 
-                size={size} 
-                color={focused ? COLORS.primary : '#666666'} 
+                size={20}
+                color={focused ? COLORS.primary : '#7A7A7A'} 
               />
             </View>
           );
@@ -107,14 +107,14 @@ const AdminTabNavigator: React.FC = () => {
         tabBarLabel: ({ focused, color }) => (
           <Text style={[
             styles.tabLabel,
-            { color: focused ? COLORS.primary : '#666666' }
+            { color: focused ? COLORS.primary : '#7A7A7A' }
           ]}>
             {route.name}
           </Text>
         ),
         tabBarStyle: styles.tabBar,
         tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: '#666666',
+        tabBarInactiveTintColor: '#7A7A7A',
       })}
     >
       <Tab.Screen 
@@ -177,22 +177,28 @@ const AdminNavigator: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  tabIconContainer: {
+  tabIconWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  tabIconWrapperActive: {
+    backgroundColor: 'rgba(28,108,169,0.2)',
   },
   tabLabel: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
-    marginTop: 2,
+    fontSize: 10,
+    fontWeight: '500',
+    marginTop: 4,
   },
   tabBar: {
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    borderTopColor: '#E0F0FA',
     paddingBottom: 8,
     paddingTop: 8,
-    height: 65,
+    height: 70,
   },
 });
 

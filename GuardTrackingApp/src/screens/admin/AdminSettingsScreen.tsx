@@ -3,16 +3,46 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { SettingsIcon, UserIcon, NotificationIcon } from '../../components/ui/AppIcons';
+import { useDispatch } from 'react-redux';
+import type { AppDispatch } from '../../store';
+import { logoutUser } from '../../store/slices/authSlice';
 
 const AdminSettingsScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+  const dispatch = useDispatch<AppDispatch>();
+
   const settingsOptions = [
     { id: 'profile', title: 'Admin Profile', subtitle: 'Manage admin account', icon: UserIcon },
     { id: 'notifications', title: 'Notifications', subtitle: 'Configure alerts', icon: NotificationIcon },
     { id: 'system', title: 'System Settings', subtitle: 'App configuration', icon: SettingsIcon },
   ];
+
+  const handleLogout = async () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await dispatch(logoutUser()).unwrap();
+            } catch (error) {
+              console.error('Logout error:', error);
+              Alert.alert('Error', 'Failed to logout. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -34,6 +64,14 @@ const AdminSettingsScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
             <Text style={styles.arrow}>→</Text>
           </TouchableOpacity>
         ))}
+
+        <TouchableOpacity style={[styles.settingItem, styles.logoutItem]} onPress={handleLogout}>
+          <View style={styles.settingContent}>
+            <Text style={[styles.settingTitle, styles.logoutText]}>Logout</Text>
+            <Text style={[styles.settingSubtitle, styles.logoutText]}>Sign out of your admin account</Text>
+          </View>
+          <Text style={[styles.arrow, styles.logoutText]}>→</Text>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -50,6 +88,8 @@ const styles = StyleSheet.create({
   settingTitle: { fontSize: TYPOGRAPHY.fontSize.md, fontWeight: TYPOGRAPHY.fontWeight.semibold, color: COLORS.textPrimary },
   settingSubtitle: { fontSize: TYPOGRAPHY.fontSize.sm, color: COLORS.textSecondary },
   arrow: { fontSize: TYPOGRAPHY.fontSize.lg, color: COLORS.textSecondary },
+  logoutItem: { backgroundColor: '#FEE2E2' },
+  logoutText: { color: COLORS.error },
 });
 
 export default AdminSettingsScreen;

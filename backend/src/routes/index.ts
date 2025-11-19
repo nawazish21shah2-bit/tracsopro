@@ -12,6 +12,11 @@ import siteRoutes from './sites.js';
 import emergencyRoutes from './emergency.js';
 import paymentRoutes from './payments.js';
 import chatRoutes from './chat.js';
+import superAdminRoutes from './superAdmin';
+import adminUserRoutes from './adminUsers.js';
+import adminSiteRoutes from './adminSites.js';
+import adminClientRoutes from './adminClients.js';
+import adminShiftRoutes from './adminShifts.js';
 
 const router = Router();
 
@@ -41,6 +46,21 @@ router.use('/sites', siteRoutes);
 router.use('/emergency', emergencyRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/chat', chatRoutes);
+router.use('/admin/users', adminUserRoutes);
+router.use('/admin/sites', adminSiteRoutes);
+router.use('/admin/clients', adminClientRoutes);
+router.use('/admin/shifts', adminShiftRoutes);
+// Test route for Super Admin
+router.get('/super-admin-test', (req, res) => {
+  res.json({ success: true, message: 'Super Admin routes are working!' });
+});
+
+// Super Admin routes with simple test
+router.get('/super-admin/test', (req, res) => {
+  res.json({ success: true, message: 'Super Admin endpoint working!' });
+});
+
+router.use('/super-admin', superAdminRoutes);
 
 // Legacy routes for backward compatibility with in-memory server
 router.get('/locations', (req, res) => {

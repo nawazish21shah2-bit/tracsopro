@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleProp, TextStyle } from 'react-native';
+import { StyleProp, TextStyle, View } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -97,9 +97,42 @@ export const SettingsIcon: React.FC<CommonIconProps> = ({ size = 24, color = COL
 );
 
 // Action icons
-export const MenuIcon: React.FC<CommonIconProps> = ({ size = 24, color = COLORS.textPrimary, style }) => (
-  <SvgIcon Svg={MenuSvg} size={size} color={color} style={style} />
-);
+export const MenuIcon: React.FC<CommonIconProps> = ({ size = 24, color = COLORS.textPrimary, style }) => {
+  const lineHeight = Math.max(1, Math.round(size / 10));
+  const barWidth = size * 0.8;
+  const gap = lineHeight * 1.5;
+
+  return (
+    <View style={[{ width: size, height: size, justifyContent: 'center' }, style]}>
+      <View
+        style={{
+          width: barWidth,
+          height: lineHeight,
+          backgroundColor: color,
+          borderRadius: lineHeight / 2,
+        }}
+      />
+      <View
+        style={{
+          width: barWidth,
+          height: lineHeight,
+          backgroundColor: color,
+          borderRadius: lineHeight / 2,
+          marginTop: gap,
+        }}
+      />
+      <View
+        style={{
+          width: barWidth,
+          height: lineHeight,
+          backgroundColor: color,
+          borderRadius: lineHeight / 2,
+          marginTop: gap,
+        }}
+      />
+    </View>
+  );
+};
 
 export const NotificationIcon: React.FC<CommonIconProps> = ({ size = 24, color = COLORS.textPrimary, style }) => (
   <SvgIcon Svg={BellSvg} size={size} color={color} style={style} />

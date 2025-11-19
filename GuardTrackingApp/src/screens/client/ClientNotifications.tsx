@@ -86,6 +86,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
+    marginTop: 40,
   },
   menuButton: {
     width: 40,

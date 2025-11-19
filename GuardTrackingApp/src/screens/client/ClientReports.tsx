@@ -27,6 +27,7 @@ interface ReportData {
   description: string;
   status: 'Respond' | 'New' | 'Reviewed';
   checkInTime?: string;
+  guardId?: string;
 }
 
 const ClientReports: React.FC = () => {
@@ -43,6 +44,7 @@ const ClientReports: React.FC = () => {
       description: 'Visitor collapsed in main lobby',
       status: 'Respond',
       checkInTime: '08:12 am',
+      guardId: 'guard_1',
     },
     {
       id: '2',
@@ -53,6 +55,7 @@ const ClientReports: React.FC = () => {
       description: 'Unauthorized vehicle in parking area. License plate recorded',
       status: 'New',
       checkInTime: '08:12 am',
+      guardId: 'guard_1',
     },
     {
       id: '3',
@@ -63,6 +66,7 @@ const ClientReports: React.FC = () => {
       description: 'Employee smoking in non-designated area, Issued Warning.',
       status: 'New',
       checkInTime: '08:12 am',
+      guardId: 'guard_1',
     },
     {
       id: '4',
@@ -73,6 +77,7 @@ const ClientReports: React.FC = () => {
       description: 'Employee smoking in non-designated area, Issued Warning.',
       status: 'Reviewed',
       checkInTime: '08:12 am',
+      guardId: 'guard_1',
     },
   ]);
 
@@ -83,6 +88,16 @@ const ClientReports: React.FC = () => {
   const handleRespond = (reportId: string) => {
     console.log('Respond to report:', reportId);
     // Update report status or navigate to response screen
+  };
+
+  const handleChatWithGuard = (guardId: string, guardName: string) => {
+    // Navigate to chat screen with guard
+    (navigation as any).navigate('IndividualChatScreen', {
+      chatId: `client_guard_${guardId}`,
+      chatName: guardName,
+      avatar: undefined,
+      context: 'report'
+    });
   };
 
   return (
@@ -105,6 +120,7 @@ const ClientReports: React.FC = () => {
             report={report}
             onPress={() => handleReportPress(report.id)}
             onRespond={() => handleRespond(report.id)}
+            onChatWithGuard={handleChatWithGuard}
           />
         ))}
       </ScrollView>

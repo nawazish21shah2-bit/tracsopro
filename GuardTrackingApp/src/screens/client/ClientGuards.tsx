@@ -117,6 +117,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
+    paddingTop: 60,
   },
   menuButton: {
     width: 40,

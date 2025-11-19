@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { PersonIcon, LocationIcon } from '../ui/AppIcons';
 import StatusBadge from './StatusBadge';
+import { globalStyles } from '../../styles/globalStyles';
 
 interface SiteCardProps {
   site: {
@@ -13,14 +14,16 @@ interface SiteCardProps {
     status: 'Active' | 'Upcoming' | 'Missed';
     shiftTime?: string;
     checkInTime?: string;
+    guardId?: string;
   };
   onPress?: () => void;
   onMoreOptions?: () => void;
+  onChatWithGuard?: (guardId: string, guardName: string) => void;
 }
 
-const SiteCard: React.FC<SiteCardProps> = ({ site, onPress, onMoreOptions }) => {
+const SiteCard: React.FC<SiteCardProps> = ({ site, onPress, onMoreOptions, onChatWithGuard }) => {
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={[globalStyles.card, styles.card]} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.header}>
         <View style={styles.siteInfo}>
           <View style={styles.locationIcon}>
@@ -55,7 +58,17 @@ const SiteCard: React.FC<SiteCardProps> = ({ site, onPress, onMoreOptions }) => 
               <Text style={styles.checkInTime}>Checked in at {site.checkInTime}</Text>
             )}
           </View>
-          <StatusBadge status={site.status} size="small" />
+          <View style={styles.rightSection}>
+            {onChatWithGuard && site.guardId && site.status === 'Active' && (
+              <TouchableOpacity 
+                style={styles.chatButton}
+                onPress={() => onChatWithGuard(site.guardId!, site.guardName)}
+              >
+                <Text style={styles.chatButtonText}>💬</Text>
+              </TouchableOpacity>
+            )}
+            <StatusBadge status={site.status} size="small" />
+          </View>
         </View>
       </View>
     </TouchableOpacity>
@@ -64,18 +77,7 @@ const SiteCard: React.FC<SiteCardProps> = ({ site, onPress, onMoreOptions }) => 
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
   },
   header: {
     flexDirection: 'row',
@@ -166,6 +168,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#2E7D32',
     fontWeight: '500',
+  },
+  rightSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  chatButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#1976D2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  chatButtonText: {
+    fontSize: 14,
   },
 });
 

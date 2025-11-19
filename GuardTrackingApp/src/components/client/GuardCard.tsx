@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { PersonIcon } from '../ui/AppIcons';
 import StatusBadge from './StatusBadge';
+import { globalStyles } from '../../styles/globalStyles';
 
 interface GuardCardProps {
   guard: {
@@ -24,7 +25,7 @@ interface GuardCardProps {
 
 const GuardCard: React.FC<GuardCardProps> = ({ guard, onPress, onHire, showHireButton = false }) => {
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={[globalStyles.card, styles.card]} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.header}>
         <View style={styles.guardInfo}>
           <View style={styles.avatar}>
@@ -73,18 +74,7 @@ const GuardCard: React.FC<GuardCardProps> = ({ guard, onPress, onHire, showHireB
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
   },
   header: {
     flexDirection: 'row',

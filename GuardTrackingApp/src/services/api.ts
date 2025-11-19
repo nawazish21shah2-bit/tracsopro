@@ -276,6 +276,133 @@ class ApiService {
     }
   }
 
+  // Admin Shift Management (simple create for scheduling screen)
+  async createAdminShift(data: {
+    guardId: string;
+    locationName: string;
+    locationAddress: string;
+    scheduledStartTime: string;
+    scheduledEndTime: string;
+    description?: string;
+    notes?: string;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.post('/admin/shifts', data);
+      return {
+        success: true,
+        data: response.data.data,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.error || error.response?.data?.message || 'Failed to create shift',
+      };
+    }
+  }
+
+  // Admin Client Management (for dropdowns, etc.)
+  async getAdminClients(params: { page?: number; limit?: number; search?: string } = {}): Promise<ApiResponse<any>> {
+    try {
+      const { page = 1, limit = 50, search } = params;
+      const query = new URLSearchParams();
+      query.append('page', String(page));
+      query.append('limit', String(limit));
+      if (search) query.append('search', search);
+
+      const response = await this.api.get(`/admin/clients?${query.toString()}`);
+      return {
+        success: true,
+        data: response.data.data,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to fetch clients',
+      };
+    }
+  }
+
+  // Admin Site Management Methods
+  async getAdminSites(params: {
+    page?: number;
+    limit?: number;
+    clientId?: string;
+    isActive?: boolean;
+    search?: string;
+  } = {}): Promise<ApiResponse<any>> {
+    try {
+      const { page = 1, limit = 20, clientId, isActive, search } = params;
+      const query = new URLSearchParams();
+      query.append('page', String(page));
+      query.append('limit', String(limit));
+      if (clientId) query.append('clientId', clientId);
+      if (typeof isActive === 'boolean') query.append('isActive', String(isActive));
+      if (search) query.append('search', search);
+
+      const response = await this.api.get(`/admin/sites?${query.toString()}`);
+      return {
+        success: true,
+        data: response.data.data,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to fetch sites',
+      };
+    }
+  }
+
+  async createAdminSite(data: any): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.post('/admin/sites', data);
+      return {
+        success: true,
+        data: response.data.data,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to create site',
+      };
+    }
+  }
+
+  async updateAdminSite(id: string, data: any): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.put(`/admin/sites/${id}`, data);
+      return {
+        success: true,
+        data: response.data.data,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to update site',
+      };
+    }
+  }
+
+  async deleteAdminSite(id: string): Promise<ApiResponse<null>> {
+    try {
+      await this.api.delete(`/admin/sites/${id}`);
+      return {
+        success: true,
+        data: null,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to delete site',
+      };
+    }
+  }
+
   async register(userData: RegisterForm): Promise<ApiResponse<any>> {
     try {
       const response = await this.api.post('/auth/register', userData);
@@ -457,6 +584,85 @@ class ApiService {
         success: false,
         data: {} as User,
         message: error.response?.data?.message || 'Failed to update profile'
+      };
+    }
+  }
+
+  // Admin User Management Methods
+  async getAdminUsers(params: {
+    page?: number;
+    limit?: number;
+    role?: 'ADMIN' | 'GUARD' | 'CLIENT' | 'SUPER_ADMIN';
+    search?: string;
+    isActive?: boolean;
+  } = {}): Promise<ApiResponse<any>> {
+    try {
+      const { page = 1, limit = 50, role, search, isActive } = params;
+      const query = new URLSearchParams();
+      query.append('page', String(page));
+      query.append('limit', String(limit));
+      if (role) query.append('role', role);
+      if (search) query.append('search', search);
+      if (typeof isActive === 'boolean') query.append('isActive', String(isActive));
+
+      const response = await this.api.get(`/admin/users?${query.toString()}`);
+      return {
+        success: true,
+        data: response.data.data,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to fetch users',
+      };
+    }
+  }
+
+  async updateAdminUserStatus(id: string, isActive: boolean): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.patch(`/admin/users/${id}/status`, { isActive });
+      return {
+        success: true,
+        data: response.data.data,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to update user status',
+      };
+    }
+  }
+
+  async updateAdminUser(id: string, data: Partial<{ firstName: string; lastName: string; email: string; role: 'ADMIN' | 'GUARD' | 'CLIENT' | 'SUPER_ADMIN'; }>): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.put(`/admin/users/${id}`, data);
+      return {
+        success: true,
+        data: response.data.data,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to update user',
+      };
+    }
+  }
+
+  async deleteAdminUser(id: string): Promise<ApiResponse<null>> {
+    try {
+      await this.api.delete(`/admin/users/${id}`);
+      return {
+        success: true,
+        data: null,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to delete user',
       };
     }
   }

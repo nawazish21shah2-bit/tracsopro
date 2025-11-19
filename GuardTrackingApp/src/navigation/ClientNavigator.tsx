@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, Text, StyleSheet } from 'react-native';
@@ -25,9 +26,9 @@ const ClientNavigator: React.FC = () => {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarIcon: ({ focused, color, size }) => {
+        tabBarIcon: ({ focused }) => {
           let IconComponent;
-          
+
           switch (route.name) {
             case 'Dashboard':
               IconComponent = HomeIcon;
@@ -47,59 +48,61 @@ const ClientNavigator: React.FC = () => {
             default:
               IconComponent = HomeIcon;
           }
-          
+
           return (
-            <View style={styles.tabIconContainer}>
-              <IconComponent 
-                size={size} 
-                color={focused ? '#1C6CA9' : '#666666'} 
+            <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
+              <IconComponent
+                size={20}
+                color={focused ? '#1C6CA9' : '#7A7A7A'}
               />
             </View>
           );
         },
-        tabBarLabel: ({ focused, color }) => (
-          <Text style={[
-            styles.tabLabel,
-            { color: focused ? '#1C6CA9' : '#666666' }
-          ]}>
+        tabBarLabel: ({ focused }) => (
+          <Text
+            style={[
+              styles.tabLabel,
+              { color: focused ? '#1C6CA9' : '#7A7A7A' },
+            ]}
+          >
             {route.name}
           </Text>
         ),
         tabBarStyle: styles.tabBar,
         tabBarActiveTintColor: '#1C6CA9',
-        tabBarInactiveTintColor: '#666666',
+        tabBarInactiveTintColor: '#7A7A7A',
       })}
     >
-      <Tab.Screen 
-        name="Dashboard" 
+      <Tab.Screen
+        name="Dashboard"
         component={ClientDashboard}
         options={{
           tabBarLabel: 'Dashboard',
         }}
       />
-      <Tab.Screen 
-        name="Sites & Shifts" 
+      <Tab.Screen
+        name="Sites & Shifts"
         component={ClientSites}
         options={{
           tabBarLabel: 'Sites & Shifts',
         }}
       />
-      <Tab.Screen 
-        name="Reports" 
+      <Tab.Screen
+        name="Reports"
         component={ClientReports}
         options={{
           tabBarLabel: 'Reports',
         }}
       />
-      <Tab.Screen 
-        name="Guards" 
+      <Tab.Screen
+        name="Guards"
         component={ClientGuards}
         options={{
           tabBarLabel: 'Guards',
         }}
       />
-      <Tab.Screen 
-        name="Settings" 
+      <Tab.Screen
+        name="Settings"
         component={ClientSettings}
         options={{
           tabBarLabel: 'Settings',
@@ -113,14 +116,20 @@ const styles = StyleSheet.create({
   tabBar: {
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    borderTopColor: '#E0F0FA',
     paddingTop: 8,
     paddingBottom: 8,
     height: 70,
   },
-  tabIconContainer: {
+  tabIconWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  tabIconWrapperActive: {
+    backgroundColor: 'rgba(28,108,169,0.2)',
   },
   tabLabel: {
     fontSize: 10,
@@ -130,3 +139,4 @@ const styles = StyleSheet.create({
 });
 
 export default ClientNavigator;
+

@@ -32,8 +32,21 @@ const IncidentReviewScreen: React.FC<IncidentReviewScreenProps> = ({ navigation 
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'under_review'>('pending');
 
   useEffect(() => {
+    initializeService();
+  }, []);
+
+  useEffect(() => {
     loadIncidents();
   }, [filterStatus]);
+
+  const initializeService = async () => {
+    try {
+      await enhancedIncidentService.initialize();
+      loadIncidents();
+    } catch (error) {
+      console.error('Error initializing incident service:', error);
+    }
+  };
 
   const loadIncidents = () => {
     const allIncidents = enhancedIncidentService.getIncidents({

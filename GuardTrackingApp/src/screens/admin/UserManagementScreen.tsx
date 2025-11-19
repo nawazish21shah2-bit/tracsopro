@@ -18,6 +18,7 @@ import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
 import { globalStyles, COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { UserIcon, SettingsIcon, EmergencyIcon } from '../../components/ui/AppIcons';
+import apiService from '../../services/api';
 
 interface User {
   id: string;
@@ -46,81 +47,116 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
     role: 'guard' as User['role'],
     department: '',
   });
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [editUser, setEditUser] = useState({
+    name: '',
+    email: '',
+    role: 'guard' as User['role'],
+  });
 
   useEffect(() => {
     loadUsers();
   }, []);
 
-  const loadUsers = () => {
-    // Mock users data
-    const mockUsers: User[] = [
-      {
-        id: 'user_1',
-        name: 'John Smith',
-        email: 'john.smith@company.com',
-        role: 'guard',
-        status: 'active',
-        department: 'Security',
-        lastLogin: '2024-11-09 10:30',
-        createdAt: '2024-10-01',
-      },
-      {
-        id: 'user_2',
-        name: 'Sarah Johnson',
-        email: 'sarah.j@company.com',
-        role: 'guard',
-        status: 'active',
-        department: 'Security',
-        lastLogin: '2024-11-09 08:15',
-        createdAt: '2024-09-15',
-      },
-      {
-        id: 'user_3',
-        name: 'Mike Wilson',
-        email: 'mike.wilson@company.com',
-        role: 'admin',
-        status: 'active',
-        lastLogin: '2024-11-09 09:45',
-        createdAt: '2024-08-20',
-      },
-      {
-        id: 'user_4',
-        name: 'ABC Corporation',
-        email: 'contact@abccorp.com',
-        role: 'client',
-        status: 'active',
-        lastLogin: '2024-11-08 16:20',
-        createdAt: '2024-07-10',
-      },
-    ];
+  const loadUsers = async () => {
+    try {
+      const response = await apiService.getAdminUsers();
 
-    setUsers(mockUsers);
+      if (!response.success || !response.data) {
+        console.warn('Failed to load users:', response.message);
+        return;
+      }
+
+      const backendUsers = response.data.users as any[];
+
+      const mappedUsers: User[] = backendUsers.map((u) => {
+        const fullName = `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email;
+        const roleMap: Record<string, User['role']> = {
+          ADMIN: 'admin',
+          GUARD: 'guard',
+          CLIENT: 'client',
+        };
+
+        return {
+          id: u.id,
+          name: fullName,
+          email: u.email,
+          role: roleMap[u.role] || 'guard',
+          status: u.isActive ? 'active' : 'inactive',
+          department: u.guard?.department,
+          createdAt: u.createdAt,
+          lastLogin: undefined,
+        };
+      });
+
+      setUsers(mappedUsers);
+    } catch (error: any) {
+      console.error('Failed to load users:', error);
+      Alert.alert('Error', error.message || 'Failed to load users');
+    }
   };
 
-  const handleCreateUser = () => {
+  const handleCreateUser = async () => {
     if (!newUser.name || !newUser.email) {
       Alert.alert('Error', 'Please fill in all required fields');
       return;
     }
 
-    const user: User = {
-      id: `user_${Date.now()}`,
-      name: newUser.name,
-      email: newUser.email,
-      role: newUser.role,
-      status: 'active',
-      department: newUser.department || undefined,
-      createdAt: new Date().toISOString().split('T')[0],
+    // Map UI role to backend role enum
+    const roleMap: Record<User['role'], 'GUARD' | 'ADMIN' | 'CLIENT'> = {
+      admin: 'ADMIN',
+      guard: 'GUARD',
+      client: 'CLIENT',
     };
 
-    setUsers(prev => [...prev, user]);
-    setShowCreateModal(false);
-    setNewUser({ name: '', email: '', role: 'guard', department: '' });
-    
-    Alert.alert('Success', 'User created successfully');
+    const [firstName, ...rest] = newUser.name.trim().split(' ');
+    const lastName = rest.join(' ');
+
+    // Generate a simple temporary password for the new user
+    const tempPassword = `Temp${Math.floor(100000 + Math.random() * 900000)}!`;
+
+    try {
+      const response = await apiService.register({
+        email: newUser.email.trim().toLowerCase(),
+        password: tempPassword,
+        firstName,
+        lastName: lastName || firstName,
+        role: roleMap[newUser.role],
+      } as any);
+
+      if (!response.success || !response.data) {
+        Alert.alert('Error', response.message || 'Failed to create user');
+        return;
+      }
+
+      const createdAt = new Date().toISOString();
+
+      const user: User = {
+        id: response.data.userId || `user_${Date.now()}`,
+        name: newUser.name,
+        email: newUser.email.trim().toLowerCase(),
+        role: newUser.role,
+        status: 'active',
+        department: newUser.department || undefined,
+        createdAt,
+      };
+
+      setUsers(prev => [...prev, user]);
+      setShowCreateModal(false);
+      setNewUser({ name: '', email: '', role: 'guard', department: '' });
+
+      Alert.alert(
+        'User created',
+        `User has been created successfully. Temporary password: ${tempPassword}`
+      );
+    } catch (error: any) {
+      console.error('Admin create user error:', error);
+      Alert.alert('Error', error.message || 'Failed to create user');
+    }
   };
 
-  const handleUserAction = (userId: string, action: 'edit' | 'suspend' | 'activate' | 'delete') => {
+  const handleUserAction = async (userId: string, action: 'edit' | 'suspend' | 'activate' | 'delete') => {
     const user = users.find(u => u.id === userId);
     if (!user) return;
 
@@ -134,19 +170,39 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
             { 
               text: 'Suspend', 
               style: 'destructive',
-              onPress: () => {
-                setUsers(prev => prev.map(u => 
-                  u.id === userId ? { ...u, status: 'suspended' } : u
-                ));
+              onPress: async () => {
+                try {
+                  const response = await apiService.updateAdminUserStatus(userId, false);
+                  if (!response.success) {
+                    Alert.alert('Error', response.message || 'Failed to suspend user');
+                    return;
+                  }
+                  setUsers(prev => prev.map(u => 
+                    u.id === userId ? { ...u, status: 'suspended' } : u
+                  ));
+                } catch (error: any) {
+                  console.error('Suspend user error:', error);
+                  Alert.alert('Error', error.message || 'Failed to suspend user');
+                }
               }
             },
           ]
         );
         break;
       case 'activate':
-        setUsers(prev => prev.map(u => 
-          u.id === userId ? { ...u, status: 'active' } : u
-        ));
+        try {
+          const response = await apiService.updateAdminUserStatus(userId, true);
+          if (!response.success) {
+            Alert.alert('Error', response.message || 'Failed to activate user');
+            return;
+          }
+          setUsers(prev => prev.map(u => 
+            u.id === userId ? { ...u, status: 'active' } : u
+          ));
+        } catch (error: any) {
+          console.error('Activate user error:', error);
+          Alert.alert('Error', error.message || 'Failed to activate user');
+        }
         break;
       case 'delete':
         Alert.alert(
@@ -157,13 +213,89 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
             { 
               text: 'Delete', 
               style: 'destructive',
-              onPress: () => {
-                setUsers(prev => prev.filter(u => u.id !== userId));
+              onPress: async () => {
+                try {
+                  const response = await apiService.deleteAdminUser(userId);
+                  if (!response.success) {
+                    Alert.alert('Error', response.message || 'Failed to delete user');
+                    return;
+                  }
+                  setUsers(prev => prev.filter(u => u.id !== userId));
+                } catch (error: any) {
+                  console.error('Delete user error:', error);
+                  Alert.alert('Error', error.message || 'Failed to delete user');
+                }
               }
             },
           ]
         );
         break;
+      case 'edit':
+        setEditingUserId(user.id);
+        setEditUser({
+          name: user.name,
+          email: user.email,
+          role: user.role,
+        });
+        setShowEditModal(true);
+        break;
+    }
+  };
+
+  const handleSaveEditUser = async () => {
+    if (!editingUserId) return;
+
+    if (!editUser.name || !editUser.email) {
+      Alert.alert('Error', 'Please fill in all required fields');
+      return;
+    }
+
+    const roleMap: Record<User['role'], 'GUARD' | 'ADMIN' | 'CLIENT'> = {
+      admin: 'ADMIN',
+      guard: 'GUARD',
+      client: 'CLIENT',
+    };
+
+    const [firstName, ...rest] = editUser.name.trim().split(' ');
+    const lastName = rest.join(' ');
+
+    try {
+      const response = await apiService.updateAdminUser(editingUserId, {
+        firstName,
+        lastName: lastName || firstName,
+        email: editUser.email.trim().toLowerCase(),
+        role: roleMap[editUser.role],
+      });
+
+      if (!response.success || !response.data) {
+        Alert.alert('Error', response.message || 'Failed to update user');
+        return;
+      }
+
+      const updatedRoleMap: Record<string, User['role']> = {
+        ADMIN: 'admin',
+        GUARD: 'guard',
+        CLIENT: 'client',
+      };
+
+      setUsers(prev => prev.map(u => 
+        u.id === editingUserId
+          ? {
+              ...u,
+              name: editUser.name,
+              email: editUser.email.trim().toLowerCase(),
+              role: updatedRoleMap[response.data.role] || editUser.role,
+            }
+          : u
+      ));
+
+      setShowEditModal(false);
+      setEditingUserId(null);
+
+      Alert.alert('Success', 'User updated successfully');
+    } catch (error: any) {
+      console.error('Edit user error:', error);
+      Alert.alert('Error', error.message || 'Failed to update user');
     }
   };
 
@@ -378,6 +510,82 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
               onPress={handleCreateUser}
             >
               <Text style={styles.createButtonText}>Create User</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showEditModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Edit User</Text>
+            <TouchableOpacity
+              onPress={() => {
+                setShowEditModal(false);
+                setEditingUserId(null);
+              }}
+            >
+              <Text style={styles.closeButton}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.modalContent}>
+            <View style={styles.formField}>
+              <Text style={styles.fieldLabel}>Full Name</Text>
+              <TextInput
+                style={styles.fieldInput}
+                value={editUser.name}
+                onChangeText={(text) => setEditUser(prev => ({ ...prev, name: text }))}
+                placeholder="Enter full name"
+              />
+            </View>
+
+            <View style={styles.formField}>
+              <Text style={styles.fieldLabel}>Email</Text>
+              <TextInput
+                style={styles.fieldInput}
+                value={editUser.email}
+                onChangeText={(text) => setEditUser(prev => ({ ...prev, email: text }))}
+                placeholder="Enter email address"
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View style={styles.formField}>
+              <Text style={styles.fieldLabel}>Role</Text>
+              <View style={styles.roleSelector}>
+                {['admin', 'guard', 'client'].map((role) => (
+                  <TouchableOpacity
+                    key={role}
+                    style={[
+                      styles.roleOption,
+                      editUser.role === role && styles.roleOptionSelected,
+                    ]}
+                    onPress={() => setEditUser(prev => ({ ...prev, role: role as User['role'] }))}
+                  >
+                    <Text
+                      style={[
+                        styles.roleOptionText,
+                        editUser.role === role && styles.roleOptionTextSelected,
+                      ]}
+                    >
+                      {role.charAt(0).toUpperCase() + role.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.createButton}
+              onPress={handleSaveEditUser}
+            >
+              <Text style={styles.createButtonText}>Save Changes</Text>
             </TouchableOpacity>
           </View>
         </View>
