@@ -13,7 +13,7 @@ import {
   TextInput,
   Image,
 } from 'react-native';
-import { PersonIcon, PasswordIcon, EyeIcon, EyeSlashIcon } from '../../components/ui/AppIcons';
+import { PersonIcon, PasswordIcon } from '../../components/ui/AppIcons';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -23,6 +23,7 @@ import { registerUser, clearError } from '../../store/slices/authSlice';
 import { AuthStackParamList, UserRole } from '../../types';
 import { useTheme } from '../../utils/theme';
 import Input from '../../components/common/Input';
+import AuthInput from '../../components/auth/AuthInput';
 import Button from '../../components/common/Button';
 import { globalStyles, COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import Logo from '../../assets/images/tracSOpro-logo.png';
@@ -146,100 +147,58 @@ const RegisterScreen: React.FC = () => {
         {/* Form */}
         <View style={styles.form}>
           <View style={styles.inputContainer}>
-            <View style={styles.inputWrapper}>
-              <View style={styles.iconContainer}>
-                <PersonIcon size={20} color="#1C6CA9" />
-              </View>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Full Name"
-                placeholderTextColor="#9CA3AF"
-                value={formData.fullName}
-                onChangeText={(value) => handleInputChange('fullName', value)}
-                autoCapitalize="words"
-                autoCorrect={false}
-                editable={!isLoading}
-              />
-            </View>
+            <AuthInput
+              label="Full Name"
+              icon="person-outline"
+              placeholder="Full Name"
+              value={formData.fullName}
+              onChangeText={(v) => handleInputChange('fullName', v)}
+              autoCapitalize="words"
+              editable={!isLoading}
+            />
           </View>
 
           <View style={styles.inputContainer}>
-            <View style={styles.inputWrapper}>
-              <View style={styles.iconContainer}>
-                <PersonIcon size={20} color="#1C6CA9" />
-              </View>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Email Address"
-                placeholderTextColor="#9CA3AF"
-                value={formData.email}
-                onChangeText={(value) => handleInputChange('email', value)}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!isLoading}
-              />
-            </View>
+            <AuthInput
+              label="Email Address"
+              icon="email-outline"
+              placeholder="Email Address"
+              value={formData.email}
+              onChangeText={(v) => handleInputChange('email', v)}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              editable={!isLoading}
+            />
           </View>
 
           <View style={styles.inputContainer}>
-            <View style={styles.inputWrapper}>
-              <View style={styles.iconContainer}>
-                <PasswordIcon size={20} color="#F59E0B" />
-              </View>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Password"
-                placeholderTextColor="#9CA3AF"
-                value={formData.password}
-                onChangeText={(value) => handleInputChange('password', value)}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!isLoading}
-              />
-              <TouchableOpacity
-                onPress={() => setShowPassword(!showPassword)}
-                style={styles.eyeButton}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                {showPassword ? (
-                  <EyeSlashIcon size={20} color="#6B7280" />
-                ) : (
-                  <EyeIcon size={20} color="#6B7280" />
-                )}
-              </TouchableOpacity>
-            </View>
+            <AuthInput
+              label="Password"
+              icon="lock-outline"
+              placeholder="Password"
+              value={formData.password}
+              onChangeText={(v) => handleInputChange('password', v)}
+              secureTextEntry
+              showPassword={showPassword}
+              onTogglePassword={() => setShowPassword(!showPassword)}
+              autoCapitalize="none"
+              editable={!isLoading}
+            />
           </View>
 
           <View style={styles.inputContainer}>
-            <View style={styles.inputWrapper}>
-              <View style={styles.iconContainer}>
-                <PasswordIcon size={20} color="#F59E0B" />
-              </View>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Confirm Password"
-                placeholderTextColor="#9CA3AF"
-                value={formData.confirmPassword}
-                onChangeText={(value) => handleInputChange('confirmPassword', value)}
-                secureTextEntry={!showConfirmPassword}
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!isLoading}
-              />
-              <TouchableOpacity
-                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                style={styles.eyeButton}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                {showConfirmPassword ? (
-                  <EyeSlashIcon size={20} color="#6B7280" />
-                ) : (
-                  <EyeIcon size={20} color="#6B7280" />
-                )}
-              </TouchableOpacity>
-            </View>
+            <AuthInput
+              label="Confirm Password"
+              icon="lock-outline"
+              placeholder="Confirm Password"
+              value={formData.confirmPassword}
+              onChangeText={(v) => handleInputChange('confirmPassword', v)}
+              secureTextEntry
+              showPassword={showConfirmPassword}
+              onTogglePassword={() => setShowConfirmPassword(!showConfirmPassword)}
+              autoCapitalize="none"
+              editable={!isLoading}
+            />
           </View>
 
           <Button

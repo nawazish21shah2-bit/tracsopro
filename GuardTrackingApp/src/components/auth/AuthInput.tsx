@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, forwardRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, TextInputProps } from 'react-native';
 import { AppIcon, EyeIcon, EyeSlashIcon } from '../ui/AppIcons';
 
@@ -11,7 +11,7 @@ interface AuthInputProps extends TextInputProps {
   required?: boolean;
 }
 
-const AuthInput: React.FC<AuthInputProps> = ({
+const AuthInput = forwardRef<TextInput, AuthInputProps> (({
   label,
   icon,
   error,
@@ -20,8 +20,9 @@ const AuthInput: React.FC<AuthInputProps> = ({
   required = false,
   style,
   ...props
-}) => {
+}, ref) => {
   const isPasswordField = props.secureTextEntry !== undefined;
+  const [focused, setFocused] = useState(false);
 
   return (
     <View style={styles.container}>
@@ -32,14 +33,24 @@ const AuthInput: React.FC<AuthInputProps> = ({
         </Text>
       )}
       
-      <View style={[styles.inputWrapper, error && styles.inputError, style]}>
+      <View
+        style={[
+          styles.inputWrapper,
+          focused && styles.inputFocused,
+          error && styles.inputError,
+          style,
+        ]}
+      >
         {icon && (
           <AppIcon type="material" name={icon} size={20} color="#9CA3AF" style={styles.inputIcon} />
         )}
         
         <TextInput
+          ref={ref}
           style={styles.textInput}
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor="#828282"
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           {...props}
           secureTextEntry={isPasswordField ? !showPassword : props.secureTextEntry}
         />
@@ -58,7 +69,7 @@ const AuthInput: React.FC<AuthInputProps> = ({
       {error && <Text style={styles.errorText}>{error}</Text>}
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -68,7 +79,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter',
     fontWeight: '500',
     fontSize: 14,
-    color: '#374151',
+    color: '#828282',
     marginBottom: 8,
   },
   required: {
@@ -79,10 +90,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#ACD3F1',
     borderRadius: 12,
     paddingHorizontal: 16,
     height: 56,
+  },
+  inputFocused: {
+    borderColor: '#1C6CA9',
+    borderWidth: 2,
   },
   inputError: {
     borderColor: '#EF4444',

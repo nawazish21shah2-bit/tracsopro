@@ -285,7 +285,7 @@ class ShiftService {
     severity: string;
     title: string;
     description: string;
-    location?: {
+    location?: { 
       latitude: number;
       longitude: number;
       accuracy: number;
