@@ -10,7 +10,7 @@ import {
   TextInput,
   Image,
 } from 'react-native';
-import { UserIcon, LockIcon, EyeIcon, EyeOffIcon, ArrowRightIcon } from '../../components/ui/FeatherIcons';
+import { ArrowRightIcon } from '../../components/ui/AppIcons';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -18,6 +18,7 @@ import { RootState, AppDispatch } from '../../store';
 import { loginUser, clearError } from '../../store/slices/authSlice';
 import { AuthStackParamList } from '../../types';
 import Input from '../../components/common/Input';
+import AuthInput from '../../components/auth/AuthInput';
 import Button from '../../components/common/Button';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorBoundary from '../../components/common/ErrorBoundary';
@@ -119,65 +120,40 @@ const LoginScreen: React.FC = () => {
         {/* Form */}
         <View style={styles.form}>
           <View style={styles.inputContainer}>
-            <View style={styles.inputWrapper}>
-              <View style={styles.iconContainer}>
-                <UserIcon size={20} color="#1C6CA9" />
-              </View>
-              <TextInput
-                ref={emailInputRef}
-                style={styles.textInput}
-                placeholder="Email Address"
-                placeholderTextColor="#9CA3AF"
-                value={formData.email}
-                onChangeText={(value) => handleInputChange('email', value)}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete="off"
-                textContentType="none"
-                importantForAutofill="no"
-                editable={!isLoading}
-                returnKeyType="next"
-                onSubmitEditing={() => passwordInputRef.current?.focus()}
-                blurOnSubmit={false}
-              />
-            </View>
+            <AuthInput
+              ref={emailInputRef as any}
+              label="Email"
+              icon="email-outline"
+              placeholder="Email Address"
+              value={formData.email}
+              onChangeText={(v) => handleInputChange('email', v)}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!isLoading}
+              returnKeyType="next"
+              onSubmitEditing={() => passwordInputRef.current?.focus()}
+              blurOnSubmit={false}
+            />
           </View>
 
           <View style={styles.inputContainer}>
-            <View style={styles.inputWrapper}>
-              <View style={styles.iconContainer}>
-                <LockIcon size={20} color="#F59E0B" />
-              </View>
-              <TextInput
-                ref={passwordInputRef}
-                style={styles.textInput}
-                placeholder="Password"
-                placeholderTextColor="#9CA3AF"
-                value={formData.password}
-                onChangeText={(value) => handleInputChange('password', value)}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete="off"
-                textContentType="none"
-                importantForAutofill="no"
-                editable={!isLoading}
-                returnKeyType="done"
-                onSubmitEditing={handleLogin}
-              />
-              <TouchableOpacity
-                onPress={() => setShowPassword(!showPassword)}
-                style={styles.eyeButton}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                {showPassword ? (
-                  <EyeOffIcon size={20} color="#6B7280" />
-                ) : (
-                  <EyeIcon size={20} color="#6B7280" />
-                )}
-              </TouchableOpacity>
-            </View>
+            <AuthInput
+              ref={passwordInputRef as any}
+              label="Password"
+              icon="lock-outline"
+              placeholder="Password"
+              value={formData.password}
+              onChangeText={(v) => handleInputChange('password', v)}
+              secureTextEntry
+              showPassword={showPassword}
+              onTogglePassword={() => setShowPassword(!showPassword)}
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!isLoading}
+              returnKeyType="done"
+              onSubmitEditing={handleLogin}
+            />
           </View>
 
           {/* Forgot Password */}

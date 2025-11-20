@@ -59,12 +59,8 @@ const Input: React.FC<InputProps> = ({
     
     if (isFocused) {
       baseStyle.push({
-        borderColor: theme.colors.primary,
-        shadowColor: theme.colors.primary,
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.2,
-        shadowRadius: 4,
-        elevation: 2,
+        borderColor: '#1C6CA9',
+        borderWidth: 2,
       });
     }
     
@@ -105,29 +101,29 @@ const Input: React.FC<InputProps> = ({
     <View style={[containerStyle]}>
       {/* Label */}
       {label && (
-        <Text style={[styles.label, { color: theme.colors.text.primary }, labelStyle]}>
+        <Text style={[styles.label, { color: '#828282' }, labelStyle]}>
           {label}
           {required && <Text style={[styles.required, { color: theme.colors.danger }]}> *</Text>}
         </Text>
       )}
 
       {/* Input Container */}
-      <View style={[getContainerStyle(), { borderRadius: theme.borderRadius.md }]}>
+      <View style={[getContainerStyle(), { borderRadius: 12 }]}>
         {/* Left Icon */}
         {leftIcon && (
           <View style={styles.leftIconContainer}>
-            <Text style={[styles.icon, { color: theme.colors.gray[500] }]}>{leftIcon}</Text>
+            <Text style={[styles.icon, { color: '#9CA3AF' }]}>{leftIcon}</Text>
           </View>
         )}
 
         {/* Text Input */}
         <TextInput
           ref={inputRef}
-          style={[getInputStyle(), { color: theme.colors.text.primary }, inputStyle]}
+          style={[getInputStyle(), { color: '#000000' }, inputStyle]}
           onFocus={handleFocus}
           onBlur={handleBlur}
           editable={!disabled && !loading}
-          placeholderTextColor={theme.colors.gray[400]}
+          placeholderTextColor={'#828282'}
           {...textInputProps}
         />
 
@@ -138,7 +134,7 @@ const Input: React.FC<InputProps> = ({
             onPress={onRightIconPress}
             disabled={disabled || loading}
           >
-            <Text style={[styles.icon, { color: theme.colors.gray[500] }]}>{rightIcon}</Text>
+            <Text style={[styles.icon, { color: '#9CA3AF' }]}>{rightIcon}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -177,20 +173,27 @@ const styles = StyleSheet.create({
   // Container variants
   defaultContainer: {
     borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
-    backgroundColor: '#F8F9FA',
+    borderColor: '#ACD3F1',
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    minHeight: 50,
+    paddingHorizontal: 16,
   },
   outlinedContainer: {
-    borderWidth: 2,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
-    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#ACD3F1',
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    minHeight: 50,
+    paddingHorizontal: 16,
   },
   filledContainer: {
-    borderWidth: 0,
-    borderRadius: 8,
-    backgroundColor: '#F5F5F5',
+    borderWidth: 1,
+    borderColor: '#ACD3F1',
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    minHeight: 50,
+    paddingHorizontal: 16,
   },
   
   // Focus and error states
@@ -200,7 +203,7 @@ const styles = StyleSheet.create({
   
   // Input styles
   input: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 0,
     fontSize: 16,
     flex: 1,
   },
@@ -211,11 +214,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   mediumInput: {
-    paddingVertical: 12,
+    paddingVertical: 14,
     fontSize: 16,
   },
   largeInput: {
-    paddingVertical: 16,
+    paddingVertical: 18,
     fontSize: 18,
   },
   
