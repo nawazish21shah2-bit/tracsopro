@@ -21,6 +21,8 @@ import Button from '../../components/common/Button';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorBoundary from '../../components/common/ErrorBoundary';
 import { useDebounce, useStableCallback } from '../../utils/performance';
+import SharedHeader from '../../components/ui/SharedHeader';
+import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 
 type DashboardScreenNavigationProp = StackNavigationProp<any, 'Dashboard'>;
 
@@ -102,26 +104,12 @@ const DashboardScreen: React.FC = () => {
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
       >
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.greetingContainer}>
-          <Text style={styles.greeting}>{getGreeting()},</Text>
-          <Text style={styles.userName}>{user?.firstName} {user?.lastName}</Text>
-        </View>
-        <TouchableOpacity
-          style={styles.notificationButton}
-          onPress={() => navigation.navigate('Messages')}
-        >
-          <Text style={styles.notificationIcon}>🔔</Text>
-          {stats.unreadNotifications > 0 && (
-            <View style={styles.notificationBadge}>
-              <Text style={styles.notificationBadgeText}>
-                {stats.unreadNotifications}
-              </Text>
-            </View>
-          )}
-        </TouchableOpacity>
-      </View>
+      <SharedHeader
+        variant="dashboard"
+        title={`${getGreeting()}, ${user?.firstName} ${user?.lastName}`}
+        onNotificationPress={() => navigation.navigate('Messages')}
+        notificationCount={stats.unreadNotifications}
+      />
 
       {/* Stats Cards */}
       <View style={styles.statsContainer}>

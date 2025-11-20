@@ -24,11 +24,10 @@ import {
   EmergencyIcon, 
   ShiftsIcon,
   SettingsIcon,
-  NotificationIcon,
-  MenuIcon
 } from '../../components/ui/AppIcons';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { ChevronRightIcon } from '../../components/ui/AppIcons';
+import SharedHeader from '../../components/ui/SharedHeader';
 
 const { width } = Dimensions.get('window');
 
@@ -177,36 +176,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
   };
 
   const renderHeader = () => (
-    <View style={styles.header}>
-      <View style={styles.headerLeft}>
-        <TouchableOpacity style={styles.menuButton}>
-          <MenuIcon size={24} color="#FFF" />
-        </TouchableOpacity>
-        <View style={styles.headerInfo}>
-          <Text style={styles.welcomeText}>Welcome back,</Text>
-          <Text style={styles.adminName}>Admin Dashboard</Text>
-        </View>
-      </View>
-      
-      <View style={styles.headerRight}>
-        <TouchableOpacity style={styles.notificationButton}>
-          <NotificationIcon size={24} color="#FFF" />
-          {metrics.emergencyAlerts > 0 && (
-            <View style={styles.notificationBadge}>
-              <Text style={styles.notificationBadgeText}>{metrics.emergencyAlerts}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.emergencyButton} onPress={handleEmergencyAlert}>
-          <EmergencyIcon size={20} color="#FFF" />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <SettingsIcon size={20} color="#FFF" />
-        </TouchableOpacity>
-      </View>
-    </View>
+    <SharedHeader
+      variant="admin"
+      welcomeText="Welcome back,"
+      adminName="Admin Dashboard"
+      onNotificationPress={() => {
+        // Handle notification press
+      }}
+      onEmergencyPress={handleEmergencyAlert}
+      onSettingsPress={handleLogout}
+      emergencyAlertCount={metrics.emergencyAlerts}
+      notificationCount={metrics.emergencyAlerts}
+    />
   );
 
   const renderMetricsOverview = () => (

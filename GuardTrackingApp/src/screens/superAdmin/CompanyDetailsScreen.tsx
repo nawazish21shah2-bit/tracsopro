@@ -6,33 +6,16 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
-import { useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { superAdminService, SecurityCompany } from '../../services/superAdminService';
 
-interface CompanyDetails {
-  id: string;
-  name: string;
-  email: string;
-  phone?: string;
-  address?: string;
-  city?: string;
-  state?: string;
-  zipCode?: string;
-  country?: string;
-  subscriptionPlan: string;
-  subscriptionStatus: string;
-  subscriptionStartDate: string;
-  subscriptionEndDate?: string;
-  guardsCount: number;
-  clientsCount: number;
-  sitesCount: number;
-  monthlyRevenue: number;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
+type CompanyDetails = SecurityCompany & {
+  _count?: { users: number; guards: number; clients: number; sites: number };
+};
 
 const CompanyDetailsScreen: React.FC = () => {
-  const route = useRoute();
+  const route = useRoute<any>();
+  const navigation = useNavigation<any>();
   const [company, setCompany] = useState<CompanyDetails | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -43,30 +26,9 @@ const CompanyDetailsScreen: React.FC = () => {
   const loadCompanyDetails = async () => {
     try {
       setLoading(true);
-      // Mock company data - replace with real API call
-      const mockCompany: CompanyDetails = {
-        id: '1',
-        name: 'Elite Security Services',
-        email: 'contact@elitesecurity.com',
-        phone: '+1-555-0101',
-        address: '123 Business Ave',
-        city: 'New York',
-        state: 'NY',
-        zipCode: '10001',
-        country: 'USA',
-        subscriptionPlan: 'PROFESSIONAL',
-        subscriptionStatus: 'ACTIVE',
-        subscriptionStartDate: '2024-01-15',
-        subscriptionEndDate: '2025-01-15',
-        guardsCount: 45,
-        clientsCount: 12,
-        sitesCount: 18,
-        monthlyRevenue: 15000,
-        isActive: true,
-        createdAt: '2024-01-15T10:00:00Z',
-        updatedAt: '2024-11-15T14:30:00Z',
-      };
-      setCompany(mockCompany);
+      const { companyId } = route.params || {};
+      const data = await superAdminService.getCompanyById(companyId);
+      setCompany(data as CompanyDetails);
     } catch (error) {
       console.error('Error loading company details:', error);
       Alert.alert('Error', 'Failed to load company details');
@@ -75,13 +37,43 @@ const CompanyDetailsScreen: React.FC = () => {
     }
   };
 
-  const handleSuspendCompany = () => {
+  const handleToggleStatus = () => {
+    if (!company) return;
+    const action = company.isActive ? 'Suspend' : 'Activate';
     Alert.alert(
-      'Suspend Company',
-      'Are you sure you want to suspend this company?',
+      `${action} Company`,
+      `Are you sure you want to ${action.toLowerCase()} this company?`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Suspend', style: 'destructive', onPress: () => console.log('Company suspended') },
+        { text: action, style: 'destructive', onPress: async () => {
+          try {
+            const updated = await superAdminService.toggleCompanyStatus(company.id, !company.isActive);
+            setCompany(updated as CompanyDetails);
+            Alert.alert('Success', `Company ${!company.isActive ? 'activated' : 'suspended'} successfully`);
+          } catch (e) {
+            Alert.alert('Error', 'Failed to update company status');
+          }
+        }}
+      ]
+    );
+  };
+
+  const handleDeleteCompany = () => {
+    if (!company) return;
+    Alert.alert(
+      'Delete Company',
+      'This action cannot be undone. Do you want to continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: async () => {
+          try {
+            await superAdminService.deleteCompany(company.id);
+            Alert.alert('Deleted', 'Company deleted successfully');
+            navigation.goBack();
+          } catch (e) {
+            Alert.alert('Error', 'Failed to delete company');
+          }
+        }}
       ]
     );
   };
@@ -164,20 +156,16 @@ const CompanyDetailsScreen: React.FC = () => {
           <Text style={styles.sectionTitle}>Statistics</Text>
           <View style={styles.statsGrid}>
             <View style={styles.statCard}>
-              <Text style={styles.statValue}>{company.guardsCount}</Text>
+              <Text style={styles.statValue}>{company._count?.guards ?? 0}</Text>
               <Text style={styles.statLabel}>Guards</Text>
             </View>
             <View style={styles.statCard}>
-              <Text style={styles.statValue}>{company.clientsCount}</Text>
+              <Text style={styles.statValue}>{company._count?.clients ?? 0}</Text>
               <Text style={styles.statLabel}>Clients</Text>
             </View>
             <View style={styles.statCard}>
-              <Text style={styles.statValue}>{company.sitesCount}</Text>
+              <Text style={styles.statValue}>{company._count?.sites ?? 0}</Text>
               <Text style={styles.statLabel}>Sites</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>${company.monthlyRevenue.toLocaleString()}</Text>
-              <Text style={styles.statLabel}>Monthly Revenue</Text>
             </View>
           </View>
         </View>
@@ -186,8 +174,11 @@ const CompanyDetailsScreen: React.FC = () => {
           <TouchableOpacity style={styles.editButton}>
             <Text style={styles.editButtonText}>Edit Company</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.suspendButton} onPress={handleSuspendCompany}>
-            <Text style={styles.suspendButtonText}>Suspend Company</Text>
+          <TouchableOpacity style={styles.suspendButton} onPress={handleToggleStatus}>
+            <Text style={styles.suspendButtonText}>{company.isActive ? 'Suspend Company' : 'Activate Company'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteCompany}>
+            <Text style={styles.deleteButtonText}>Delete Company</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -215,6 +206,133 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: TYPOGRAPHY.fontSize.md,
     color: COLORS.textSecondary,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  loadingText: {
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textSecondary,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  errorText: {
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.error,
+  },
+  scrollView: {
+    padding: SPACING.lg,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.lg,
+  },
+  statusBadge: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  statusText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  section: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: SPACING.lg,
+    marginBottom: SPACING.lg,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  sectionTitle: {
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.md,
+  },
+  infoGrid: {
+    rowGap: SPACING.md,
+  },
+  infoItem: {
+    marginBottom: SPACING.sm,
+  },
+  infoLabel: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
+    marginBottom: 4,
+  },
+  infoValue: {
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textPrimary,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  statCard: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: SPACING.md,
+    backgroundColor: '#F0F6FB',
+    borderRadius: 10,
+    marginRight: SPACING.md,
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 4,
+  },
+  actionsSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: SPACING.lg,
+  },
+  editButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+  },
+  editButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  suspendButton: {
+    backgroundColor: COLORS.warning,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+  },
+  suspendButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  deleteButton: {
+    backgroundColor: COLORS.error,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+  },
+  deleteButtonText: {
+    color: '#fff',
+    fontWeight: '600',
   },
 });
 

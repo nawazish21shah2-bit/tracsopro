@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
+import { AuthService } from './authService.js';
 
 const prisma = new PrismaClient();
 
@@ -57,6 +58,58 @@ export class SuperAdminService {
     } catch (error) {
       console.error('Error getting platform overview:', error);
       throw new Error('Failed to get platform overview');
+    }
+  }
+
+  /**
+   * Get a single security company by ID
+   */
+  static async getSecurityCompany(companyId: string) {
+    try {
+      const company = await prisma.securityCompany.findUnique({
+        where: { id: companyId },
+        include: {
+          _count: {
+            select: { users: true, guards: true, clients: true, sites: true },
+          },
+          subscriptions: {
+            where: { isActive: true },
+            take: 1,
+            orderBy: { createdAt: 'desc' },
+          },
+        },
+      });
+
+      if (!company) {
+        throw new Error('Company not found');
+      }
+
+      return company;
+    } catch (error) {
+      console.error('Error getting security company:', error);
+      throw new Error('Failed to get security company');
+    }
+  }
+
+  /**
+   * Delete a security company by ID
+   */
+  static async deleteSecurityCompany(companyId: string) {
+    try {
+      // Optionally: check constraints or perform cascading cleanup as needed
+      const deleted = await prisma.securityCompany.delete({ where: { id: companyId } });
+
+      await this.logAction({
+        action: 'DELETE_COMPANY',
+        resource: 'SecurityCompany',
+        resourceId: companyId,
+        oldValues: deleted,
+      });
+
+      return { id: companyId };
+    } catch (error) {
+      console.error('Error deleting security company:', error);
+      throw new Error('Failed to delete security company');
     }
   }
 
@@ -427,8 +480,9 @@ export class SuperAdminService {
       await prisma.systemAuditLog.create({
         data: {
           ...params,
-          oldValues: params.oldValues ? JSON.stringify(params.oldValues) : null,
-          newValues: params.newValues ? JSON.stringify(params.newValues) : null
+          // Pass JSON objects directly; omit when not provided for cleaner typing
+          oldValues: params.oldValues as any,
+          newValues: params.newValues as any
         }
       });
     } catch (error) {
@@ -467,31 +521,36 @@ export class SuperAdminService {
    */
   static async updatePlatformSettings(settings: { [key: string]: any }) {
     try {
-      const updates = [];
-      
+      const ops: Promise<any>[] = [];
+
       for (const [category, categorySettings] of Object.entries(settings)) {
         for (const [key, value] of Object.entries(categorySettings as any)) {
-          updates.push(
-            prisma.platformSettings.upsert({
-              where: {
-                securityCompanyId_key: {
-                  securityCompanyId: null,
-                  key: `${category}.${key}`
-                }
-              },
-              update: { value: String(value) },
-              create: {
-                key: `${category}.${key}`,
-                value: String(value),
-                category: category as any,
-                isGlobal: true
-              }
-            })
-          );
+          const fullKey = `${category}.${key}`;
+          ops.push((async () => {
+            const existing = await prisma.platformSettings.findFirst({
+              where: { securityCompanyId: null, key: fullKey },
+              select: { id: true },
+            });
+            if (existing) {
+              return prisma.platformSettings.update({
+                where: { id: existing.id },
+                data: { value: String(value) },
+              });
+            } else {
+              return prisma.platformSettings.create({
+                data: {
+                  key: fullKey,
+                  value: String(value),
+                  category: category as any,
+                  isGlobal: true,
+                },
+              });
+            }
+          })());
         }
       }
 
-      await Promise.all(updates);
+      await Promise.all(ops);
 
       // Log the action
       await this.logAction({
@@ -504,6 +563,44 @@ export class SuperAdminService {
     } catch (error) {
       console.error('Error updating platform settings:', error);
       throw new Error('Failed to update platform settings');
+    }
+  }
+
+  /**
+   * Impersonate a user (Super Admin only)
+   * Returns access and refresh tokens for the target user
+   */
+  static async impersonateUser(params: { targetUserId: string; actingUserId: string }) {
+    try {
+      const { targetUserId, actingUserId } = params;
+
+      // Ensure target user exists and is active
+      const targetUser = await prisma.user.findUnique({
+        where: { id: targetUserId },
+        select: { id: true, email: true, isActive: true },
+      });
+
+      if (!targetUser || !targetUser.isActive) {
+        throw new Error('Target user not found or inactive');
+      }
+
+      // Issue tokens for target user
+      const authService = new AuthService();
+      const result = await authService.loginById(targetUserId);
+
+      // Audit log
+      await this.logAction({
+        userId: actingUserId,
+        action: 'IMPERSONATE_USER',
+        resource: 'User',
+        resourceId: targetUserId,
+        newValues: { targetEmail: targetUser.email },
+      });
+
+      return result; // { token, refreshToken, user, expiresIn }
+    } catch (error) {
+      console.error('Error impersonating user:', error);
+      throw new Error('Failed to impersonate user');
     }
   }
 }

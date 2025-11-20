@@ -8,6 +8,8 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, A
 import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { LocationIcon, UserIcon, SettingsIcon } from '../../components/ui/AppIcons';
 import apiService from '../../services/api';
+import SharedHeader from '../../components/ui/SharedHeader';
+import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 
 interface Site {
   id: string;
@@ -241,16 +243,16 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>← Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Site Management</Text>
-        <TouchableOpacity style={styles.addButton} onPress={() => setShowCreateModal(true)}>
-          <Text style={styles.addButtonText}>+ Add Site</Text>
-        </TouchableOpacity>
-      </View>
+    <SafeAreaWrapper>
+      <SharedHeader
+        variant="admin"
+        adminName="Site Management"
+        rightIcon={
+          <TouchableOpacity style={styles.addButton} onPress={() => setShowCreateModal(true)}>
+            <Text style={styles.addButtonText}>+ Add Site</Text>
+          </TouchableOpacity>
+        }
+      />
 
       <FlatList
         data={sites}
@@ -427,7 +429,7 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
           </View>
         </View>
       </Modal>
-    </View>
+    </SafeAreaWrapper>
   );
 };
 

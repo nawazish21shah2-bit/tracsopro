@@ -15,6 +15,9 @@ import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { ClientStackParamList } from '../../navigation/ClientStackNavigator';
 import { RootState, AppDispatch } from '../../store';
 import { logoutUser } from '../../store/slices/authSlice';
+import SharedHeader from '../../components/ui/SharedHeader';
+import ClientProfileDrawer from '../../components/client/ClientProfileDrawer';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 
 interface SettingItem {
   id: string;
@@ -27,6 +30,7 @@ const ClientSettings: React.FC = () => {
   const navigation = useNavigation<StackNavigationProp<ClientStackParamList>>();
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
 
   const handleProfile = () => {
     Alert.alert('Profile', 'Open client profile settings');
@@ -65,10 +69,20 @@ const ClientSettings: React.FC = () => {
 
   return (
     <SafeAreaWrapper>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Settings</Text>
-      </View>
+      <SharedHeader
+        variant="client"
+        title="Settings"
+        profileDrawer={
+          <ClientProfileDrawer
+            visible={isDrawerVisible}
+            onClose={closeDrawer}
+            onNavigateToNotifications={() => {
+              closeDrawer();
+              navigation.navigate('ClientNotifications');
+            }}
+          />
+        }
+      />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.card}>

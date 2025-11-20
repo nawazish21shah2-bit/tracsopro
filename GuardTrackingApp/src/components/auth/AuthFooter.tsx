@@ -42,6 +42,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
     color: '#1C6CA9',
+    marginTop: 4,
   },
 });
 

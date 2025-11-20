@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
-import { COLORS, BORDER_RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from '../../styles/globalStyles';
+import { COLORS, BORDER_RADIUS, SPACING, TYPOGRAPHY } from '../../styles/globalStyles';
 
 interface StatsCardProps {
   label: string;
@@ -13,13 +13,13 @@ interface StatsCardProps {
 const getVariantColors = (variant: StatsCardProps['variant']) => {
   switch (variant) {
     case 'success':
-      return { bg: '#E8F8EC', iconBg: '#D4F5DD', iconBorder: '#4CAF5000' };
+      return { iconBg: '#DCFCE7', iconColor: '#16A34A' }; // Green
     case 'danger':
-      return { bg: '#FDECEC', iconBg: '#FAD7D7', iconBorder: '#F4433600' };
+      return { iconBg: '#FEE2E2', iconColor: '#DC2626' }; // Red
     case 'info':
-      return { bg: '#E8F1FD', iconBg: '#D5E3FB', iconBorder: '#1C6CA900' };
+      return { iconBg: '#DBEAFE', iconColor: '#1976D2' }; // Blue
     default:
-      return { bg: '#F5F5F5', iconBg: '#E8E8E8', iconBorder: '#B0B0B000' };
+      return { iconBg: '#F3F4F6', iconColor: '#6B7280' }; // Gray
   }
 };
 
@@ -27,14 +27,14 @@ const StatsCard: React.FC<StatsCardProps> = ({ label, value, icon, variant = 'ne
   const colors = getVariantColors(variant);
 
   return (
-    <View style={[styles.card,  style]}>
-      <View style={[styles.iconContainer, { backgroundColor: colors.iconBg, borderColor: colors.iconBorder }]}> 
+    <View style={[styles.card, style]}>
+      <View style={[styles.iconContainer, { backgroundColor: colors.iconBg }]}>
         {icon}
       </View>
       <View style={styles.textContainer}>
-        <Text style={styles.label}>{label}</Text>
-        <Text style={styles.value}>{value}</Text>
+        <Text style={styles.label} numberOfLines={2}>{label}</Text>
       </View>
+      <Text style={styles.value}>{value}</Text>
     </View>
   );
 };
@@ -43,46 +43,46 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 16,
-    borderColor: '#dcdcdc',
+    padding: 8,
+    borderRadius: 12,
     borderWidth: 1,
+    borderColor: '#DCDCDC',
     backgroundColor: COLORS.backgroundPrimary,
-    shadowColor: '#000000',
+    // Drop shadow: X 0, Y 4, Blur 4, Spread 0, Color DCDCDC at 25% opacity
+    shadowColor: '#DCDCDC',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 2,
+    minHeight: 58,
   },
   iconContainer: {
     width: 36,
     height: 36,
-    borderRadius: 12,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
-    borderWidth: 1,
+    marginRight: 10,
   },
   textContainer: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    marginRight: 8,
   },
   label: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
+    fontSize: 12,
     fontFamily: TYPOGRAPHY.fontPrimary,
-    fontWeight: '500',
-    flexWrap: 'wrap',
-    
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    color: '#7A7A7A',
+    lineHeight: 14,
+    letterSpacing: -0.41,
   },
   value: {
-    fontSize: 20,
-    color: COLORS.textPrimary,
+    fontSize: 24,
     fontFamily: TYPOGRAPHY.fontPrimary,
-    fontWeight: '700',
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    lineHeight: 29,
   },
 });
 

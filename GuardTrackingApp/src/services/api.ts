@@ -46,6 +46,27 @@ class ApiService {
     this.setupInterceptors();
   }
 
+  // Lightweight raw helpers for feature modules
+  public getRaw<T = any>(path: string, config?: any) {
+    return this.api.get<T>(path, config);
+  }
+
+  public postRaw<T = any>(path: string, data?: any, config?: any) {
+    return this.api.post<T>(path, data, config);
+  }
+
+  public putRaw<T = any>(path: string, data?: any, config?: any) {
+    return this.api.put<T>(path, data, config);
+  }
+
+  public patchRaw<T = any>(path: string, data?: any, config?: any) {
+    return this.api.patch<T>(path, data, config);
+  }
+
+  public deleteRaw<T = any>(path: string, config?: any) {
+    return this.api.delete<T>(path, config);
+  }
+
   private setupInterceptors() {
     // Request interceptor to add auth token and logging
     this.api.interceptors.request.use(

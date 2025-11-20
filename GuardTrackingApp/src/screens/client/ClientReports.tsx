@@ -11,11 +11,14 @@ import {
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
-import { MenuIcon, NotificationIcon } from '../../components/ui/AppIcons';
 import ReportCard from '../../components/client/ReportCard';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { ClientStackParamList } from '../../navigation/ClientStackNavigator';
+import SharedHeader from '../../components/ui/SharedHeader';
+import ClientProfileDrawer from '../../components/client/ClientProfileDrawer';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 
 interface ReportData {
   id: string;
@@ -33,6 +36,7 @@ interface ReportData {
 const ClientReports: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const navigation = useNavigation<StackNavigationProp<ClientStackParamList>>();
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
 
   const [reports, setReports] = useState<ReportData[]>([
     {
@@ -101,17 +105,25 @@ const ClientReports: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.menuButton}>
-          <MenuIcon size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Reports</Text>
-        <TouchableOpacity style={styles.notificationButton} onPress={() => navigation.navigate('ClientNotifications')}>
-          <NotificationIcon size={24} color="#333" />
-        </TouchableOpacity>
-      </View>
+    <SafeAreaWrapper>
+      <SharedHeader
+        variant="client"
+        title="Reports"
+        onNotificationPress={() => navigation.navigate('ClientNotifications')}
+        profileDrawer={
+          <ClientProfileDrawer
+            visible={isDrawerVisible}
+            onClose={closeDrawer}
+            onNavigateToReports={() => {
+              closeDrawer();
+            }}
+            onNavigateToNotifications={() => {
+              closeDrawer();
+              navigation.navigate('ClientNotifications');
+            }}
+          />
+        }
+      />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {reports.map((report) => (
@@ -124,7 +136,7 @@ const ClientReports: React.FC = () => {
           />
         ))}
       </ScrollView>
-    </SafeAreaView>
+    </SafeAreaWrapper>
   );
 };
 

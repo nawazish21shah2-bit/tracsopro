@@ -18,8 +18,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { UserIcon, ReportsIcon, ShiftsIcon } from '../../components/ui/AppIcons';
 import { superAdminService, SecurityCompany } from '../../services/superAdminService';
+import { useNavigation } from '@react-navigation/native';
 
 const CompanyManagementScreen: React.FC = () => {
+  const navigation = useNavigation<any>();
   const [companies, setCompanies] = useState<SecurityCompany[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -71,6 +73,14 @@ const CompanyManagementScreen: React.FC = () => {
     }
   };
 
+  const handleViewDetails = (companyId: string) => {
+    navigation.navigate('CompanyDetails', { companyId });
+  };
+
+  const handleAddCompany = () => {
+    navigation.navigate('CreateCompany');
+  };
+
   const CompanyCard: React.FC<{ company: SecurityCompany }> = ({ company }) => (
     <View style={styles.companyCard}>
       <View style={styles.companyHeader}>
@@ -111,7 +121,7 @@ const CompanyManagementScreen: React.FC = () => {
       </View>
 
       <View style={styles.companyActions}>
-        <TouchableOpacity style={styles.actionButton}>
+        <TouchableOpacity style={styles.actionButton} onPress={() => handleViewDetails(company.id)}>
           <Text style={styles.actionButtonText}>View Details</Text>
         </TouchableOpacity>
         <TouchableOpacity 
@@ -141,7 +151,7 @@ const CompanyManagementScreen: React.FC = () => {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Company Management</Text>
-        <TouchableOpacity style={styles.addButton}>
+        <TouchableOpacity style={styles.addButton} onPress={handleAddCompany}>
           <Text style={styles.addButtonText}>+ Add Company</Text>
         </TouchableOpacity>
       </View>

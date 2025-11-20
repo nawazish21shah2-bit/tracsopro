@@ -140,7 +140,8 @@ class SuperAdminService {
   /**
    * Get all security companies with pagination and filters
    */
-  static async getSecurityCompanies(params: {
+  // Instance method used by screens
+  async getSecurityCompanies(params: {
     page?: number;
     limit?: number;
     search?: string;
@@ -155,85 +156,14 @@ class SuperAdminService {
       pages: number;
     };
   }> {
-    try {
-      const response = await apiService.get('/super-admin/companies', {
-        params,
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching companies:', error);
-      // Fallback to mock data
-      const mockCompanies: SecurityCompany[] = [
-        {
-          id: '1',
-          name: 'SecureGuard Solutions',
-          email: 'admin@secureguard.com',
-          phone: '+1-555-0123',
-          address: '123 Security St',
-          city: 'New York',
-          state: 'NY',
-          zipCode: '10001',
-          country: 'USA',
-          subscriptionPlan: 'PROFESSIONAL',
-          subscriptionStatus: 'ACTIVE',
-          subscriptionStartDate: '2024-01-01',
-          maxGuards: 50,
-          maxClients: 20,
-          maxSites: 30,
-          isActive: true,
-          createdAt: '2024-01-01',
-          updatedAt: '2024-01-01',
-          _count: {
-            users: 45,
-            guards: 42,
-            clients: 18,
-            sites: 25,
-          },
-        },
-        {
-          id: '2',
-          name: 'Elite Protection Services',
-          email: 'contact@eliteprotection.com',
-          phone: '+1-555-0456',
-          address: '456 Guard Ave',
-          city: 'Los Angeles',
-          state: 'CA',
-          zipCode: '90210',
-          country: 'USA',
-          subscriptionPlan: 'ENTERPRISE',
-          subscriptionStatus: 'ACTIVE',
-          subscriptionStartDate: '2024-02-01',
-          maxGuards: 100,
-          maxClients: 50,
-          maxSites: 75,
-          isActive: true,
-          createdAt: '2024-02-01',
-          updatedAt: '2024-02-01',
-          _count: {
-            users: 85,
-            guards: 78,
-            clients: 35,
-            sites: 42,
-          },
-        },
-      ];
-
-      return {
-        companies: mockCompanies,
-        pagination: {
-          page: params.page || 1,
-          limit: params.limit || 10,
-          total: mockCompanies.length,
-          pages: 1,
-        },
-      };
-    }
+    const response = await apiService.getRaw('/super-admin/companies', { params });
+    return response.data;
   }
 
   /**
    * Create a new security company
    */
-  static async createSecurityCompany(data: {
+  async createSecurityCompany(data: {
     name: string;
     email: string;
     phone?: string;
@@ -247,71 +177,34 @@ class SuperAdminService {
     maxClients?: number;
     maxSites?: number;
   }): Promise<SecurityCompany> {
-    // Mock implementation
-    const newCompany: SecurityCompany = {
-      id: Date.now().toString(),
-      ...data,
-      subscriptionStatus: 'TRIAL',
-      subscriptionStartDate: new Date().toISOString(),
-      maxGuards: data.maxGuards || 10,
-      maxClients: data.maxClients || 5,
-      maxSites: data.maxSites || 10,
-      isActive: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      _count: {
-        users: 0,
-        guards: 0,
-        clients: 0,
-        sites: 0
-      }
-    };
-    return newCompany;
+    const response = await apiService.postRaw('/super-admin/companies', data);
+    return response.data;
   }
 
   /**
    * Update security company
    */
   async updateSecurityCompany(companyId: string, data: Partial<SecurityCompany>): Promise<SecurityCompany> {
-    // Mock implementation
-    const updatedCompany: SecurityCompany = {
-      id: companyId,
-      name: data.name || 'Updated Company',
-      email: data.email || 'updated@company.com',
-      subscriptionPlan: 'PROFESSIONAL',
-      subscriptionStatus: 'ACTIVE',
-      subscriptionStartDate: '2024-01-01',
-      maxGuards: 50,
-      maxClients: 20,
-      maxSites: 30,
-      isActive: true,
-      createdAt: '2024-01-01',
-      updatedAt: new Date().toISOString(),
-      ...data
-    };
-    return updatedCompany;
+    const response = await apiService.putRaw(`/super-admin/companies/${companyId}`, data);
+    return response.data;
   }
 
   /**
    * Toggle security company status (activate/suspend)
    */
   async toggleCompanyStatus(companyId: string, isActive: boolean): Promise<SecurityCompany> {
-    // Mock implementation
-    const company: SecurityCompany = {
-      id: companyId,
-      name: 'Sample Company',
-      email: 'sample@company.com',
-      subscriptionPlan: 'PROFESSIONAL',
-      subscriptionStatus: isActive ? 'ACTIVE' : 'SUSPENDED',
-      subscriptionStartDate: '2024-01-01',
-      maxGuards: 50,
-      maxClients: 20,
-      maxSites: 30,
-      isActive,
-      createdAt: '2024-01-01',
-      updatedAt: new Date().toISOString()
-    };
-    return company;
+    const response = await apiService.patchRaw(`/super-admin/companies/${companyId}/status`, { isActive });
+    return response.data;
+  }
+
+  async getCompanyById(companyId: string): Promise<SecurityCompany> {
+    const response = await apiService.getRaw(`/super-admin/companies/${companyId}`);
+    return response.data;
+  }
+
+  async deleteCompany(companyId: string): Promise<{ id: string }> {
+    const response = await apiService.deleteRaw(`/super-admin/companies/${companyId}`);
+    return response.data;
   }
 
   /**
