@@ -13,6 +13,7 @@ import { useNavigation, DrawerActions } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootState } from '../../store';
+import { securityManager } from '../../utils/security';
 import {
   fetchTodayShifts,
   fetchUpcomingShifts,
@@ -73,6 +74,7 @@ const MyShiftsScreen: React.FC = () => {
     loading, 
     error 
   } = useSelector((state: RootState) => state.shifts);
+  const { isAuthenticated } = useSelector((state: RootState) => state.auth);
 
   // Use Redux data or fallback to mock data
   const monthlyStats = {
@@ -86,6 +88,11 @@ const MyShiftsScreen: React.FC = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
+        const hasValidTokens = await securityManager.areTokensValid();
+        if (!hasValidTokens) {
+          if (__DEV__) console.log('Skipping shift fetch: no valid tokens');
+          return;
+        }
         await Promise.all([
           dispatch(fetchTodayShifts() as any),
           dispatch(fetchUpcomingShifts() as any),
@@ -96,7 +103,27 @@ const MyShiftsScreen: React.FC = () => {
       }
     };
     loadData();
-  }, [dispatch]);
+  }, [dispatch, isAuthenticated]);
+
+  const onRefresh = async () => {
+    try {
+      setRefreshing(true);
+      const hasValidTokens = await securityManager.areTokensValid();
+      if (!hasValidTokens) {
+        setRefreshing(false);
+        return;
+      }
+      await Promise.all([
+        dispatch(fetchTodayShifts() as any),
+        dispatch(fetchUpcomingShifts() as any),
+        dispatch(fetchPastShifts() as any),
+      ]);
+    } catch (e) {
+      console.error('Refresh error:', e);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   // Handler functions
   const handleMenuPress = () => {
@@ -251,7 +278,7 @@ const MyShiftsScreen: React.FC = () => {
     <View key={shift.id} style={styles.shiftCard}>
       <View style={styles.shiftHeader}>
         <View style={styles.locationInfo}>
-          <MapPinIcon size={20} color="#3B82F6" />
+          <MapPinIcon size={20} color="#1C6CA9" />
           <View style={styles.locationText}>
             <Text style={styles.locationName}>{shift.location}</Text>
             <Text style={styles.locationAddress}>{shift.address}</Text>
@@ -406,7 +433,13 @@ const MyShiftsScreen: React.FC = () => {
         onNotificationPress={handleNotificationPress}
       />
       
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
         {renderMonthlyStats()}
         {renderContent()}
         {renderWeeklySummary()}

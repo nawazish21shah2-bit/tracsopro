@@ -20,6 +20,7 @@ import WebSocketService from '../../services/WebSocketService';
 import InteractiveMapView from '../../components/client/InteractiveMapView';
 import LiveActivityFeed from '../../components/client/LiveActivityFeed';
 import { ErrorHandler } from '../../utils/errorHandler';
+import { ReportsIcon, UserIcon, EmergencyIcon, SettingsIcon } from '../../components/ui/AppIcons';
 
 interface GuardStatus {
   guardId: string;
@@ -387,28 +388,31 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
   const renderViewSelector = () => (
     <View style={styles.viewSelector}>
       {[
-        { key: 'overview', label: 'Overview', icon: '📊' },
-        { key: 'guards', label: 'Guards', icon: '👥' },
-        { key: 'alerts', label: 'Alerts', icon: '🚨' },
-        { key: 'analytics', label: 'Analytics', icon: '📈' },
-      ].map((view) => (
-        <TouchableOpacity
-          key={view.key}
-          style={[
-            styles.viewButton,
-            selectedView === view.key && styles.viewButtonActive,
-          ]}
-          onPress={() => setSelectedView(view.key as any)}
-        >
-          <Text style={styles.viewIcon}>{view.icon}</Text>
-          <Text style={[
-            styles.viewLabel,
-            selectedView === view.key && styles.viewLabelActive,
-          ]}>
-            {view.label}
-          </Text>
-        </TouchableOpacity>
-      ))}
+        { key: 'overview', label: 'Overview', icon: (active: boolean) => (<ReportsIcon size={18} color={active ? COLORS.textInverse : COLORS.textSecondary} />) },
+        { key: 'guards', label: 'Guards', icon: (active: boolean) => (<UserIcon size={18} color={active ? COLORS.textInverse : COLORS.textSecondary} />) },
+        { key: 'alerts', label: 'Alerts', icon: (active: boolean) => (<EmergencyIcon size={18} color={active ? COLORS.textInverse : COLORS.textSecondary} />) },
+        { key: 'analytics', label: 'Analytics', icon: (active: boolean) => (<SettingsIcon size={18} color={active ? COLORS.textInverse : COLORS.textSecondary} />) },
+      ].map((view) => {
+        const isActive = selectedView === (view.key as any);
+        return (
+          <TouchableOpacity
+            key={view.key}
+            style={[
+              styles.viewButton,
+              isActive && styles.viewButtonActive,
+            ]}
+            onPress={() => setSelectedView(view.key as any)}
+          >
+            <View style={styles.viewIcon}>{view.icon(isActive)}</View>
+            <Text style={[
+              styles.viewLabel,
+              isActive && styles.viewLabelActive,
+            ]}>
+              {view.label}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
     </View>
   );
 
@@ -541,8 +545,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
   },
   viewIcon: {
-    fontSize: 18,
     marginBottom: SPACING.xs,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   viewLabel: {
     fontSize: TYPOGRAPHY.fontSize.xs,
@@ -571,6 +576,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: SPACING.md,
     position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   metricValue: {
     fontSize: TYPOGRAPHY.fontSize.xl,
@@ -607,6 +617,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: SPACING.md,
     marginBottom: SPACING.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
   },
   emergencyContent: {
     flex: 1,
@@ -639,6 +654,14 @@ const styles = StyleSheet.create({
   },
   mapSection: {
     marginBottom: SPACING.lg,
+    backgroundColor: COLORS.backgroundSecondary,
+    borderRadius: 12,
+    padding: SPACING.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   sectionTitle: {
     fontSize: TYPOGRAPHY.fontSize.md,
@@ -654,6 +677,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: SPACING.md,
     marginBottom: SPACING.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   guardHeader: {
     flexDirection: 'row',

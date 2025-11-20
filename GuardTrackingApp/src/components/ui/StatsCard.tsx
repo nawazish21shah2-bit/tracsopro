@@ -13,13 +13,13 @@ interface StatsCardProps {
 const getVariantColors = (variant: StatsCardProps['variant']) => {
   switch (variant) {
     case 'success':
-      return { bg: '#E8F8EC', iconBg: '#D4F5DD', iconBorder: '#4CAF50' };
+      return { bg: '#E8F8EC', iconBg: '#D4F5DD', iconBorder: '#4CAF5000' };
     case 'danger':
-      return { bg: '#FDECEC', iconBg: '#FAD7D7', iconBorder: '#F44336' };
+      return { bg: '#FDECEC', iconBg: '#FAD7D7', iconBorder: '#F4433600' };
     case 'info':
-      return { bg: '#E8F1FD', iconBg: '#D5E3FB', iconBorder: '#1C6CA9' };
+      return { bg: '#E8F1FD', iconBg: '#D5E3FB', iconBorder: '#1C6CA900' };
     default:
-      return { bg: '#F5F5F5', iconBg: '#E8E8E8', iconBorder: '#B0B0B0' };
+      return { bg: '#F5F5F5', iconBg: '#E8E8E8', iconBorder: '#B0B0B000' };
   }
 };
 
@@ -27,7 +27,7 @@ const StatsCard: React.FC<StatsCardProps> = ({ label, value, icon, variant = 'ne
   const colors = getVariantColors(variant);
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.bg }, style]}>
+    <View style={[styles.card,  style]}>
       <View style={[styles.iconContainer, { backgroundColor: colors.iconBg, borderColor: colors.iconBorder }]}> 
         {icon}
       </View>
@@ -46,6 +46,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 16,
+    borderColor: '#dcdcdc',
+    borderWidth: 1,
     backgroundColor: COLORS.backgroundPrimary,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },

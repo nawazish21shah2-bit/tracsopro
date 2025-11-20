@@ -10,6 +10,7 @@ import {
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../store';
 import { getCurrentUser } from '../store/slices/authSlice';
+import { securityManager } from '../utils/security';
 import { useTheme } from '../utils/theme';
 import Logo from '../assets/images/tracSOpro-logo.png';
 
@@ -19,10 +20,15 @@ const SplashScreen: React.FC = () => {
   const { theme } = useTheme();
 
   useEffect(() => {
-    // Check if user is already authenticated
+    // Check if user is already authenticated (only if token exists)
     const checkAuthStatus = async () => {
       try {
-        await dispatch(getCurrentUser());
+        const hasValidTokens = await securityManager.areTokensValid();
+        if (hasValidTokens) {
+          await dispatch(getCurrentUser());
+        } else if (__DEV__) {
+          console.log('Skipping /auth/me: no valid tokens in storage');
+        }
       } catch (error) {
         console.log('No existing authentication');
       }

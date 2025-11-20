@@ -528,6 +528,87 @@ export class PaymentService {
       throw error;
     }
   }
+  
+  async getOrCreateCompanyCustomer(securityCompanyId: string): Promise<string> {
+    const company = await prisma.securityCompany.findUnique({ where: { id: securityCompanyId } });
+    if (!company) {
+      throw new Error('Security company not found');
+    }
+    let customerId: string | null = null;
+    if (company.email) {
+      const customers = await stripe.customers.list({ email: company.email, limit: 1 });
+      if (customers.data.length > 0) {
+        customerId = customers.data[0].id;
+      }
+    }
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: company.email || undefined,
+        name: company.name,
+        metadata: { securityCompanyId },
+      });
+      customerId = customer.id;
+    }
+    return customerId;
+  }
+
+  getPlanCatalog() {
+    return {
+      currency: (process.env.BILLING_CURRENCY || 'USD').toUpperCase(),
+      plans: [
+        {
+          key: 'BASIC',
+          name: 'Basic',
+          monthly: { priceId: process.env.STRIPE_PRICE_BASIC_MONTHLY || '', amount: 30 },
+          yearly: { priceId: process.env.STRIPE_PRICE_BASIC_YEARLY || '', amount: 300 },
+        },
+        {
+          key: 'PROFESSIONAL',
+          name: 'Professional',
+          monthly: { priceId: process.env.STRIPE_PRICE_PROF_MONTHLY || '', amount: 100 },
+          yearly: { priceId: process.env.STRIPE_PRICE_PROF_YEARLY || '', amount: 1000 },
+        },
+        {
+          key: 'ENTERPRISE',
+          name: 'Enterprise',
+          monthly: { priceId: process.env.STRIPE_PRICE_ENTERPRISE_MONTHLY || '', amount: 300 },
+          yearly: { priceId: process.env.STRIPE_PRICE_ENTERPRISE_YEARLY || '', amount: 3000 },
+        },
+      ],
+    };
+  }
+
+  async createSubscriptionCheckoutSession(params: {
+    securityCompanyId: string;
+    priceId: string;
+    trialDays?: number;
+    successUrl?: string;
+    cancelUrl?: string;
+  }): Promise<{ id: string; url: string | null }> {
+    const customer = await this.getOrCreateCompanyCustomer(params.securityCompanyId);
+    const success_url = params.successUrl || process.env.STRIPE_SUCCESS_URL || 'https://example.com/success';
+    const cancel_url = params.cancelUrl || process.env.STRIPE_CANCEL_URL || 'https://example.com/cancel';
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      customer,
+      line_items: [{ price: params.priceId, quantity: 1 }],
+      allow_promotion_codes: true,
+      subscription_data: {
+        trial_period_days: params.trialDays ?? 14,
+        metadata: { securityCompanyId: params.securityCompanyId },
+      },
+      success_url,
+      cancel_url,
+    });
+    return { id: session.id, url: session.url };
+  }
+
+  async createBillingPortalSession(params: { securityCompanyId: string; returnUrl?: string }): Promise<{ url: string }> {
+    const customer = await this.getOrCreateCompanyCustomer(params.securityCompanyId);
+    const return_url = params.returnUrl || process.env.BILLING_PORTAL_RETURN_URL || 'https://example.com/account';
+    const session = await stripe.billingPortal.sessions.create({ customer, return_url });
+    return { url: session.url };
+  }
 }
 
 export default PaymentService;

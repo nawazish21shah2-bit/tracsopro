@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { Platform } from 'react-native';
 import {
   Shift,
   ShiftStats,
@@ -247,7 +248,7 @@ class ShiftService {
   /**
    * Start break during shift (Phase 2)
    */
-  async startBreak(shiftId: string, breakType: string, location?: {
+  async startBreakV2(shiftId: string, breakType: string, location?: {
     latitude: number;
     longitude: number;
     accuracy: number;
@@ -263,7 +264,7 @@ class ShiftService {
   /**
    * End break during shift (Phase 2)
    */
-  async endBreak(shiftId: string, breakId: string, location?: {
+  async endBreakV2(shiftId: string, breakId: string, location?: {
     latitude: number;
     longitude: number;
     accuracy: number;

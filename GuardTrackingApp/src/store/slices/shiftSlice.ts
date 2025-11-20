@@ -7,6 +7,7 @@ import {
   ShiftStatus,
 } from '../../types/shift.types';
 import shiftService from '../../services/shiftService';
+import { securityManager } from '../../utils/security';
 
 interface ShiftState {
   stats: ShiftStats | null;
@@ -143,6 +144,10 @@ export const fetchActiveShift = createAsyncThunk(
   'shift/fetchActiveShift',
   async (_, { rejectWithValue }) => {
     try {
+      const hasValidTokens = await securityManager.areTokensValid();
+      if (!hasValidTokens) {
+        return rejectWithValue('Not authenticated');
+      }
       return await shiftService.getActiveShift();
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.error || 'Failed to fetch active shift');

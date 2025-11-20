@@ -11,17 +11,17 @@ import {
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../store';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
-import { 
-  CreditCard, 
-  DollarSign, 
-  Calendar, 
-  Download,
-  Settings,
-  Plus,
-  CheckCircle,
-  Clock,
-  AlertCircle,
-} from 'react-native-feather';
+import {
+  CreditCardIcon,
+  DollarIcon,
+  ShiftsIcon,
+  DownloadIcon,
+  SettingsIcon,
+  PlusIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  ErrorCircleIcon,
+} from '../../components/ui/AppIcons';
 
 interface Invoice {
   id: string;
@@ -211,9 +211,9 @@ const PaymentScreen: React.FC = () => {
 
   const getStatusIcon = (status: Invoice['status']) => {
     switch (status) {
-      case 'paid': return <CheckCircle width={16} height={16} color="#10B981" />;
-      case 'open': return <Clock width={16} height={16} color="#F59E0B" />;
-      default: return <AlertCircle width={16} height={16} color="#6B7280" />;
+      case 'paid': return <CheckCircleIcon size={16} color="#10B981" />;
+      case 'open': return <ClockIcon size={16} color="#F59E0B" />;
+      default: return <ErrorCircleIcon size={16} color="#6B7280" />;
     }
   };
 
@@ -237,14 +237,14 @@ const PaymentScreen: React.FC = () => {
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Payment Methods</Text>
         <TouchableOpacity onPress={handleAddPaymentMethod}>
-          <Plus width={20} height={20} color="#007AFF" />
+          <PlusIcon size={20} color="#007AFF" />
         </TouchableOpacity>
       </View>
       
       {paymentMethods.map((method) => (
         <View key={method.id} style={styles.paymentMethodCard}>
           <View style={styles.paymentMethodInfo}>
-            <CreditCard width={24} height={24} color="#374151" />
+            <CreditCardIcon size={24} color="#374151" />
             <View style={styles.paymentMethodDetails}>
               <Text style={styles.paymentMethodText}>
                 {method.brand?.toUpperCase()} •••• {method.last4}
@@ -265,7 +265,7 @@ const PaymentScreen: React.FC = () => {
       ))}
       
       <TouchableOpacity style={styles.autoPayButton} onPress={handleSetupAutoPay}>
-        <Settings width={20} height={20} color="#007AFF" />
+        <SettingsIcon size={20} color="#007AFF" />
         <Text style={styles.autoPayButtonText}>Setup Auto-Pay</Text>
       </TouchableOpacity>
     </View>
@@ -309,7 +309,7 @@ const PaymentScreen: React.FC = () => {
                 style={styles.downloadButton}
                 onPress={() => handleDownloadInvoice(invoice)}
               >
-                <Download width={16} height={16} color="#6B7280" />
+                <DownloadIcon size={16} color="#6B7280" />
               </TouchableOpacity>
               
               {invoice.status === 'open' && (
@@ -331,7 +331,7 @@ const PaymentScreen: React.FC = () => {
     <SafeAreaWrapper>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Billing & Payments</Text>
-        <DollarSign width={24} height={24} color="#007AFF" />
+        <DollarIcon size={24} color="#007AFF" />
       </View>
 
       <ScrollView 

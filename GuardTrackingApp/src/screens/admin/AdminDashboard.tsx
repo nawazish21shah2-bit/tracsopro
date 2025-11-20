@@ -28,6 +28,7 @@ import {
   MenuIcon
 } from '../../components/ui/AppIcons';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
+import { ChevronRightIcon } from '../../components/ui/AppIcons';
 
 const { width } = Dimensions.get('window');
 
@@ -246,7 +247,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
 
         <View style={styles.metricCard}>
           <View style={styles.metricHeader}>
-            <ShiftsIcon size={24} color={COLORS.info} />
+            <ShiftsIcon size={24} color={COLORS.info}  />
             <Text style={styles.metricValue}>{metrics.scheduledShifts}</Text>
           </View>
           <Text style={styles.metricLabel}>Scheduled Shifts</Text>
@@ -282,7 +283,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
             </View>
             
             <View style={styles.actionArrow}>
-              <Text style={styles.arrowText}>→</Text>
+              <ChevronRightIcon size={16} color="#fff" />
             </View>
           </TouchableOpacity>
         ))}
@@ -445,6 +446,14 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.backgroundSecondary,
     borderRadius: 12,
     padding: SPACING.md,
+     shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   metricHeader: {
     flexDirection: 'row',
@@ -478,11 +487,16 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.backgroundSecondary,
     borderRadius: 12,
     padding: SPACING.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2  ,
   },
   actionIcon: {
     width: 48,
     height: 48,
-    borderRadius: 24,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: SPACING.md,
@@ -501,14 +515,18 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
   },
   actionArrow: {
-    width: 24,
-    height: 24,
+    width: 34,
+    height: 34,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#1C6CA9',
+    borderRadius: 12,
+    marginLeft: SPACING.md,
   },
   arrowText: {
     fontSize: TYPOGRAPHY.fontSize.lg,
     color: COLORS.textSecondary,
+    fontWeight: TYPOGRAPHY.fontWeight.extrabold,
   },
   recentActivityContainer: {
     padding: SPACING.md,
@@ -519,9 +537,14 @@ const styles = StyleSheet.create({
   activityItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.backgroundSecondary,
-    borderRadius: 8,
+       backgroundColor: COLORS.backgroundSecondary,
+    borderRadius: 12,
     padding: SPACING.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2  ,
   },
   activityIcon: {
     width: 32,

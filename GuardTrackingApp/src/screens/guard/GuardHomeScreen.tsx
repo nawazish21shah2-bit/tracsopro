@@ -17,14 +17,14 @@ import { GuardStackParamList } from '../../navigation/GuardStackNavigator';
 import { AppDispatch } from '../../store';
 import { logoutUser } from '../../store/slices/authSlice';
 import {
-  Clock,
-  MapPin,
-  CheckCircle,
-  AlertTriangle,
-  Calendar,
-  Users,
-  LogOut,
-} from 'react-native-feather';
+  ClockIcon,
+  LocationIcon,
+  CheckCircleIcon,
+  EmergencyIcon,
+  ShiftsIcon,
+  UsersIcon,
+  LogoutIcon,
+} from '../../components/ui/AppIcons';
 
 type GuardHomeScreenNavigationProp = StackNavigationProp<GuardStackParamList>;
 
@@ -113,23 +113,23 @@ const GuardHomeScreen: React.FC = () => {
       <Text style={styles.sectionTitle}>Quick Actions</Text>
       <View style={styles.quickActionsGrid}>
         <TouchableOpacity style={styles.quickActionCard}>
-          <Clock width={24} height={24} color="#1C6CA9" />
+          <ClockIcon size={24} color="#1C6CA9" />
           <Text style={styles.quickActionText}>Check In</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.quickActionCard}>
-          <MapPin width={24} height={24} color="#10B981" />
+          <LocationIcon size={24} color="#10B981" />
           <Text style={styles.quickActionText}>View Sites</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.quickActionCard}>
-          <Calendar width={24} height={24} color="#F59E0B" />
+          <ShiftsIcon size={24} color="#F59E0B" />
           <Text style={styles.quickActionText}>My Shifts</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.quickActionCard}>
-          <AlertTriangle width={24} height={24} color="#EF4444" />
+          <EmergencyIcon size={24} color="#EF4444" />
           <Text style={styles.quickActionText}>Report</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.quickActionCard} onPress={handleLogout}>
-          <LogOut width={24} height={24} color="#6B7280" />
+          <LogoutIcon size={24} color="#6B7280" />
           <Text style={styles.quickActionText}>Logout</Text>
         </TouchableOpacity>
       </View>
@@ -155,25 +155,25 @@ const GuardHomeScreen: React.FC = () => {
           {renderStatsCard(
             'Completed Shifts',
             '24',
-            <CheckCircle width={20} height={20} color="#10B981" />,
+            <CheckCircleIcon size={20} color="#10B981" />,
             '#10B981'
           )}
           {renderStatsCard(
             'Total Hours',
             '156',
-            <Clock width={20} height={20} color="#1C6CA9" />,
+            <ClockIcon size={20} color="#1C6CA9" />,
             '#1C6CA9'
           )}
           {renderStatsCard(
             'Active Sites',
             '8',
-            <MapPin width={20} height={20} color="#6366F1" />,
+            <LocationIcon size={20} color="#6366F1" />,
             '#6366F1'
           )}
           {renderStatsCard(
             'Team Members',
             '12',
-            <Users width={20} height={20} color="#F59E0B" />,
+            <UsersIcon size={20} color="#F59E0B" />,
             '#F59E0B'
           )}
         </View>
@@ -225,7 +225,7 @@ const GuardHomeScreen: React.FC = () => {
           <View style={styles.activityList}>
             <View style={styles.activityItem}>
               <View style={styles.activityIcon}>
-                <CheckCircle width={16} height={16} color="#10B981" />
+                <CheckCircleIcon size={16} color="#10B981" />
               </View>
               <View style={styles.activityContent}>
                 <Text style={styles.activityTitle}>Shift Completed</Text>
@@ -235,7 +235,7 @@ const GuardHomeScreen: React.FC = () => {
             </View>
             <View style={styles.activityItem}>
               <View style={styles.activityIcon}>
-                <AlertTriangle width={16} height={16} color="#F59E0B" />
+                <EmergencyIcon size={16} color="#F59E0B" />
               </View>
               <View style={styles.activityContent}>
                 <Text style={styles.activityTitle}>Incident Reported</Text>

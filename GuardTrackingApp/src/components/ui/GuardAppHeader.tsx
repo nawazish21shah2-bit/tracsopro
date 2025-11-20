@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image, ViewStyle, ImageStyle } from 'react-native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
-import { Bell, User, Menu } from 'react-native-feather';
+import { MenuIcon, NotificationIcon, UserIcon } from './AppIcons';
 import { COLORS, SPACING, TYPOGRAPHY } from '../../styles/globalStyles';
 import Logo from '../../assets/images/tracSOpro-logo.png';
 import GuardProfileDrawer from '../guard/GuardProfileDrawer';
@@ -45,7 +45,7 @@ export const GuardAppHeader: React.FC<GuardAppHeaderProps> = ({
     
     return (
       <TouchableOpacity style={styles.hamburgerButton} onPress={openDrawer}>
-        <Menu width={24} height={24} color={COLORS.textPrimary} />
+        <MenuIcon size={24} color={COLORS.textPrimary} />
       </TouchableOpacity>
     );
   };
@@ -73,7 +73,7 @@ export const GuardAppHeader: React.FC<GuardAppHeaderProps> = ({
       <View style={styles.rightContainer}>
         {onNotificationPress && (
           <TouchableOpacity style={styles.iconButton} onPress={onNotificationPress}>
-            <Bell width={24} height={24} color={COLORS.textPrimary} />
+            <NotificationIcon size={24} color={COLORS.textPrimary} />
             {/* Notification badge */}
             <View style={styles.notificationBadge}>
               <Text style={styles.badgeText}>3</Text>
@@ -83,7 +83,7 @@ export const GuardAppHeader: React.FC<GuardAppHeaderProps> = ({
         
         <TouchableOpacity style={styles.profileIconButton} onPress={openDrawer}>
           <View style={[styles.profileAvatar, isActive && styles.profileAvatarActive]}>
-            <User width={20} height={20} color={isActive ? '#FFFFFF' : COLORS.textSecondary} />
+            <UserIcon size={20} color={isActive ? '#FFFFFF' : COLORS.textSecondary} />
           </View>
         </TouchableOpacity>
       </View>

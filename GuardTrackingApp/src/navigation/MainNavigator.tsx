@@ -16,7 +16,7 @@ import ReportsScreen from '../screens/dashboard/ReportsScreen';
 import JobsScreen from '../screens/dashboard/JobsScreen';
 import ProfileScreen from '../screens/dashboard/ProfileScreen';
 import DashboardNavigator from './DashboardNavigator';
-import { Home, Clock, Calendar, FileText, Briefcase, User } from 'react-native-feather';
+import { HomeIcon, LocationIcon, ShiftsIcon, ReportsIcon, JobsIcon, UserIcon } from '../components/ui/AppIcons';
 
 // Import other screens (create placeholders for now)
 import TrackingScreen from '../screens/main/TrackingScreen';
@@ -94,24 +94,24 @@ const MainTabNavigator: React.FC = () => {
   return <GuardStackNavigator />;
 };
 
-// Tab Icon Component using react-native-feather icons
+// Tab Icon Component using AppIcons
 const TabIcon: React.FC<{ name: string; color: string; size: number }> = ({ name, color, size }) => {
   const iconSize = 20; // enforce 20x20 for consistency
   switch (name) {
     case 'home':
-      return <Home width={iconSize} height={iconSize} stroke={color} />;
+      return <HomeIcon size={iconSize} color={color} />;
     case 'location':
-      return <Clock width={iconSize} height={iconSize} stroke={color} />;
+      return <LocationIcon size={iconSize} color={color} />;
     case 'calendar':
-      return <Calendar width={iconSize} height={iconSize} stroke={color} />;
+      return <ShiftsIcon size={iconSize} color={color} />;
     case 'reports':
-      return <FileText width={iconSize} height={iconSize} stroke={color} />;
+      return <ReportsIcon size={iconSize} color={color} />;
     case 'jobs':
-      return <Briefcase width={iconSize} height={iconSize} stroke={color} />;
+      return <JobsIcon size={iconSize} color={color} />;
     case 'person':
-      return <User width={iconSize} height={iconSize} stroke={color} />;
+      return <UserIcon size={iconSize} color={color} />;
     default:
-      return <Home width={iconSize} height={iconSize} stroke={color} />;
+      return <HomeIcon size={iconSize} color={color} />;
   }
 };
 

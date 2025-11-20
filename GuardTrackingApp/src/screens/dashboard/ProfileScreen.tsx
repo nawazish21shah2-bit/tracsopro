@@ -10,7 +10,17 @@ import {
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { logoutUser } from '../../store/slices/authSlice';
-import { User, CheckCircle, Briefcase, MapPin, Calendar, Bell, HelpCircle, LogOut, ChevronRight } from 'react-native-feather';
+import { 
+  UserIcon,
+  CheckCircleIcon,
+  JobsIcon,
+  LocationIcon,
+  ShiftsIcon,
+  NotificationIcon,
+  InfoIcon,
+  LogoutIcon,
+  ChevronRightIcon
+} from '../../components/ui/AppIcons';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 
 interface MenuOption {
@@ -64,31 +74,31 @@ const ProfileScreen: React.FC = () => {
     {
       id: '1',
       title: 'Past Jobs',
-      icon: <CheckCircle width={20} height={20} color="#666666" />,
+      icon: <CheckCircleIcon size={20} color="#666666" />,
       onPress: handlePastJobs,
     },
     {
       id: '2',
       title: 'Assigned Sites',
-      icon: <MapPin width={20} height={20} color="#666666" />,
+      icon: <LocationIcon size={20} color="#666666" />,
       onPress: handleAssignedSites,
     },
     {
       id: '3',
       title: 'Attendance Record',
-      icon: <Calendar width={20} height={20} color="#666666" />,
+      icon: <ShiftsIcon size={20} color="#666666" />,
       onPress: handleAttendanceRecord,
     },
     {
       id: '4',
       title: 'Notification Settings',
-      icon: <Bell width={20} height={20} color="#666666" />,
+      icon: <NotificationIcon size={20} color="#666666" />,
       onPress: handleNotificationSettings,
     },
     {
       id: '5',
       title: 'Contact Support',
-      icon: <HelpCircle width={20} height={20} color="#666666" />,
+      icon: <InfoIcon size={20} color="#666666" />,
       onPress: handleContactSupport,
     },
   ];
@@ -105,7 +115,7 @@ const ProfileScreen: React.FC = () => {
         <View style={styles.profileCard}>
           <View style={styles.profileHeader}>
             <View style={styles.profileAvatar}>
-              <User width={24} height={24} color="#333333" />
+              <UserIcon size={24} color="#333333" />
             </View>
             <View style={styles.profileInfo}>
               <Text style={styles.profileName}>
@@ -119,7 +129,7 @@ const ProfileScreen: React.FC = () => {
                     !isVerified && { backgroundColor: '#B0B0B0' },
                   ]}
                 >
-                  <CheckCircle width={14} height={14} color={isVerified ? '#4CAF50' : '#FFFFFF'} />
+                  <CheckCircleIcon size={14} color={isVerified ? '#4CAF50' : '#FFFFFF'} />
                 </View>
               </View>
             </View>
@@ -141,14 +151,14 @@ const ProfileScreen: React.FC = () => {
                 <View style={styles.menuItemIcon}>{option.icon}</View>
                 <Text style={styles.menuItemTitle}>{option.title}</Text>
               </View>
-              <ChevronRight width={18} height={18} color="#9AA0A6" />
+              <ChevronRightIcon size={18} color="#9AA0A6" />
             </TouchableOpacity>
           ))}
         </View>
 
         {/* Logout Button */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <LogOut width={18} height={18} color="#D32F2F" />
+          <LogoutIcon size={18} color="#D32F2F" />
           <Text style={styles.logoutText}> Logout</Text>
         </TouchableOpacity>
       </ScrollView>

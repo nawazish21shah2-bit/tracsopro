@@ -56,7 +56,7 @@ export const AppIcon: React.FC<IconProps> = ({
     case 'ionicons':
       return <Ionicons name={name} size={size} color={color} style={iconStyle} />;
     case 'fontawesome':
-      return <FontAwesome name={name} size={size} color={color} style={iconStyle} />;
+      return <FontAwesome name={name} size={size} color={color} style={iconStyle}  />;
     default:
       return <MaterialIcons name="error" size={size} color={color} style={iconStyle} />;
   }
@@ -65,7 +65,7 @@ export const AppIcon: React.FC<IconProps> = ({
 // Generic SVG icon wrapper for our Figma-exported assets
 type SvgIconProps = { size?: number; color?: string; style?: any };
 const SvgIcon = ({ Svg, size = 24, color = COLORS.textPrimary, style }: SvgIconProps & { Svg: any }) => (
-  <Svg width={size} height={size} color={color} fill={color} stroke={color} style={style} />
+  <Svg width={size} height={size} color={color} fill={color} stroke={color} strokeWidth={size / 50} style={style} />
 );
 
 // Specialized icon components for common use cases
@@ -242,6 +242,68 @@ export const CertificationIcon: React.FC<CommonIconProps> = ({ size = 24, color 
   <AppIcon type="material" name="verified" size={size} color={color} style={style} />
 );
 
+// Additional common utility icons (Material)
+export const SearchIcon: React.FC<CommonIconProps> = ({ size = 24, color = COLORS.textPrimary, style }) => (
+  <AppIcon type="material" name="search" size={size} color={color} style={style} />
+);
+
+export const EditIcon: React.FC<CommonIconProps> = ({ size = 24, color = COLORS.textPrimary, style }) => (
+  <AppIcon type="material" name="edit" size={size} color={color} style={style} />
+);
+
+export const PlusIcon: React.FC<CommonIconProps> = ({ size = 24, color = COLORS.textPrimary, style }) => (
+  <AppIcon type="material" name="add" size={size} color={color} style={style} />
+);
+
+export const ChevronRightIcon: React.FC<CommonIconProps> = ({ size = 24, color = COLORS.textPrimary, style }) => (
+  <AppIcon type="material" name="chevron-right" size={size} color={color} style={style} />
+);
+
+export const ChevronDownIcon: React.FC<CommonIconProps> = ({ size = 24, color = COLORS.textPrimary, style }) => (
+  <AppIcon type="material" name="expand-more" size={size} color={color} style={style} />
+);
+
+export const LogoutIcon: React.FC<CommonIconProps> = ({ size = 24, color = COLORS.textPrimary, style }) => (
+  <AppIcon type="material" name="logout" size={size} color={color} style={style} />
+);
+
+// Additional app-wide icons mapped to Material glyphs
+export const ArrowLeftIcon: React.FC<CommonIconProps> = ({ size = 24, color = COLORS.textPrimary, style }) => (
+  <AppIcon type="material" name="arrow-back" size={size} color={color} style={style} />
+);
+
+export const SaveIcon: React.FC<CommonIconProps> = ({ size = 24, color = COLORS.textPrimary, style }) => (
+  <AppIcon type="material" name="save" size={size} color={color} style={style} />
+);
+
+export const DollarIcon: React.FC<CommonIconProps> = ({ size = 24, color = COLORS.textPrimary, style }) => (
+  <AppIcon type="material" name="attach-money" size={size} color={color} style={style} />
+);
+
+export const CreditCardIcon: React.FC<CommonIconProps> = ({ size = 24, color = COLORS.textPrimary, style }) => (
+  <AppIcon type="material" name="credit-card" size={size} color={color} style={style} />
+);
+
+export const UsersIcon: React.FC<CommonIconProps> = ({ size = 24, color = COLORS.textPrimary, style }) => (
+  <AppIcon type="material" name="groups" size={size} color={color} style={style} />
+);
+
+export const DownloadIcon: React.FC<CommonIconProps> = ({ size = 24, color = COLORS.textPrimary, style }) => (
+  <AppIcon type="material" name="file-download" size={size} color={color} style={style} />
+);
+
+export const MicIcon: React.FC<CommonIconProps> = ({ size = 24, color = COLORS.textPrimary, style }) => (
+  <AppIcon type="material" name="mic" size={size} color={color} style={style} />
+);
+
+export const SendIcon: React.FC<CommonIconProps> = ({ size = 24, color = COLORS.textPrimary, style }) => (
+  <AppIcon type="material" name="send" size={size} color={color} style={style} />
+);
+
+export const MoreHorizontalIcon: React.FC<CommonIconProps> = ({ size = 24, color = COLORS.textPrimary, style }) => (
+  <AppIcon type="material" name="more-horiz" size={size} color={color} style={style} />
+);
+
 // Export a default object for easy imports
 const AppIcons = {
   HomeIcon,
@@ -276,6 +338,21 @@ const AppIcons = {
   CertificationIcon,
   EyeIcon,
   EyeSlashIcon,
+  SearchIcon,
+  EditIcon,
+  PlusIcon,
+  ChevronRightIcon,
+  ChevronDownIcon,
+  LogoutIcon,
+  ArrowLeftIcon,
+  SaveIcon,
+  DollarIcon,
+  CreditCardIcon,
+  UsersIcon,
+  DownloadIcon,
+  MicIcon,
+  SendIcon,
+  MoreHorizontalIcon,
 };
 
 export default AppIcons;

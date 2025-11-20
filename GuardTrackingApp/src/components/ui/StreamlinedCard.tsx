@@ -1,7 +1,7 @@
 import React from 'react';
 import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
 import { getCardStyle, getIconContainerStyle, getStatusDotStyle, getTextStyle, UI_COLORS } from '../../styles/uiStyles';
-import { ChevronRight } from 'react-native-feather';
+import { ChevronRightIcon } from './AppIcons';
 
 interface StreamlinedCardProps {
   title: string;
@@ -74,9 +74,8 @@ export const StreamlinedCard: React.FC<StreamlinedCardProps> = ({
         
         {showChevron && (
           <View style={styles.chevronContainer}>
-            <ChevronRight 
-              width={16} 
-              height={16} 
+            <ChevronRightIcon 
+              size={16} 
               color={isActive ? UI_COLORS.textActive : UI_COLORS.inactive} 
             />
           </View>

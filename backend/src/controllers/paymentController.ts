@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { logger } from '../utils/logger.js';
+import PaymentService from '../services/paymentService.js';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -8,6 +9,62 @@ interface AuthenticatedRequest extends Request {
     clientId?: string;
   };
 }
+
+/**
+ * Get plan catalog (prices and features)
+ */
+export const getPlans = async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    const svc = PaymentService.getInstance();
+    const catalog = svc.getPlanCatalog();
+    res.json({ success: true, data: catalog });
+  } catch (error) {
+    logger.error('Error getting plans:', error);
+    res.status(500).json({ success: false, message: 'Failed to get plans' });
+  }
+};
+
+/**
+ * Create Stripe Checkout Session for subscription (14-day trial by default)
+ */
+export const createSubscriptionCheckout = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { securityCompanyId, priceId, trialDays } = req.body;
+    if (!securityCompanyId || !priceId) {
+      return res.status(400).json({ success: false, message: 'securityCompanyId and priceId are required' });
+    }
+    const svc = PaymentService.getInstance();
+    const session = await svc.createSubscriptionCheckoutSession({
+      securityCompanyId,
+      priceId,
+      trialDays: typeof trialDays === 'number' ? trialDays : 14,
+      successUrl: process.env.STRIPE_SUCCESS_URL,
+      cancelUrl: process.env.STRIPE_CANCEL_URL,
+    });
+    res.status(201).json({ success: true, data: session });
+  } catch (error) {
+    logger.error('Error creating subscription checkout session:', error);
+    res.status(500).json({ success: false, message: 'Failed to create checkout session' });
+  }
+};
+
+/**
+ * Create Billing Portal session for security company
+ */
+export const getBillingPortal = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { securityCompanyId } = req.query as { securityCompanyId?: string };
+    if (!securityCompanyId) {
+      return res.status(400).json({ success: false, message: 'securityCompanyId is required' });
+    }
+    const svc = PaymentService.getInstance();
+    const session = await svc.createBillingPortalSession({ securityCompanyId, returnUrl: process.env.BILLING_PORTAL_RETURN_URL });
+    res.json({ success: true, data: session });
+  } catch (error) {
+    logger.error('Error creating billing portal session:', error);
+    res.status(500).json({ success: false, message: 'Failed to create billing portal session' });
+  }
+};
 
 /**
  * Create payment intent for one-time payment
@@ -406,4 +463,7 @@ export default {
   setupAutomaticPayments,
   handleWebhook,
   getInvoices,
+  getPlans,
+  createSubscriptionCheckout,
+  getBillingPortal,
 };

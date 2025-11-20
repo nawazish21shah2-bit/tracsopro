@@ -204,6 +204,11 @@ router.post('/setup-intent', authorize('CLIENT'), paymentController.createSetupI
  */
 router.post('/auto-pay', authorize('CLIENT'), paymentController.setupAutomaticPayments);
 
+// Subscription plans & checkout (Admins only)
+router.get('/plans', authorize('ADMIN', 'SUPER_ADMIN'), paymentController.getPlans);
+router.post('/subscriptions/checkout', authorize('ADMIN', 'SUPER_ADMIN'), paymentController.createSubscriptionCheckout);
+router.get('/portal', authorize('ADMIN', 'SUPER_ADMIN'), paymentController.getBillingPortal);
+
 /**
  * @swagger
  * /payments/invoices:

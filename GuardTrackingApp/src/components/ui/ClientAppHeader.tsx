@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image, ViewStyle, ImageStyle } from 'react-native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
-import { Bell, Menu, Home } from 'react-native-feather';
+import { MenuIcon, NotificationIcon, UserIcon } from './AppIcons';
 import { COLORS, SPACING, TYPOGRAPHY } from '../../styles/globalStyles';
 import Logo from '../../assets/images/tracSOpro-logo.png';
 import ClientProfileDrawer from '../client/ClientProfileDrawer';
@@ -56,7 +56,7 @@ export const ClientAppHeader: React.FC<ClientAppHeaderProps> = ({
           openDrawer();
         }}
       >
-        <Menu width={24} height={24} color={COLORS.textPrimary} />
+        <MenuIcon size={24} color={COLORS.textPrimary} />
       </TouchableOpacity>
     );
   };
@@ -82,7 +82,7 @@ export const ClientAppHeader: React.FC<ClientAppHeaderProps> = ({
       <View style={styles.rightContainer}>
         {onNotificationPress && (
           <TouchableOpacity style={styles.iconButton} onPress={onNotificationPress}>
-            <Bell width={24} height={24} color={COLORS.textPrimary} />
+            <NotificationIcon size={24} color={COLORS.textPrimary} />
             {/* Notification badge */}
             <View style={styles.notificationBadge}>
               <Text style={styles.badgeText}>5</Text>
@@ -92,7 +92,7 @@ export const ClientAppHeader: React.FC<ClientAppHeaderProps> = ({
         
         <TouchableOpacity style={styles.profileButton} onPress={openDrawer}>
           <View style={styles.profileAvatar}>
-            <Home width={20} height={20} color={COLORS.primary} />
+            <UserIcon size={20} color={COLORS.primary} />
           </View>
         </TouchableOpacity>
       </View>
