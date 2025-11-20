@@ -129,16 +129,20 @@ async function main() {
   console.log('✅ Locations created');
 
   // Create checkpoints
-  await prisma.checkpoint.create({
-    data: {
+  await prisma.checkpoint.upsert({
+    where: { qrCode: 'QR-MAIN-001' },
+    update: {},
+    create: {
       locationId: location1.id,
       name: 'Main Entrance',
       qrCode: 'QR-MAIN-001',
     },
   });
 
-  await prisma.checkpoint.create({
-    data: {
+  await prisma.checkpoint.upsert({
+    where: { qrCode: 'QR-BACK-001' },
+    update: {},
+    create: {
       locationId: location1.id,
       name: 'Back Entrance',
       qrCode: 'QR-BACK-001',

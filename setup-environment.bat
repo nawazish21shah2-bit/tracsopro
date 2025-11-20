@@ -1,8 +1,8 @@
 @echo off
 echo Setting up React Native Environment Variables...
 
-REM Set JAVA_HOME (adjust path if your JDK is installed elsewhere)
-setx JAVA_HOME "C:\Program Files\Java\jdk-25" /M
+REM Set JAVA_HOME (using Android Studio's bundled JRE)
+setx JAVA_HOME "C:\Program Files\Android\Android Studio\jbr" /M
 
 REM Set ANDROID_HOME
 setx ANDROID_HOME "%USERPROFILE%\AppData\Local\Android\Sdk" /M

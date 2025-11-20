@@ -130,7 +130,7 @@ const styles = StyleSheet.create({
   },
   logoImage: {
     width: 160,
-    height: 40,
+    height: 140,
   },
   titleContainer: {
     alignItems: 'center',
@@ -158,6 +158,9 @@ const styles = StyleSheet.create({
   optionsContainer: {
     marginBottom: 40,
     gap: 16,
+    flex: 1,
+    justifyContent: 'center',
+    flexDirection: 'row',
   },
   optionCard: {
     height: 160,
@@ -168,6 +171,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+    width: '48%',
   },
   optionCardSelected: {
     borderColor: '#1C6CA9',
@@ -215,6 +219,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 17,
     color: '#1C6CA9',
+    marginTop: 4,
   },
 });
 

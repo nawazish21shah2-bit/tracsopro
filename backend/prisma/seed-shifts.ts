@@ -6,11 +6,9 @@ const prisma = new PrismaClient();
 async function seedShifts() {
   console.log('🌱 Seeding shifts...');
 
-  // Find a guard user
+  // Find a guard user and its Guard profile (we need Guard.id for Shift.guardId)
   const guardUser = await prisma.user.findFirst({
-    where: {
-      role: 'GUARD',
-    },
+    where: { role: 'GUARD' },
   });
 
   if (!guardUser) {
@@ -19,6 +17,15 @@ async function seedShifts() {
   }
 
   console.log(`✅ Found guard user: ${guardUser.email}`);
+
+  const guardProfile = await prisma.guard.findUnique({
+    where: { userId: guardUser.id },
+  });
+
+  if (!guardProfile) {
+    console.log('❌ No guard profile found for the guard user. Please seed basic users first.');
+    return;
+  }
 
   // Create or find a location
   let location = await prisma.location.findFirst();
@@ -44,86 +51,75 @@ async function seedShifts() {
   const shifts = [
     // Today's active shift
     {
-      guardId: guardUser.id,
+      guardId: guardProfile.id,
       locationId: location.id,
       locationName: location.name,
       locationAddress: location.address,
-      startTime: setHours(setMinutes(today, 0), 8), // 8:00 AM today
-      endTime: setHours(setMinutes(today, 0), 19), // 7:00 PM today
-      breakStartTime: setHours(setMinutes(today, 0), 14), // 2:00 PM
-      breakEndTime: setHours(setMinutes(today, 0), 15), // 3:00 PM
+      scheduledStartTime: setHours(setMinutes(today, 0), 8), // 8:00 AM today
+      scheduledEndTime: setHours(setMinutes(today, 0), 19), // 7:00 PM today
       status: ShiftStatus.IN_PROGRESS,
       description: 'Make sure to check the parking lot for illegal parkings.',
-      checkInTime: setHours(setMinutes(today, 1), 8), // 8:01 AM
+      actualStartTime: setHours(setMinutes(today, 1), 8), // 8:01 AM
+      totalBreakTime: 60,
     },
     // Upcoming shift - tomorrow
     {
-      guardId: guardUser.id,
+      guardId: guardProfile.id,
       locationId: location.id,
       locationName: location.name,
       locationAddress: location.address,
-      startTime: setHours(setMinutes(addDays(today, 1), 0), 8),
-      endTime: setHours(setMinutes(addDays(today, 1), 0), 19),
-      breakStartTime: setHours(setMinutes(addDays(today, 1), 0), 14),
-      breakEndTime: setHours(setMinutes(addDays(today, 1), 0), 15),
+      scheduledStartTime: setHours(setMinutes(addDays(today, 1), 0), 8),
+      scheduledEndTime: setHours(setMinutes(addDays(today, 1), 0), 19),
       status: ShiftStatus.SCHEDULED,
       description: 'Make sure to check the parking lot for illegal parkings.',
     },
     // Upcoming shift - day after tomorrow
     {
-      guardId: guardUser.id,
+      guardId: guardProfile.id,
       locationId: location.id,
       locationName: location.name,
       locationAddress: location.address,
-      startTime: setHours(setMinutes(addDays(today, 2), 0), 8),
-      endTime: setHours(setMinutes(addDays(today, 2), 0), 19),
-      breakStartTime: setHours(setMinutes(addDays(today, 2), 0), 14),
-      breakEndTime: setHours(setMinutes(addDays(today, 2), 0), 15),
+      scheduledStartTime: setHours(setMinutes(addDays(today, 2), 0), 8),
+      scheduledEndTime: setHours(setMinutes(addDays(today, 2), 0), 19),
       status: ShiftStatus.SCHEDULED,
       description: 'Make sure to check the parking lot for illegal parkings.',
     },
     // Completed shift - yesterday
     {
-      guardId: guardUser.id,
+      guardId: guardProfile.id,
       locationId: location.id,
       locationName: location.name,
       locationAddress: location.address,
-      startTime: setHours(setMinutes(subDays(today, 1), 0), 8),
-      endTime: setHours(setMinutes(subDays(today, 1), 0), 19),
-      breakStartTime: setHours(setMinutes(subDays(today, 1), 0), 14),
-      breakEndTime: setHours(setMinutes(subDays(today, 1), 0), 15),
+      scheduledStartTime: setHours(setMinutes(subDays(today, 1), 0), 8),
+      scheduledEndTime: setHours(setMinutes(subDays(today, 1), 0), 19),
       status: ShiftStatus.COMPLETED,
       description: 'Make sure to check the parking lot for illegal parkings.',
-      checkInTime: setHours(setMinutes(subDays(today, 1), 2), 8),
-      checkOutTime: setHours(setMinutes(subDays(today, 1), 0), 19),
-      actualDuration: 660, // 11 hours in minutes
+      actualStartTime: setHours(setMinutes(subDays(today, 1), 2), 8),
+      actualEndTime: setHours(setMinutes(subDays(today, 1), 0), 19),
+      totalBreakTime: 60,
     },
     // Completed shift - 2 days ago
     {
-      guardId: guardUser.id,
+      guardId: guardProfile.id,
       locationId: location.id,
       locationName: location.name,
       locationAddress: location.address,
-      startTime: setHours(setMinutes(subDays(today, 2), 0), 8),
-      endTime: setHours(setMinutes(subDays(today, 2), 0), 19),
-      breakStartTime: setHours(setMinutes(subDays(today, 2), 0), 14),
-      breakEndTime: setHours(setMinutes(subDays(today, 2), 0), 15),
+      scheduledStartTime: setHours(setMinutes(subDays(today, 2), 0), 8),
+      scheduledEndTime: setHours(setMinutes(subDays(today, 2), 0), 19),
       status: ShiftStatus.COMPLETED,
       description: 'Make sure to check the parking lot for illegal parkings.',
-      checkInTime: setHours(setMinutes(subDays(today, 2), 2), 8),
-      checkOutTime: setHours(setMinutes(subDays(today, 2), 0), 19),
-      actualDuration: 660,
+      actualStartTime: setHours(setMinutes(subDays(today, 2), 2), 8),
+      actualEndTime: setHours(setMinutes(subDays(today, 2), 0), 19),
+      totalBreakTime: 60,
     },
     // Missed shift - 3 days ago
     {
-      guardId: guardUser.id,
+      guardId: guardProfile.id,
       locationId: location.id,
       locationName: location.name,
       locationAddress: location.address,
-      startTime: setHours(setMinutes(subDays(today, 3), 0), 8),
-      endTime: setHours(setMinutes(subDays(today, 3), 0), 19),
-      breakStartTime: setHours(setMinutes(subDays(today, 3), 0), 14),
-      breakEndTime: setHours(setMinutes(subDays(today, 3), 0), 15),
+      scheduledStartTime: setHours(setMinutes(subDays(today, 3), 0), 8),
+      scheduledEndTime: setHours(setMinutes(subDays(today, 3), 0), 19),
       status: ShiftStatus.MISSED,
       description: 'Make sure to check the parking lot for illegal parkings.',
     },
@@ -140,7 +136,7 @@ async function seedShifts() {
   // Create some shift reports for completed shifts
   const completedShifts = await prisma.shift.findMany({
     where: {
-      guardId: guardUser.id,
+      guardId: guardProfile.id,
       status: ShiftStatus.COMPLETED,
     },
     take: 2,

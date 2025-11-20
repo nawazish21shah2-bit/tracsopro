@@ -222,7 +222,7 @@ const styles = StyleSheet.create({
   },
   logoImage: {
     width: 160,
-    height: 40,
+    height: 140,
   },
   title: {
     fontFamily: 'Montserrat',
@@ -366,6 +366,7 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     letterSpacing: -0.408,
     color: '#1C6CA9',
+    marginTop: 4,
   },
 });
 
