@@ -25,7 +25,7 @@ Create a file `fix-secret.sh`:
 ```bash
 #!/bin/bash
 if [ -f STRIPE_KEYS_CONFIGURED.md ]; then
-  sed -i 's/sk_test_51SVpTpLEsN8TIkgKEOqTp39aj0n7GBtdq/sk_test_.../g' STRIPE_KEYS_CONFIGURED.md
+  sed -i 's/sk_test_YOUR_ACTUAL_KEY_HERE/sk_test_.../g' STRIPE_KEYS_CONFIGURED.md
   git add STRIPE_KEYS_CONFIGURED.md
 fi
 ```
@@ -35,7 +35,7 @@ fi
 ```bash
 git filter-branch --force --tree-filter '
   if [ -f STRIPE_KEYS_CONFIGURED.md ]; then
-    sed -i "s/sk_test_51SVpTpLEsN8TIkgKEOqTp39aj0n7GBtdq/sk_test_.../g" STRIPE_KEYS_CONFIGURED.md
+    sed -i "s/sk_test_YOUR_ACTUAL_KEY_HERE/sk_test_.../g" STRIPE_KEYS_CONFIGURED.md
   fi
 ' 05948ab^..HEAD
 ```
