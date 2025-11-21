@@ -7,6 +7,9 @@ import CreateShiftScreen from '../screens/client/CreateShiftScreen';
 import ClientNotifications from '../screens/client/ClientNotifications';
 import IndividualChatScreen from '../screens/chat/IndividualChatScreen';
 import ChatListScreen from '../screens/chat/ChatListScreen';
+import PaymentScreen from '../screens/client/PaymentScreen';
+import InvoiceDetailsScreen from '../screens/client/InvoiceDetailsScreen';
+import PaymentMethodsScreen from '../screens/client/PaymentMethodsScreen';
 
 export type ClientStackParamList = {
   ClientTabs: undefined;
@@ -21,6 +24,9 @@ export type ClientStackParamList = {
     context?: 'report' | 'site' | 'general';
   };
   ChatListScreen: undefined;
+  Payment: undefined;
+  InvoiceDetails: { invoiceId: string };
+  PaymentMethods: undefined;
 };
 
 const Stack = createStackNavigator<ClientStackParamList>();
@@ -49,6 +55,21 @@ const ClientStackNavigator: React.FC = () => {
       <Stack.Screen 
         name="ChatListScreen" 
         component={ChatListScreen} 
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="Payment" 
+        component={PaymentScreen} 
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="InvoiceDetails" 
+        component={InvoiceDetailsScreen} 
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="PaymentMethods" 
+        component={PaymentMethodsScreen} 
         options={{ headerShown: false }}
       />
     </Stack.Navigator>

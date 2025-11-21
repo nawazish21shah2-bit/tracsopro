@@ -27,6 +27,7 @@ import UserManagementScreen from '../screens/admin/UserManagementScreen';
 import SiteManagementScreen from '../screens/admin/SiteManagementScreen';
 import AdminAnalyticsScreen from '../screens/admin/AdminAnalyticsScreen';
 import AdminSettingsScreen from '../screens/admin/AdminSettingsScreen';
+import AdminSubscriptionScreen from '../screens/admin/AdminSubscriptionScreen';
 
 export type AdminTabParamList = {
   Dashboard: undefined;
@@ -45,6 +46,7 @@ export type AdminStackParamList = {
   SiteManagement: undefined;
   AdminAnalytics: undefined;
   AdminSettings: undefined;
+  AdminSubscription: undefined;
 };
 
 const Tab = createBottomTabNavigator<AdminTabParamList>();
@@ -172,6 +174,7 @@ const AdminNavigator: React.FC = () => {
       <Stack.Screen name="SiteManagement" component={SiteManagementScreen} />
       <Stack.Screen name="AdminAnalytics" component={AdminAnalyticsScreen} />
       <Stack.Screen name="AdminSettings" component={AdminSettingsScreen} />
+      <Stack.Screen name="AdminSubscription" component={AdminSubscriptionScreen} />
     </Stack.Navigator>
   );
 };

@@ -8,6 +8,7 @@ export interface AuthRequest extends Request {
   user?: any;
   clientId?: string;
   guardId?: string;
+  securityCompanyId?: string;
 }
 
 export const authenticate = async (
@@ -43,6 +44,14 @@ export const authenticate = async (
         },
         guard: {
           select: { id: true }
+        },
+        companyUsers: {
+          where: { isActive: true },
+          select: {
+            securityCompanyId: true,
+            role: true
+          },
+          take: 1
         }
       },
     });
@@ -64,6 +73,10 @@ export const authenticate = async (
     }
     if (user.guard) {
       req.guardId = user.guard.id;
+    }
+    // Set security company ID for admins
+    if (user.role === 'ADMIN' && user.companyUsers.length > 0) {
+      req.securityCompanyId = user.companyUsers[0].securityCompanyId;
     }
     next();
   } catch (error) {

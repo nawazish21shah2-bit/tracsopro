@@ -15,6 +15,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { HomeIcon, UserIcon, ReportsIcon, ShiftsIcon } from '../../components/ui/AppIcons';
 import StatsCard from '../../components/ui/StatsCard';
@@ -30,6 +31,7 @@ interface RecentActivity {
 }
 
 const SuperAdminDashboard: React.FC = () => {
+  const navigation = useNavigation();
   const [overview, setOverview] = useState<Omit<PlatformOverview, 'recentActivity'> | null>(null);
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -193,25 +195,37 @@ const SuperAdminDashboard: React.FC = () => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.quickActionsGrid}>
-            <TouchableOpacity style={styles.quickActionCard}>
+            <TouchableOpacity 
+              style={styles.quickActionCard}
+              onPress={() => navigation.navigate('CreateCompany' as never)}
+            >
               <View style={styles.quickActionIcon}>
                 <UserIcon size={24} color={COLORS.primary} />
               </View>
               <Text style={styles.quickActionText}>Add Company</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.quickActionCard}>
+            <TouchableOpacity 
+              style={styles.quickActionCard}
+              onPress={() => navigation.navigate('PlatformAnalytics' as never)}
+            >
               <View style={styles.quickActionIcon}>
                 <ReportsIcon size={24} color={COLORS.primary} />
               </View>
               <Text style={styles.quickActionText}>View Analytics</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.quickActionCard}>
+            <TouchableOpacity 
+              style={styles.quickActionCard}
+              onPress={() => navigation.navigate('BillingManagement' as never)}
+            >
               <View style={styles.quickActionIcon}>
                 <ShiftsIcon size={24} color={COLORS.primary} />
               </View>
               <Text style={styles.quickActionText}>Billing</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.quickActionCard}>
+            <TouchableOpacity 
+              style={styles.quickActionCard}
+              onPress={() => navigation.navigate('SystemSettings' as never)}
+            >
               <View style={styles.quickActionIcon}>
                 <HomeIcon size={24} color={COLORS.primary} />
               </View>

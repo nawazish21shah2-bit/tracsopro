@@ -17,6 +17,7 @@ import adminUserRoutes from './adminUsers.js';
 import adminSiteRoutes from './adminSites.js';
 import adminClientRoutes from './adminClients.js';
 import adminShiftRoutes from './adminShifts.js';
+import adminRoutes from './admin.js';
 
 const router = Router();
 
@@ -50,6 +51,7 @@ router.use('/admin/users', adminUserRoutes);
 router.use('/admin/sites', adminSiteRoutes);
 router.use('/admin/clients', adminClientRoutes);
 router.use('/admin/shifts', adminShiftRoutes);
+router.use('/admin', adminRoutes);
 // Test route for Super Admin
 router.get('/super-admin-test', (req, res) => {
   res.json({ success: true, message: 'Super Admin routes are working!' });

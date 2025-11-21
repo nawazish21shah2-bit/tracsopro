@@ -7,8 +7,10 @@ import {
   TouchableOpacity,
   Alert,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
+import { useNavigation } from '@react-navigation/native';
 import { RootState } from '../../store';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import {
@@ -22,6 +24,7 @@ import {
   ClockIcon,
   ErrorCircleIcon,
 } from '../../components/ui/AppIcons';
+import paymentService, { Invoice, PaymentMethod } from '../../services/paymentService';
 
 interface Invoice {
   id: string;
@@ -46,12 +49,14 @@ interface PaymentMethod {
 
 const PaymentScreen: React.FC = () => {
   const dispatch = useDispatch();
+  const navigation = useNavigation();
   const { user } = useSelector((state: RootState) => state.auth);
   
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [processingPayment, setProcessingPayment] = useState<string | null>(null);
 
   useEffect(() => {
     loadPaymentData();
@@ -61,65 +66,19 @@ const PaymentScreen: React.FC = () => {
     try {
       setLoading(true);
       
-      // Mock data - replace with actual API calls
-      const mockInvoices: Invoice[] = [
-        {
-          id: 'inv_1',
-          amount: 4750,
-          currency: 'usd',
-          description: 'Security Services - November 2024',
-          status: 'open',
-          dueDate: '2024-12-15T00:00:00.000Z',
-          createdAt: '2024-11-15T00:00:00.000Z',
-        },
-        {
-          id: 'inv_2',
-          amount: 3200,
-          currency: 'usd',
-          description: 'Security Services - October 2024',
-          status: 'paid',
-          dueDate: '2024-11-15T00:00:00.000Z',
-          createdAt: '2024-10-15T00:00:00.000Z',
-          paidAt: '2024-11-10T00:00:00.000Z',
-        },
-        {
-          id: 'inv_3',
-          amount: 2800,
-          currency: 'usd',
-          description: 'Security Services - September 2024',
-          status: 'paid',
-          dueDate: '2024-10-15T00:00:00.000Z',
-          createdAt: '2024-09-15T00:00:00.000Z',
-          paidAt: '2024-10-12T00:00:00.000Z',
-        },
-      ];
+      const [invoicesData, methodsData] = await Promise.all([
+        paymentService.getInvoices({ page: 1, limit: 50 }),
+        paymentService.getPaymentMethods(),
+      ]);
 
-      const mockPaymentMethods: PaymentMethod[] = [
-        {
-          id: 'pm_1',
-          type: 'card',
-          last4: '4242',
-          brand: 'visa',
-          expiryMonth: 12,
-          expiryYear: 2025,
-          isDefault: true,
-        },
-        {
-          id: 'pm_2',
-          type: 'card',
-          last4: '0005',
-          brand: 'mastercard',
-          expiryMonth: 8,
-          expiryYear: 2026,
-          isDefault: false,
-        },
-      ];
-
-      setInvoices(mockInvoices);
-      setPaymentMethods(mockPaymentMethods);
-    } catch (error) {
+      setInvoices(invoicesData.invoices);
+      setPaymentMethods(methodsData);
+    } catch (error: any) {
       console.error('Error loading payment data:', error);
-      Alert.alert('Error', 'Failed to load payment information');
+      Alert.alert(
+        'Error',
+        error.response?.data?.message || 'Failed to load payment information'
+      );
     } finally {
       setLoading(false);
     }
@@ -144,22 +103,41 @@ const PaymentScreen: React.FC = () => {
 
   const processPayment = async (invoice: Invoice) => {
     try {
-      // Mock payment processing
-      Alert.alert(
-        'Payment Processing',
-        'Your payment is being processed. You will receive a confirmation email shortly.',
-        [{ text: 'OK' }]
-      );
+      setProcessingPayment(invoice.id);
       
-      // Update invoice status locally
-      setInvoices(prev => prev.map(inv => 
-        inv.id === invoice.id 
-          ? { ...inv, status: 'paid' as const, paidAt: new Date().toISOString() }
-          : inv
-      ));
-    } catch (error) {
+      // Create payment intent
+      const paymentIntent = await paymentService.createPaymentIntent({
+        amount: invoice.amount,
+        currency: invoice.currency,
+        description: invoice.description,
+        metadata: {
+          invoiceId: invoice.id,
+        },
+      });
+
+      // TODO: Integrate with Stripe SDK for React Native
+      // For now, show success message
+      Alert.alert(
+        'Payment Initiated',
+        `Payment intent created. Amount: $${invoice.amount.toFixed(2)}. Please complete the payment using your payment method.`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              // Refresh invoices to get updated status
+              loadPaymentData();
+            },
+          },
+        ]
+      );
+    } catch (error: any) {
       console.error('Error processing payment:', error);
-      Alert.alert('Payment Failed', 'There was an error processing your payment. Please try again.');
+      Alert.alert(
+        'Payment Failed',
+        error.response?.data?.message || 'There was an error processing your payment. Please try again.'
+      );
+    } finally {
+      setProcessingPayment(null);
     }
   };
 
@@ -172,30 +150,46 @@ const PaymentScreen: React.FC = () => {
   };
 
   const handleAddPaymentMethod = () => {
-    Alert.alert(
-      'Add Payment Method',
-      'Payment method management will be available soon.',
-      [{ text: 'OK' }]
-    );
+    navigation.navigate('PaymentMethods' as never);
   };
 
   const handleSetupAutoPay = () => {
+    if (paymentMethods.length === 0) {
+      Alert.alert(
+        'No Payment Methods',
+        'Please add a payment method first before setting up auto-pay.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    const defaultMethod = paymentMethods.find(m => m.isDefault) || paymentMethods[0];
+    
     Alert.alert(
       'Setup Auto-Pay',
-      'Would you like to set up automatic payments for future invoices?',
+      `Would you like to set up automatic payments using ${defaultMethod.brand?.toUpperCase()} •••• ${defaultMethod.last4}?`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Setup', onPress: () => setupAutomaticPayments() },
+        { text: 'Setup', onPress: () => setupAutomaticPayments(defaultMethod.id) },
       ]
     );
   };
 
-  const setupAutomaticPayments = () => {
-    Alert.alert(
-      'Auto-Pay Setup',
-      'Automatic payments have been configured. Future invoices will be automatically paid using your default payment method.',
-      [{ text: 'OK' }]
-    );
+  const setupAutomaticPayments = async (paymentMethodId: string) => {
+    try {
+      await paymentService.setupAutomaticPayments(paymentMethodId);
+      Alert.alert(
+        'Auto-Pay Setup',
+        'Automatic payments have been configured. Future invoices will be automatically paid using your default payment method.',
+        [{ text: 'OK' }]
+      );
+    } catch (error: any) {
+      console.error('Error setting up auto-pay:', error);
+      Alert.alert(
+        'Error',
+        error.response?.data?.message || 'Failed to set up automatic payments'
+      );
+    }
   };
 
   const getStatusColor = (status: Invoice['status']): string => {
@@ -312,12 +306,24 @@ const PaymentScreen: React.FC = () => {
                 <DownloadIcon size={16} color="#6B7280" />
               </TouchableOpacity>
               
+              <TouchableOpacity
+                style={styles.viewButton}
+                onPress={() => navigation.navigate('InvoiceDetails' as never, { invoiceId: invoice.id } as never)}
+              >
+                <Text style={styles.viewButtonText}>View</Text>
+              </TouchableOpacity>
+              
               {invoice.status === 'open' && (
                 <TouchableOpacity 
-                  style={styles.payButton}
+                  style={[styles.payButton, processingPayment === invoice.id && styles.payButtonDisabled]}
                   onPress={() => handlePayInvoice(invoice)}
+                  disabled={processingPayment === invoice.id}
                 >
-                  <Text style={styles.payButtonText}>Pay Now</Text>
+                  {processingPayment === invoice.id ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <Text style={styles.payButtonText}>Pay Now</Text>
+                  )}
                 </TouchableOpacity>
               )}
             </View>
@@ -498,6 +504,18 @@ const styles = StyleSheet.create({
   downloadButton: {
     padding: 8,
   },
+  viewButton: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginRight: 8,
+  },
+  viewButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
   payButton: {
     backgroundColor: '#007AFF',
     borderRadius: 6,
@@ -508,6 +526,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  payButtonDisabled: {
+    opacity: 0.6,
   },
 });
 

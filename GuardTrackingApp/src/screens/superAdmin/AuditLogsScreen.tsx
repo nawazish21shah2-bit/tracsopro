@@ -6,6 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, FlatList, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
+import { superAdminService } from '../../services/superAdminService';
 
 interface AuditLog {
   id: string;
@@ -32,67 +33,29 @@ const AuditLogsScreen: React.FC = () => {
   const loadAuditLogs = async () => {
     try {
       setLoading(true);
-      // Mock audit logs data
-      const mockLogs: AuditLog[] = [
-        {
-          id: '1',
-          action: 'LOGIN',
-          resource: 'Authentication',
-          userId: 'user-123',
-          userName: 'John Doe',
-          timestamp: new Date().toISOString(),
-          details: { success: true, method: 'email' },
-          ipAddress: '192.168.1.100',
-          userAgent: 'Mozilla/5.0...',
-        },
-        {
-          id: '2',
-          action: 'COMPANY_CREATED',
-          resource: 'SecurityCompany',
-          userId: 'admin-456',
-          userName: 'Super Admin',
-          timestamp: new Date(Date.now() - 3600000).toISOString(),
-          details: { companyName: 'Elite Security Services', plan: 'PROFESSIONAL' },
-          ipAddress: '192.168.1.101',
-          userAgent: 'Mozilla/5.0...',
-        },
-        {
-          id: '3',
-          action: 'USER_SUSPENDED',
-          resource: 'User',
-          userId: 'admin-456',
-          userName: 'Super Admin',
-          timestamp: new Date(Date.now() - 7200000).toISOString(),
-          details: { suspendedUserId: 'user-789', reason: 'Policy violation' },
-          ipAddress: '192.168.1.101',
-          userAgent: 'Mozilla/5.0...',
-        },
-        {
-          id: '4',
-          action: 'PAYMENT_PROCESSED',
-          resource: 'Billing',
-          userId: 'system',
-          userName: 'System',
-          timestamp: new Date(Date.now() - 10800000).toISOString(),
-          details: { amount: 299, companyId: 'comp-123', status: 'SUCCESS' },
-          ipAddress: 'system',
-          userAgent: 'system',
-        },
-        {
-          id: '5',
-          action: 'SETTINGS_UPDATED',
-          resource: 'PlatformSettings',
-          userId: 'admin-456',
-          userName: 'Super Admin',
-          timestamp: new Date(Date.now() - 14400000).toISOString(),
-          details: { setting: 'maintenance_mode', oldValue: false, newValue: true },
-          ipAddress: '192.168.1.101',
-          userAgent: 'Mozilla/5.0...',
-        },
-      ];
-      setAuditLogs(mockLogs);
+      const data = await superAdminService.getAuditLogs({
+        page: 1,
+        limit: 50,
+        action: selectedFilter !== 'ALL' ? selectedFilter : undefined,
+      });
+      
+      // Transform backend data to frontend format
+      const logs: AuditLog[] = (data.logs || []).map((log: any) => ({
+        id: log.id,
+        action: log.action,
+        resource: log.resource,
+        userId: log.userId || 'system',
+        userName: log.userId ? 'User' : 'System', // Could fetch user name if needed
+        timestamp: log.timestamp,
+        details: log.newValues || log.oldValues || {},
+        ipAddress: log.ipAddress || 'N/A',
+        userAgent: log.userAgent || 'N/A',
+      }));
+      
+      setAuditLogs(logs);
     } catch (error) {
       console.error('Error loading audit logs:', error);
+      setAuditLogs([]);
     } finally {
       setLoading(false);
     }

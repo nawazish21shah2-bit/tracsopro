@@ -1,6 +1,7 @@
 import express from 'express';
 import SuperAdminService from '../services/superAdminService';
 import { authenticateToken, requireSuperAdmin } from '../middleware/auth';
+import prisma from '../config/database';
 
 const router = express.Router();
 
@@ -46,12 +47,56 @@ router.get('/companies', async (req, res) => {
 });
 
 /**
+ * GET /api/super-admin/companies/:id
+ * Get a single security company by ID
+ */
+router.get('/companies/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const company = await prisma.securityCompany.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            users: true,
+            guards: true,
+            clients: true,
+            sites: true
+          }
+        }
+      }
+    });
+    
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+    
+    res.json(company);
+  } catch (error) {
+    console.error('Error getting security company:', error);
+    res.status(500).json({ error: 'Failed to get security company' });
+  }
+});
+
+/**
  * POST /api/super-admin/companies
  * Create a new security company
  */
 router.post('/companies', async (req, res) => {
   try {
     const company = await SuperAdminService.createSecurityCompany(req.body);
+    
+    // Log the action
+    await SuperAdminService.logAction({
+      userId: req.userId,
+      action: 'CREATE_COMPANY',
+      resource: 'SecurityCompany',
+      resourceId: company.id,
+      newValues: company,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
+    
     res.status(201).json(company);
   } catch (error) {
     console.error('Error creating security company:', error);
@@ -66,7 +111,26 @@ router.post('/companies', async (req, res) => {
 router.put('/companies/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    
+    // Get old company data for logging
+    const oldCompany = await prisma.securityCompany.findUnique({
+      where: { id }
+    });
+    
     const company = await SuperAdminService.updateSecurityCompany(id, req.body);
+    
+    // Log the action
+    await SuperAdminService.logAction({
+      userId: req.userId,
+      action: 'UPDATE_COMPANY',
+      resource: 'SecurityCompany',
+      resourceId: id,
+      oldValues: oldCompany,
+      newValues: company,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
+    
     res.json(company);
   } catch (error) {
     console.error('Error updating security company:', error);
@@ -84,6 +148,18 @@ router.patch('/companies/:id/status', async (req, res) => {
     const { isActive } = req.body;
     
     const company = await SuperAdminService.toggleCompanyStatus(id, isActive);
+    
+    // Log the action
+    await SuperAdminService.logAction({
+      userId: req.userId,
+      action: isActive ? 'ACTIVATE_COMPANY' : 'SUSPEND_COMPANY',
+      resource: 'SecurityCompany',
+      resourceId: id,
+      newValues: { isActive, subscriptionStatus: company.subscriptionStatus },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
+    
     res.json(company);
   } catch (error) {
     console.error('Error toggling company status:', error);
@@ -171,6 +247,17 @@ router.get('/settings', async (req, res) => {
 router.put('/settings', async (req, res) => {
   try {
     const result = await SuperAdminService.updatePlatformSettings(req.body);
+    
+    // Log the action
+    await SuperAdminService.logAction({
+      userId: req.userId,
+      action: 'UPDATE_PLATFORM_SETTINGS',
+      resource: 'PlatformSettings',
+      newValues: req.body,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
+    
     res.json(result);
   } catch (error) {
     console.error('Error updating platform settings:', error);

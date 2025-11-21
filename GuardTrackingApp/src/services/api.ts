@@ -46,6 +46,27 @@ class ApiService {
     this.setupInterceptors();
   }
 
+  // Public API methods for direct use
+  async get(url: string, config?: any): Promise<AxiosResponse> {
+    return this.api.get(url, config);
+  }
+
+  async post(url: string, data?: any, config?: any): Promise<AxiosResponse> {
+    return this.api.post(url, data, config);
+  }
+
+  async put(url: string, data?: any, config?: any): Promise<AxiosResponse> {
+    return this.api.put(url, data, config);
+  }
+
+  async patch(url: string, data?: any, config?: any): Promise<AxiosResponse> {
+    return this.api.patch(url, data, config);
+  }
+
+  async delete(url: string, config?: any): Promise<AxiosResponse> {
+    return this.api.delete(url, config);
+  }
+
   private setupInterceptors() {
     // Request interceptor to add auth token and logging
     this.api.interceptors.request.use(

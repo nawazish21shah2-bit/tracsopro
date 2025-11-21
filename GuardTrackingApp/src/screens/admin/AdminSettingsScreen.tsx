@@ -4,17 +4,20 @@
 
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
-import { SettingsIcon, UserIcon, NotificationIcon } from '../../components/ui/AppIcons';
+import { SettingsIcon, UserIcon, NotificationIcon, DollarIcon } from '../../components/ui/AppIcons';
 import { useDispatch } from 'react-redux';
 import type { AppDispatch } from '../../store';
 import { logoutUser } from '../../store/slices/authSlice';
 
-const AdminSettingsScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+const AdminSettingsScreen: React.FC<{ navigation?: any }> = ({ navigation: propNavigation }) => {
   const dispatch = useDispatch<AppDispatch>();
+  const navigation = useNavigation() || propNavigation;
 
   const settingsOptions = [
     { id: 'profile', title: 'Admin Profile', subtitle: 'Manage admin account', icon: UserIcon },
+    { id: 'subscription', title: 'Subscription & Billing', subtitle: 'Manage platform subscription', icon: DollarIcon },
     { id: 'notifications', title: 'Notifications', subtitle: 'Configure alerts', icon: NotificationIcon },
     { id: 'system', title: 'System Settings', subtitle: 'App configuration', icon: SettingsIcon },
   ];
@@ -55,7 +58,15 @@ const AdminSettingsScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 
       <ScrollView style={styles.content}>
         {settingsOptions.map((option) => (
-          <TouchableOpacity key={option.id} style={styles.settingItem}>
+          <TouchableOpacity 
+            key={option.id} 
+            style={styles.settingItem}
+            onPress={() => {
+              if (option.id === 'subscription') {
+                navigation.navigate('AdminSubscription' as never);
+              }
+            }}
+          >
             <option.icon size={24} color={COLORS.primary} />
             <View style={styles.settingContent}>
               <Text style={styles.settingTitle}>{option.title}</Text>

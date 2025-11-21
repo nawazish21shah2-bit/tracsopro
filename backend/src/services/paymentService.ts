@@ -558,21 +558,39 @@ export class PaymentService {
       plans: [
         {
           key: 'BASIC',
-          name: 'Basic',
-          monthly: { priceId: process.env.STRIPE_PRICE_BASIC_MONTHLY || '', amount: 30 },
-          yearly: { priceId: process.env.STRIPE_PRICE_BASIC_YEARLY || '', amount: 300 },
+          name: 'Basic Plan',
+          monthly: { 
+            priceId: process.env.STRIPE_PRICE_BASIC_MONTHLY || '', 
+            amount: 4900 // $49.00 in cents
+          },
+          yearly: { 
+            priceId: process.env.STRIPE_PRICE_BASIC_YEARLY || '', 
+            amount: 49000 // $490.00 in cents (save 17%)
+          },
         },
         {
           key: 'PROFESSIONAL',
-          name: 'Professional',
-          monthly: { priceId: process.env.STRIPE_PRICE_PROF_MONTHLY || '', amount: 100 },
-          yearly: { priceId: process.env.STRIPE_PRICE_PROF_YEARLY || '', amount: 1000 },
+          name: 'Professional Plan',
+          monthly: { 
+            priceId: process.env.STRIPE_PRICE_PROF_MONTHLY || '', 
+            amount: 14900 // $149.00 in cents
+          },
+          yearly: { 
+            priceId: process.env.STRIPE_PRICE_PROF_YEARLY || '', 
+            amount: 149000 // $1,490.00 in cents (save 17%)
+          },
         },
         {
           key: 'ENTERPRISE',
-          name: 'Enterprise',
-          monthly: { priceId: process.env.STRIPE_PRICE_ENTERPRISE_MONTHLY || '', amount: 300 },
-          yearly: { priceId: process.env.STRIPE_PRICE_ENTERPRISE_YEARLY || '', amount: 3000 },
+          name: 'Enterprise Plan',
+          monthly: { 
+            priceId: process.env.STRIPE_PRICE_ENTERPRISE_MONTHLY || '', 
+            amount: 39900 // $399.00 in cents
+          },
+          yearly: { 
+            priceId: process.env.STRIPE_PRICE_ENTERPRISE_YEARLY || '', 
+            amount: 399000 // $3,990.00 in cents (save 17%)
+          },
         },
       ],
     };

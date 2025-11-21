@@ -6,6 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
+import { superAdminService } from '../../services/superAdminService';
 
 interface BillingRecord {
   id: string;
@@ -28,36 +29,23 @@ const BillingManagementScreen: React.FC = () => {
   const loadBillingData = async () => {
     try {
       setLoading(true);
-      // Mock billing data
-      const mockData: BillingRecord[] = [
-        {
-          id: '1',
-          companyName: 'Elite Security Services',
-          amount: 299,
-          status: 'PAID',
-          dueDate: '2024-12-15',
-          plan: 'PROFESSIONAL',
-        },
-        {
-          id: '2',
-          companyName: 'Guardian Protection Co.',
-          amount: 599,
-          status: 'PENDING',
-          dueDate: '2024-12-20',
-          plan: 'ENTERPRISE',
-        },
-        {
-          id: '3',
-          companyName: 'SecureWatch Solutions',
-          amount: 99,
-          status: 'OVERDUE',
-          dueDate: '2024-11-30',
-          plan: 'BASIC',
-        },
-      ];
-      setBillingRecords(mockData);
+      const billing = await superAdminService.getBillingOverview();
+      
+      // Transform backend data to frontend format
+      const records: BillingRecord[] = (billing.recentTransactions || []).map((transaction: any) => ({
+        id: transaction.id,
+        companyName: transaction.securityCompany?.name || 'Unknown Company',
+        amount: transaction.amount || 0,
+        status: transaction.status || 'PENDING',
+        dueDate: transaction.dueDate || transaction.createdAt,
+        plan: transaction.subscriptionPlan || 'BASIC',
+      }));
+      
+      setBillingRecords(records);
     } catch (error) {
       console.error('Error loading billing data:', error);
+      // Fallback to empty array on error
+      setBillingRecords([]);
     } finally {
       setLoading(false);
     }
