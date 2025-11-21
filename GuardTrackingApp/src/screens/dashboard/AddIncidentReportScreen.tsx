@@ -1,5 +1,5 @@
-// Add Incident Report Screen - Pixel Perfect UI
-import React, { useState, useEffect } from 'react';
+// Add Incident Report Screen - Updated UI
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -10,14 +10,18 @@ import {
   Alert,
   Image,
   Platform,
-  StatusBar,
+  Modal,
 } from 'react-native';
-import { useSelector, useDispatch } from 'react-redux';
+import { useSelector } from 'react-redux';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { launchImageLibrary, launchCamera, ImagePickerResponse, MediaType } from 'react-native-image-picker';
-import { RootState, AppDispatch } from '../../store';
-import apiService from '../../services/api';
+import { RootState } from '../../store';
+import { COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
+import SharedHeader from '../../components/ui/SharedHeader';
+import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
+import { LocationIcon, CameraIcon } from '../../components/ui/AppIcons';
+import { CalendarIcon, FileTextIcon } from '../../components/ui/FeatherIcons';
 
 type AddIncidentReportScreenNavigationProp = StackNavigationProp<any, 'AddIncidentReport'>;
 
@@ -30,7 +34,6 @@ interface MediaItem {
 
 const AddIncidentReportScreen: React.FC = () => {
   const navigation = useNavigation<AddIncidentReportScreenNavigationProp>();
-  const dispatch = useDispatch<AppDispatch>();
   const { user, token } = useSelector((state: RootState) => state.auth);
 
   // Form state
@@ -38,6 +41,7 @@ const AddIncidentReportScreen: React.FC = () => {
   const [description, setDescription] = useState('');
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showReportTypeModal, setShowReportTypeModal] = useState(false);
 
   // Current location and date
   const currentLocation = {
@@ -173,27 +177,23 @@ const AddIncidentReportScreen: React.FC = () => {
   };
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <SafeAreaWrapper>
+      <SharedHeader
+        variant="guard"
+        title="Add Incident Report"
+        showLogo={false}
+      />
       
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.backIcon}>←</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Add Incident Report</Text>
-        <View style={styles.headerSpacer} />
-      </View>
-
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.scrollView} 
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Location Card */}
         <View style={styles.locationCard}>
           <View style={styles.locationHeader}>
-            <View style={styles.locationIcon}>
-              <Text style={styles.locationIconText}>📍</Text>
+            <View style={styles.locationIconContainer}>
+              <LocationIcon size={20} color={COLORS.primary} />
             </View>
             <View style={styles.locationInfo}>
               <Text style={styles.locationName}>{currentLocation.name}</Text>
@@ -205,6 +205,9 @@ const AddIncidentReportScreen: React.FC = () => {
           </View>
           
           <View style={styles.dateRow}>
+            <View style={styles.dateIconContainer}>
+              <CalendarIcon size={16} color={COLORS.textSecondary} />
+            </View>
             <Text style={styles.dateLabel}>Date:</Text>
             <Text style={styles.dateValue}>{currentDate}</Text>
           </View>
@@ -213,7 +216,10 @@ const AddIncidentReportScreen: React.FC = () => {
         {/* Report Type Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Report type</Text>
-          <TouchableOpacity style={styles.dropdown}>
+          <TouchableOpacity 
+            style={styles.dropdown}
+            onPress={() => setShowReportTypeModal(true)}
+          >
             <Text style={styles.dropdownText}>{reportType}</Text>
             <Text style={styles.dropdownArrow}>▼</Text>
           </TouchableOpacity>
@@ -242,9 +248,10 @@ const AddIncidentReportScreen: React.FC = () => {
           <TouchableOpacity 
             style={styles.mediaButton}
             onPress={handleTakePicture}
+            activeOpacity={0.7}
           >
             <View style={styles.mediaButtonContent}>
-              <Text style={styles.cameraIcon}>📷</Text>
+              <CameraIcon size={24} color={COLORS.textSecondary} />
               <Text style={styles.mediaButtonText}>Take a Picture/video</Text>
             </View>
           </TouchableOpacity>
@@ -253,9 +260,10 @@ const AddIncidentReportScreen: React.FC = () => {
           <TouchableOpacity 
             style={styles.mediaButton}
             onPress={handleUploadMedia}
+            activeOpacity={0.7}
           >
             <View style={styles.mediaButtonContent}>
-              <Text style={styles.uploadIcon}>🖼️</Text>
+              <FileTextIcon size={24} color={COLORS.textSecondary} />
               <Text style={styles.mediaButtonText}>Upload a picture/video</Text>
             </View>
           </TouchableOpacity>
@@ -290,6 +298,7 @@ const AddIncidentReportScreen: React.FC = () => {
             ]}
             onPress={handleSubmitReport}
             disabled={!description.trim() || isSubmitting}
+            activeOpacity={0.8}
           >
             <Text style={styles.submitButtonText}>
               {isSubmitting ? 'Submitting Report...' : 'Submit Report'}
@@ -298,301 +307,302 @@ const AddIncidentReportScreen: React.FC = () => {
         </View>
       </ScrollView>
 
-      {/* Bottom Navigation */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem}>
-          <Text style={styles.navIcon}>🏠</Text>
-          <Text style={styles.navLabel}>Home</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
-          <Text style={styles.navIcon}>📅</Text>
-          <Text style={styles.navLabel}>My Shifts</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.navItem, styles.navItemActive]}>
-          <Text style={[styles.navIcon, styles.navIconActive]}>📋</Text>
-          <Text style={[styles.navLabel, styles.navLabelActive]}>Reports</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
-          <Text style={styles.navIcon}>💼</Text>
-          <Text style={styles.navLabel}>Jobs</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+      {/* Report Type Modal */}
+      <Modal
+        visible={showReportTypeModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowReportTypeModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Report Type</Text>
+              <TouchableOpacity 
+                onPress={() => setShowReportTypeModal(false)}
+                style={styles.modalCloseButton}
+              >
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScrollView}>
+              {reportTypes.map((type) => (
+                <TouchableOpacity
+                  key={type}
+                  style={[
+                    styles.modalOption,
+                    reportType === type && styles.modalOptionSelected
+                  ]}
+                  onPress={() => {
+                    setReportType(type);
+                    setShowReportTypeModal(false);
+                  }}
+                >
+                  <Text style={[
+                    styles.modalOptionText,
+                    reportType === type && styles.modalOptionTextSelected
+                  ]}>
+                    {type}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaWrapper>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F5F5',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    paddingTop: Platform.OS === 'ios' ? 50 : 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5E5',
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  backIcon: {
-    fontSize: 24,
-    color: '#000000',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#000000',
-  },
-  headerSpacer: {
-    width: 40,
-  },
   scrollView: {
     flex: 1,
+    backgroundColor: COLORS.backgroundSecondary,
+  },
+  scrollContent: {
+    paddingBottom: SPACING.xl * 2,
   },
   locationCard: {
-    backgroundColor: '#FFFFFF',
-    margin: 16,
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
+    backgroundColor: COLORS.backgroundPrimary,
+    margin: SPACING.lg,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
+    ...SHADOWS.small,
   },
   locationHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: SPACING.md,
   },
-  locationIcon: {
+  locationIconContainer: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#E8F4FD',
+    backgroundColor: COLORS.backgroundTertiary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
-  },
-  locationIconText: {
-    fontSize: 18,
+    marginRight: SPACING.md,
   },
   locationInfo: {
     flex: 1,
   },
   locationName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000000',
-    marginBottom: 2,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.xs,
   },
   locationAddress: {
-    fontSize: 13,
-    color: '#666666',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
   },
   statusBadge: {
-    backgroundColor: '#E8F5E8',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: COLORS.success + '20',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderRadius: BORDER_RADIUS.md,
   },
   statusText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#2E7D32',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    color: COLORS.success,
   },
   dateRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 12,
+    paddingTop: SPACING.md,
     borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
+    borderTopColor: COLORS.borderLight,
+  },
+  dateIconContainer: {
+    marginRight: SPACING.sm,
   },
   dateLabel: {
-    fontSize: 14,
-    color: '#666666',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
+    marginRight: SPACING.sm,
   },
   dateValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#000000',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    color: COLORS.textPrimary,
+    flex: 1,
+    textAlign: 'right',
   },
   section: {
-    backgroundColor: '#FFFFFF',
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+    backgroundColor: COLORS.backgroundPrimary,
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.lg,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
+    ...SHADOWS.small,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000000',
-    marginBottom: 12,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.md,
   },
   dropdown: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    backgroundColor: COLORS.backgroundSecondary,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
     borderWidth: 1,
-    borderColor: '#E5E5E5',
+    borderColor: COLORS.borderLight,
   },
   dropdownText: {
-    fontSize: 15,
-    color: '#000000',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textPrimary,
+    flex: 1,
   },
   dropdownArrow: {
-    fontSize: 12,
-    color: '#666666',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textSecondary,
+    marginLeft: SPACING.sm,
   },
   descriptionInput: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 8,
-    padding: 16,
-    fontSize: 15,
-    color: '#000000',
+    backgroundColor: COLORS.backgroundSecondary,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.lg,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textPrimary,
     borderWidth: 1,
-    borderColor: '#E5E5E5',
+    borderColor: COLORS.borderLight,
     minHeight: 120,
+    textAlignVertical: 'top',
   },
   mediaButton: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 8,
+    backgroundColor: COLORS.backgroundSecondary,
+    borderRadius: BORDER_RADIUS.md,
     borderWidth: 2,
-    borderColor: '#E5E5E5',
+    borderColor: COLORS.borderLight,
     borderStyle: 'dashed',
-    marginBottom: 12,
-    paddingVertical: 20,
+    marginBottom: SPACING.md,
+    paddingVertical: SPACING.xl,
   },
   mediaButtonContent: {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cameraIcon: {
-    fontSize: 24,
-    marginBottom: 8,
-  },
-  uploadIcon: {
-    fontSize: 24,
-    marginBottom: 8,
-  },
   mediaButtonText: {
-    fontSize: 15,
-    color: '#666666',
-    fontWeight: '500',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textSecondary,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    marginTop: SPACING.sm,
   },
   mediaPreview: {
-    marginTop: 16,
+    marginTop: SPACING.lg,
   },
   mediaPreviewTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#000000',
-    marginBottom: 12,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.md,
   },
   mediaItem: {
     position: 'relative',
-    marginRight: 12,
+    marginRight: SPACING.md,
   },
   mediaImage: {
     width: 80,
     height: 80,
-    borderRadius: 8,
+    borderRadius: BORDER_RADIUS.md,
   },
   removeMediaButton: {
     position: 'absolute',
-    top: -8,
-    right: -8,
+    top: -SPACING.sm,
+    right: -SPACING.sm,
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#FF4444',
+    backgroundColor: COLORS.error,
     alignItems: 'center',
     justifyContent: 'center',
+    ...SHADOWS.small,
   },
   removeMediaText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: COLORS.textInverse,
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
   },
   submitSection: {
-    paddingHorizontal: 16,
-    paddingBottom: 100,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.lg,
   },
   submitButton: {
-    backgroundColor: '#1C6CA9',
-    borderRadius: 8,
-    paddingVertical: 16,
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: SPACING.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.small,
+  },
+  submitButtonDisabled: {
+    backgroundColor: COLORS.textTertiary,
+  },
+  submitButtonText: {
+    color: COLORS.textInverse,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: COLORS.backgroundPrimary,
+    borderTopLeftRadius: BORDER_RADIUS.xl,
+    borderTopRightRadius: BORDER_RADIUS.xl,
+    maxHeight: '70%',
+    ...SHADOWS.large,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: SPACING.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
+  },
+  modalTitle: {
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+  },
+  modalCloseButton: {
+    width: 32,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  submitButtonDisabled: {
-    backgroundColor: '#B0BEC5',
+  modalCloseText: {
+    fontSize: TYPOGRAPHY.fontSize.xl,
+    color: COLORS.textSecondary,
   },
-  submitButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+  modalScrollView: {
+    maxHeight: 400,
   },
-  bottomNav: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#FFFFFF',
-    flexDirection: 'row',
-    paddingVertical: 8,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 8,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E5E5',
+  modalOption: {
+    padding: SPACING.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
   },
-  navItem: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 8,
+  modalOptionSelected: {
+    backgroundColor: COLORS.backgroundTertiary,
   },
-  navItemActive: {
-    // Active state styling
+  modalOptionText: {
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textPrimary,
   },
-  navIcon: {
-    fontSize: 20,
-    marginBottom: 4,
-  },
-  navIconActive: {
-    // Active icon styling
-  },
-  navLabel: {
-    fontSize: 12,
-    color: '#666666',
-  },
-  navLabelActive: {
-    color: '#1C6CA9',
-    fontWeight: '600',
+  modalOptionTextSelected: {
+    color: COLORS.primary,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
 });
 

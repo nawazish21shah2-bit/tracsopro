@@ -7,6 +7,10 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import SuperAdminService from '../../services/superAdminService';
+import SharedHeader from '../../components/ui/SharedHeader';
+import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
+import SuperAdminProfileDrawer from '../../components/superAdmin/SuperAdminProfileDrawer';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 
 const { width } = Dimensions.get('window');
 
@@ -34,6 +38,7 @@ interface AnalyticsData {
 }
 
 const PlatformAnalyticsScreen: React.FC = () => {
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState('30d');
@@ -134,22 +139,33 @@ const PlatformAnalyticsScreen: React.FC = () => {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaWrapper>
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Loading Analytics...</Text>
         </View>
-      </SafeAreaView>
+      </SafeAreaWrapper>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaWrapper>
+      <SharedHeader
+        variant="superAdmin"
+        title="Platform Analytics"
+        onNotificationPress={() => {
+          // Handle notification press
+        }}
+        profileDrawer={
+          <SuperAdminProfileDrawer
+            visible={isDrawerVisible}
+            onClose={closeDrawer}
+            onNavigateToAnalytics={() => {
+              closeDrawer();
+            }}
+          />
+        }
+      />
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Platform Analytics</Text>
-          <Text style={styles.subtitle}>Performance metrics and insights</Text>
-        </View>
-
         {renderPeriodSelector()}
 
         {analytics && (
@@ -171,7 +187,7 @@ const PlatformAnalyticsScreen: React.FC = () => {
           <Text style={styles.chartSubtitle}>Chart visualization coming soon</Text>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </SafeAreaWrapper>
   );
 };
 

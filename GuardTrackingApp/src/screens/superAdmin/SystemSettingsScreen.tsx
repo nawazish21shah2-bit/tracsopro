@@ -10,6 +10,10 @@ import { useNavigation } from '@react-navigation/native';
 import { useDispatch } from 'react-redux';
 import type { AppDispatch } from '../../store';
 import { logoutUser } from '../../store/slices/authSlice';
+import SharedHeader from '../../components/ui/SharedHeader';
+import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
+import SuperAdminProfileDrawer from '../../components/superAdmin/SuperAdminProfileDrawer';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 
 interface SettingItem {
   id: string;
@@ -23,6 +27,7 @@ interface SettingItem {
 const SystemSettingsScreen: React.FC = () => {
   const navigation = useNavigation();
   const dispatch = useDispatch<AppDispatch>();
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
   const [settings, setSettings] = useState({
     emailNotifications: true,
     pushNotifications: true,
@@ -167,18 +172,29 @@ const SystemSettingsScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>System Settings</Text>
-        <Text style={styles.subtitle}>Configure platform settings and preferences</Text>
-      </View>
-
+    <SafeAreaWrapper>
+      <SharedHeader
+        variant="superAdmin"
+        title="System Settings"
+        onNotificationPress={() => {
+          // Handle notification press
+        }}
+        profileDrawer={
+          <SuperAdminProfileDrawer
+            visible={isDrawerVisible}
+            onClose={closeDrawer}
+            onNavigateToSystemSettings={() => {
+              closeDrawer();
+            }}
+          />
+        }
+      />
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.settingsContainer}>
           {settingsData.map(renderSettingItem)}
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </SafeAreaWrapper>
   );
 };
 

@@ -267,36 +267,149 @@ export class ClientService {
   }
 
   async getClientGuards(clientId: string, page: number = 1, limit: number = 50) {
-    // Mock data for client guards - in real implementation, this would fetch guards assigned to client
-    const guards = [
-      {
-        id: '1',
-        name: 'Mark Husdon',
-        pastJobs: 13,
-        rating: 4.5,
-        availability: 'Available today',
-        status: 'Active',
-      },
-      {
-        id: '2',
-        name: 'John Smith',
-        pastJobs: 8,
-        rating: 4.2,
-        availability: 'Available today',
-        status: 'Active',
-      },
-    ];
+    try {
+      const skip = (page - 1) * limit;
+      
+      // Get today's date range
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
 
-    logger.info(`Guards list requested for client: ${clientId}`);
-    return {
-      guards,
-      pagination: {
-        page,
-        limit,
-        total: guards.length,
-        pages: Math.ceil(guards.length / limit),
-      },
-    };
+      // Fetch today's shifts for this client
+      const [shifts, total] = await Promise.all([
+        prisma.shift.findMany({
+          where: {
+            clientId,
+            scheduledStartTime: {
+              gte: today,
+              lt: tomorrow,
+            },
+          },
+          include: {
+            guard: {
+              select: {
+                id: true,
+                profilePictureUrl: true,
+                user: {
+                  select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                  },
+                },
+                trackingRecords: {
+                  where: {
+                    timestamp: {
+                      gte: new Date(Date.now() - 15 * 60 * 1000), // Last 15 minutes
+                    },
+                  },
+                  orderBy: {
+                    timestamp: 'desc',
+                  },
+                  take: 1,
+                },
+              },
+            },
+            site: {
+              select: {
+                id: true,
+                name: true,
+                address: true,
+                latitude: true,
+                longitude: true,
+              },
+            },
+          },
+          orderBy: {
+            scheduledStartTime: 'asc',
+          },
+          skip,
+          take: limit,
+        }),
+        prisma.shift.count({
+          where: {
+            clientId,
+            scheduledStartTime: {
+              gte: today,
+              lt: tomorrow,
+            },
+          },
+        }),
+      ]);
+
+      // Transform shifts to guard data format
+      const guards = shifts.map((shift) => {
+        const guardUser = shift.guard.user;
+        const guardName = `${guardUser.firstName} ${guardUser.lastName}`;
+        
+        // Format shift time
+        const formatTime = (date: Date) => {
+          const hours = date.getHours();
+          const minutes = date.getMinutes();
+          const ampm = hours >= 12 ? 'Pm' : 'Am';
+          const displayHours = hours % 12 || 12;
+          return `${displayHours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+        };
+
+        const shiftTime = `${formatTime(shift.scheduledStartTime)} - ${formatTime(shift.scheduledEndTime)}`;
+
+        // Map shift status to guard status
+        let status: 'Active' | 'Upcoming' | 'Missed' | 'Completed' = 'Upcoming';
+        if (shift.status === 'IN_PROGRESS') {
+          status = 'Active';
+        } else if (shift.status === 'COMPLETED') {
+          status = 'Completed';
+        } else if (shift.status === 'NO_SHOW') {
+          status = 'Missed';
+        } else if (shift.status === 'SCHEDULED') {
+          const now = new Date();
+          if (shift.scheduledStartTime <= now && shift.scheduledEndTime >= now) {
+            status = 'Active';
+          } else if (shift.scheduledStartTime > now) {
+            status = 'Upcoming';
+          }
+        }
+
+        // Get guard's latest location if active
+        const latestLocation = shift.guard.trackingRecords?.[0];
+        const guardLatitude = latestLocation?.latitude;
+        const guardLongitude = latestLocation?.longitude;
+
+        return {
+          id: shift.guard.id,
+          name: guardName,
+          avatar: shift.guard.profilePictureUrl || undefined,
+          site: shift.site?.name || shift.locationName || 'N/A',
+          siteAddress: shift.site?.address || shift.locationAddress || 'N/A',
+          siteLatitude: shift.site?.latitude || undefined,
+          siteLongitude: shift.site?.longitude || undefined,
+          guardLatitude: status === 'Active' && guardLatitude ? guardLatitude : undefined,
+          guardLongitude: status === 'Active' && guardLongitude ? guardLongitude : undefined,
+          shiftTime,
+          status,
+          checkInTime: shift.actualStartTime ? shift.actualStartTime.toISOString() : undefined,
+          checkOutTime: shift.actualEndTime ? shift.actualEndTime.toISOString() : undefined,
+          description: shift.description || undefined,
+          startTime: shift.scheduledStartTime.toISOString(),
+          endTime: shift.scheduledEndTime.toISOString(),
+        };
+      });
+
+      logger.info(`Guards list requested for client: ${clientId}, found ${guards.length} shifts`);
+      return {
+        guards,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit),
+        },
+      };
+    } catch (error) {
+      logger.error('Error fetching client guards:', error);
+      throw error;
+    }
   }
 
   async getClientReports(clientId: string, page: number = 1, limit: number = 50) {

@@ -10,6 +10,8 @@ import { LocationIcon, UserIcon, SettingsIcon } from '../../components/ui/AppIco
 import apiService from '../../services/api';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
+import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 
 interface Site {
   id: string;
@@ -20,6 +22,7 @@ interface Site {
 }
 
 const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
   const [sites, setSites] = useState<Site[]>([]);
   const [loading, setLoading] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -246,22 +249,39 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     <SafeAreaWrapper>
       <SharedHeader
         variant="admin"
-        adminName="Site Management"
-        rightIcon={
-          <TouchableOpacity style={styles.addButton} onPress={() => setShowCreateModal(true)}>
-            <Text style={styles.addButtonText}>+ Add Site</Text>
-          </TouchableOpacity>
+        title="Site Management"
+        onNotificationPress={() => {
+          // Handle notification press
+        }}
+        profileDrawer={
+          <AdminProfileDrawer
+            visible={isDrawerVisible}
+            onClose={closeDrawer}
+            onNavigateToSiteManagement={() => {
+              closeDrawer();
+            }}
+          />
         }
       />
 
-      <FlatList
-        data={sites}
-        renderItem={renderSiteItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContainer}
-        refreshing={loading}
-        onRefresh={loadSites}
-      />
+      <View style={styles.contentWrapper}>
+        <FlatList
+          data={sites}
+          renderItem={renderSiteItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContainer}
+          refreshing={loading}
+          onRefresh={loadSites}
+        />
+      </View>
+
+      {/* Sticky Action Button */}
+      <TouchableOpacity 
+        style={styles.stickyAddButton}
+        onPress={() => setShowCreateModal(true)}
+      >
+        <Text style={styles.stickyAddButtonText}>+ Add Site</Text>
+      </TouchableOpacity>
 
       <Modal
         visible={showCreateModal}

@@ -16,7 +16,9 @@ import { RootState, AppDispatch } from '../../store';
 import { UserIcon, LocationIcon, ReportsIcon, EmergencyIcon } from '../../components/ui/AppIcons';
 import StatsCard from '../../components/ui/StatsCard';
 import GuardCard from '../../components/client/GuardCard';
+import ShiftsTableRow from '../../components/client/ShiftsTableRow';
 import InteractiveMapView from '../../components/client/InteractiveMapView';
+import ShiftCard from '../../components/client/ShiftCard';
 import { fetchDashboardStats, fetchMyGuards } from '../../store/slices/clientSlice';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { useNavigation } from '@react-navigation/native';
@@ -156,37 +158,116 @@ const ClientDashboard: React.FC = () => {
           </TouchableOpacity>
         </View>
 
+        {/* Today's Shifts - Shift Cards */}
+        <View style={styles.shiftsSection}>
+          <Text style={styles.sectionTitle}>Today's Shifts</Text>
+          {guards && guards.length > 0 ? (
+            guards.map((guard) => {
+              // Transform guard data to shift card format
+              const shiftCardData = {
+                id: guard.id,
+                guardId: guard.id,
+                guardName: guard.name,
+                guardAvatar: guard.avatar,
+                siteName: guard.site || 'Unknown Site',
+                siteAddress: guard.siteAddress || guard.site || 'Address not available',
+                siteLatitude: guard.siteLatitude,
+                siteLongitude: guard.siteLongitude,
+                guardLatitude: guard.guardLatitude,
+                guardLongitude: guard.guardLongitude,
+                shiftTime: guard.shiftTime || '--:--',
+                startTime: guard.startTime || guard.shiftTime?.split(' - ')[0] || '08:00 Am',
+                endTime: guard.endTime || guard.shiftTime?.split(' - ')[1] || '07:00 Pm',
+                status: guard.status,
+                checkInTime: guard.checkInTime,
+                checkOutTime: guard.checkOutTime,
+                description: guard.description || 'Make sure to check the parking lot for illegal parkings.',
+                breakTime: '02:00 pm - 03:00 pm',
+                shiftStartIn: '10 min',
+              };
+
+              return (
+                <ShiftCard
+                  key={guard.id}
+                  shift={shiftCardData}
+                  onPress={() => handleGuardPress(guard.id)}
+                  onViewLocation={() => {
+                    // Navigate to full map view or show location details
+                    console.log('View location for:', guard.site);
+                    // TODO: Navigate to full map view when route is available
+                  }}
+                  onMapPress={() => {
+                    // Open full screen map view
+                    console.log('Map pressed for shift:', guard.id);
+                    // TODO: Navigate to full map view when route is available
+                  }}
+                  onGuardPress={(guardId) => {
+                    handleGuardPress(guardId);
+                  }}
+                  showMap={true}
+                  mapHeight={200}
+                />
+              );
+            })
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No shifts available for today</Text>
+            </View>
+          )}
+        </View>
+
         {/* Interactive Map Section */}
         <View style={styles.mapContainer}>
           <Text style={styles.sectionTitle}>Live Guards Location</Text>
           <InteractiveMapView 
             height={200}
             showControls={true}
-            onGuardSelect={(guardId: string) => console.log('Guard selected:', guardId)}
+            onGuardSelect={(guardId: string) => {
+              handleGuardPress(guardId);
+            }}
           />
         </View>
 
-        {/* Today's Shifts Summary */}
+        {/* Today's Shifts Summary Table */}
         <View style={styles.shiftsSection}>
           <Text style={styles.sectionTitle}>Todays Shifts Summary</Text>
-          <View style={styles.shiftsTable}>
-            <View style={styles.tableHeader}>
-              <Text style={[styles.tableHeaderText, { flex: 1 }]}>GUARD</Text>
-              <Text style={[styles.tableHeaderText, { flex: 1 }]}>SITE</Text>
-              <Text style={[styles.tableHeaderText, { flex: 1 }]}>SHIFT TIME</Text>
-              <Text style={[styles.tableHeaderText, { flex: 0.8 }]}>STATUS</Text>
-            </View>
-            {guards && guards.length > 0 ? guards.map((guard) => (
-              <GuardCard
-                key={guard.id}
-                guard={guard}
-                onPress={() => handleGuardPress(guard.id)}
-              />
-            )) : (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyStateText}>No guards data available</Text>
+          <View style={styles.tableContainer}>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={true}
+              contentContainerStyle={styles.tableScrollContent}
+            >
+              <View style={styles.shiftsTable}>
+                <View style={styles.tableHeader}>
+                  <Text style={[styles.tableHeaderText, styles.guardHeader]}>GUARD</Text>
+                  <Text style={[styles.tableHeaderText, styles.siteHeader]}>SITE</Text>
+                  <Text style={[styles.tableHeaderText, styles.shiftTimeHeader]}>SHIFT TIME</Text>
+                  <Text style={[styles.tableHeaderText, styles.statusHeader]}>STATUS</Text>
+                  <Text style={[styles.tableHeaderText, styles.checkInHeader]}>CHECK IN</Text>
+                  <Text style={[styles.tableHeaderText, styles.checkOutHeader]}>CHECK OUT</Text>
+                </View>
+                {guards && guards.length > 0 ? guards.map((guard) => (
+                  <ShiftsTableRow
+                    key={guard.id}
+                    guard={{
+                      id: guard.id,
+                      name: guard.name,
+                      avatar: guard.avatar,
+                      site: guard.site,
+                      shiftTime: guard.shiftTime,
+                      status: guard.status,
+                      checkInTime: guard.checkInTime,
+                      checkOutTime: guard.checkOutTime,
+                    }}
+                    onPress={() => handleGuardPress(guard.id)}
+                  />
+                )) : (
+                  <View style={styles.emptyState}>
+                    <Text style={styles.emptyStateText}>No guards data available</Text>
+                  </View>
+                )}
               </View>
-            )}
+            </ScrollView>
           </View>
         </View>
       </ScrollView>
@@ -260,24 +341,61 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 20,
   },
-  shiftsTable: {
+  tableContainer: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     overflow: 'hidden',
+    // Drop shadow: X 0, Y 4, Blur 4, Spread 0, Color #000000 at 6% opacity
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  tableScrollContent: {
+    minWidth: '100%',
+  },
+  shiftsTable: {
+    minWidth: 700, // Minimum width to ensure all columns are visible
   },
   tableHeader: {
     flexDirection: 'row',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#D7EAF9',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    minHeight: 31,
   },
   tableHeaderText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#666666',
+    color: '#323232',
     textAlign: 'left',
+  },
+  guardHeader: {
+    minWidth: 140,
+    flex: 1.2,
+  },
+  siteHeader: {
+    minWidth: 120,
+    flex: 1,
+  },
+  shiftTimeHeader: {
+    minWidth: 150,
+    flex: 1.2,
+  },
+  statusHeader: {
+    minWidth: 100,
+    flex: 0.9,
+  },
+  checkInHeader: {
+    minWidth: 100,
+    flex: 0.9,
+  },
+  checkOutHeader: {
+    minWidth: 100,
+    flex: 0.9,
   },
   emptyState: {
     padding: 20,

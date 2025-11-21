@@ -213,7 +213,7 @@ const ClientSignupScreen: React.FC = () => {
 
           {/* Phone Number */}
           <View style={styles.inputContainer}>
-            <Text style={styles.phoneLabel}>Phone Number</Text>
+            {/* <Text style={styles.phoneLabel}>Phone Number</Text> */}
             <View style={[styles.phoneInputWrapper, errors.phoneNumber && styles.inputError]}>
               <View style={styles.countryCodeContainer}>
                 <Text style={styles.flagText}>🇺🇸</Text>

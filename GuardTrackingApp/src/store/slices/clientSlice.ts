@@ -14,9 +14,18 @@ export interface GuardData {
   name: string;
   avatar?: string;
   site?: string;
+  siteAddress?: string;
+  siteLatitude?: number;
+  siteLongitude?: number;
+  guardLatitude?: number;
+  guardLongitude?: number;
   shiftTime?: string;
   status: 'Active' | 'Upcoming' | 'Missed' | 'Completed';
   checkInTime?: string;
+  checkOutTime?: string;
+  description?: string;
+  startTime?: string;
+  endTime?: string;
   pastJobs?: number;
   rating?: number;
   availability?: string;

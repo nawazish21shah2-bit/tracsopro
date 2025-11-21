@@ -225,7 +225,7 @@ const GuardHomeScreen: React.FC = () => {
 
   const renderStatsSection = () => (
     <View style={styles.statsSection}>
-      <Text style={styles.sectionTitle}>This Month Shifts</Text>
+      {/* <Text style={styles.sectionTitle}>This Month Shifts</Text> */}
       <AppStatGrid style={styles.statsGrid}>
         <StatsCard
           label="Completed Shifts"
@@ -265,7 +265,9 @@ const GuardHomeScreen: React.FC = () => {
       <AppCard style={styles.shiftCard}>
         <View style={styles.shiftHeader}>
           <View style={styles.locationInfo}>
+            <View style={styles.locationIconContainer}>
             <MapPinIcon size={20} color={COLORS.primary} style={styles.locationIcon} />
+            </View>
             <View>
               <Text style={styles.locationName}>{todayShift.location}</Text>
               <Text style={styles.locationAddress}>{todayShift.address}</Text>
@@ -349,6 +351,12 @@ const GuardHomeScreen: React.FC = () => {
   // Show error state if there's an error and no data
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
 
+  // Check if it's a network error
+  const isNetworkError = error?.toLowerCase().includes('network') || 
+                         error?.toLowerCase().includes('connection') ||
+                         error?.toLowerCase().includes('econnrefused') ||
+                         error?.toLowerCase().includes('enotfound');
+
   if (error && !activeShift && !upcomingShifts?.length) {
     return (
       <AppScreen>
@@ -360,31 +368,94 @@ const GuardHomeScreen: React.FC = () => {
             <GuardProfileDrawer
               visible={isDrawerVisible}
               onClose={closeDrawer}
+              onNavigateToProfile={() => {
+                closeDrawer();
+                // Navigate to profile/settings when available
+              }}
+              onNavigateToPastJobs={() => {
+                closeDrawer();
+                // Navigation handled in drawer
+              }}
+              onNavigateToAssignedSites={() => {
+                closeDrawer();
+                // Navigation handled in drawer
+              }}
+              onNavigateToAttendance={() => {
+                closeDrawer();
+                // Navigation handled in drawer
+              }}
+              onNavigateToEarnings={() => {
+                closeDrawer();
+                // Navigation handled in drawer
+              }}
+              onNavigateToNotifications={() => {
+                closeDrawer();
+                // Navigate to notifications/settings
+              }}
+              onNavigateToSupport={() => {
+                closeDrawer();
+                // Navigation handled in drawer
+              }}
             />
           }
         />
-        <ErrorState
-          error={error}
-          onRetry={initializeData}
-          style={styles.errorContainer}
-        />
+        {isNetworkError ? (
+          <NetworkError
+            onRetry={initializeData}
+            style={styles.errorContainer}
+          />
+        ) : (
+          <ErrorState
+            error={error}
+            onRetry={initializeData}
+            style={styles.errorContainer}
+          />
+        )}
       </AppScreen>
     );
   }
 
   return (
     <AppScreen>
-      <SharedHeader
-        variant="guard"
-        showLogo={true}
-        onNotificationPress={handleNotificationPress}
-        profileDrawer={
-          <GuardProfileDrawer
-            visible={isDrawerVisible}
-            onClose={closeDrawer}
-          />
-        }
-      />
+        <SharedHeader
+          variant="guard"
+          showLogo={true}
+          onNotificationPress={handleNotificationPress}
+          profileDrawer={
+            <GuardProfileDrawer
+              visible={isDrawerVisible}
+              onClose={closeDrawer}
+              onNavigateToProfile={() => {
+                closeDrawer();
+                // Navigate to profile/settings when available
+              }}
+              onNavigateToPastJobs={() => {
+                closeDrawer();
+                // Navigation handled in drawer
+              }}
+              onNavigateToAssignedSites={() => {
+                closeDrawer();
+                // Navigation handled in drawer
+              }}
+              onNavigateToAttendance={() => {
+                closeDrawer();
+                // Navigation handled in drawer
+              }}
+              onNavigateToEarnings={() => {
+                closeDrawer();
+                // Navigation handled in drawer
+              }}
+              onNavigateToNotifications={() => {
+                closeDrawer();
+                // Navigate to notifications/settings
+              }}
+              onNavigateToSupport={() => {
+                closeDrawer();
+                // Navigation handled in drawer
+              }}
+            />
+          }
+        />
       
       {/* Loading overlay for initial load */}
       <LoadingOverlay
@@ -512,10 +583,18 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     flex: 1,
   },
+  locationIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#DBEAFE',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: SPACING.sm,
+    marginTop: 4,
+  },
   locationIcon: {
     fontSize: TYPOGRAPHY.fontSize.md,
-    marginRight: SPACING.sm,
-    marginTop: 2,
   },
   locationName: {
     fontSize: TYPOGRAPHY.fontSize.md,

@@ -6,18 +6,41 @@ import {
 } from '../types/shift.types';
 import { securityManager } from '../utils/security';
 
-const API_URL = 'http://localhost:3000/api';
+import { Platform } from 'react-native';
+
+const API_URL = __DEV__
+  ? Platform.OS === 'android'
+    ? 'http://10.0.2.2:3000/api'
+    : 'http://localhost:3000/api'
+  : 'https://your-production-api.com/api'; // Replace with your production API URL
 
 // Create axios instance with auth interceptor
 const createAuthAxios = async () => {
   const tokens = await securityManager.getTokens();
-  return axios.create({
+  const instance = axios.create({
     baseURL: API_URL,
+    timeout: 15000, // 15 seconds timeout
     headers: {
       'Content-Type': 'application/json',
       ...(tokens && { Authorization: `Bearer ${tokens.accessToken}` }),
     },
   });
+
+  instance.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      if (axios.isAxiosError(error)) {
+        if (error.code === 'ECONNABORTED') {
+          throw new Error('Request timed out. Please try again.');
+        }
+        if (!error.response) {
+          throw new Error('Network Error: Unable to connect to server. Please check your connection.');
+        }
+      }
+      return Promise.reject(error);
+    }
+  );
+  return instance;
 };
 
 class ShiftReportService {

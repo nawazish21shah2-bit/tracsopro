@@ -19,9 +19,14 @@ import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { UserIcon, ReportsIcon, ShiftsIcon } from '../../components/ui/AppIcons';
 import { superAdminService, SecurityCompany } from '../../services/superAdminService';
 import { useNavigation } from '@react-navigation/native';
+import SharedHeader from '../../components/ui/SharedHeader';
+import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
+import SuperAdminProfileDrawer from '../../components/superAdmin/SuperAdminProfileDrawer';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 
 const CompanyManagementScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
   const [companies, setCompanies] = useState<SecurityCompany[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -138,24 +143,32 @@ const CompanyManagementScreen: React.FC = () => {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaWrapper>
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Loading companies...</Text>
         </View>
-      </SafeAreaView>
+      </SafeAreaWrapper>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Company Management</Text>
-        <TouchableOpacity style={styles.addButton} onPress={handleAddCompany}>
-          <Text style={styles.addButtonText}>+ Add Company</Text>
-        </TouchableOpacity>
-      </View>
-
+    <SafeAreaWrapper>
+      <SharedHeader
+        variant="superAdmin"
+        title="Company Management"
+        onNotificationPress={() => {
+          // Handle notification press
+        }}
+        profileDrawer={
+          <SuperAdminProfileDrawer
+            visible={isDrawerVisible}
+            onClose={closeDrawer}
+            onNavigateToCompanies={() => {
+              closeDrawer();
+            }}
+          />
+        }
+      />
       {/* Search and Filters */}
       <View style={styles.searchSection}>
         <View style={styles.searchContainer}>
@@ -207,7 +220,15 @@ const CompanyManagementScreen: React.FC = () => {
           )}
         </View>
       </ScrollView>
-    </SafeAreaView>
+
+      {/* Sticky Action Button */}
+      <TouchableOpacity 
+        style={styles.stickyAddButton}
+        onPress={handleAddCompany}
+      >
+        <Text style={styles.stickyAddButtonText}>+ Add Company</Text>
+      </TouchableOpacity>
+    </SafeAreaWrapper>
   );
 };
 
@@ -240,16 +261,25 @@ const styles = StyleSheet.create({
     fontWeight: TYPOGRAPHY.fontWeight.bold,
     color: COLORS.textPrimary,
   },
-  addButton: {
+  stickyAddButton: {
+    position: 'absolute',
+    bottom: 20,
+    left: 20,
     backgroundColor: COLORS.primary,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
-    borderRadius: 8,
+    borderRadius: 25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+    zIndex: 1000,
   },
-  addButtonText: {
-    color: '#FFFFFF',
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
+  stickyAddButtonText: {
+    color: COLORS.textInverse,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
   searchSection: {
     backgroundColor: '#FFFFFF',

@@ -1,5 +1,5 @@
 // Onboarding Screen Component
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   StatusBar,
   Image,
+  Animated,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -36,21 +37,21 @@ const slides: OnboardingSlide[] = [
     id: 1,
     title: 'Welcome to tracSOpro',
     subtitle: 'Your complete security solution',
-    description: 'Streamline your security operations with advanced guard management and incident reporting.',
+    description: 'Your reliable companion for security shift management and incident reporting.',
     icon: '🛡️',
   },
   {
     id: 2,
     title: 'Location Tracking',
     subtitle: 'Real-time monitoring',
-    description: 'Automatically track guard locations and clock in/out events at your assigned sites.',
+    description: 'Automatic location detection ensures accurate clock-in/out records at your assigned sites.',
     icon: '📍',
   },
   {
     id: 3,
     title: 'Quick Reporting',
     subtitle: 'Instant incident reports',
-    description: 'Submit incident reports with photos, options and custom notes.',
+    description: 'Submit incident reports instantly with options and custom notes.',
     icon: '📊',
   },
 ];
@@ -60,6 +61,14 @@ const OnboardingScreen: React.FC = () => {
   const { theme } = useTheme();
   const [currentSlide, setCurrentSlide] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
+  
+  // Animated values for dots
+  const dotAnimations = useRef(
+    slides.map((_, index) => ({
+      width: new Animated.Value(index === 0 ? 40 : 10),
+      opacity: new Animated.Value(index === 0 ? 1 : 0.3),
+    }))
+  ).current;
 
   const handleNext = () => {
     if (currentSlide < slides.length - 1) {
@@ -77,8 +86,31 @@ const OnboardingScreen: React.FC = () => {
 
   const handleScroll = (event: any) => {
     const slideIndex = Math.round(event.nativeEvent.contentOffset.x / width);
-    setCurrentSlide(slideIndex);
+    if (slideIndex !== currentSlide) {
+      setCurrentSlide(slideIndex);
+    }
   };
+
+  // Animate dots when slide changes
+  useEffect(() => {
+    dotAnimations.forEach((dotAnim, index) => {
+      const isActive = index === currentSlide;
+      
+      Animated.parallel([
+        Animated.spring(dotAnim.width, {
+          toValue: isActive ? 30 : 10,
+          useNativeDriver: false,
+          tension: 50,
+          friction: 7,
+        }),
+        Animated.timing(dotAnim.opacity, {
+          toValue: isActive ? 1 : 0.3,
+          duration: 300,
+          useNativeDriver: false,
+        }),
+      ]).start();
+    });
+  }, [currentSlide]);
 
   const illustrations = [Step1, Step2, Step3];
 
@@ -110,23 +142,6 @@ const OnboardingScreen: React.FC = () => {
         <Text style={[styles.description, { color: theme.colors.text.secondary }]}>
           {slide.description}
         </Text>
-      </View>
-
-      {/* Pagination Dots */}
-      <View style={styles.paginationContainer}>
-        {slides.map((_, dotIndex) => (
-          <View
-            key={dotIndex}
-            style={[
-              styles.paginationDot,
-              {
-                backgroundColor: dotIndex === index 
-                  ? theme.colors.primary 
-                  : theme.colors.gray[300]
-              }
-            ]}
-          />
-        ))}
       </View>
 
       {/* Action Buttons */}
@@ -161,6 +176,28 @@ const OnboardingScreen: React.FC = () => {
       >
         {slides.map((slide, index) => renderSlide(slide, index))}
       </ScrollView>
+      
+      {/* Pagination Dots - Rendered once outside ScrollView */}
+      <View style={styles.paginationContainer}>
+        {slides.map((_, dotIndex) => {
+          const dotAnim = dotAnimations[dotIndex];
+          const isActive = dotIndex === currentSlide;
+          
+          return (
+            <Animated.View
+              key={dotIndex}
+              style={[
+                styles.paginationDot,
+                {
+                  width: dotAnim.width,
+                  backgroundColor: isActive ? '#1C6CA9' : '#EBEBEB',
+                  opacity: dotAnim.opacity,
+                }
+              ]}
+            />
+          );
+        })}
+      </View>
     </View>
   );
 };
@@ -229,6 +266,7 @@ const styles = StyleSheet.create({
   contentContainer: {
     alignItems: 'center',
     paddingHorizontal: 20,
+    marginBottom: 60,
   },
   title: {
     fontSize: 24,
@@ -242,16 +280,19 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   paginationContainer: {
+    position: 'absolute',
+    bottom: 200,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginVertical: 32,
-    gap: 8,
+    paddingHorizontal: 24,
   },
   paginationDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    height: 10,
+    borderRadius: 30,
+    marginHorizontal: 4,
   },
   actionContainer: {
     paddingBottom: 20,

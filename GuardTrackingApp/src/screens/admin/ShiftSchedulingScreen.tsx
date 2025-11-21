@@ -16,10 +16,16 @@ import {
   FlatList,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
-import { RootState } from '../../store';
+import { RootState, AppDispatch } from '../../store';
+import { logoutUser } from '../../store/slices/authSlice';
 import { globalStyles, COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { ErrorHandler } from '../../utils/errorHandler';
 import apiService from '../../services/api';
+import SharedHeader from '../../components/ui/SharedHeader';
+import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
+import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import { ShiftsIcon, UserIcon, EmergencyIcon } from '../../components/ui/AppIcons';
 
 interface ScheduledShift {
   id: string;
@@ -74,8 +80,34 @@ interface ShiftSchedulingScreenProps {
 }
 
 const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigation }) => {
-  const dispatch = useDispatch();
+  const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+
+  const handleLogout = async () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await dispatch(logoutUser()).unwrap();
+            } catch (error) {
+              console.error('Logout error:', error);
+              Alert.alert('Error', 'Failed to logout. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const [shifts, setShifts] = useState<ScheduledShift[]>([]);
   const [guards, setGuards] = useState<Guard[]>([]);
@@ -588,45 +620,70 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Shift Scheduling</Text>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => setShowCreateModal(true)}
-        >
-          <Text style={styles.addButtonText}>+ Add Shift</Text>
-        </TouchableOpacity>
-      </View>
+    <SafeAreaWrapper>
+      <SharedHeader
+        variant="admin"
+        title="Shift Scheduling"
+        onNotificationPress={() => {
+          // Handle notification press
+        }}
+        profileDrawer={
+          <AdminProfileDrawer
+            visible={isDrawerVisible}
+            onClose={closeDrawer}
+            onNavigateToScheduling={() => {
+              closeDrawer();
+            }}
+          />
+        }
+      />
+      <View style={styles.container}>
 
-      <View style={styles.viewSelector}>
+        <View style={styles.viewSelector}>
         {[
-          { key: 'calendar', label: 'Calendar' },
-          { key: 'conflicts', label: 'Conflicts' },
-          { key: 'guards', label: 'Guards' },
-        ].map((view) => (
-          <TouchableOpacity
-            key={view.key}
-            style={[
-              styles.viewTab,
-              selectedView === view.key && styles.viewTabActive,
-            ]}
-            onPress={() => setSelectedView(view.key as any)}
-          >
-            <Text style={[
-              styles.viewTabText,
-              selectedView === view.key && styles.viewTabTextActive,
-            ]}>
-              {view.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
+          { key: 'calendar', label: 'Calendar', icon: ShiftsIcon },
+          { key: 'conflicts', label: 'Conflicts', icon: EmergencyIcon },
+          { key: 'guards', label: 'Guards', icon: UserIcon },
+        ].map((view) => {
+          const isActive = selectedView === view.key;
+          const IconComponent = view.icon;
+          const iconColor = isActive ? COLORS.textInverse : '#7A7A7A';
+          return (
+            <TouchableOpacity
+              key={view.key}
+              style={[
+                styles.viewTab,
+                isActive && styles.viewTabActive,
+              ]}
+              onPress={() => setSelectedView(view.key as any)}
+            >
+              <View style={styles.viewTabIcon}>
+                <IconComponent size={18} color={iconColor} />
+              </View>
+              <Text style={[
+                styles.viewTabText,
+                isActive && styles.viewTabTextActive,
+              ]}>
+                {view.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
-      {selectedView === 'calendar' && renderCalendarView()}
-      
-      {renderCreateShiftModal()}
-    </View>
+        {selectedView === 'calendar' && renderCalendarView()}
+        
+        {renderCreateShiftModal()}
+      </View>
+
+      {/* Sticky Action Button */}
+      <TouchableOpacity 
+        style={styles.stickyAddButton}
+        onPress={() => setShowCreateModal(true)}
+      >
+        <Text style={styles.stickyAddButtonText}>+ Add Shift</Text>
+      </TouchableOpacity>
+    </SafeAreaWrapper>
   );
 };
 
@@ -637,49 +694,60 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     alignItems: 'center',
     padding: SPACING.md,
-    backgroundColor: COLORS.backgroundSecondary,
-    marginTop: 40,
+    backgroundColor: COLORS.backgroundPrimary,
   },
-  headerTitle: {
-    fontSize: TYPOGRAPHY.fontSize.lg,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
-    color: COLORS.textPrimary,
-  },
-  addButton: {
+  stickyAddButton: {
+    position: 'absolute',
+    bottom: 20,
+    left: 20,
     backgroundColor: COLORS.primary,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
-    borderRadius: 8,
+    borderRadius: 25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+    zIndex: 1000,
   },
-  addButtonText: {
+  stickyAddButtonText: {
     color: COLORS.textInverse,
-    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontSize: TYPOGRAPHY.fontSize.md,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
   viewSelector: {
     flexDirection: 'row',
     backgroundColor: COLORS.backgroundSecondary,
-    paddingHorizontal: SPACING.md,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
   },
   viewTab: {
     flex: 1,
-    paddingVertical: SPACING.sm,
     alignItems: 'center',
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 11,
+    marginHorizontal: SPACING.xs,
+    backgroundColor: '#ECECEC',
   },
   viewTabActive: {
-    borderBottomColor: COLORS.primary,
+    backgroundColor: COLORS.primary,
+  },
+  viewTabIcon: {
+    marginBottom: SPACING.xs,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   viewTabText: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontSize: TYPOGRAPHY.fontSize.xs,
     color: COLORS.textSecondary,
   },
   viewTabTextActive: {
-    color: COLORS.primary,
+    color: COLORS.textInverse,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
   calendarContainer: {

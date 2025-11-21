@@ -11,9 +11,12 @@ import type { AppDispatch } from '../../store';
 import { logoutUser } from '../../store/slices/authSlice';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
+import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 
 const AdminSettingsScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const dispatch = useDispatch<AppDispatch>();
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
 
   const settingsOptions = [
     { id: 'profile', title: 'Admin Profile', subtitle: 'Manage admin account', icon: UserIcon },
@@ -50,8 +53,19 @@ const AdminSettingsScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     <SafeAreaWrapper>
       <SharedHeader
         variant="admin"
-        adminName="Admin Settings"
-        onSettingsPress={handleLogout}
+        title="Admin Settings"
+        onNotificationPress={() => {
+          // Handle notification press
+        }}
+        profileDrawer={
+          <AdminProfileDrawer
+            visible={isDrawerVisible}
+            onClose={closeDrawer}
+            onNavigateToSettings={() => {
+              closeDrawer();
+            }}
+          />
+        }
       />
 
       <ScrollView style={styles.content}>

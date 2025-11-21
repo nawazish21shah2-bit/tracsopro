@@ -148,9 +148,15 @@ export const fetchActiveShift = createAsyncThunk(
       if (!hasValidTokens) {
         return rejectWithValue('Not authenticated');
       }
-      return await shiftService.getActiveShift();
+      // getActiveShift returns null if no active shift (404), which is valid
+      const activeShift = await shiftService.getActiveShift();
+      return activeShift; // Can be null, which is fine
     } catch (error: any) {
-      return rejectWithValue(error.response?.data?.error || 'Failed to fetch active shift');
+      // Only reject for actual errors, not 404s (which return null)
+      if (error.response?.status === 404) {
+        return null; // No active shift is not an error
+      }
+      return rejectWithValue(error.response?.data?.error || error.message || 'Failed to fetch active shift');
     }
   }
 );
@@ -376,6 +382,7 @@ const shiftSlice = createSlice({
       .addCase(fetchTodayShifts.fulfilled, (state, action) => {
         state.loading = false;
         state.todayShifts = action.payload;
+        state.error = null; // Clear error on successful fetch
       })
       .addCase(fetchTodayShifts.rejected, (state, action) => {
         state.loading = false;
@@ -391,6 +398,7 @@ const shiftSlice = createSlice({
       .addCase(fetchUpcomingShifts.fulfilled, (state, action) => {
         state.loading = false;
         state.upcomingShifts = action.payload;
+        state.error = null; // Clear error on successful fetch
       })
       .addCase(fetchUpcomingShifts.rejected, (state, action) => {
         state.loading = false;
@@ -406,6 +414,7 @@ const shiftSlice = createSlice({
       .addCase(fetchPastShifts.fulfilled, (state, action) => {
         state.loading = false;
         state.pastShifts = action.payload;
+        state.error = null; // Clear error on successful fetch
       })
       .addCase(fetchPastShifts.rejected, (state, action) => {
         state.loading = false;
@@ -435,7 +444,8 @@ const shiftSlice = createSlice({
       })
       .addCase(fetchActiveShift.fulfilled, (state, action) => {
         state.loading = false;
-        state.activeShift = action.payload;
+        state.activeShift = action.payload; // Can be null, which is valid
+        state.error = null; // Clear error on successful fetch (even if null)
       })
       .addCase(fetchActiveShift.rejected, (state, action) => {
         state.loading = false;

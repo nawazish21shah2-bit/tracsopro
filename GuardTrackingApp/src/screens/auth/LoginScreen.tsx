@@ -122,7 +122,7 @@ const LoginScreen: React.FC = () => {
           <View style={styles.inputContainer}>
             <AuthInput
               ref={emailInputRef as any}
-              label="Email"
+              // label="Email"
               icon="email-outline"
               placeholder="Email Address"
               value={formData.email}
@@ -140,7 +140,7 @@ const LoginScreen: React.FC = () => {
           <View style={styles.inputContainer}>
             <AuthInput
               ref={passwordInputRef as any}
-              label="Password"
+              // label="Password"
               icon="lock-outline"
               placeholder="Password"
               value={formData.password}

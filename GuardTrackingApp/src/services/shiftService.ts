@@ -8,15 +8,22 @@ import {
 } from '../types/shift.types';
 import { securityManager } from '../utils/security';
 
-const API_URL = 'http://localhost:3000/api';
+// Use 10.0.2.2 for Android emulator, localhost for iOS simulator
+const API_URL = __DEV__
+  ? Platform.OS === 'android'
+    ? 'http://10.0.2.2:3000/api'
+    : 'http://localhost:3000/api'
+  : 'http://localhost:3000/api';
 
 // Create axios instance with auth interceptor
 const createAuthAxios = async () => {
   const tokens = await securityManager.getTokens();
   return axios.create({
     baseURL: API_URL,
+    timeout: 15000, // 15 second timeout
     headers: {
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
       ...(tokens && { Authorization: `Bearer ${tokens.accessToken}` }),
     },
   });
@@ -46,8 +53,14 @@ class ShiftService {
    */
   async getUpcomingShifts(): Promise<Shift[]> {
     const api = await createAuthAxios();
-    const response = await api.get<Shift[]>('/shifts/upcoming');
-    return response.data;
+    const response = await api.get<{ success: boolean; data: Shift[] }>('/shifts/upcoming');
+    
+    // Handle response format
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+    
+    return [];
   }
 
   /**
@@ -74,9 +87,39 @@ class ShiftService {
    * Get active shift
    */
   async getActiveShift(): Promise<Shift | null> {
-    const api = await createAuthAxios();
-    const response = await api.get<Shift | null>('/shifts/active');
-    return response.data;
+    try {
+      const api = await createAuthAxios();
+      const response = await api.get<{ success: boolean; data?: Shift; message?: string; error?: string }>('/shifts/active', {
+        timeout: 10000, // 10 second timeout
+      });
+      
+      // Handle success response with data
+      if (response.data.success && response.data.data) {
+        return response.data.data;
+      }
+      
+      // Handle 404 (no active shift) - return null instead of error
+      return null;
+    } catch (error: any) {
+      // Handle network errors
+      if (error.code === 'ECONNABORTED' || error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+        throw new Error('Network Error: Unable to connect to server. Please check your connection.');
+      }
+      
+      // Handle 404 as a valid case (no active shift)
+      if (error.response?.status === 404) {
+        return null;
+      }
+      
+      // Handle 401 (unauthorized) - might need to refresh token
+      if (error.response?.status === 401) {
+        throw new Error('Authentication failed. Please log in again.');
+      }
+      
+      // Re-throw other errors with better message
+      const errorMessage = error.response?.data?.error || error.message || 'Failed to fetch active shift';
+      throw new Error(errorMessage);
+    }
   }
 
   /**
@@ -131,7 +174,19 @@ class ShiftService {
     const response = await api.get<{ success: boolean; data: ShiftStats }>('/shifts/statistics', {
       params,
     });
-    return response.data.data;
+    
+    // Handle response format
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+    
+    // Return default stats if no data
+    return {
+      completedShifts: 0,
+      missedShifts: 0,
+      totalSites: 0,
+      incidentReports: 0,
+    };
   }
 
   /**

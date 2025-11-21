@@ -25,7 +25,8 @@ import { AppScreen, AppCard } from '../../components/ui/AppComponents';
 import StatsCard from '../../components/ui/StatsCard';
 import SharedHeader from '../../components/ui/SharedHeader';
 import GuardProfileDrawer from '../../components/guard/GuardProfileDrawer';
-import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import { ErrorState, NetworkError } from '../../components/ui/LoadingStates';
+import { clearError } from '../../store/slices/shiftSlice';
 
 type MyShiftsScreenNavigationProp = StackNavigationProp<any, 'MyShifts'>;
 
@@ -63,7 +64,6 @@ interface WeeklyShift {
 const MyShiftsScreen: React.FC = () => {
   const navigation = useNavigation<MyShiftsScreenNavigationProp>();
   const dispatch = useDispatch();
-  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
   
   const [selectedTab, setSelectedTab] = useState('Today');
   const [activeTab, setActiveTab] = useState<'today' | 'upcoming' | 'past'>('today');
@@ -99,7 +99,7 @@ const MyShiftsScreen: React.FC = () => {
         await Promise.all([
           dispatch(fetchTodayShifts() as any),
           dispatch(fetchUpcomingShifts() as any),
-          dispatch(fetchPastShifts() as any),
+          dispatch(fetchPastShifts(20) as any),
         ]);
       } catch (error) {
         console.error('Error loading shifts data:', error);
@@ -111,6 +111,7 @@ const MyShiftsScreen: React.FC = () => {
   const onRefresh = async () => {
     try {
       setRefreshing(true);
+      dispatch(clearError() as any); // Clear any previous errors
       const hasValidTokens = await securityManager.areTokensValid();
       if (!hasValidTokens) {
         setRefreshing(false);
@@ -119,7 +120,7 @@ const MyShiftsScreen: React.FC = () => {
       await Promise.all([
         dispatch(fetchTodayShifts() as any),
         dispatch(fetchUpcomingShifts() as any),
-        dispatch(fetchPastShifts() as any),
+        dispatch(fetchPastShifts(20) as any),
       ]);
     } catch (e) {
       console.error('Refresh error:', e);
@@ -127,6 +128,11 @@ const MyShiftsScreen: React.FC = () => {
       setRefreshing(false);
     }
   };
+
+  // Clear error when switching tabs
+  useEffect(() => {
+    dispatch(clearError() as any);
+  }, [activeTab, dispatch]);
 
   // Handler functions
   const handleMenuPress = () => {
@@ -397,7 +403,60 @@ const MyShiftsScreen: React.FC = () => {
     clockedOut: s.checkOutTime ? new Date(s.checkOutTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : undefined,
   });
 
+  // Check if error is related to the current tab
+  const isErrorRelevant = () => {
+    if (!error) return false;
+    const errorLower = error.toLowerCase();
+    if (activeTab === 'upcoming' && errorLower.includes('upcoming')) return true;
+    if (activeTab === 'today' && errorLower.includes('today')) return true;
+    if (activeTab === 'past' && errorLower.includes('past')) return true;
+    return false;
+  };
+
+  const isNetworkError = error?.toLowerCase().includes('network') || 
+                         error?.toLowerCase().includes('connection') ||
+                         error?.toLowerCase().includes('econnrefused') ||
+                         error?.toLowerCase().includes('enotfound');
+
+  const handleRetry = async () => {
+    dispatch(clearError() as any);
+    const hasValidTokens = await securityManager.areTokensValid();
+    if (!hasValidTokens) return;
+    
+    switch (activeTab) {
+      case 'today':
+        await dispatch(fetchTodayShifts() as any);
+        break;
+      case 'upcoming':
+        await dispatch(fetchUpcomingShifts() as any);
+        break;
+      case 'past':
+        await dispatch(fetchPastShifts(20) as any);
+        break;
+    }
+  };
+
   const renderContent = () => {
+    // Show error state if there's an error relevant to current tab
+    if (isErrorRelevant()) {
+      return (
+        <View style={styles.errorContainer}>
+          {isNetworkError ? (
+            <NetworkError
+              onRetry={handleRetry}
+              style={styles.errorState}
+            />
+          ) : (
+            <ErrorState
+              error={error || 'An error occurred'}
+              onRetry={handleRetry}
+              style={styles.errorState}
+            />
+          )}
+        </View>
+      );
+    }
+
     switch (activeTab) {
       case 'today':
         return (
@@ -407,6 +466,15 @@ const MyShiftsScreen: React.FC = () => {
           </View>
         );
       case 'upcoming':
+        // Show empty state if no shifts, but only if not loading and no error
+        if (!loading && (!upcomingShifts || !Array.isArray(upcomingShifts) || upcomingShifts.length === 0)) {
+          return (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No upcoming shifts</Text>
+              <Text style={styles.emptySubtext}>You don't have any upcoming shifts scheduled</Text>
+            </View>
+          );
+        }
         return (
           <View>
             {(
@@ -417,9 +485,19 @@ const MyShiftsScreen: React.FC = () => {
           </View>
         );
       case 'past':
+        if (!loading && (!pastShifts || !Array.isArray(pastShifts) || pastShifts.length === 0)) {
+          return (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No past shifts to display</Text>
+            </View>
+          );
+        }
         return (
           <View>
-            <Text style={styles.emptyText}>No past shifts to display</Text>
+            {pastShifts && Array.isArray(pastShifts) && pastShifts.length > 0
+              ? pastShifts.map(toShiftData).map(renderShiftCard)
+              : <Text style={styles.emptyText}>No past shifts to display</Text>
+            }
           </View>
         );
       default:
@@ -436,8 +514,29 @@ const MyShiftsScreen: React.FC = () => {
         onNotificationPress={handleNotificationPress}
         profileDrawer={
           <GuardProfileDrawer
-            visible={isDrawerVisible}
-            onClose={closeDrawer}
+            visible={false}
+            onClose={() => {}}
+            onNavigateToProfile={() => {
+              // Navigate to profile/settings when available
+            }}
+            onNavigateToPastJobs={() => {
+              // Navigation handled in drawer
+            }}
+            onNavigateToAssignedSites={() => {
+              // Navigation handled in drawer
+            }}
+            onNavigateToAttendance={() => {
+              // Navigation handled in drawer
+            }}
+            onNavigateToEarnings={() => {
+              // Navigation handled in drawer
+            }}
+            onNavigateToNotifications={() => {
+              // Navigate to notifications/settings
+            }}
+            onNavigateToSupport={() => {
+              // Navigation handled in drawer
+            }}
           />
         }
       />
@@ -450,8 +549,33 @@ const MyShiftsScreen: React.FC = () => {
         }
       >
         {renderMonthlyStats()}
+        
+        {/* Tab Navigation */}
+        <View style={styles.tabsContainer}>
+          {tabs.map((tab) => (
+            <TouchableOpacity
+              key={tab.id}
+              style={[
+                styles.tab,
+                activeTab === tab.id && styles.activeTab,
+              ]}
+              onPress={() => setActiveTab(tab.id as 'today' | 'upcoming' | 'past')}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  activeTab === tab.id && styles.activeTabText,
+                ]}
+              >
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
         {renderContent()}
-        {renderWeeklySummary()}
+        {/* Only show weekly summary on today tab */}
+        {activeTab === 'today' && renderWeeklySummary()}
       </ScrollView>
     </View>
   );
@@ -802,6 +926,27 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     marginTop: 40,
+    fontWeight: '500',
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  emptyContainer: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+    minHeight: 300,
+  },
+  errorState: {
+    width: '100%',
   },
   actionIconMargin: {
     marginRight: 8,

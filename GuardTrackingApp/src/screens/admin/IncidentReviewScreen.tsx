@@ -14,17 +14,51 @@ import {
   Modal,
   TextInput,
 } from 'react-native';
-import { useSelector } from 'react-redux';
-import { RootState } from '../../store';
+import { useSelector, useDispatch } from 'react-redux';
+import { RootState, AppDispatch } from '../../store';
+import { logoutUser } from '../../store/slices/authSlice';
 import enhancedIncidentService, { EnhancedIncident } from '../../services/enhancedIncidentService';
-import { globalStyles, COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
+import SharedHeader from '../../components/ui/SharedHeader';
+import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
+import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import { ReportsIcon, EmergencyIcon, CheckCircleIcon } from '../../components/ui/AppIcons';
+import { FeatherIcon } from '../../components/ui/FeatherIcons';
 
 interface IncidentReviewScreenProps {
   navigation: any;
 }
 
 const IncidentReviewScreen: React.FC<IncidentReviewScreenProps> = ({ navigation }) => {
+  const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+
+  const handleLogout = async () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await dispatch(logoutUser()).unwrap();
+            } catch (error) {
+              console.error('Logout error:', error);
+              Alert.alert('Error', 'Failed to logout. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
   const [incidents, setIncidents] = useState<EnhancedIncident[]>([]);
   const [selectedIncident, setSelectedIncident] = useState<EnhancedIncident | null>(null);
   const [reviewModal, setReviewModal] = useState(false);
@@ -86,9 +120,9 @@ const IncidentReviewScreen: React.FC<IncidentReviewScreenProps> = ({ navigation 
 
   const getSeverityColor = (severity: EnhancedIncident['severity']) => {
     switch (severity) {
-      case 'critical': return COLORS.error;
-      case 'high': return '#FF8800';
-      case 'medium': return COLORS.warning;
+      case 'critical': return '#DC2626'; // Red
+      case 'high': return '#F59E0B'; // Orange
+      case 'medium': return '#F59E0B'; // Orange
       case 'low': return COLORS.success;
       default: return COLORS.textSecondary;
     }
@@ -96,11 +130,21 @@ const IncidentReviewScreen: React.FC<IncidentReviewScreenProps> = ({ navigation 
 
   const getStatusColor = (status: EnhancedIncident['status']) => {
     switch (status) {
-      case 'pending': return COLORS.warning;
-      case 'under_review': return COLORS.info;
-      case 'approved': return COLORS.success;
+      case 'pending': return '#F59E0B'; // Orange
+      case 'under_review': return COLORS.primary; // Blue
+      case 'approved': return COLORS.success; // Green
       case 'rejected': return COLORS.error;
       default: return COLORS.textSecondary;
+    }
+  };
+
+  const getStatusLabel = (status: EnhancedIncident['status']) => {
+    switch (status) {
+      case 'pending': return 'Pending';
+      case 'under_review': return 'Under Review';
+      case 'approved': return 'Approved';
+      case 'rejected': return 'Rejected';
+      default: return status;
     }
   };
 
@@ -108,32 +152,52 @@ const IncidentReviewScreen: React.FC<IncidentReviewScreenProps> = ({ navigation 
     <TouchableOpacity 
       style={styles.incidentCard}
       onPress={() => handleReviewIncident(item)}
+      activeOpacity={0.7}
     >
       <View style={styles.incidentHeader}>
-        <Text style={styles.incidentTitle}>{item.title}</Text>
+        <Text style={styles.incidentTitle} numberOfLines={2}>{item.title}</Text>
         <View style={[styles.severityBadge, { backgroundColor: getSeverityColor(item.severity) }]}>
           <Text style={styles.severityText}>{item.severity.toUpperCase()}</Text>
         </View>
       </View>
       
       <Text style={styles.incidentType}>{item.type.replace('_', ' ').toUpperCase()}</Text>
-      <Text style={styles.incidentDescription} numberOfLines={2}>
+      <Text style={styles.incidentDescription} numberOfLines={3}>
         {item.description}
       </Text>
       
       <View style={styles.incidentFooter}>
         <Text style={styles.incidentDate}>
-          {new Date(item.reportedAt).toLocaleDateString()}
+          {new Date(item.reportedAt).toLocaleDateString('en-US', {
+            month: '2-digit',
+            day: '2-digit',
+            year: 'numeric'
+          })}
         </Text>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-          <Text style={styles.statusText}>{item.status.replace('_', ' ')}</Text>
-        </View>
+        <TouchableOpacity 
+          style={[styles.actionButton, { backgroundColor: getStatusColor(item.status) }]}
+          onPress={(e) => {
+            e.stopPropagation();
+            handleReviewIncident(item);
+          }}
+        >
+          <Text style={styles.actionButtonText}>{getStatusLabel(item.status)}</Text>
+        </TouchableOpacity>
       </View>
       
       <View style={styles.incidentMeta}>
-        <Text style={styles.metaText}>📷 {item.mediaFiles.length} files</Text>
-        <Text style={styles.metaText}>🎤 {item.voiceTranscription ? 'Voice' : 'No voice'}</Text>
-        <Text style={styles.metaText}>📡 {item.syncStatus}</Text>
+        <View style={styles.metaItem}>
+          <FeatherIcon name="camera" size={14} color={COLORS.textSecondary} />
+          <Text style={styles.metaText}>{item.mediaFiles.length} files</Text>
+        </View>
+        <View style={styles.metaItem}>
+          <FeatherIcon name="mic" size={14} color={COLORS.textSecondary} />
+          <Text style={styles.metaText}>{item.voiceTranscription ? 'Voice' : 'No voice'}</Text>
+        </View>
+        <View style={styles.metaItem}>
+          <FeatherIcon name="cloud" size={14} color={COLORS.textSecondary} />
+          <Text style={styles.metaText}>{item.syncStatus}</Text>
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -202,28 +266,52 @@ const IncidentReviewScreen: React.FC<IncidentReviewScreenProps> = ({ navigation 
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Incident Review</Text>
-        <View style={styles.filterContainer}>
-          {['all', 'pending', 'under_review'].map((status) => (
+    <SafeAreaWrapper>
+      <SharedHeader
+        variant="admin"
+        title="Incident Review"
+        showLogo={false}
+        profileDrawer={
+          <AdminProfileDrawer
+            visible={isDrawerVisible}
+            onClose={closeDrawer}
+            onNavigateToIncidentReview={() => {
+              closeDrawer();
+            }}
+          />
+        }
+      />
+      <View style={styles.filterContainer}>
+        {[
+          { key: 'all', label: 'All', icon: ReportsIcon, inactiveColor: '#7A7A7A' },
+          { key: 'pending', label: 'Pending', icon: EmergencyIcon, inactiveColor: '#DC2626' },
+          { key: 'under_review', label: 'Under Review', icon: CheckCircleIcon, inactiveColor: '#16A34A' },
+        ].map((status) => {
+          const isActive = filterStatus === status.key;
+          const IconComponent = status.icon;
+          const iconColor = isActive ? COLORS.textInverse : status.inactiveColor;
+          const textColor = isActive ? COLORS.textInverse : status.inactiveColor;
+          return (
             <TouchableOpacity
-              key={status}
+              key={status.key}
               style={[
                 styles.filterButton,
-                filterStatus === status && styles.filterButtonActive
+                isActive && styles.filterButtonActive
               ]}
-              onPress={() => setFilterStatus(status as any)}
+              onPress={() => setFilterStatus(status.key as any)}
             >
+              <View style={styles.filterIcon}>
+                <IconComponent size={16} color={iconColor} />
+              </View>
               <Text style={[
                 styles.filterText,
-                filterStatus === status && styles.filterTextActive
+                isActive ? styles.filterTextActive : { color: textColor }
               ]}>
-                {status.replace('_', ' ')}
+                {status.label}
               </Text>
             </TouchableOpacity>
-          ))}
-        </View>
+          );
+        })}
       </View>
       
       <FlatList
@@ -232,76 +320,83 @@ const IncidentReviewScreen: React.FC<IncidentReviewScreenProps> = ({ navigation 
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
+        style={styles.list}
       />
       
       {renderReviewModal()}
-    </View>
+    </SafeAreaWrapper>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.backgroundPrimary,
-  },
-  header: {
-    padding: SPACING.md,
-    backgroundColor: COLORS.backgroundSecondary,
-  },
-  headerTitle: {
-    fontSize: TYPOGRAPHY.fontSize.xl,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.sm,
-  },
   filterContainer: {
     flexDirection: 'row',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    backgroundColor: COLORS.backgroundPrimary,
     gap: SPACING.sm,
   },
   filterButton: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    borderRadius: 20,
-    backgroundColor: COLORS.backgroundPrimary,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 11,
+    backgroundColor: '#ECECEC',
+    gap: SPACING.xs,
   },
   filterButtonActive: {
     backgroundColor: COLORS.primary,
   },
+  filterIcon: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   filterText: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.textSecondary,
-    textTransform: 'capitalize',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
   filterTextActive: {
     color: COLORS.textInverse,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
+  list: {
+    flex: 1,
+    backgroundColor: COLORS.backgroundSecondary,
+  },
   listContainer: {
-    padding: SPACING.md,
+    padding: SPACING.lg,
+    paddingBottom: SPACING.xl * 2,
   },
   incidentCard: {
-    backgroundColor: COLORS.backgroundSecondary,
-    borderRadius: 12,
-    padding: SPACING.md,
-    marginBottom: SPACING.sm,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
+    marginBottom: SPACING.md,
+    ...SHADOWS.small,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
   },
   incidentHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: SPACING.xs,
+    marginBottom: SPACING.sm,
   },
   incidentTitle: {
     fontSize: TYPOGRAPHY.fontSize.md,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
     color: COLORS.textPrimary,
     flex: 1,
-    marginRight: SPACING.sm,
+    marginRight: SPACING.md,
+    lineHeight: 20,
   },
   severityBadge: {
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: 12,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs / 2,
+    borderRadius: BORDER_RADIUS.round,
   },
   severityText: {
     fontSize: TYPOGRAPHY.fontSize.xs,
@@ -309,39 +404,49 @@ const styles = StyleSheet.create({
     fontWeight: TYPOGRAPHY.fontWeight.bold,
   },
   incidentType: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontSize: TYPOGRAPHY.fontSize.xs,
     color: COLORS.textSecondary,
-    marginBottom: SPACING.xs,
+    marginBottom: SPACING.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
   incidentDescription: {
     fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.textPrimary,
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.md,
+    lineHeight: 18,
   },
   incidentFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: SPACING.xs,
+    marginBottom: SPACING.md,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderLight,
   },
   incidentDate: {
     fontSize: TYPOGRAPHY.fontSize.xs,
     color: COLORS.textSecondary,
   },
-  statusBadge: {
-    paddingHorizontal: SPACING.sm,
+  actionButton: {
+    paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.xs,
-    borderRadius: 8,
+    borderRadius: BORDER_RADIUS.round,
   },
-  statusText: {
+  actionButtonText: {
     fontSize: TYPOGRAPHY.fontSize.xs,
     color: COLORS.textInverse,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
-    textTransform: 'capitalize',
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
   incidentMeta: {
     flexDirection: 'row',
     gap: SPACING.md,
+    alignItems: 'center',
+  },
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs / 2,
   },
   metaText: {
     fontSize: TYPOGRAPHY.fontSize.xs,
@@ -355,8 +460,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: SPACING.md,
-    backgroundColor: COLORS.backgroundSecondary,
+    padding: SPACING.lg,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
   },
   modalTitle: {
     fontSize: TYPOGRAPHY.fontSize.lg,

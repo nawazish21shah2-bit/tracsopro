@@ -1,9 +1,9 @@
 /**
- * Admin Operations Center - Phase 6
+ * Admin Operations Center - Exact Figma Design Implementation
  * Live guard monitoring, emergency alerts, and comprehensive operations management
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,48 +12,20 @@ import {
   TouchableOpacity,
   Alert,
   FlatList,
+  RefreshControl,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../store';
 import { globalStyles, COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
-import WebSocketService from '../../services/WebSocketService';
 import InteractiveMapView from '../../components/client/InteractiveMapView';
 import LiveActivityFeed from '../../components/client/LiveActivityFeed';
 import { ErrorHandler } from '../../utils/errorHandler';
 import { ReportsIcon, UserIcon, EmergencyIcon, SettingsIcon } from '../../components/ui/AppIcons';
-
-interface GuardStatus {
-  guardId: string;
-  guardName: string;
-  status: 'active' | 'on_break' | 'offline' | 'emergency';
-  location: {
-    latitude: number;
-    longitude: number;
-    accuracy: number;
-    timestamp: number;
-  };
-  currentSite: string;
-  shiftStart: number;
-  lastUpdate: number;
-  batteryLevel?: number;
-  emergencyAlert?: {
-    id: string;
-    timestamp: number;
-    message: string;
-    acknowledged: boolean;
-  };
-}
-
-interface OperationsMetrics {
-  totalGuards: number;
-  activeGuards: number;
-  guardsOnBreak: number;
-  offlineGuards: number;
-  emergencyAlerts: number;
-  siteCoverage: number;
-  averageResponseTime: number;
-  incidentsToday: number;
-}
+import SharedHeader from '../../components/ui/SharedHeader';
+import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
+import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import operationsService, { GuardStatus, OperationsMetrics, EmergencyAlert } from '../../services/operationsService';
 
 interface AdminOperationsCenterProps {
   navigation: any;
@@ -62,161 +34,80 @@ interface AdminOperationsCenterProps {
 const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigation }) => {
   const dispatch = useDispatch();
   const { user } = useSelector((state: RootState) => state.auth);
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
   
   const [guardStatuses, setGuardStatuses] = useState<GuardStatus[]>([]);
   const [operationsMetrics, setOperationsMetrics] = useState<OperationsMetrics | null>(null);
-  const [emergencyAlerts, setEmergencyAlerts] = useState<any[]>([]);
+  const [emergencyAlerts, setEmergencyAlerts] = useState<EmergencyAlert[]>([]);
   const [selectedView, setSelectedView] = useState<'overview' | 'guards' | 'alerts' | 'analytics'>('overview');
   const [isLiveMode, setIsLiveMode] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [selectedGuard, setSelectedGuard] = useState<string | null>(null);
 
   useEffect(() => {
     initializeOperationsCenter();
-    setupRealTimeUpdates();
-
+    const interval = setupRealTimeUpdates();
     return () => {
-      // Cleanup
+      if (interval) clearInterval(interval);
     };
-  }, []);
+  }, [isLiveMode]);
 
   const initializeOperationsCenter = async () => {
     try {
-      await loadGuardStatuses();
-      await loadOperationsMetrics();
-      await loadEmergencyAlerts();
-      
-      console.log('🏢 Admin Operations Center initialized');
+      await Promise.all([
+        loadGuardStatuses(),
+        loadOperationsMetrics(),
+        loadEmergencyAlerts(),
+      ]);
     } catch (error) {
       ErrorHandler.handleError(error, 'initialize_operations_center');
     }
   };
 
   const setupRealTimeUpdates = () => {
-    // Setup WebSocket listeners for real-time updates
+    if (!isLiveMode) return null;
+    
     const interval = setInterval(() => {
-      if (isLiveMode) {
-        updateGuardStatuses();
-        updateOperationsMetrics();
-      }
+      loadGuardStatuses();
+      loadOperationsMetrics();
+      loadEmergencyAlerts();
     }, 15000); // Update every 15 seconds
 
-    return () => clearInterval(interval);
+    return interval;
   };
 
   const loadGuardStatuses = async () => {
-    // Mock guard statuses
-    const mockGuardStatuses: GuardStatus[] = [
-      {
-        guardId: 'guard_1',
-        guardName: 'John Smith',
-        status: 'active',
-        location: {
-          latitude: 40.7589,
-          longitude: -73.9851,
-          accuracy: 5,
-          timestamp: Date.now(),
-        },
-        currentSite: 'Central Office',
-        shiftStart: Date.now() - 4 * 60 * 60 * 1000, // 4 hours ago
-        lastUpdate: Date.now() - 30000, // 30 seconds ago
-        batteryLevel: 85,
-      },
-      {
-        guardId: 'guard_2',
-        guardName: 'Sarah Johnson',
-        status: 'emergency',
-        location: {
-          latitude: 40.7505,
-          longitude: -73.9934,
-          accuracy: 8,
-          timestamp: Date.now(),
-        },
-        currentSite: 'Warehouse A',
-        shiftStart: Date.now() - 3 * 60 * 60 * 1000,
-        lastUpdate: Date.now() - 60000,
-        batteryLevel: 42,
-        emergencyAlert: {
-          id: 'alert_1',
-          timestamp: Date.now() - 120000, // 2 minutes ago
-          message: 'Emergency button pressed - requires immediate assistance',
-          acknowledged: false,
-        },
-      },
-      {
-        guardId: 'guard_3',
-        guardName: 'Mike Wilson',
-        status: 'on_break',
-        location: {
-          latitude: 40.7614,
-          longitude: -73.9776,
-          accuracy: 12,
-          timestamp: Date.now(),
-        },
-        currentSite: 'Retail Store',
-        shiftStart: Date.now() - 2 * 60 * 60 * 1000,
-        lastUpdate: Date.now() - 45000,
-        batteryLevel: 67,
-      },
-    ];
-
-    setGuardStatuses(mockGuardStatuses);
+    try {
+      const statuses = await operationsService.getGuardStatuses();
+      setGuardStatuses(statuses);
+    } catch (error) {
+      console.error('Error loading guard statuses:', error);
+    }
   };
 
   const loadOperationsMetrics = async () => {
-    const mockMetrics: OperationsMetrics = {
-      totalGuards: 12,
-      activeGuards: 8,
-      guardsOnBreak: 2,
-      offlineGuards: 2,
-      emergencyAlerts: 1,
-      siteCoverage: 94.2,
-      averageResponseTime: 8.5,
-      incidentsToday: 3,
-    };
-
-    setOperationsMetrics(mockMetrics);
+    try {
+      const metrics = await operationsService.getOperationsMetrics();
+      setOperationsMetrics(metrics);
+    } catch (error) {
+      console.error('Error loading operations metrics:', error);
+    }
   };
 
   const loadEmergencyAlerts = async () => {
-    const mockAlerts = [
-      {
-        id: 'alert_1',
-        guardId: 'guard_2',
-        guardName: 'Sarah Johnson',
-        type: 'emergency_button',
-        message: 'Emergency button pressed - requires immediate assistance',
-        timestamp: Date.now() - 120000,
-        location: { latitude: 40.7505, longitude: -73.9934 },
-        acknowledged: false,
-        severity: 'critical',
-      },
-    ];
-
-    setEmergencyAlerts(mockAlerts);
-  };
-
-  const updateGuardStatuses = () => {
-    setGuardStatuses(prev => prev.map(guard => ({
-      ...guard,
-      lastUpdate: Date.now(),
-      // Simulate small location changes for active guards
-      location: guard.status === 'active' ? {
-        ...guard.location,
-        latitude: guard.location.latitude + (Math.random() - 0.5) * 0.0001,
-        longitude: guard.location.longitude + (Math.random() - 0.5) * 0.0001,
-        timestamp: Date.now(),
-      } : guard.location,
-    })));
-  };
-
-  const updateOperationsMetrics = () => {
-    if (operationsMetrics) {
-      setOperationsMetrics(prev => ({
-        ...prev!,
-        averageResponseTime: prev!.averageResponseTime + (Math.random() - 0.5) * 0.5,
-        siteCoverage: Math.min(100, prev!.siteCoverage + (Math.random() - 0.5) * 2),
-      }));
+    try {
+      const alerts = await operationsService.getActiveEmergencyAlerts();
+      setEmergencyAlerts(alerts);
+    } catch (error) {
+      console.error('Error loading emergency alerts:', error);
     }
   };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await initializeOperationsCenter();
+    setRefreshing(false);
+  }, []);
 
   const handleEmergencyAlert = (alertId: string) => {
     Alert.alert(
@@ -233,18 +124,15 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
     );
   };
 
-  const acknowledgeEmergency = (alertId: string) => {
-    setEmergencyAlerts(prev => prev.map(alert => 
-      alert.id === alertId ? { ...alert, acknowledged: true } : alert
-    ));
-    
-    setGuardStatuses(prev => prev.map(guard => 
-      guard.emergencyAlert?.id === alertId 
-        ? { ...guard, emergencyAlert: { ...guard.emergencyAlert, acknowledged: true } }
-        : guard
-    ));
-
-    Alert.alert('Emergency Acknowledged', 'Emergency services have been dispatched.');
+  const acknowledgeEmergency = async (alertId: string) => {
+    const success = await operationsService.acknowledgeEmergencyAlert(alertId);
+    if (success) {
+      await loadEmergencyAlerts();
+      await loadGuardStatuses();
+      Alert.alert('Emergency Acknowledged', 'Emergency services have been dispatched.');
+    } else {
+      Alert.alert('Error', 'Failed to acknowledge emergency alert.');
+    }
   };
 
   const getGuardStatusColor = (status: GuardStatus['status']) => {
@@ -264,136 +152,205 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
     return `${hours}h ${minutes}m`;
   };
 
-  const renderOperationsOverview = () => (
-    <View style={styles.overviewContainer}>
-      {/* Metrics Cards */}
-      <View style={styles.metricsGrid}>
-        <View style={styles.metricCard}>
-          <Text style={styles.metricValue}>{operationsMetrics?.activeGuards || 0}</Text>
-          <Text style={styles.metricLabel}>Active Guards</Text>
-          <View style={[styles.statusIndicator, { backgroundColor: COLORS.success }]} />
-        </View>
-        
-        <View style={styles.metricCard}>
-          <Text style={[styles.metricValue, { color: COLORS.error }]}>
-            {operationsMetrics?.emergencyAlerts || 0}
-          </Text>
-          <Text style={styles.metricLabel}>Emergency Alerts</Text>
-          <View style={[styles.statusIndicator, { backgroundColor: COLORS.error }]} />
-        </View>
-        
-        <View style={styles.metricCard}>
-          <Text style={styles.metricValue}>{operationsMetrics?.siteCoverage?.toFixed(1) || 0}%</Text>
-          <Text style={styles.metricLabel}>Site Coverage</Text>
-          <View style={[styles.statusIndicator, { backgroundColor: COLORS.info }]} />
-        </View>
-        
-        <View style={styles.metricCard}>
-          <Text style={styles.metricValue}>{operationsMetrics?.averageResponseTime?.toFixed(1) || 0}min</Text>
-          <Text style={styles.metricLabel}>Avg Response</Text>
-          <View style={[styles.statusIndicator, { backgroundColor: COLORS.warning }]} />
-        </View>
-      </View>
+  const formatTimeAgo = (timestamp: number): string => {
+    const diff = Date.now() - timestamp;
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    
+    if (days > 0) return `${days} day${days !== 1 ? 's' : ''} ago`;
+    if (hours > 0) return `${hours} hour${hours !== 1 ? 's' : ''} ago`;
+    if (minutes > 0) return `${minutes} minute${minutes !== 1 ? 's' : ''} ago`;
+    return 'Just now';
+  };
 
-      {/* Emergency Alerts */}
-      {emergencyAlerts.length > 0 && (
-        <View style={styles.emergencySection}>
-          <Text style={styles.emergencyTitle}>🚨 Active Emergency Alerts</Text>
-          {emergencyAlerts.map((alert) => (
-            <TouchableOpacity
-              key={alert.id}
-              style={styles.emergencyAlert}
-              onPress={() => handleEmergencyAlert(alert.id)}
-            >
-              <View style={styles.emergencyContent}>
-                <Text style={styles.emergencyGuard}>{alert.guardName}</Text>
-                <Text style={styles.emergencyMessage}>{alert.message}</Text>
-                <Text style={styles.emergencyTime}>
-                  {Math.floor((Date.now() - alert.timestamp) / 60000)} minutes ago
+  const handleGuardSelect = (guardId: string) => {
+    setSelectedGuard(selectedGuard === guardId ? null : guardId);
+  };
+
+  const renderOperationsOverview = () => {
+    const selectedGuardData = selectedGuard 
+      ? guardStatuses.find(g => g.guardId === selectedGuard)
+      : null;
+
+    return (
+      <View style={styles.overviewContainer}>
+        {/* Metrics Cards - Exact Figma Specs */}
+        <View style={styles.metricsGrid}>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{operationsMetrics?.activeGuards || 0}</Text>
+            <Text style={styles.metricLabel}>Active Guards</Text>
+            <View style={[styles.statusIndicator, { backgroundColor: COLORS.success }]} />
+          </View>
+          
+          <View style={styles.metricCard}>
+            <Text style={[styles.metricValue, { color: COLORS.error }]}>
+              {operationsMetrics?.emergencyAlerts || 0}
+            </Text>
+            <Text style={styles.metricLabel}>Emergency Alerts</Text>
+            <View style={[styles.statusIndicator, { backgroundColor: COLORS.error }]} />
+          </View>
+          
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{operationsMetrics?.siteCoverage?.toFixed(1) || 0}%</Text>
+            <Text style={styles.metricLabel}>Site Coverage</Text>
+            <View style={[styles.statusIndicator, { backgroundColor: COLORS.info }]} />
+          </View>
+          
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{operationsMetrics?.averageResponseTime?.toFixed(1) || 0}min</Text>
+            <Text style={styles.metricLabel}>Avg Response</Text>
+            <View style={[styles.statusIndicator, { backgroundColor: COLORS.warning }]} />
+          </View>
+        </View>
+
+        {/* Emergency Alerts - Exact Figma Specs */}
+        {emergencyAlerts.length > 0 && (
+          <View style={styles.emergencySection}>
+            <View style={styles.emergencySectionHeader}>
+              <Text style={styles.emergencyTitle}>Active Emergency Alert</Text>
+            </View>
+            {emergencyAlerts.map((alert) => (
+              <TouchableOpacity
+                key={alert.id}
+                style={styles.emergencyAlert}
+                onPress={() => handleEmergencyAlert(alert.id)}
+              >
+                <View style={styles.emergencyContent}>
+                  <Text style={styles.emergencyGuard}>{alert.guardName}</Text>
+                  <Text style={styles.emergencyMessage}>{alert.message}</Text>
+                  <Text style={styles.emergencyTime}>
+                    {formatTimeAgo(alert.timestamp)}
+                  </Text>
+                </View>
+                {!alert.acknowledged && (
+                  <View style={styles.emergencyStatusBadge}>
+                    <Text style={styles.emergencyStatusText}>NEW</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* Live Map - Exact Figma Specs */}
+        <View style={styles.mapSection}>
+          <Text style={styles.sectionTitle}>Live Guards Location</Text>
+          <View style={styles.mapContainer}>
+            <InteractiveMapView
+              height={300}
+              showControls={true}
+              onGuardSelect={handleGuardSelect}
+              guardData={guardStatuses.map(guard => ({
+                guardId: guard.guardId,
+                guardName: guard.guardName,
+                latitude: guard.location.latitude,
+                longitude: guard.location.longitude,
+                accuracy: guard.location.accuracy,
+                status: guard.status,
+                siteName: guard.currentSite,
+              }))}
+            />
+          </View>
+          
+          {/* Guard Detail Card - Shows when guard is selected */}
+          {selectedGuardData && (
+            <View style={styles.guardDetailCard}>
+              <TouchableOpacity 
+                style={styles.closeButton}
+                onPress={() => setSelectedGuard(null)}
+              >
+                <Text style={styles.closeButtonText}>✕</Text>
+              </TouchableOpacity>
+              <Text style={styles.guardDetailName}>{selectedGuardData.guardName}</Text>
+              <Text style={styles.guardDetailSite}>{selectedGuardData.currentSite}</Text>
+              <View style={styles.guardDetailStatus}>
+                <View style={[styles.guardDetailStatusDot, { backgroundColor: getGuardStatusColor(selectedGuardData.status) }]} />
+                <Text style={styles.guardDetailStatusText}>
+                  {selectedGuardData.status === 'active' ? 'Active' : selectedGuardData.status.toUpperCase()}
                 </Text>
               </View>
-              <View style={[
-                styles.emergencyStatus,
-                { backgroundColor: alert.acknowledged ? COLORS.success : COLORS.error }
-              ]}>
-                <Text style={styles.emergencyStatusText}>
-                  {alert.acknowledged ? 'ACK' : 'NEW'}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          ))}
+              <Text style={styles.guardDetailUpdate}>
+                Last Updated: Just Now
+              </Text>
+              <Text style={styles.guardDetailAccuracy}>
+                Accuracy = {selectedGuardData.location.accuracy}m
+              </Text>
+            </View>
+          )}
         </View>
-      )}
-
-      {/* Live Map */}
-      <View style={styles.mapSection}>
-        <Text style={styles.sectionTitle}>Live Guard Locations</Text>
-        <InteractiveMapView
-          height={250}
-          showControls={true}
-          onGuardSelect={(guardId) => console.log('Guard selected:', guardId)}
-        />
       </View>
-    </View>
-  );
+    );
+  };
 
   const renderGuardMonitoring = () => (
-    <View style={styles.guardMonitoringContainer}>
-      <FlatList
-        data={guardStatuses}
-        renderItem={({ item }) => (
-          <TouchableOpacity style={styles.guardStatusCard}>
-            <View style={styles.guardHeader}>
-              <Text style={styles.guardName}>{item.guardName}</Text>
-              <View style={[
-                styles.guardStatusBadge,
-                { backgroundColor: getGuardStatusColor(item.status) }
-              ]}>
-                <Text style={styles.guardStatusText}>{item.status.toUpperCase()}</Text>
-              </View>
+    <FlatList
+      style={styles.guardMonitoringContainer}
+      contentContainerStyle={styles.guardMonitoringContent}
+      data={guardStatuses}
+      renderItem={({ item }) => (
+        <TouchableOpacity 
+          style={styles.guardStatusCard}
+          onPress={() => handleGuardSelect(item.guardId)}
+        >
+          <View style={styles.guardHeader}>
+            <Text style={styles.guardName}>{item.guardName}</Text>
+            <View style={[
+              styles.guardStatusBadge,
+              { backgroundColor: getGuardStatusColor(item.status) }
+            ]}>
+              <Text style={styles.guardStatusText}>{item.status.toUpperCase()}</Text>
             </View>
-            
-            <Text style={styles.guardSite}>{item.currentSite}</Text>
-            <Text style={styles.guardShiftTime}>
-              Shift: {formatDuration(item.shiftStart)}
-            </Text>
-            
-            <View style={styles.guardMetrics}>
+          </View>
+          
+          <Text style={styles.guardSite}>{item.currentSite}</Text>
+          <Text style={styles.guardShiftTime}>
+            Shift: {formatDuration(item.shiftStart)}
+          </Text>
+          
+          <View style={styles.guardMetrics}>
+            {item.batteryLevel && (
               <Text style={styles.guardMetric}>
                 🔋 {item.batteryLevel}%
               </Text>
-              <Text style={styles.guardMetric}>
-                📍 ±{item.location.accuracy}m
-              </Text>
-              <Text style={styles.guardMetric}>
-                🕐 {Math.floor((Date.now() - item.lastUpdate) / 1000)}s ago
+            )}
+            <Text style={styles.guardMetric}>
+              📍 ±{item.location.accuracy}m
+            </Text>
+            <Text style={styles.guardMetric}>
+              🕐 {formatTimeAgo(item.lastUpdate)}
+            </Text>
+          </View>
+          
+          {item.emergencyAlert && (
+            <View style={styles.emergencyBanner}>
+              <Text style={styles.emergencyBannerText}>
+                🚨 EMERGENCY: {item.emergencyAlert.message}
               </Text>
             </View>
-            
-            {item.emergencyAlert && (
-              <View style={styles.emergencyBanner}>
-                <Text style={styles.emergencyBannerText}>
-                  🚨 EMERGENCY: {item.emergencyAlert.message}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        )}
-        keyExtractor={(item) => item.guardId}
-        showsVerticalScrollIndicator={false}
-      />
-    </View>
+          )}
+        </TouchableOpacity>
+      )}
+      keyExtractor={(item) => item.guardId}
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
+    />
   );
 
   const renderViewSelector = () => (
     <View style={styles.viewSelector}>
       {[
-        { key: 'overview', label: 'Overview', icon: (active: boolean) => (<ReportsIcon size={18} color={active ? COLORS.textInverse : COLORS.textSecondary} />) },
-        { key: 'guards', label: 'Guards', icon: (active: boolean) => (<UserIcon size={18} color={active ? COLORS.textInverse : COLORS.textSecondary} />) },
-        { key: 'alerts', label: 'Alerts', icon: (active: boolean) => (<EmergencyIcon size={18} color={active ? COLORS.textInverse : COLORS.textSecondary} />) },
-        { key: 'analytics', label: 'Analytics', icon: (active: boolean) => (<SettingsIcon size={18} color={active ? COLORS.textInverse : COLORS.textSecondary} />) },
+        { key: 'overview', label: 'Overview', icon: ReportsIcon },
+        { key: 'guards', label: 'Guards', icon: UserIcon },
+        { key: 'alerts', label: 'Alerts', icon: EmergencyIcon },
+        { key: 'analytics', label: 'Analytics', icon: SettingsIcon },
       ].map((view) => {
         const isActive = selectedView === (view.key as any);
+        const IconComponent = view.icon;
+        // Icon color: white when active, gray when inactive
+        const iconColor = isActive ? COLORS.textInverse : '#7A7A7A';
         return (
           <TouchableOpacity
             key={view.key}
@@ -403,7 +360,9 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
             ]}
             onPress={() => setSelectedView(view.key as any)}
           >
-            <View style={styles.viewIcon}>{view.icon(isActive)}</View>
+            <View style={styles.viewIcon}>
+              <IconComponent size={18} color={iconColor} />
+            </View>
             <Text style={[
               styles.viewLabel,
               isActive && styles.viewLabelActive,
@@ -420,8 +379,6 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
     switch (selectedView) {
       case 'overview':
         return renderOperationsOverview();
-      case 'guards':
-        return renderGuardMonitoring();
       case 'alerts':
         return (
           <View style={styles.alertsContainer}>
@@ -447,31 +404,81 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
   };
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle}>Operations Center</Text>
+    <SafeAreaWrapper>
+      <SharedHeader
+        variant="admin"
+        title="Operations Center"
+        onNotificationPress={() => {
+          // Handle notification press
+        }}
+        profileDrawer={
+          <AdminProfileDrawer
+            visible={isDrawerVisible}
+            onClose={closeDrawer}
+            onNavigateToOperations={() => {
+              closeDrawer();
+            }}
+            onNavigateToScheduling={() => {
+              closeDrawer();
+              navigation.navigate('ShiftScheduling');
+            }}
+            onNavigateToUserManagement={() => {
+              closeDrawer();
+              navigation.navigate('UserManagement');
+            }}
+            onNavigateToSiteManagement={() => {
+              closeDrawer();
+              navigation.navigate('SiteManagement');
+            }}
+            onNavigateToIncidentReview={() => {
+              closeDrawer();
+              navigation.navigate('IncidentReview');
+            }}
+            onNavigateToAnalytics={() => {
+              closeDrawer();
+              navigation.navigate('AdminAnalytics');
+            }}
+            onNavigateToSettings={() => {
+              closeDrawer();
+              navigation.navigate('AdminSettings');
+            }}
+          />
+        }
+      />
+      <View style={styles.container}>
+        {/* LIVE Indicator */}
+        <View style={styles.liveIndicatorContainer}>
           <View style={styles.liveIndicator}>
             <View style={[styles.liveDot, { backgroundColor: isLiveMode ? COLORS.success : COLORS.error }]} />
             <Text style={styles.liveText}>{isLiveMode ? 'LIVE' : 'PAUSED'}</Text>
           </View>
+          <TouchableOpacity
+            style={styles.liveToggle}
+            onPress={() => setIsLiveMode(!isLiveMode)}
+          >
+            <Text style={styles.liveToggleText}>{isLiveMode ? 'Pause' : 'Resume'}</Text>
+          </TouchableOpacity>
         </View>
-        
-        <TouchableOpacity
-          style={styles.liveToggle}
-          onPress={() => setIsLiveMode(!isLiveMode)}
-        >
-          <Text style={styles.liveToggleText}>{isLiveMode ? 'Pause' : 'Resume'}</Text>
-        </TouchableOpacity>
-      </View>
 
-      {renderViewSelector()}
-      
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {renderContent()}
-      </ScrollView>
-    </View>
+        {renderViewSelector()}
+        
+        {selectedView === 'guards' ? (
+          // Render FlatList directly for guards view (no ScrollView wrapper)
+          renderGuardMonitoring()
+        ) : (
+          // Use ScrollView for other views
+          <ScrollView 
+            style={styles.content} 
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+          >
+            {renderContent()}
+          </ScrollView>
+        )}
+      </View>
+    </SafeAreaWrapper>
   );
 };
 
@@ -480,28 +487,18 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.backgroundPrimary,
   },
-  header: {
+  liveIndicatorContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
-    backgroundColor: COLORS.primary,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: TYPOGRAPHY.fontSize.lg,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
-    color: COLORS.textInverse,
-    marginRight: SPACING.sm,
+    backgroundColor: COLORS.backgroundPrimary,
   },
   liveIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.backgroundPrimary,
+    backgroundColor: COLORS.backgroundSecondary,
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.xs,
     borderRadius: 12,
@@ -528,6 +525,7 @@ const styles = StyleSheet.create({
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
     color: COLORS.primary,
   },
+  // View Selector - Exact Figma Specs: Corner radius 11, Padding H:16 V:10, Fill #ECECEC (inactive), accent (active)
   viewSelector: {
     flexDirection: 'row',
     backgroundColor: COLORS.backgroundSecondary,
@@ -537,12 +535,14 @@ const styles = StyleSheet.create({
   viewButton: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: SPACING.sm,
-    borderRadius: 8,
+    paddingVertical: 10, // Figma: V:10
+    paddingHorizontal: 16, // Figma: H:16
+    borderRadius: 11, // Figma: Corner radius 11
     marginHorizontal: SPACING.xs,
+    backgroundColor: '#ECECEC', // Figma: Fill #ECECEC (inactive)
   },
   viewButtonActive: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.primary, // Figma: accent (active)
   },
   viewIcon: {
     marginBottom: SPACING.xs,
@@ -563,6 +563,7 @@ const styles = StyleSheet.create({
   overviewContainer: {
     padding: SPACING.md,
   },
+  // Metrics Grid - Exact Figma Specs
   metricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -572,14 +573,18 @@ const styles = StyleSheet.create({
   metricCard: {
     flex: 1,
     minWidth: '45%',
-    backgroundColor: COLORS.backgroundSecondary,
-    borderRadius: 12,
+    backgroundColor: '#FFFFFF', // Figma: Fill #FFFFFF
+    borderRadius: 12, // Figma: Corner radius 12
     padding: SPACING.md,
     position: 'relative',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    borderWidth: 1, // Figma: Stroke weight 1
+    borderColor: '#DCDCDC', // Figma: Stroke #DCDCDC
+    borderStyle: 'solid',
+    // Figma: Drop shadow - X:0, Y:4, Blur:4, Spread:0, Color:#DCDCDC 25%
+    shadowColor: '#DCDCDC',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
     elevation: 4,
   },
   metricValue: {
@@ -600,26 +605,32 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
+  // Emergency Section - Exact Figma Specs
   emergencySection: {
     marginBottom: SPACING.lg,
+  },
+  emergencySectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
   },
   emergencyTitle: {
     fontSize: TYPOGRAPHY.fontSize.md,
     fontWeight: TYPOGRAPHY.fontWeight.bold,
-    color: COLORS.error,
-    marginBottom: SPACING.sm,
+    color: COLORS.textPrimary,
   },
   emergencyAlert: {
     flexDirection: 'row',
-    backgroundColor: COLORS.error + '20',
-    borderLeftWidth: 4,
-    borderLeftColor: COLORS.error,
-    borderRadius: 8,
+    backgroundColor: '#FEEBEB', // Figma: Fill #FEEBEB
+    borderWidth: 2, // Figma: Stroke weight 2
+    borderColor: '#DC2626', // Figma: Stroke #DC2626
+    borderRadius: 12, // Figma: Corner radius 12
     padding: SPACING.md,
     marginBottom: SPACING.sm,
-    shadowColor: '#000',
+    // Figma: Drop shadow - X:0, Y:2, Blur:6, Spread:0, Color:#000000 14%
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.14,
     shadowRadius: 6,
     elevation: 3,
   },
@@ -628,7 +639,7 @@ const styles = StyleSheet.create({
   },
   emergencyGuard: {
     fontSize: TYPOGRAPHY.fontSize.md,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
     color: COLORS.textPrimary,
     marginBottom: SPACING.xs,
   },
@@ -641,27 +652,23 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.fontSize.xs,
     color: COLORS.textSecondary,
   },
-  emergencyStatus: {
+  emergencyStatusBadge: {
+    backgroundColor: '#DC2626',
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.xs,
     borderRadius: 8,
     alignSelf: 'flex-start',
+    height: 20,
+    justifyContent: 'center',
   },
   emergencyStatusText: {
     fontSize: TYPOGRAPHY.fontSize.xs,
     fontWeight: TYPOGRAPHY.fontWeight.bold,
     color: COLORS.textInverse,
   },
+  // Map Section - Exact Figma Specs
   mapSection: {
     marginBottom: SPACING.lg,
-    backgroundColor: COLORS.backgroundSecondary,
-    borderRadius: 12,
-    padding: SPACING.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
   },
   sectionTitle: {
     fontSize: TYPOGRAPHY.fontSize.md,
@@ -669,7 +676,86 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     marginBottom: SPACING.sm,
   },
+  mapContainer: {
+    borderRadius: 12, // Figma: Corner radius 12
+    overflow: 'hidden',
+    borderWidth: 1, // Figma: Stroke weight 1
+    borderColor: '#DCDCDC', // Figma: Stroke #DCDCDC
+    // Figma: Drop shadow - X:0, Y:4, Blur:4, Spread:0, Color:#DCDCDC 25%
+    shadowColor: '#DCDCDC',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
+    backgroundColor: COLORS.backgroundPrimary,
+  },
+  // Guard Detail Card - Exact Figma Specs
+  guardDetailCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: SPACING.md,
+    marginTop: SPACING.sm,
+    borderWidth: 1,
+    borderColor: '#DCDCDC',
+    shadowColor: '#DCDCDC',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  closeButton: {
+    position: 'absolute',
+    top: SPACING.sm,
+    right: SPACING.sm,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    color: COLORS.textSecondary,
+  },
+  guardDetailName: {
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.xs,
+  },
+  guardDetailSite: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.xs,
+  },
+  guardDetailStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.xs,
+  },
+  guardDetailStatusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: SPACING.xs,
+  },
+  guardDetailStatusText: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+  },
+  guardDetailUpdate: {
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.xs,
+  },
+  guardDetailAccuracy: {
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textSecondary,
+  },
   guardMonitoringContainer: {
+    flex: 1,
+  },
+  guardMonitoringContent: {
     padding: SPACING.md,
   },
   guardStatusCard: {

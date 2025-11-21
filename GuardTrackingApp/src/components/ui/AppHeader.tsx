@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image, ViewStyle, ImageStyle } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Image, ViewStyle, ImageStyle, StatusBar, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MenuIcon, BellIcon } from './FeatherIcons';
 import { COLORS, SPACING, TYPOGRAPHY } from '../../styles/globalStyles';
 import Logo from '../../assets/images/tracSOpro-logo.png';
@@ -23,6 +24,9 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   rightIcon,
   style,
 }) => {
+  const insets = useSafeAreaInsets();
+  const topPadding = Math.max(insets.top, Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0);
+
   const renderLeft = () => {
     if (leftIcon) return leftIcon;
     if (onMenuPress) {
@@ -62,7 +66,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   };
 
   return (
-    <View style={[styles.container, style]}>
+    <View style={[styles.container, { paddingTop: topPadding + SPACING.sm }, style]}>
       {renderLeft()}
       {renderCenter()}
       {renderRight()}
@@ -76,13 +80,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
+    paddingBottom: SPACING.md,
     backgroundColor: COLORS.backgroundPrimary,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.borderLight,
     minHeight: 60,
-    marginTop: 20,
-      },
+  },
   iconButton: {
     width: 40,
     height: 40,

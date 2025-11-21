@@ -10,29 +10,27 @@ import {
   Alert,
   StatusBar,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootState } from '../../store';
-import { globalStyles, COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS } from '../../styles/globalStyles';
-import { AppScreen, AppCard, AppButton } from '../../components/ui/AppComponents';
+import { 
+  fetchGuardReports, 
+  createReport,
+  clearError 
+} from '../../store/slices/shiftReportSlice';
+import { fetchActiveShift } from '../../store/slices/shiftSlice';
+import { globalStyles, COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import SharedHeader from '../../components/ui/SharedHeader';
 import GuardProfileDrawer from '../../components/guard/GuardProfileDrawer';
-import { useProfileDrawer } from '../../hooks/useProfileDrawer';
-import { MenuIcon, BellIcon, MapPinIcon, AlertTriangleIcon, AlertCircleIcon, FileTextIcon } from '../../components/ui/FeatherIcons';
+import { MapPinIcon, AlertTriangleIcon, AlertCircleIcon, FileTextIcon } from '../../components/ui/FeatherIcons';
+import { FeatherIcon } from '../../components/ui/FeatherIcons';
+import { ReportType } from '../../types/shift.types';
+import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
 
 type ReportsScreenNavigationProp = StackNavigationProp<any, 'Reports'>;
-
-interface ShiftReport {
-  id: string;
-  location: string;
-  address: string;
-  shiftTime: string;
-  reportText: string;
-  submittedAt: string;
-  type: 'incident' | 'shift';
-}
 
 const ReportsScreen: React.FC = () => {
   const navigation = useNavigation<ReportsScreenNavigationProp>();
@@ -44,56 +42,75 @@ const ReportsScreen: React.FC = () => {
   // Redux state
   const { 
     activeShift, 
-    loading, 
-    error 
+    loading: shiftLoading, 
+    error: shiftError 
   } = useSelector((state: RootState) => state.shifts);
-  const [submittedReports, setSubmittedReports] = useState<ShiftReport[]>([
-    {
-      id: '1',
-      location: 'Ocean View Vila',
-      address: '1321 Baker Street, NY',
-      shiftTime: '08:00 am - 07:00 pm',
-      reportText: 'We had no incident occured on the site, during my shift hours',
-      submittedAt: '27-10-2025, 03:32 pm',
-      type: 'incident',
-    },
-    {
-      id: '2',
-      location: 'Ocean View Vila',
-      address: '1321 Baker Street, NY',
-      shiftTime: '08:00 am - 07:00 pm',
-      reportText: 'We had no incident occured on the site, during my shift hours',
-      submittedAt: '27-10-2025, 03:32 pm',
-      type: 'incident',
-    },
-  ]);
+  
+  const {
+    reports,
+    loading: reportsLoading,
+    error: reportsError,
+    submitLoading,
+  } = useSelector((state: RootState) => state.shiftReports);
 
-  const handleSubmitReport = () => {
+  const { user } = useSelector((state: RootState) => state.auth);
+
+  // Load data on mount
+  useEffect(() => {
+    initializeData();
+  }, [dispatch]);
+
+  const initializeData = async () => {
+    try {
+      await Promise.all([
+        dispatch(fetchActiveShift() as any),
+        dispatch(fetchGuardReports(50) as any),
+      ]);
+    } catch (error) {
+      console.error('Error initializing data:', error);
+    }
+  };
+
+  const onRefresh = async () => {
+    try {
+      setRefreshing(true);
+      dispatch(clearError());
+      await Promise.all([
+        dispatch(fetchActiveShift() as any),
+        dispatch(fetchGuardReports(50) as any),
+      ]);
+    } catch (error) {
+      console.error('Refresh error:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const handleSubmitReport = async () => {
     if (!reportText.trim()) {
       Alert.alert('Error', 'Please write a report before submitting');
       return;
     }
 
-    const newReport: ShiftReport = {
-      id: Date.now().toString(),
-      location: 'Ocean View Vila',
-      address: '1321 Baker Street, NY',
-      shiftTime: '08:00 am - 07:00 pm',
-      reportText: reportText.trim(),
-      submittedAt: new Date().toLocaleString('en-US', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      }),
-      type: 'shift',
-    };
+    if (!activeShift) {
+      Alert.alert('Error', 'No active shift found. Please check in to a shift first.');
+      return;
+    }
 
-    setSubmittedReports([newReport, ...submittedReports]);
-    setReportText('');
-    Alert.alert('Success', 'Report submitted successfully');
+    try {
+      await dispatch(createReport({
+        shiftId: activeShift.id,
+        reportType: ReportType.SHIFT,
+        content: reportText.trim(),
+      }) as any);
+      
+      setReportText('');
+      Alert.alert('Success', 'Report submitted successfully');
+      // Refresh reports list
+      await dispatch(fetchGuardReports(50) as any);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to submit report');
+    }
   };
 
   const handleAddIncidentReport = () => {
@@ -109,224 +126,351 @@ const ReportsScreen: React.FC = () => {
         { 
           text: 'Send Alert', 
           style: 'destructive',
-          onPress: () => Alert.alert('Emergency Alert Sent', 'Help is on the way!')
+          onPress: () => {
+            // TODO: Implement emergency alert API call
+            Alert.alert('Emergency Alert Sent', 'Help is on the way!');
+          }
         },
       ]
     );
   };
 
-  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
-
   const handleNotificationPress = () => {
     console.log('Notification pressed');
   };
 
-  const handleViewLocation = () => {
-    console.log('View location pressed');
+  const formatTime = (time?: string) => {
+    if (!time) return '--:--';
+    try {
+      const date = new Date(time);
+      return date.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        hour12: true 
+      }).toLowerCase().replace(' ', ' ');
+    } catch {
+      return time;
+    }
   };
 
-  const renderCurrentShiftCard = () => (
-    <AppCard style={styles.currentShiftCard}>
-      <View style={styles.locationHeader}>
-        <View style={styles.locationInfo}>
-          <MapPinIcon size={20} color={COLORS.primary} />
-          <View style={styles.locationText}>
-            <Text style={styles.locationName}>Ocean View Vila</Text>
-            <Text style={styles.locationAddress}>1321 Baker Street, NY</Text>
+  const formatDate = (dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleString('en-US', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      });
+    } catch {
+      return dateString;
+    }
+  };
+
+  const getReportTypeLabel = (reportType: string) => {
+    switch (reportType) {
+      case 'INCIDENT':
+        return 'Incident report';
+      case 'EMERGENCY':
+        return 'Emergency report';
+      default:
+        return 'Shift report';
+    }
+  };
+
+  const renderCurrentShiftCard = () => {
+    if (!activeShift) {
+      return (
+        <View style={styles.emptyShiftCard}>
+          <Text style={styles.emptyShiftText}>No active shift</Text>
+          <Text style={styles.emptyShiftSubtext}>Check in to a shift to submit reports</Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.currentShiftCard}>
+        <View style={styles.locationHeader}>
+          <View style={styles.locationInfo}>
+            <View style={styles.locationIconCircle}>
+              <MapPinIcon size={20} color={COLORS.primary} />
+            </View>
+            <View style={styles.locationText}>
+              <Text style={styles.locationName}>{activeShift.locationName || 'Unknown Location'}</Text>
+              <Text style={styles.locationAddress}>{activeShift.locationAddress || 'No address'}</Text>
+            </View>
+          </View>
+          <View style={styles.statusBadge}>
+            <Text style={styles.statusText}>Active</Text>
           </View>
         </View>
-        <View style={styles.statusBadge}>
-          <Text style={styles.statusText}>Active</Text>
+
+        {activeShift.description && (
+          <Text style={styles.shiftDescription}>
+            {activeShift.description}
+          </Text>
+        )}
+
+        <View style={styles.shiftTimeRow}>
+          <Text style={styles.shiftTimeLabel}>Shift Time:</Text>
+          <Text style={styles.shiftTimeValue}>
+            {formatTime(activeShift.startTime)} - {formatTime(activeShift.endTime)}
+          </Text>
+        </View>
+
+        <TextInput
+          style={styles.reportInput}
+          placeholder="Write shift report"
+          placeholderTextColor="#9CA3AF"
+          multiline
+          numberOfLines={4}
+          value={reportText}
+          onChangeText={setReportText}
+          textAlignVertical="top"
+        />
+
+        <TouchableOpacity
+          style={[styles.submitButton, submitLoading && styles.submitButtonDisabled]}
+          onPress={handleSubmitReport}
+          disabled={submitLoading}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.submitButtonText}>
+            {submitLoading ? 'Submitting...' : 'Submit'}
+          </Text>
+        </TouchableOpacity>
+
+        <View style={styles.actionButtons}>
+          <TouchableOpacity 
+            style={styles.incidentButton} 
+            onPress={handleAddIncidentReport}
+            activeOpacity={0.8}
+          >
+            <FileTextIcon size={16} color="#1E3A8A" />
+            <Text style={styles.incidentButtonText}>Add Incident Report</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.emergencyButton} 
+            onPress={handleEmergencyAlert}
+            activeOpacity={0.8}
+          >
+            <AlertCircleIcon size={16} color={COLORS.error} />
+            <Text style={styles.emergencyButtonText}>Emergency Alert</Text>
+          </TouchableOpacity>
         </View>
       </View>
+    );
+  };
 
-      <Text style={styles.shiftDescription}>
-        Make sure to check the parking lot for illegal parkings.
-      </Text>
+  const renderSubmittedReports = () => {
+    if (reportsLoading && reports.length === 0) {
+      return (
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading reports...</Text>
+        </View>
+      );
+    }
 
-      <View style={styles.shiftTimeRow}>
-        <Text style={styles.shiftTimeLabel}>Shift Time:</Text>
-        <Text style={styles.shiftTimeValue}>08:00 am - 07:00 pm</Text>
-      </View>
+    if (reports.length === 0) {
+      return (
+        <View style={styles.emptyReportsContainer}>
+          <Text style={styles.emptyReportsText}>No submitted reports</Text>
+          <Text style={styles.emptyReportsSubtext}>Your submitted reports will appear here</Text>
+        </View>
+      );
+    }
 
-      <TextInput
-        style={styles.reportInput}
-        placeholder="Write shift report"
-        placeholderTextColor="#9CA3AF"
-        multiline
-        numberOfLines={4}
-        value={reportText}
-        onChangeText={setReportText}
-        textAlignVertical="top"
-      />
+    return (
+      <View style={styles.submittedReportsContainer}>
+        <Text style={styles.sectionTitle}>Submitted Reports</Text>
 
-      <AppButton
-        title="Submit Report"
-        onPress={handleSubmitReport}
-        style={styles.submitButton}
-      />
+        {reports.map((report) => {
+          const shift = report.shift;
+          // Get location from shift - shift has locationName and locationAddress directly
+          const locationName = shift?.locationName || shift?.location?.name || 'Unknown Location';
+          const locationAddress = shift?.locationAddress || shift?.location?.address || 'No address';
 
-      <View style={styles.actionButtons}>
-        <TouchableOpacity style={styles.incidentButton} onPress={handleAddIncidentReport}>
-          <AlertTriangleIcon size={16} color={COLORS.primary} style={styles.actionIconMargin} />
-          <Text style={styles.incidentButtonText}>Add Incident Report</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.emergencyButton} onPress={handleEmergencyAlert}>
-          <AlertCircleIcon size={16} color={COLORS.error} style={styles.actionIconMargin} />
-          <Text style={styles.emergencyButtonText}>Emergency Alert</Text>
-        </TouchableOpacity>
-      </View>
-    </AppCard>
-  );
+          return (
+            <View key={report.id} style={styles.reportCard}>
+              <View style={styles.locationHeader}>
+                <View style={styles.locationInfo}>
+                  <View style={styles.locationIconCircle}>
+                    <MapPinIcon size={20} color={COLORS.textPrimary} />
+                  </View>
+                  <View style={styles.locationText}>
+                    <Text style={styles.locationName}>{locationName}</Text>
+                    <Text style={styles.locationAddress}>{locationAddress}</Text>
+                  </View>
+                </View>
+              </View>
 
-  const renderSubmittedReports = () => (
-    <View style={styles.submittedReportsContainer}>
-      <Text style={styles.sectionTitle}>Submitted Reports</Text>
+              <Text style={styles.reportText}>{report.content}</Text>
 
-      {submittedReports.map((report) => (
-        <View key={report.id} style={styles.reportCard}>
-          <View style={styles.locationHeader}>
-            <View style={styles.locationInfo}>
-              <MapPinIcon size={20} color={COLORS.textPrimary} />
-              <View style={styles.locationText}>
-                <Text style={styles.locationName}>{report.location}</Text>
-                <Text style={styles.locationAddress}>{report.address}</Text>
+              <View style={styles.reportFooter}>
+                <TouchableOpacity 
+                  style={styles.reportType}
+                  onPress={() => {
+                    // TODO: Navigate to report details or show dropdown
+                    console.log('Report type clicked:', report.id);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <FileTextIcon size={14} color="#1C6CA9" />
+                  <Text style={styles.reportTypeText}>
+                    {getReportTypeLabel(report.reportType)}
+                  </Text>
+                  <FeatherIcon name="chevronDown" size={12} color="#828282" />
+                </TouchableOpacity>
+                <Text style={styles.reportTime}>
+                  {formatDate(report.submittedAt)}
+                </Text>
               </View>
             </View>
-          </View>
+          );
+        })}
+      </View>
+    );
+  };
 
-          <Text style={styles.reportText}>{report.reportText}</Text>
+  // Check for network errors
+  const isNetworkError = reportsError?.toLowerCase().includes('network') || 
+                         reportsError?.toLowerCase().includes('connection') ||
+                         reportsError?.toLowerCase().includes('econnrefused') ||
+                         reportsError?.toLowerCase().includes('enotfound');
 
-          <View style={styles.reportFooter}>
-            <View style={styles.reportType}>
-              <AlertTriangleIcon size={14} color="#1C6CA9" style={styles.reportTypeIconMargin} />
-              <Text style={styles.reportTypeText}>
-                {report.type === 'incident' ? 'Incident report' : 'Shift report'}
-              </Text>
-              <Text style={styles.reportTypeArrow}>⌄</Text>
-            </View>
-            <Text style={styles.reportTime}>{report.submittedAt}</Text>
-          </View>
-        </View>
-      ))}
-    </View>
-  );
+  if (reportsError && reports.length === 0 && !reportsLoading) {
+    return (
+      <View style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+        <SharedHeader
+          variant="guard"
+          title="My Reports"
+          onNotificationPress={handleNotificationPress}
+          profileDrawer={
+            <GuardProfileDrawer
+              visible={false}
+              onClose={() => {}}
+            />
+          }
+        />
+        {isNetworkError ? (
+          <NetworkError
+            onRetry={initializeData}
+            style={styles.errorContainer}
+          />
+        ) : (
+          <ErrorState
+            error={reportsError || 'An error occurred'}
+            onRetry={initializeData}
+            style={styles.errorContainer}
+          />
+        )}
+      </View>
+    );
+  }
 
   return (
-    <AppScreen>
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       <SharedHeader
         variant="guard"
         title="My Reports"
         onNotificationPress={handleNotificationPress}
         profileDrawer={
           <GuardProfileDrawer
-            visible={isDrawerVisible}
-            onClose={closeDrawer}
+            visible={false}
+            onClose={() => {}}
           />
         }
       />
       
+      <LoadingOverlay
+        visible={shiftLoading && !activeShift}
+        message="Loading shift data..."
+      />
+
       <ScrollView 
         style={styles.content} 
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => {
-              setRefreshing(true);
-              // TODO: Refresh reports data
-              setTimeout(() => setRefreshing(false), 1000);
-            }}
+            onRefresh={onRefresh}
+            tintColor={COLORS.primary}
           />
         }
       >
         {renderCurrentShiftCard()}
         {renderSubmittedReports()}
       </ScrollView>
-
-      {/* Floating Action Button for Quick Incident Report */}
-      <TouchableOpacity 
-        style={styles.fab}
-        onPress={handleAddIncidentReport}
-        activeOpacity={0.8}
-      >
-        <FileTextIcon size={18} color="#FFFFFF" />
-        <Text style={styles.fabText}>New Report</Text>
-      </TouchableOpacity>
-    </AppScreen>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  menuButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  notificationButton: {
-    padding: 8,
+    backgroundColor: '#FAFAFA',
   },
   content: {
     flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: SPACING.lg,
   },
   currentShiftCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.backgroundPrimary,
     borderRadius: 12,
-    padding: 20,
-    marginTop: 20,
-    marginBottom: 24,
-    shadowColor: '#000',
+    padding: SPACING.lg,
+    marginTop: SPACING.lg,
+    marginBottom: SPACING.xl,
+    // Drop shadow: X: 0, Y: 4, Blur: 4, Spread: 0, Color: #DCDCDC 25%
+    shadowColor: '#DCDCDC',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 4,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
     elevation: 5,
+    borderWidth: 1,
+    borderColor: '#DCDCDC',
   },
   locationHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: SPACING.md,
   },
   locationInfo: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     flex: 1,
   },
+  locationIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#DBEAFE', // Light blue background for icon
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: SPACING.md,
+  },
   locationText: {
-    marginLeft: 12,
     flex: 1,
   },
   locationName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
     marginBottom: 2,
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
   locationAddress: {
-    fontSize: 14,
-    color: '#6B7280',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: '#828282',
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
   statusBadge: {
     backgroundColor: '#E8F5E8',
@@ -335,41 +479,47 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   statusText: {
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
     color: '#4CAF50',
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
   shiftDescription: {
-    fontSize: 14,
-    color: '#111827',
-    marginBottom: 12,
-    lineHeight: 20,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.md,
+    lineHeight: TYPOGRAPHY.lineHeight.relaxed * TYPOGRAPHY.fontSize.sm,
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
   shiftTimeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    alignItems: 'center',
+    marginBottom: SPACING.lg,
   },
   shiftTimeLabel: {
-    fontSize: 14,
-    color: '#6B7280',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: '#828282',
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
   shiftTimeValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#111827',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    color: COLORS.textPrimary,
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
   reportInput: {
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 8,
-    padding: 16,
-    fontSize: 14,
-    color: '#111827',
-    backgroundColor: '#FFFFFF',
-    marginBottom: 16,
-    minHeight: 100,
+    borderColor: '#DCDCDC',
+    borderRadius: 12,
+    padding: SPACING.lg,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textPrimary,
+    backgroundColor: '#FAFAFA',
+    marginBottom: SPACING.lg,
+    minHeight: 115,
     textAlignVertical: 'top',
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
   submitButton: {
     backgroundColor: '#1C6CA9',
@@ -377,44 +527,91 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 24,
     alignItems: 'center',
-    marginBottom: 16,
+    justifyContent: 'center',
+    marginBottom: SPACING.lg,
+    alignSelf: 'flex-end',
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
   },
   submitButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+    color: COLORS.textInverse,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
-  incidentIconMargin: {
-    marginRight: 8,
-    },
+  actionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: SPACING.md,
+  },
+  incidentButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#DBEAFE', // Light blue background
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: SPACING.md,
+    gap: SPACING.xs,
+  },
+  incidentButtonText: {
+    color: '#1E3A8A', // Dark blue text
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+  },
+  emergencyButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFEBEE',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: SPACING.md,
+    gap: SPACING.xs,
+  },
+  emergencyButtonText: {
+    color: COLORS.error,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+  },
   submittedReportsContainer: {
     marginBottom: 100,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 16,
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.lg,
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
   reportCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.backgroundPrimary,
     borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: '#000',
+    padding: SPACING.lg,
+    marginBottom: SPACING.lg,
+    // Drop shadow: X: 0, Y: 4, Blur: 4, Spread: 0, Color: #DCDCDC 25%
+    shadowColor: '#DCDCDC',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 4,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
     elevation: 5,
+    borderWidth: 1,
+    borderColor: '#DCDCDC',
   },
   reportText: {
-    fontSize: 14,
-    color: '#111827',
-    lineHeight: 20,
-    marginBottom: 16,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textPrimary,
+    lineHeight: TYPOGRAPHY.lineHeight.relaxed * TYPOGRAPHY.fontSize.sm,
+    marginBottom: SPACING.lg,
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
   reportFooter: {
     flexDirection: 'row',
@@ -424,89 +621,69 @@ const styles = StyleSheet.create({
   reportType: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  reportTypeIconMargin: {
-    marginRight: 8,
+    gap: SPACING.xs,
   },
   reportTypeText: {
-    fontSize: 14,
+    fontSize: TYPOGRAPHY.fontSize.sm,
     color: '#1C6CA9',
-    marginRight: 8,
-  },
-  reportTypeArrow: {
-    fontSize: 12,
-    color: '#6B7280',
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
   reportTime: {
-    fontSize: 12,
-    color: '#6B7280',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: '#828282',
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
-  fab: {
-    position: 'absolute',
-    bottom: 80,
-    right: 20,
-    backgroundColor: '#1C6CA9',
-    borderRadius: 28,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    flexDirection: 'row',
+  emptyShiftCard: {
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: 12,
+    padding: SPACING.xl,
+    marginTop: SPACING.lg,
+    marginBottom: SPACING.xl,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    borderWidth: 1,
+    borderColor: '#DCDCDC',
   },
-  fabIconMargin: {
-    marginRight: 8,
-  },
-  fabText: {
-    color: '#FFFFFF',
-    fontSize: 14,
+  emptyShiftText: {
+    fontSize: TYPOGRAPHY.fontSize.md,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.xs,
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
-  actionIconMargin: {
-    marginRight: 8,
+  emptyShiftSubtext: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: '#828282',
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
-  actionButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 16,
-  },
-  incidentButton: {
-    flex: 1,
-    flexDirection: 'row',
+  emptyReportsContainer: {
+    paddingVertical: SPACING.xxl,
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F3F8FF',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginRight: 8,
   },
-  incidentButtonText: {
-    color: COLORS.primary,
-    fontSize: 14,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
+  emptyReportsText: {
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.xs,
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
-  emergencyButton: {
-    flex: 1,
-    flexDirection: 'row',
+  emptyReportsSubtext: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: '#828282',
+    fontFamily: TYPOGRAPHY.fontPrimary,
+  },
+  loadingContainer: {
+    paddingVertical: SPACING.xxl,
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFF3F3',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginLeft: 8,
   },
-  emergencyButtonText: {
-    color: COLORS.error,
-    fontSize: 14,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
+  loadingText: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: '#828282',
+    fontFamily: TYPOGRAPHY.fontPrimary,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.lg,
   },
 });
 

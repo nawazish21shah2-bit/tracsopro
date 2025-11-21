@@ -19,15 +19,23 @@ import { logoutUser } from '../../store/slices/authSlice';
 import { globalStyles, COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { 
   UserIcon, 
+  UsersIcon,
   LocationIcon, 
   ReportsIcon, 
   EmergencyIcon, 
   ShiftsIcon,
   SettingsIcon,
+  MenuIcon,
 } from '../../components/ui/AppIcons';
+import { AppIcon } from '../../components/ui/AppIcons';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { ChevronRightIcon } from '../../components/ui/AppIcons';
 import SharedHeader from '../../components/ui/SharedHeader';
+import AdminStatsCard from '../../components/ui/AdminStatsCard';
+import QuickActionCard from '../../components/ui/QuickActionCard';
+import RecentActivityCard from '../../components/ui/RecentActivityCard';
+import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 
 const { width } = Dimensions.get('window');
 
@@ -51,13 +59,14 @@ interface DashboardMetrics {
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
 
   const [metrics, setMetrics] = useState<DashboardMetrics>({
     totalGuards: 24,
-    activeGuards: 18,
+    activeGuards: 22,
     totalSites: 12,
     activeSites: 10,
-    todayIncidents: 3,
+    todayIncidents: 6,
     pendingIncidents: 1,
     emergencyAlerts: 0,
     scheduledShifts: 32,
@@ -68,10 +77,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
   const [quickActions] = useState([
     {
       id: 'operations',
-      title: 'Operations Center',
-      subtitle: 'Live monitoring & alerts',
+      title: 'Operation Center',
+      subtitle: 'Live Monitoring & alerts',
       icon: 'monitor',
-      color: COLORS.primary,
+      iconBgColor: '#DBEAFE',
+      iconColor: '#1C6CA9',
       screen: 'AdminOperationsCenter',
     },
     {
@@ -79,40 +89,36 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
       title: 'Shift Scheduling',
       subtitle: 'Manage guard schedules',
       icon: 'calendar',
-      color: COLORS.success,
+      iconBgColor: '#FCE7F3',
+      iconColor: '#EC4899',
       screen: 'ShiftScheduling',
     },
     {
       id: 'users',
       title: 'User Management',
-      subtitle: 'Guards, clients & admins',
+      subtitle: 'Guards, clients & admin',
       icon: 'users',
-      color: COLORS.info,
+      iconBgColor: '#DCFCE7',
+      iconColor: '#16A34A',
       screen: 'UserManagement',
     },
     {
       id: 'incidents',
       title: 'Incident Review',
-      subtitle: 'Review & approve reports',
+      subtitle: 'Review and approve reports',
       icon: 'alert',
-      color: COLORS.warning,
+      iconBgColor: '#DBEAFE',
+      iconColor: '#1C6CA9',
       screen: 'IncidentReview',
     },
     {
       id: 'sites',
       title: 'Site Management',
-      subtitle: 'Locations & geofencing',
+      subtitle: 'Location & Geofencing',
       icon: 'location',
-      color: COLORS.error,
+      iconBgColor: '#DBEAFE',
+      iconColor: '#1C6CA9',
       screen: 'SiteManagement',
-    },
-    {
-      id: 'analytics',
-      title: 'Analytics & Reports',
-      subtitle: 'Performance insights',
-      icon: 'chart',
-      color: '#9C27B0',
-      screen: 'AdminAnalytics',
     },
   ]);
 
@@ -178,62 +184,90 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
   const renderHeader = () => (
     <SharedHeader
       variant="admin"
-      welcomeText="Welcome back,"
-      adminName="Admin Dashboard"
+      showLogo={true}
       onNotificationPress={() => {
         // Handle notification press
       }}
-      onEmergencyPress={handleEmergencyAlert}
-      onSettingsPress={handleLogout}
-      emergencyAlertCount={metrics.emergencyAlerts}
       notificationCount={metrics.emergencyAlerts}
+      profileDrawer={
+        <AdminProfileDrawer
+          visible={isDrawerVisible}
+          onClose={closeDrawer}
+          onNavigateToOperations={() => {
+            closeDrawer();
+            navigation.navigate('AdminOperationsCenter');
+          }}
+          onNavigateToScheduling={() => {
+            closeDrawer();
+            navigation.navigate('ShiftScheduling');
+          }}
+          onNavigateToUserManagement={() => {
+            closeDrawer();
+            navigation.navigate('UserManagement');
+          }}
+          onNavigateToSiteManagement={() => {
+            closeDrawer();
+            navigation.navigate('SiteManagement');
+          }}
+          onNavigateToIncidentReview={() => {
+            closeDrawer();
+            navigation.navigate('IncidentReview');
+          }}
+          onNavigateToAnalytics={() => {
+            closeDrawer();
+            navigation.navigate('AdminAnalytics');
+          }}
+          onNavigateToSettings={() => {
+            closeDrawer();
+            navigation.navigate('AdminSettings');
+          }}
+        />
+      }
     />
   );
 
   const renderMetricsOverview = () => (
     <View style={styles.metricsContainer}>
-      <Text style={styles.sectionTitle}>Operations Overview</Text>
-
       <View style={styles.metricsGrid}>
-        <View style={styles.metricCard}>
-          <View style={styles.metricHeader}>
-            <UserIcon size={24} color={COLORS.primary} />
-            <Text style={styles.metricValue}>
-              {metrics.activeGuards}/{metrics.totalGuards}
-            </Text>
-          </View>
-          <Text style={styles.metricLabel}>Active Guards</Text>
-          <Text style={styles.metricTrend}>+2 from yesterday</Text>
-        </View>
-
-        <View style={styles.metricCard}>
-          <View style={styles.metricHeader}>
-            <LocationIcon size={24} color={COLORS.success} />
-            <Text style={styles.metricValue}>
-              {metrics.activeSites}/{metrics.totalSites}
-            </Text>
-          </View>
-          <Text style={styles.metricLabel}>Active Sites</Text>
-          <Text style={styles.metricTrend}>All operational</Text>
-        </View>
-
-        <View style={styles.metricCard}>
-          <View style={styles.metricHeader}>
-            <ReportsIcon size={24} color={COLORS.warning} />
-            <Text style={styles.metricValue}>{metrics.todayIncidents}</Text>
-          </View>
-          <Text style={styles.metricLabel}>Today's Incidents</Text>
-          <Text style={styles.metricTrend}>{metrics.pendingIncidents} pending</Text>
-        </View>
-
-        <View style={styles.metricCard}>
-          <View style={styles.metricHeader}>
-            <ShiftsIcon size={24} color={COLORS.info}  />
-            <Text style={styles.metricValue}>{metrics.scheduledShifts}</Text>
-          </View>
-          <Text style={styles.metricLabel}>Scheduled Shifts</Text>
-          <Text style={styles.metricTrend}>This week</Text>
-        </View>
+        <AdminStatsCard
+          label="Active Guards"
+          value={`${metrics.activeGuards}/${metrics.totalGuards}`}
+          subLabel="2 On Leave"
+          icon={<UserIcon size={20} color="#16A34A" />}
+          iconBgColor="#DCFCE7"
+          iconColor="#16A34A"
+          style={styles.statCard}
+        />
+        
+        <AdminStatsCard
+          label="Active Sites"
+          value={`${metrics.activeSites}/${metrics.totalSites}`}
+          subLabel="All Operational"
+          icon={<LocationIcon size={20} color="#1976D2" />}
+          iconBgColor="#DBEAFE"
+          iconColor="#1976D2"
+          style={styles.statCard}
+        />
+        
+        <AdminStatsCard
+          label="Today's Report"
+          value={metrics.todayIncidents}
+          subLabel="1 Pending"
+          icon={<ReportsIcon size={20} color="#6B7280" />}
+          iconBgColor="#F3F4F6"
+          iconColor="#6B7280"
+          style={styles.statCard}
+        />
+        
+        <AdminStatsCard
+          label="Scheduled Shifts"
+          value={metrics.scheduledShifts}
+          subLabel="This Week"
+          icon={<ShiftsIcon size={20} color="#EC4899" />}
+          iconBgColor="#FCE7F3"
+          iconColor="#EC4899"
+          style={styles.statCard}
+        />
       </View>
     </View>
   );
@@ -242,73 +276,96 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
     <View style={styles.quickActionsContainer}>
       <Text style={styles.sectionTitle}>Quick Actions</Text>
       
-      <View style={styles.actionsGrid}>
-        {quickActions.map((action) => (
-          <TouchableOpacity
-            key={action.id}
-            style={styles.actionCard}
-            onPress={() => handleQuickAction(action)}
-          >
-            <View style={[styles.actionIcon, { backgroundColor: action.color + '20' }]}>
-              {action.icon === 'monitor' && <EmergencyIcon size={24} color={action.color} />}
-              {action.icon === 'calendar' && <ShiftsIcon size={24} color={action.color} />}
-              {action.icon === 'users' && <UserIcon size={24} color={action.color} />}
-              {action.icon === 'alert' && <ReportsIcon size={24} color={action.color} />}
-              {action.icon === 'location' && <LocationIcon size={24} color={action.color} />}
-              {action.icon === 'chart' && <SettingsIcon size={24} color={action.color} />}
-            </View>
-            
-            <View style={styles.actionContent}>
-              <Text style={styles.actionTitle}>{action.title}</Text>
-              <Text style={styles.actionSubtitle}>{action.subtitle}</Text>
-            </View>
-            
-            <View style={styles.actionArrow}>
-              <ChevronRightIcon size={16} color="#fff" />
-            </View>
-          </TouchableOpacity>
-        ))}
+      <View style={styles.actionsList}>
+        {quickActions.map((action) => {
+          let iconComponent;
+          switch (action.icon) {
+            case 'monitor':
+              // Operation Center: Professional dashboard/analytics icon for operations management
+              iconComponent = <AppIcon type="material" name="dashboard" size={20} color={action.iconColor} />;
+              break;
+            case 'calendar':
+              // Shift Scheduling: Calendar with clock
+              iconComponent = <ShiftsIcon size={20} color={action.iconColor} />;
+              break;
+            case 'users':
+              // User Management: People/users icon
+              iconComponent = <UsersIcon size={20} color={action.iconColor} />;
+              break;
+            case 'alert':
+              // Incident Review: Document/clipboard icon
+              iconComponent = <ReportsIcon size={20} color={action.iconColor} />;
+              break;
+            case 'location':
+              // Site Management: Location pin icon
+              iconComponent = <LocationIcon size={20} color={action.iconColor} />;
+              break;
+            default:
+              iconComponent = <SettingsIcon size={20} color={action.iconColor} />;
+          }
+          
+          return (
+            <QuickActionCard
+              key={action.id}
+              title={action.title}
+              subtitle={action.subtitle}
+              icon={iconComponent}
+              iconBgColor={action.iconBgColor}
+              onPress={() => handleQuickAction(action)}
+            />
+          );
+        })}
       </View>
     </View>
   );
 
-  const renderRecentActivity = () => (
-    <View style={styles.recentActivityContainer}>
-      <Text style={styles.sectionTitle}>Recent Activity</Text>
-      
-      <View style={styles.activityList}>
-        <View style={styles.activityItem}>
-          <View style={styles.activityIcon}>
-            <UserIcon size={16} color={COLORS.success} />
-          </View>
-          <View style={styles.activityContent}>
-            <Text style={styles.activityText}>John Smith checked in at Central Office</Text>
-            <Text style={styles.activityTime}>2 minutes ago</Text>
-          </View>
-        </View>
+  const renderRecentActivity = () => {
+    const activities = [
+      {
+        id: '1',
+        text: 'John Smith checked in at Central Office',
+        time: '2 minutes ago',
+        icon: <UserIcon size={20} color="#16A34A" />,
+        iconColor: '#16A34A',
+        shadowColor: '#16A34A', // Green shadow for check-in
+      },
+      {
+        id: '2',
+        text: 'New incident reported at Warehouse A',
+        time: '15 minutes ago',
+        icon: <ReportsIcon size={20} color="#F59E0B" />,
+        iconColor: '#F59E0B',
+        shadowColor: '#F59E0B', // Orange shadow for incidents
+      },
+      {
+        id: '3',
+        text: 'Sarah Johnson completed night shift',
+        time: '1 hour ago',
+        icon: <ShiftsIcon size={20} color="#3B82F6" />,
+        iconColor: '#3B82F6',
+        shadowColor: '#3B82F6', // Blue shadow for shifts
+      },
+    ];
 
-        <View style={styles.activityItem}>
-          <View style={styles.activityIcon}>
-            <ReportsIcon size={16} color={COLORS.warning} />
-          </View>
-          <View style={styles.activityContent}>
-            <Text style={styles.activityText}>New incident reported at Warehouse A</Text>
-            <Text style={styles.activityTime}>15 minutes ago</Text>
-          </View>
-        </View>
-
-        <View style={styles.activityItem}>
-          <View style={styles.activityIcon}>
-            <ShiftsIcon size={16} color={COLORS.info} />
-          </View>
-          <View style={styles.activityContent}>
-            <Text style={styles.activityText}>Sarah Johnson completed night shift</Text>
-            <Text style={styles.activityTime}>1 hour ago</Text>
-          </View>
+    return (
+      <View style={styles.recentActivityContainer}>
+        <Text style={styles.sectionTitle}>Recent Activity</Text>
+        
+        <View style={styles.activityList}>
+          {activities.map((activity) => (
+            <RecentActivityCard
+              key={activity.id}
+              text={activity.text}
+              time={activity.time}
+              icon={activity.icon}
+              iconColor={activity.iconColor}
+              shadowColor={activity.shadowColor}
+            />
+          ))}
         </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <SafeAreaWrapper>
@@ -419,134 +476,25 @@ const styles = StyleSheet.create({
   metricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: SPACING.sm,
-  },
-  metricCard: {
-    flex: 1,
-    minWidth: (width - SPACING.md * 3) / 2,
-    backgroundColor: COLORS.backgroundSecondary,
-    borderRadius: 12,
-    padding: SPACING.md,
-     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  metricHeader: {
-    flexDirection: 'row',
+    gap: 8,
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.sm,
   },
-  metricValue: {
-    fontSize: TYPOGRAPHY.fontSize.xl,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
-    color: COLORS.textPrimary,
-  },
-  metricLabel: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.xs,
-  },
-  metricTrend: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    color: COLORS.success,
+  statCard: {
+    flex: 1,
+    minWidth: (width - SPACING.md * 2 - 8) / 2,
+    maxWidth: (width - SPACING.md * 2 - 8) / 2,
   },
   quickActionsContainer: {
     padding: SPACING.md,
   },
-  actionsGrid: {
-    gap: SPACING.sm,
-  },
-  actionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.backgroundSecondary,
-    borderRadius: 12,
-    padding: SPACING.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2  ,
-  },
-  actionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: SPACING.md,
-  },
-  actionContent: {
-    flex: 1,
-  },
-  actionTitle: {
-    fontSize: TYPOGRAPHY.fontSize.md,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.xs,
-  },
-  actionSubtitle: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.textSecondary,
-  },
-  actionArrow: {
-    width: 34,
-    height: 34,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#1C6CA9',
-    borderRadius: 12,
-    marginLeft: SPACING.md,
-  },
-  arrowText: {
-    fontSize: TYPOGRAPHY.fontSize.lg,
-    color: COLORS.textSecondary,
-    fontWeight: TYPOGRAPHY.fontWeight.extrabold,
+  actionsList: {
+    gap: 0,
   },
   recentActivityContainer: {
     padding: SPACING.md,
   },
   activityList: {
-    gap: SPACING.sm,
-  },
-  activityItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-       backgroundColor: COLORS.backgroundSecondary,
-    borderRadius: 12,
-    padding: SPACING.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2  ,
-  },
-  activityIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.backgroundPrimary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: SPACING.md,
-  },
-  activityContent: {
-    flex: 1,
-  },
-  activityText: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.xs,
-  },
-  activityTime: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    color: COLORS.textSecondary,
+    gap: 0,
   },
 });
 

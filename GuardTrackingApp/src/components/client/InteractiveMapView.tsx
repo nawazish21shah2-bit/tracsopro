@@ -39,7 +39,7 @@ interface GuardLocation {
   longitude: number;
   accuracy: number;
   timestamp: number;
-  status: 'active' | 'on_break' | 'offline';
+  status: 'active' | 'on_break' | 'offline' | 'emergency';
   siteName?: string;
   lastUpdate: string;
 }
@@ -57,12 +57,22 @@ interface InteractiveMapViewProps {
   height?: number;
   showControls?: boolean;
   onGuardSelect?: (guardId: string) => void;
+  guardData?: Array<{
+    guardId: string;
+    guardName: string;
+    latitude: number;
+    longitude: number;
+    accuracy: number;
+    status: 'active' | 'on_break' | 'offline' | 'emergency';
+    siteName?: string;
+  }>;
 }
 
 const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
   height = 300,
   showControls = true,
   onGuardSelect,
+  guardData,
 }) => {
   const dispatch = useDispatch();
   const { user } = useSelector((state: RootState) => state.auth);
@@ -91,6 +101,24 @@ const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
       stopLiveUpdates();
     };
   }, []);
+
+  // Update guard locations when guardData prop changes
+  useEffect(() => {
+    if (guardData && guardData.length > 0) {
+      const guardLocations: GuardLocation[] = guardData.map(guard => ({
+        guardId: guard.guardId,
+        guardName: guard.guardName,
+        latitude: guard.latitude,
+        longitude: guard.longitude,
+        accuracy: guard.accuracy,
+        timestamp: Date.now(),
+        status: guard.status,
+        siteName: guard.siteName,
+        lastUpdate: 'Just now',
+      }));
+      setGuardLocations(guardLocations);
+    }
+  }, [guardData]);
 
   const initializeMap = async () => {
     try {
@@ -127,7 +155,24 @@ const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
 
   const loadGuardLocations = async () => {
     try {
-      // Simulate loading guard locations from WebSocket or API
+      // If guard data is provided as prop, use it
+      if (guardData && guardData.length > 0) {
+        const guardLocations: GuardLocation[] = guardData.map(guard => ({
+          guardId: guard.guardId,
+          guardName: guard.guardName,
+          latitude: guard.latitude,
+          longitude: guard.longitude,
+          accuracy: guard.accuracy,
+          timestamp: Date.now(),
+          status: guard.status,
+          siteName: guard.siteName,
+          lastUpdate: 'Just now',
+        }));
+        setGuardLocations(guardLocations);
+        return;
+      }
+
+      // Otherwise, load from API or use mock data
       const mockGuardLocations: GuardLocation[] = [
         {
           guardId: 'guard_1',
@@ -451,6 +496,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
     backgroundColor: COLORS.backgroundSecondary,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
   },
   map: {
     flex: 1,

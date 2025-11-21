@@ -27,6 +27,7 @@ import SystemSettingsScreen from '../screens/superAdmin/SystemSettingsScreen';
 import AuditLogsScreen from '../screens/superAdmin/AuditLogsScreen';
 import CompanyDetailsScreen from '../screens/superAdmin/CompanyDetailsScreen';
 import CreateCompanyScreen from '../screens/superAdmin/CreateCompanyScreen';
+import BuyPlanScreen from '../screens/superAdmin/BuyPlanScreen';
 
 export type SuperAdminTabParamList = {
   Dashboard: undefined;
@@ -45,6 +46,7 @@ export type SuperAdminStackParamList = {
   BillingManagement: undefined;
   SystemSettings: undefined;
   AuditLogs: undefined;
+  BuyPlan: undefined;
 };
 
 const Tab = createBottomTabNavigator<SuperAdminTabParamList>();
@@ -172,6 +174,7 @@ const SuperAdminNavigator: React.FC = () => {
       <Stack.Screen name="BillingManagement" component={BillingManagementScreen} />
       <Stack.Screen name="SystemSettings" component={SystemSettingsScreen} />
       <Stack.Screen name="AuditLogs" component={AuditLogsScreen} />
+      <Stack.Screen name="BuyPlan" component={BuyPlanScreen} />
     </Stack.Navigator>
   );
 };

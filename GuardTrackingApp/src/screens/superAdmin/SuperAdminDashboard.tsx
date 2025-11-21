@@ -15,10 +15,17 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSelector, useDispatch } from 'react-redux';
+import { RootState, AppDispatch } from '../../store';
+import { logoutUser } from '../../store/slices/authSlice';
 import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { HomeIcon, UserIcon, ReportsIcon, ShiftsIcon } from '../../components/ui/AppIcons';
 import StatsCard from '../../components/ui/StatsCard';
 import SuperAdminService, { PlatformOverview } from '../../services/superAdminService';
+import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
+import SharedHeader from '../../components/ui/SharedHeader';
+import SuperAdminProfileDrawer from '../../components/superAdmin/SuperAdminProfileDrawer';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 
 interface RecentActivity {
   id: string;
@@ -30,6 +37,9 @@ interface RecentActivity {
 }
 
 const SuperAdminDashboard: React.FC = () => {
+  const dispatch = useDispatch<AppDispatch>();
+  const { user } = useSelector((state: RootState) => state.auth);
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
   const [overview, setOverview] = useState<Omit<PlatformOverview, 'recentActivity'> | null>(null);
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,39 +88,56 @@ const SuperAdminDashboard: React.FC = () => {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaWrapper>
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Loading dashboard...</Text>
         </View>
-      </SafeAreaView>
+      </SafeAreaWrapper>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaWrapper>
+      <SharedHeader
+        variant="superAdmin"
+        showLogo={true}
+        onNotificationPress={() => {
+          // Handle notification press
+        }}
+        notificationCount={0}
+        profileDrawer={
+          <SuperAdminProfileDrawer
+            visible={isDrawerVisible}
+            onClose={closeDrawer}
+            onNavigateToCompanies={() => {
+              closeDrawer();
+              // navigation.navigate('Companies');
+            }}
+            onNavigateToAnalytics={() => {
+              closeDrawer();
+              // navigation.navigate('Analytics');
+            }}
+            onNavigateToBilling={() => {
+              closeDrawer();
+              // navigation.navigate('Billing');
+            }}
+            onNavigateToSystemSettings={() => {
+              closeDrawer();
+              // navigation.navigate('SystemSettings');
+            }}
+            onNavigateToAuditLogs={() => {
+              closeDrawer();
+              // navigation.navigate('AuditLogs');
+            }}
+          />
+        }
+      />
       <ScrollView
         style={styles.scrollView}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerContent}>
-            <View style={styles.logoContainer}>
-              <View style={styles.logo}>
-                <Text style={styles.logoText}>T&P</Text>
-              </View>
-              <Text style={styles.appName}>tracSOPro</Text>
-            </View>
-            <TouchableOpacity style={styles.notificationButton}>
-              <View style={styles.notificationIcon}>
-                <Text style={styles.notificationIconText}>🔔</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.welcomeText}>Platform Overview</Text>
-        </View>
 
         {/* Overview Stats */}
         <View style={styles.section}>
@@ -220,17 +247,14 @@ const SuperAdminDashboard: React.FC = () => {
           </View>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </SafeAreaWrapper>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F7FA',
-  },
   scrollView: {
     flex: 1,
+    backgroundColor: COLORS.backgroundPrimary,
   },
   loadingContainer: {
     flex: 1,
@@ -240,57 +264,6 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: TYPOGRAPHY.fontSize.md,
     color: COLORS.textSecondary,
-  },
-  header: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-  },
-  headerContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.sm,
-  },
-  logoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  logo: {
-    width: 32,
-    height: 32,
-    backgroundColor: COLORS.primary,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: SPACING.xs,
-  },
-  logoText: {
-    color: '#FFFFFF',
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
-  },
-  appName: {
-    fontSize: TYPOGRAPHY.fontSize.lg,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
-    color: COLORS.textPrimary,
-  },
-  notificationButton: {
-    padding: SPACING.xs,
-  },
-  notificationIcon: {
-    width: 32,
-    height: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  notificationIconText: {
-    fontSize: 18,
-  },
-  welcomeText: {
-    fontSize: TYPOGRAPHY.fontSize.xl,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
-    color: COLORS.textPrimary,
   },
   section: {
     marginTop: SPACING.lg,

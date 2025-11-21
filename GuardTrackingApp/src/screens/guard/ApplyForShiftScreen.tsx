@@ -28,7 +28,7 @@ interface ShiftDetails {
 }
 
 const ApplyForShiftScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<StackNavigationProp<GuardStackParamList>>();
   const route = useRoute();
   const { shiftId } = route.params as { shiftId: string };
   
@@ -153,7 +153,15 @@ const ApplyForShiftScreen: React.FC = () => {
         {/* Shift Details */}
         <View style={styles.section}>
           <Text style={styles.shiftTitle}>{shift.title}</Text>
-          <Text style={styles.siteName}>{shift.siteName}</Text>
+          <TouchableOpacity 
+            onPress={() => {
+              // Navigate to site details - using a mock siteId for now
+              // TODO: Get actual siteId from shift data
+              navigation.navigate('GuardSiteDetails', { siteId: '1' });
+            }}
+          >
+            <Text style={styles.siteName}>{shift.siteName}</Text>
+          </TouchableOpacity>
           
           <View style={styles.detailsContainer}>
             <View style={styles.detailRow}>
@@ -293,8 +301,10 @@ const styles = StyleSheet.create({
   },
   siteName: {
     fontSize: 16,
-    color: '#666666',
+    color: '#1C6CA9',
     marginBottom: 16,
+    textDecorationLine: 'underline',
+    fontWeight: '500',
   },
   detailsContainer: {
     marginBottom: 16,

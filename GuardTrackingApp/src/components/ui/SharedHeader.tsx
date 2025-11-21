@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image, ViewStyle, ImageStyle } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Image, ViewStyle, ImageStyle, StatusBar, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
 import {  NotificationIcon, EmergencyIcon, SettingsIcon } from './AppIcons';
@@ -10,7 +11,7 @@ import Logo from '../../assets/images/tracSOpro-logo.png';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 
 // Header variant types
-export type HeaderVariant = 'auth' | 'dashboard' | 'client' | 'guard' | 'admin' | 'default';
+export type HeaderVariant = 'auth' | 'dashboard' | 'client' | 'guard' | 'admin' | 'superAdmin' | 'default';
 
 // Base props for all headers
 interface BaseHeaderProps {
@@ -73,14 +74,21 @@ interface GuardHeaderProps extends BaseHeaderProps {
 // Admin-specific props
 interface AdminHeaderProps extends BaseHeaderProps {
   variant?: 'admin';
-  welcomeText?: string;
-  adminName?: string;
-  onMenuPress?: () => void;
   onNotificationPress?: () => void;
-  onEmergencyPress?: () => void;
-  onSettingsPress?: () => void;
-  emergencyAlertCount?: number;
+  leftIcon?: React.ReactNode;
+  rightIcon?: React.ReactNode;
   notificationCount?: number;
+  profileDrawer?: React.ReactNode;
+}
+
+// Super Admin-specific props
+interface SuperAdminHeaderProps extends BaseHeaderProps {
+  variant?: 'superAdmin';
+  onNotificationPress?: () => void;
+  leftIcon?: React.ReactNode;
+  rightIcon?: React.ReactNode;
+  notificationCount?: number;
+  profileDrawer?: React.ReactNode;
 }
 
 // Union type for all header props
@@ -89,7 +97,8 @@ export type SharedHeaderProps =
   | DashboardHeaderProps
   | ClientHeaderProps
   | GuardHeaderProps
-  | AdminHeaderProps;
+  | AdminHeaderProps
+  | SuperAdminHeaderProps;
 
 export const SharedHeader: React.FC<SharedHeaderProps> = (props) => {
   const variant = props.variant || 'default';
@@ -105,6 +114,8 @@ export const SharedHeader: React.FC<SharedHeaderProps> = (props) => {
       return <GuardHeaderComponent {...(props as GuardHeaderProps)} />;
     case 'admin':
       return <AdminHeaderComponent {...(props as AdminHeaderProps)} />;
+    case 'superAdmin':
+      return <SuperAdminHeaderComponent {...(props as SuperAdminHeaderProps)} />;
     case 'dashboard':
     case 'default':
     default:
@@ -140,6 +151,9 @@ const DashboardHeaderComponent: React.FC<DashboardHeaderProps> = ({
   notificationCount,
   style,
 }) => {
+  const insets = useSafeAreaInsets();
+  const topPadding = Math.max(insets.top, Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0);
+
   const renderLeft = () => {
     if (leftIcon) return leftIcon;
     if (onMenuPress) {
@@ -184,7 +198,7 @@ const DashboardHeaderComponent: React.FC<DashboardHeaderProps> = ({
   };
 
   return (
-    <View style={[sharedStyles.dashboardContainer, style]}>
+    <View style={[sharedStyles.dashboardContainer,  style]}>
       {renderLeft()}
       {renderCenter()}
       {renderRight()}
@@ -211,6 +225,8 @@ const ClientHeaderComponent: React.FC<ClientHeaderProps> = ({
   onNavigateToSupport,
 }) => {
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+  const insets = useSafeAreaInsets();
+  const topPadding = Math.max(insets.top, Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0);
 
   const renderLeft = () => {
     if (leftIcon) return leftIcon;
@@ -253,14 +269,29 @@ const ClientHeaderComponent: React.FC<ClientHeaderProps> = ({
     );
   };
 
+  // Clone profileDrawer to pass drawer state if it's a React element
+  const renderProfileDrawer = () => {
+    if (!profileDrawer) return null;
+    
+    // If profileDrawer is a React element, clone it and pass the drawer state
+    if (React.isValidElement(profileDrawer)) {
+      return React.cloneElement(profileDrawer as React.ReactElement<any>, {
+        visible: isDrawerVisible,
+        onClose: closeDrawer,
+      });
+    }
+    
+    return profileDrawer;
+  };
+
   return (
     <>
-      <View style={[sharedStyles.dashboardContainer, style]}>
+      <View style={[sharedStyles.dashboardContainer, { paddingTop: topPadding }, style]}>
         {renderLeft()}
         {renderCenter()}
         {renderRight()}
       </View>
-      {profileDrawer}
+      {renderProfileDrawer()}
     </>
   );
 };
@@ -279,6 +310,8 @@ const GuardHeaderComponent: React.FC<GuardHeaderProps> = ({
   ...drawerProps
 }) => {
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+  const insets = useSafeAreaInsets();
+  const topPadding = Math.max(insets.top, Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0);
 
   const renderLeft = () => {
     if (leftIcon) return leftIcon;
@@ -321,79 +354,196 @@ const GuardHeaderComponent: React.FC<GuardHeaderProps> = ({
     );
   };
 
+  // Clone profileDrawer to pass drawer state if it's a React element
+  const renderProfileDrawer = () => {
+    if (!profileDrawer) return null;
+    
+    // If profileDrawer is a React element, clone it and pass the drawer state
+    if (React.isValidElement(profileDrawer)) {
+      return React.cloneElement(profileDrawer as React.ReactElement<any>, {
+        visible: isDrawerVisible,
+        onClose: closeDrawer,
+      });
+    }
+    
+    return profileDrawer;
+  };
+
   return (
     <>
-      <View style={[sharedStyles.dashboardContainer, style]}>
+      <View style={[sharedStyles.dashboardContainer, { paddingTop: topPadding }, style]}>
         {renderLeft()}
         {renderCenter()}
         {renderRight()}
       </View>
-      {profileDrawer}
+      {renderProfileDrawer()}
     </>
   );
 };
 
 // Admin Header Component
 const AdminHeaderComponent: React.FC<AdminHeaderProps> = ({
-  welcomeText,
-  adminName,
-  onMenuPress,
+  title,
+  showLogo = false,
   onNotificationPress,
-  onEmergencyPress,
-  onSettingsPress,
-  emergencyAlertCount = 0,
-  notificationCount = 0,
+  leftIcon,
+  rightIcon,
+  notificationCount,
+  profileDrawer,
   style,
 }) => {
-  const renderLeft = () => (
-    <View style={sharedStyles.adminLeftContainer}>
-      {onMenuPress && (
-        <TouchableOpacity style={sharedStyles.iconButton} onPress={onMenuPress}>
-          <MenuIcon size={24} color="#FFF" />
-        </TouchableOpacity>
-      )}
-      <View style={sharedStyles.headerInfo}>
-        {welcomeText && <Text style={sharedStyles.welcomeText}>{welcomeText}</Text>}
-        {adminName && <Text style={sharedStyles.adminName}>{adminName}</Text>}
-      </View>
-    </View>
-  );
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+  const insets = useSafeAreaInsets();
+  const topPadding = Math.max(insets.top, Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0);
 
-  const renderRight = () => (
-    <View style={sharedStyles.rightContainer}>
-      {onNotificationPress && (
-        <TouchableOpacity style={sharedStyles.iconButton} onPress={onNotificationPress}>
-          <NotificationIcon size={24} color="#FFF" />
-          {notificationCount > 0 && (
-            <View style={sharedStyles.notificationBadge}>
-              <Text style={sharedStyles.badgeText}>{notificationCount > 99 ? '99+' : notificationCount}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-      )}
-      {onEmergencyPress && (
-        <TouchableOpacity style={sharedStyles.iconButton} onPress={onEmergencyPress}>
-          <EmergencyIcon size={20} color="#FFF" />
-          {emergencyAlertCount > 0 && (
-            <View style={sharedStyles.notificationBadge}>
-              <Text style={sharedStyles.badgeText}>{emergencyAlertCount > 99 ? '99+' : emergencyAlertCount}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-      )}
-      {onSettingsPress && (
-        <TouchableOpacity style={sharedStyles.iconButton} onPress={onSettingsPress}>
-          <SettingsIcon size={20} color="#FFF" />
-        </TouchableOpacity>
-      )}
-    </View>
-  );
+  const renderLeft = () => {
+    if (leftIcon) return leftIcon;
+    return (
+      <TouchableOpacity style={sharedStyles.iconButton} onPress={openDrawer}>
+        <MenuIcon size={24} color={COLORS.textPrimary} />
+      </TouchableOpacity>
+    );
+  };
+
+  const renderCenter = () => {
+    if (showLogo) {
+      return (
+        <View style={sharedStyles.logoContainer}>
+          <Image source={Logo} style={sharedStyles.logoImage as ImageStyle} resizeMode="contain" />
+        </View>
+      );
+    }
+    if (title) {
+      return <Text style={sharedStyles.title}>{title}</Text>;
+    }
+    return null;
+  };
+
+  const renderRight = () => {
+    if (rightIcon) return rightIcon;
+    return (
+      <View style={sharedStyles.rightContainer}>
+        {onNotificationPress && (
+          <TouchableOpacity style={sharedStyles.iconButton} onPress={onNotificationPress}>
+            <NotificationIcon size={24} color={COLORS.textPrimary} />
+            {notificationCount !== undefined && notificationCount > 0 && (
+              <View style={sharedStyles.notificationBadge}>
+                <Text style={sharedStyles.badgeText}>{notificationCount > 99 ? '99+' : notificationCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  };
+
+  // Clone profileDrawer to pass drawer state if it's a React element
+  const renderProfileDrawer = () => {
+    if (!profileDrawer) return null;
+    
+    // If profileDrawer is a React element, clone it and pass the drawer state
+    if (React.isValidElement(profileDrawer)) {
+      return React.cloneElement(profileDrawer as React.ReactElement<any>, {
+        visible: isDrawerVisible,
+        onClose: closeDrawer,
+      });
+    }
+    
+    return profileDrawer;
+  };
 
   return (
-    <View style={[sharedStyles.adminContainer, style]}>
-      {renderLeft()}
-      {renderRight()}
-    </View>
+    <>
+      <View style={[sharedStyles.dashboardContainer, { paddingTop: topPadding }, style]}>
+        {renderLeft()}
+        {renderCenter()}
+        {renderRight()}
+      </View>
+      {renderProfileDrawer()}
+    </>
+  );
+};
+
+// Super Admin Header Component
+const SuperAdminHeaderComponent: React.FC<SuperAdminHeaderProps> = ({
+  title,
+  showLogo = false,
+  onNotificationPress,
+  leftIcon,
+  rightIcon,
+  notificationCount,
+  profileDrawer,
+  style,
+}) => {
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+  const insets = useSafeAreaInsets();
+  const topPadding = Math.max(insets.top, Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0);
+
+  const renderLeft = () => {
+    if (leftIcon) return leftIcon;
+    return (
+      <TouchableOpacity style={sharedStyles.iconButton} onPress={openDrawer}>
+        <MenuIcon size={24} color={COLORS.textPrimary} />
+      </TouchableOpacity>
+    );
+  };
+
+  const renderCenter = () => {
+    if (showLogo) {
+      return (
+        <View style={sharedStyles.logoContainer}>
+          <Image source={Logo} style={sharedStyles.logoImage as ImageStyle} resizeMode="contain" />
+        </View>
+      );
+    }
+    if (title) {
+      return <Text style={sharedStyles.title}>{title}</Text>;
+    }
+    return null;
+  };
+
+  const renderRight = () => {
+    if (rightIcon) return rightIcon;
+    return (
+      <View style={sharedStyles.rightContainer}>
+        {onNotificationPress && (
+          <TouchableOpacity style={sharedStyles.iconButton} onPress={onNotificationPress}>
+            <NotificationIcon size={24} color={COLORS.textPrimary} />
+            {notificationCount !== undefined && notificationCount > 0 && (
+              <View style={sharedStyles.notificationBadge}>
+                <Text style={sharedStyles.badgeText}>{notificationCount > 99 ? '99+' : notificationCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  };
+
+  // Clone profileDrawer to pass drawer state if it's a React element
+  const renderProfileDrawer = () => {
+    if (!profileDrawer) return null;
+    
+    // If profileDrawer is a React element, clone it and pass the drawer state
+    if (React.isValidElement(profileDrawer)) {
+      return React.cloneElement(profileDrawer as React.ReactElement<any>, {
+        visible: isDrawerVisible,
+        onClose: closeDrawer,
+      });
+    }
+    
+    return profileDrawer;
+  };
+
+  return (
+    <>
+      <View style={[sharedStyles.dashboardContainer, { paddingTop: topPadding }, style]}>
+        {renderLeft()}
+        {renderCenter()}
+        {renderRight()}
+      </View>
+      {renderProfileDrawer()}
+    </>
   );
 };
 
@@ -438,12 +588,9 @@ const sharedStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
+    paddingBottom: SPACING.md,
     backgroundColor: COLORS.backgroundPrimary,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
     minHeight: 60,
-    marginTop: 20,
   },
   iconButton: {
     width: 40,
@@ -451,6 +598,8 @@ const sharedStyles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
+    borderRadius: 98,
+    marginRight: SPACING.sm,
   },
   title: {
     fontSize: TYPOGRAPHY.fontSize.lg,
@@ -462,8 +611,8 @@ const sharedStyles = StyleSheet.create({
     alignItems: 'center',
   },
   logoImage: {
-    width: 73,
-    height: 64,
+    width: 103,
+    height: 84,
   },
   rightContainer: {
     flexDirection: 'row',
@@ -487,36 +636,6 @@ const sharedStyles = StyleSheet.create({
     color: '#FFFFFF',
   },
 
-  // Admin Styles
-  adminContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    backgroundColor: COLORS.primary,
-    minHeight: 60,
-    marginTop: 20,
-  },
-  adminLeftContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  headerInfo: {
-    marginLeft: SPACING.md,
-  },
-  welcomeText: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: TYPOGRAPHY.fontWeight.regular,
-    color: '#FFFFFF',
-    opacity: 0.9,
-  },
-  adminName: {
-    fontSize: TYPOGRAPHY.fontSize.lg,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
-    color: '#FFFFFF',
-  },
 });
 
 export default SharedHeader;

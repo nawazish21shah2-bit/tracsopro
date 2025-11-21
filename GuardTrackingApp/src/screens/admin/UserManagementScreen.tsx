@@ -16,11 +16,13 @@ import {
 } from 'react-native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
-import { globalStyles, COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
-import { UserIcon, SettingsIcon, EmergencyIcon } from '../../components/ui/AppIcons';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
+import { UserIcon, UsersIcon, SettingsIcon, EmergencyIcon } from '../../components/ui/AppIcons';
 import apiService from '../../services/api';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
+import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 
 interface User {
   id: string;
@@ -39,6 +41,7 @@ interface UserManagementScreenProps {
 
 const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation }) => {
   const { user } = useSelector((state: RootState) => state.auth);
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
   
   const [users, setUsers] = useState<User[]>([]);
   const [selectedRole, setSelectedRole] = useState<'all' | 'admin' | 'guard' | 'client'>('all');
@@ -332,26 +335,42 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
         </View>
         
         <View style={styles.userBadges}>
-          <View style={[styles.roleBadge, { backgroundColor: getRoleColor(item.role) }]}>
-            <Text style={styles.roleText}>{item.role.toUpperCase()}</Text>
+          <View style={[styles.roleBadge, { backgroundColor: getRoleColor(item.role) + '20' }]}>
+            <Text style={[styles.roleText, { color: getRoleColor(item.role) }]}>
+              {item.role.toUpperCase()}
+            </Text>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-            <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
+          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '20' }]}>
+            <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
+              {item.status.toUpperCase()}
+            </Text>
           </View>
         </View>
       </View>
       
       {item.department && (
-        <Text style={styles.userDepartment}>Department: {item.department}</Text>
+        <View style={styles.departmentContainer}>
+          <Text style={styles.userDepartment}>Department: {item.department}</Text>
+        </View>
       )}
       
       <View style={styles.userMeta}>
         <Text style={styles.metaText}>
-          Created: {new Date(item.createdAt).toLocaleDateString()}
+          Created: {new Date(item.createdAt).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+          })}
         </Text>
         {item.lastLogin && (
           <Text style={styles.metaText}>
-            Last login: {new Date(item.lastLogin).toLocaleString()}
+            Last login: {new Date(item.lastLogin).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })}
           </Text>
         )}
       </View>
@@ -360,6 +379,7 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
         <TouchableOpacity 
           style={styles.actionButton}
           onPress={() => handleUserAction(item.id, 'edit')}
+          activeOpacity={0.7}
         >
           <SettingsIcon size={16} color={COLORS.primary} />
           <Text style={styles.actionText}>Edit</Text>
@@ -369,23 +389,26 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
           <TouchableOpacity 
             style={styles.actionButton}
             onPress={() => handleUserAction(item.id, 'suspend')}
+            activeOpacity={0.7}
           >
             <EmergencyIcon size={16} color={COLORS.warning} />
-            <Text style={styles.actionText}>Suspend</Text>
+            <Text style={[styles.actionText, { color: COLORS.warning }]}>Suspend</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity 
             style={styles.actionButton}
             onPress={() => handleUserAction(item.id, 'activate')}
+            activeOpacity={0.7}
           >
             <UserIcon size={16} color={COLORS.success} />
-            <Text style={styles.actionText}>Activate</Text>
+            <Text style={[styles.actionText, { color: COLORS.success }]}>Activate</Text>
           </TouchableOpacity>
         )}
         
         <TouchableOpacity 
           style={styles.actionButton}
           onPress={() => handleUserAction(item.id, 'delete')}
+          activeOpacity={0.7}
         >
           <Text style={[styles.actionText, { color: COLORS.error }]}>Delete</Text>
         </TouchableOpacity>
@@ -397,44 +420,69 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
     <SafeAreaWrapper>
       <SharedHeader
         variant="admin"
-        adminName="User Management"
-        rightIcon={
-          <TouchableOpacity 
-            style={styles.addButton}
-            onPress={() => setShowCreateModal(true)}
-          >
-            <Text style={styles.addButtonText}>+ Add User</Text>
-          </TouchableOpacity>
+        title="User Management"
+        showLogo={false}
+        profileDrawer={
+          <AdminProfileDrawer
+            visible={isDrawerVisible}
+            onClose={closeDrawer}
+            onNavigateToUserManagement={() => {
+              closeDrawer();
+            }}
+          />
         }
       />
 
       <View style={styles.filterContainer}>
-        {['all', 'admin', 'guard', 'client'].map((role) => (
-          <TouchableOpacity
-            key={role}
-            style={[
-              styles.filterButton,
-              selectedRole === role && styles.filterButtonActive,
-            ]}
-            onPress={() => setSelectedRole(role as any)}
-          >
-            <Text style={[
-              styles.filterText,
-              selectedRole === role && styles.filterTextActive,
-            ]}>
-              {role === 'all' ? 'All Users' : role.charAt(0).toUpperCase() + role.slice(1) + 's'}
-            </Text>
-          </TouchableOpacity>
-        ))}
+        {[
+          { key: 'all', label: 'All Users', icon: UsersIcon },
+          { key: 'admin', label: 'Admins', icon: UserIcon },
+          { key: 'guard', label: 'Guards', icon: UserIcon },
+          { key: 'client', label: 'Clients', icon: UserIcon },
+        ].map((role) => {
+          const isActive = selectedRole === role.key;
+          const IconComponent = role.icon;
+          const iconColor = isActive ? COLORS.textInverse : '#7A7A7A';
+          return (
+            <TouchableOpacity
+              key={role.key}
+              style={[
+                styles.filterButton,
+                isActive && styles.filterButtonActive,
+              ]}
+              onPress={() => setSelectedRole(role.key as any)}
+            >
+              <View style={styles.filterIcon}>
+                <IconComponent size={16} color={iconColor} />
+              </View>
+              <Text style={[
+                styles.filterText,
+                isActive && styles.filterTextActive,
+              ]}>
+                {role.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
-      <FlatList
-        data={filteredUsers}
-        renderItem={renderUserItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContainer}
-        showsVerticalScrollIndicator={false}
-      />
+      <View style={styles.contentWrapper}>
+        <FlatList
+          data={filteredUsers}
+          renderItem={renderUserItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContainer}
+          showsVerticalScrollIndicator={false}
+        />
+      </View>
+
+      {/* Sticky Action Button */}
+      <TouchableOpacity 
+        style={styles.stickyAddButton}
+        onPress={() => setShowCreateModal(true)}
+      >
+        <Text style={styles.stickyAddButtonText}>+ Add User</Text>
+      </TouchableOpacity>
 
       <Modal
         visible={showCreateModal}
@@ -618,50 +666,72 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.fontSize.lg,
     fontWeight: TYPOGRAPHY.fontWeight.bold,
   },
-  addButton: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: 8,
+  contentWrapper: {
+    flex: 1,
+    backgroundColor: COLORS.backgroundSecondary,
   },
-  addButtonText: {
+  stickyAddButton: {
+    position: 'absolute',
+    bottom: SPACING.lg,
+    left: SPACING.lg,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderRadius: BORDER_RADIUS.round,
+    ...SHADOWS.medium,
+    zIndex: 1000,
+  },
+  stickyAddButtonText: {
     color: COLORS.textInverse,
-    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontSize: TYPOGRAPHY.fontSize.md,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
   filterContainer: {
     flexDirection: 'row',
-    padding: SPACING.md,
-    backgroundColor: COLORS.backgroundSecondary,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    backgroundColor: COLORS.backgroundPrimary,
     gap: SPACING.sm,
   },
   filterButton: {
     flex: 1,
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.sm,
-    borderRadius: 8,
-    backgroundColor: COLORS.backgroundPrimary,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 11,
+    backgroundColor: '#ECECEC',
+    gap: SPACING.xs,
   },
   filterButtonActive: {
     backgroundColor: COLORS.primary,
   },
+  filterIcon: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   filterText: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.textSecondary,
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: '#7A7A7A',
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
   filterTextActive: {
     color: COLORS.textInverse,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
   listContainer: {
-    padding: SPACING.md,
+    padding: SPACING.lg,
+    paddingBottom: SPACING.xl * 3,
   },
   userCard: {
-    backgroundColor: COLORS.backgroundSecondary,
-    borderRadius: 12,
-    padding: SPACING.md,
-    marginBottom: SPACING.sm,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    ...SHADOWS.small,
   },
   userHeader: {
     flexDirection: 'row',
@@ -683,13 +753,15 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
   },
   userBadges: {
+    flexDirection: 'row',
     gap: SPACING.xs,
+    alignItems: 'center',
   },
   roleBadge: {
     paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: 8,
-    alignSelf: 'flex-end',
+    paddingVertical: SPACING.xs / 2,
+    borderRadius: BORDER_RADIUS.sm,
+    alignSelf: 'flex-start',
   },
   roleText: {
     fontSize: TYPOGRAPHY.fontSize.xs,
@@ -698,19 +770,25 @@ const styles = StyleSheet.create({
   },
   statusBadge: {
     paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: 8,
-    alignSelf: 'flex-end',
+    paddingVertical: SPACING.xs / 2,
+    borderRadius: BORDER_RADIUS.sm,
+    alignSelf: 'flex-start',
   },
   statusText: {
     fontSize: TYPOGRAPHY.fontSize.xs,
     fontWeight: TYPOGRAPHY.fontWeight.bold,
     color: COLORS.textInverse,
   },
+  departmentContainer: {
+    marginTop: SPACING.xs,
+    marginBottom: SPACING.sm,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderLight,
+  },
   userDepartment: {
     fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.textSecondary,
-    marginBottom: SPACING.sm,
   },
   userMeta: {
     marginBottom: SPACING.sm,
@@ -723,7 +801,8 @@ const styles = StyleSheet.create({
   userActions: {
     flexDirection: 'row',
     gap: SPACING.md,
-    paddingTop: SPACING.sm,
+    paddingTop: SPACING.md,
+    marginTop: SPACING.sm,
     borderTopWidth: 1,
     borderTopColor: COLORS.borderLight,
   },
@@ -731,10 +810,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.xs,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.sm,
   },
   actionText: {
     fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.primary,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
   modalContainer: {
     flex: 1,
@@ -744,21 +827,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: SPACING.md,
-    backgroundColor: COLORS.backgroundSecondary,
+    padding: SPACING.lg,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
   },
   modalTitle: {
-    fontSize: TYPOGRAPHY.fontSize.lg,
+    fontSize: TYPOGRAPHY.fontSize.xl,
     fontWeight: TYPOGRAPHY.fontWeight.bold,
     color: COLORS.textPrimary,
   },
   closeButton: {
-    fontSize: TYPOGRAPHY.fontSize.xl,
+    fontSize: TYPOGRAPHY.fontSize.xxl,
     color: COLORS.textSecondary,
+    width: 32,
+    height: 32,
+    textAlign: 'center',
+    lineHeight: 32,
   },
   modalContent: {
     flex: 1,
-    padding: SPACING.md,
+    padding: SPACING.lg,
   },
   formField: {
     marginBottom: SPACING.lg,
@@ -771,10 +860,12 @@ const styles = StyleSheet.create({
   },
   fieldInput: {
     backgroundColor: COLORS.backgroundSecondary,
-    borderRadius: 8,
-    padding: SPACING.sm,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
     fontSize: TYPOGRAPHY.fontSize.md,
     color: COLORS.textPrimary,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
   },
   roleSelector: {
     flexDirection: 'row',
@@ -783,32 +874,37 @@ const styles = StyleSheet.create({
   roleOption: {
     flex: 1,
     backgroundColor: COLORS.backgroundSecondary,
-    borderRadius: 8,
-    padding: SPACING.sm,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
   },
   roleOptionSelected: {
     backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   roleOptionText: {
     fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.textPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
   roleOptionTextSelected: {
     color: COLORS.textInverse,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
   createButton: {
-    backgroundColor: COLORS.success,
-    borderRadius: 8,
-    padding: SPACING.md,
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.lg,
     alignItems: 'center',
-    marginTop: SPACING.lg,
+    marginTop: SPACING.xl,
+    ...SHADOWS.small,
   },
   createButtonText: {
     color: COLORS.textInverse,
     fontSize: TYPOGRAPHY.fontSize.md,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
 });
 
