@@ -33,7 +33,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: '#dddddd',
     shadowOffset: {
       width: 0,
       height: 2,

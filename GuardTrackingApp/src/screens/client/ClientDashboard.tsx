@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
-import { MenuIcon, NotificationIcon, UserIcon, LocationIcon, ReportsIcon, EmergencyIcon } from '../../components/ui/AppIcons';
+import { UserIcon, LocationIcon, ReportsIcon, EmergencyIcon } from '../../components/ui/AppIcons';
 import StatsCard from '../../components/ui/StatsCard';
 import GuardCard from '../../components/client/GuardCard';
 import InteractiveMapView from '../../components/client/InteractiveMapView';
@@ -22,6 +22,9 @@ import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { ClientStackParamList } from '../../navigation/ClientStackNavigator';
+import SharedHeader from '../../components/ui/SharedHeader';
+import ClientProfileDrawer from '../../components/client/ClientProfileDrawer';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 
 const { width } = Dimensions.get('window');
 
@@ -47,6 +50,7 @@ const ClientDashboard: React.FC = () => {
   const { dashboardStats, guards, loading, guardsLoading } = useSelector((state: RootState) => state.client);
   const navigation = useNavigation<StackNavigationProp<ClientStackParamList>>();
   const dispatch = useDispatch<AppDispatch>();
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
 
   useEffect(() => {
     dispatch(fetchDashboardStats());
@@ -63,20 +67,46 @@ const ClientDashboard: React.FC = () => {
 
   return (
     <SafeAreaWrapper>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.menuButton}>
-          <MenuIcon size={24} color="#333" />
-        </TouchableOpacity>
-        <Image 
-          source={require('../../assets/images/tracSOpro-logo.png')} 
-          style={styles.logo}
-          resizeMode="contain"
-        />
-        <TouchableOpacity style={styles.notificationButton} onPress={() => navigation.navigate('ClientNotifications')}>
-          <NotificationIcon size={24} color="#333" />
-        </TouchableOpacity>
-      </View>
+      <SharedHeader
+        variant="client"
+        showLogo={true}
+        onNotificationPress={() => navigation.navigate('ClientNotifications')}
+        notificationCount={5}
+        profileDrawer={
+          <ClientProfileDrawer
+            visible={isDrawerVisible}
+            onClose={closeDrawer}
+            onNavigateToProfile={() => {
+              closeDrawer();
+              // navigation.navigate('ClientProfile');
+            }}
+            onNavigateToSites={() => {
+              closeDrawer();
+              // navigation.navigate('ClientSites');
+            }}
+            onNavigateToGuards={() => {
+              closeDrawer();
+              // navigation.navigate('ClientGuards');
+            }}
+            onNavigateToReports={() => {
+              closeDrawer();
+              // navigation.navigate('ClientReports');
+            }}
+            onNavigateToAnalytics={() => {
+              closeDrawer();
+              // navigation.navigate('ClientAnalytics');
+            }}
+            onNavigateToNotifications={() => {
+              closeDrawer();
+              navigation.navigate('ClientNotifications');
+            }}
+            onNavigateToSupport={() => {
+              closeDrawer();
+              // navigation.navigate('ClientSupport');
+            }}
+          />
+        }
+      />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Stats Cards */}
@@ -86,7 +116,7 @@ const ClientDashboard: React.FC = () => {
               <StatsCard
                 label="Guards On Duty"
                 value={dashboardStats?.guardsOnDuty || 0}
-                icon={<UserIcon size={18} color="#2E7D32" />}
+                icon={<UserIcon size={20} color="#16A34A" />}
                 variant="success"
               />
             </View>
@@ -94,7 +124,7 @@ const ClientDashboard: React.FC = () => {
               <StatsCard
                 label="Missed Shifts"
                 value={dashboardStats?.missedShifts || 0}
-                icon={<EmergencyIcon size={18} color="#D32F2F" />}
+                icon={<EmergencyIcon size={20} color="#DC2626" />}
                 variant="danger"
               />
             </View>
@@ -104,7 +134,7 @@ const ClientDashboard: React.FC = () => {
               <StatsCard
                 label="Active Sites"
                 value={dashboardStats?.activeSites || 0}
-                icon={<LocationIcon size={18} color="#1976D2" />}
+                icon={<LocationIcon size={20} color="#1976D2" />}
                 variant="info"
               />
             </View>
@@ -112,7 +142,7 @@ const ClientDashboard: React.FC = () => {
               <StatsCard
                 label="New Reports"
                 value={dashboardStats?.newReports || 0}
-                icon={<ReportsIcon size={18} color="#FF9500" />}
+                icon={<ReportsIcon size={20} color="#6B7280" />}
                 variant="neutral"
               />
             </View>
@@ -165,45 +195,20 @@ const ClientDashboard: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-  },
-  menuButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  logo: {
-    width: 40,
-    height: 40,
-  },
-  notificationButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   content: {
     flex: 1,
   },
   statsContainer: {
-    padding: 20,
+    padding: 16,
+    gap: 8,
   },
   statsRow: {
     flexDirection: 'row',
-    marginBottom: 16,
+    marginBottom: 8,
+    gap: 8,
   },
   statsColumn: {
     flex: 1,
-    marginHorizontal: 6,
   },
   assignButtonContainer: {
     paddingHorizontal: 20,

@@ -22,7 +22,9 @@ import {
 import { globalStyles, COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { AppScreen, AppCard, AppStatGrid } from '../../components/ui/AppComponents';
 import StatsCard from '../../components/ui/StatsCard';
-import { AppHeader } from '../../components/ui/AppHeader';
+import SharedHeader from '../../components/ui/SharedHeader';
+import GuardProfileDrawer from '../../components/guard/GuardProfileDrawer';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 import { LoadingOverlay, ErrorState, NetworkError, InlineLoading } from '../../components/ui/LoadingStates';
 import { ErrorHandler, withRetry } from '../../utils/errorHandler';
 import Logo from '../../assets/images/tracSOpro-logo.png';
@@ -345,13 +347,21 @@ const GuardHomeScreen: React.FC = () => {
   );
 
   // Show error state if there's an error and no data
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+
   if (error && !activeShift && !upcomingShifts?.length) {
     return (
       <AppScreen>
-        <AppHeader
+        <SharedHeader
+          variant="guard"
           showLogo={true}
-          onMenuPress={handleMenuPress}
           onNotificationPress={handleNotificationPress}
+          profileDrawer={
+            <GuardProfileDrawer
+              visible={isDrawerVisible}
+              onClose={closeDrawer}
+            />
+          }
         />
         <ErrorState
           error={error}
@@ -364,10 +374,16 @@ const GuardHomeScreen: React.FC = () => {
 
   return (
     <AppScreen>
-      <AppHeader
+      <SharedHeader
+        variant="guard"
         showLogo={true}
-        onMenuPress={handleMenuPress}
         onNotificationPress={handleNotificationPress}
+        profileDrawer={
+          <GuardProfileDrawer
+            visible={isDrawerVisible}
+            onClose={closeDrawer}
+          />
+        }
       />
       
       {/* Loading overlay for initial load */}

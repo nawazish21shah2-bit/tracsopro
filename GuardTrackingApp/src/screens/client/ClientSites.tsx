@@ -14,11 +14,13 @@ import { useSelector, useDispatch } from 'react-redux';
 import { useNavigation, useFocusEffect, DrawerActions } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootState, AppDispatch } from '../../store';
-import { MenuIcon, NotificationIcon } from '../../components/ui/AppIcons';
 import SiteCard from '../../components/client/SiteCard';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { ClientStackParamList } from '../../navigation/ClientStackNavigator';
 import { siteService, Site } from '../../services/siteService';
+import SharedHeader from '../../components/ui/SharedHeader';
+import ClientProfileDrawer from '../../components/client/ClientProfileDrawer';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 
 interface SiteData {
   id: string;
@@ -35,15 +37,11 @@ interface SiteData {
 const ClientSites: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const navigation = useNavigation<StackNavigationProp<ClientStackParamList>>();
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
 
   const [sites, setSites] = useState<Site[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-
-  const handleMenuPress = () => {
-    // Open the nearest drawer (global sidebar)
-    (navigation as any).dispatch(DrawerActions.openDrawer());
-  };
 
   const handleNotificationPress = () => {
     navigation.navigate('ClientNotifications');
@@ -100,16 +98,24 @@ const ClientSites: React.FC = () => {
 
   return (
     <SafeAreaWrapper>
-      {/* Header (read-only for client) */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.menuButton} onPress={handleMenuPress}>
-          <MenuIcon size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Sites</Text>
-        <TouchableOpacity style={styles.menuButton} onPress={handleNotificationPress}>
-          <NotificationIcon size={22} color="#333" />
-        </TouchableOpacity>
-      </View>
+      <SharedHeader
+        variant="client"
+        title="My Sites"
+        onNotificationPress={handleNotificationPress}
+        profileDrawer={
+          <ClientProfileDrawer
+            visible={isDrawerVisible}
+            onClose={closeDrawer}
+            onNavigateToSites={() => {
+              closeDrawer();
+            }}
+            onNavigateToNotifications={() => {
+              closeDrawer();
+              navigation.navigate('ClientNotifications');
+            }}
+          />
+        }
+      />
 
       <ScrollView 
         style={styles.content} 
@@ -158,27 +164,6 @@ const ClientSites: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-  },
-  menuButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#333333',
-  },
   addButton: {
     backgroundColor: '#1C6CA9',
     paddingHorizontal: 16,

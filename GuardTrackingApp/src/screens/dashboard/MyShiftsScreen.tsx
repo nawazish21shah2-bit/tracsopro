@@ -23,7 +23,9 @@ import { MenuIcon, BellIcon, MapPinIcon, AlertTriangleIcon, AlertCircleIcon, Che
 import { globalStyles, COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS } from '../../styles/globalStyles';
 import { AppScreen, AppCard } from '../../components/ui/AppComponents';
 import StatsCard from '../../components/ui/StatsCard';
-import { AppHeader } from '../../components/ui/AppHeader';
+import SharedHeader from '../../components/ui/SharedHeader';
+import GuardProfileDrawer from '../../components/guard/GuardProfileDrawer';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 
 type MyShiftsScreenNavigationProp = StackNavigationProp<any, 'MyShifts'>;
 
@@ -61,6 +63,7 @@ interface WeeklyShift {
 const MyShiftsScreen: React.FC = () => {
   const navigation = useNavigation<MyShiftsScreenNavigationProp>();
   const dispatch = useDispatch();
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
   
   const [selectedTab, setSelectedTab] = useState('Today');
   const [activeTab, setActiveTab] = useState<'today' | 'upcoming' | 'past'>('today');
@@ -427,10 +430,16 @@ const MyShiftsScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      <AppHeader
+      <SharedHeader
+        variant="guard"
         title="My Shifts"
-        onMenuPress={handleMenuPress}
         onNotificationPress={handleNotificationPress}
+        profileDrawer={
+          <GuardProfileDrawer
+            visible={isDrawerVisible}
+            onClose={closeDrawer}
+          />
+        }
       />
       
       <ScrollView

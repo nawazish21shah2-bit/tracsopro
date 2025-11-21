@@ -377,25 +377,24 @@ async function seedSitesAndShifts() {
 
         const existingShift = await prisma.shift.findFirst({
           where: {
-            guardId: guard.userId,
+            guardId: guard.id,
             locationName: site.name,
-            startTime: startTime
+            scheduledStartTime: startTime
           }
         });
 
         if (!existingShift) {
           await prisma.shift.create({
             data: {
-              guardId: guard.userId,
+              guardId: guard.id,
               locationName: site.name,
               locationAddress: site.address,
-              startTime,
-              endTime,
+              scheduledStartTime: startTime,
+              scheduledEndTime: endTime,
               status,
               description: `Security shift at ${site.name}`,
-              checkInTime,
-              checkOutTime,
-              actualDuration,
+              actualStartTime: checkInTime,
+              actualEndTime: checkOutTime,
               notes: status === 'COMPLETED' ? 'Shift completed successfully' : null
             }
           });

@@ -238,7 +238,7 @@ const styles = StyleSheet.create({
   },
   logoImage: {
     width: 160,
-    height: 160,
+    height: 140,
   },
   title: {
     fontFamily: 'Montserrat',

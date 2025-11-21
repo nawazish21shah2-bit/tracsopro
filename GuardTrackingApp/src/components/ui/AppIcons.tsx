@@ -65,7 +65,7 @@ export const AppIcon: React.FC<IconProps> = ({
 // Generic SVG icon wrapper for our Figma-exported assets
 type SvgIconProps = { size?: number; color?: string; style?: any };
 const SvgIcon = ({ Svg, size = 24, color = COLORS.textPrimary, style }: SvgIconProps & { Svg: any }) => (
-  <Svg width={size} height={size} color={color} fill={color} stroke={color} strokeWidth={size / 50} style={style} />
+  <Svg width={size} height={size} color={color} fill={color} stroke={color} strokeWidth={size /1000} style={style} />
 );
 
 // Specialized icon components for common use cases

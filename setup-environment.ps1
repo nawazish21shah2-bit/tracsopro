@@ -3,8 +3,8 @@
 
 Write-Host "Setting up React Native Environment Variables..." -ForegroundColor Green
 
-# Set JAVA_HOME (adjust path if your JDK is installed elsewhere)
-$javaHome = "C:\Program Files\Java\jdk-25"
+# Set JAVA_HOME (using Android Studio's bundled JRE)
+$javaHome = "C:\Program Files\Android\Android Studio\jbr"
 [Environment]::SetEnvironmentVariable("JAVA_HOME", $javaHome, "Machine")
 
 # Set ANDROID_HOME

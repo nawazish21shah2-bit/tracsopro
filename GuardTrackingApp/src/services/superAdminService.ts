@@ -116,7 +116,8 @@ class SuperAdminService {
   /**
    * Get all security companies with pagination and filters
    */
-  static async getSecurityCompanies(params: {
+  // Instance method used by screens
+  async getSecurityCompanies(params: {
     page?: number;
     limit?: number;
     search?: string;
@@ -151,7 +152,7 @@ class SuperAdminService {
   /**
    * Create a new security company
    */
-  static async createSecurityCompany(data: {
+  async createSecurityCompany(data: {
     name: string;
     email: string;
     phone?: string;

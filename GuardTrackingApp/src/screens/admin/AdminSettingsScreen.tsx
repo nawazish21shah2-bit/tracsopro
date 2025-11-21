@@ -10,6 +10,8 @@ import { SettingsIcon, UserIcon, NotificationIcon, DollarIcon } from '../../comp
 import { useDispatch } from 'react-redux';
 import type { AppDispatch } from '../../store';
 import { logoutUser } from '../../store/slices/authSlice';
+import SharedHeader from '../../components/ui/SharedHeader';
+import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 
 const AdminSettingsScreen: React.FC<{ navigation?: any }> = ({ navigation: propNavigation }) => {
   const dispatch = useDispatch<AppDispatch>();
@@ -48,13 +50,12 @@ const AdminSettingsScreen: React.FC<{ navigation?: any }> = ({ navigation: propN
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>← Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Admin Settings</Text>
-      </View>
+    <SafeAreaWrapper>
+      <SharedHeader
+        variant="admin"
+        adminName="Admin Settings"
+        onSettingsPress={handleLogout}
+      />
 
       <ScrollView style={styles.content}>
         {settingsOptions.map((option) => (
@@ -84,7 +85,7 @@ const AdminSettingsScreen: React.FC<{ navigation?: any }> = ({ navigation: propN
           <Text style={[styles.arrow, styles.logoutText]}>→</Text>
         </TouchableOpacity>
       </ScrollView>
-    </View>
+    </SafeAreaWrapper>
   );
 };
 

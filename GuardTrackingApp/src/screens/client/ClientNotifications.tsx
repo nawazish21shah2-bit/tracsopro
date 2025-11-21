@@ -9,8 +9,14 @@ import {
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
-import { MenuIcon, NotificationIcon } from '../../components/ui/AppIcons';
 import NotificationCard from '../../components/client/NotificationCard';
+import SharedHeader from '../../components/ui/SharedHeader';
+import ClientProfileDrawer from '../../components/client/ClientProfileDrawer';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { ClientStackParamList } from '../../navigation/ClientStackNavigator';
 
 interface NotificationData {
   id: string;
@@ -24,6 +30,8 @@ interface NotificationData {
 
 const ClientNotifications: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
+  const navigation = useNavigation<StackNavigationProp<ClientStackParamList>>();
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
 
   const [notifications, setNotifications] = useState<NotificationData[]>([
     {
@@ -47,17 +55,20 @@ const ClientNotifications: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.menuButton}>
-          <MenuIcon size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Notification</Text>
-        <TouchableOpacity style={styles.notificationButton}>
-          <NotificationIcon size={24} color="#333" />
-        </TouchableOpacity>
-      </View>
+    <SafeAreaWrapper>
+      <SharedHeader
+        variant="client"
+        title="Notification"
+        profileDrawer={
+          <ClientProfileDrawer
+            visible={isDrawerVisible}
+            onClose={closeDrawer}
+            onNavigateToNotifications={() => {
+              closeDrawer();
+            }}
+          />
+        }
+      />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {notifications.map((notification) => (
@@ -68,7 +79,7 @@ const ClientNotifications: React.FC = () => {
           />
         ))}
       </ScrollView>
-    </SafeAreaView>
+    </SafeAreaWrapper>
   );
 };
 
@@ -76,34 +87,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8F9FA',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-    marginTop: 40,
-  },
-  menuButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#333333',
-  },
-  notificationButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   content: {
     flex: 1,

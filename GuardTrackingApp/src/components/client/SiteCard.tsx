@@ -91,9 +91,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   locationIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 42,
+    height: 42,
+    borderRadius: 12,
     backgroundColor: '#E3F2FD',
     justifyContent: 'center',
     alignItems: 'center',
@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
   siteName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333333',
+    color: '#000000',
     marginBottom: 4,
   },
   siteAddress: {

@@ -19,6 +19,8 @@ import { RootState } from '../../store';
 import { globalStyles, COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { UserIcon, SettingsIcon, EmergencyIcon } from '../../components/ui/AppIcons';
 import apiService from '../../services/api';
+import SharedHeader from '../../components/ui/SharedHeader';
+import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 
 interface User {
   id: string;
@@ -392,19 +394,19 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>← Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>User Management</Text>
-        <TouchableOpacity 
-          style={styles.addButton}
-          onPress={() => setShowCreateModal(true)}
-        >
-          <Text style={styles.addButtonText}>+ Add User</Text>
-        </TouchableOpacity>
-      </View>
+    <SafeAreaWrapper>
+      <SharedHeader
+        variant="admin"
+        adminName="User Management"
+        rightIcon={
+          <TouchableOpacity 
+            style={styles.addButton}
+            onPress={() => setShowCreateModal(true)}
+          >
+            <Text style={styles.addButtonText}>+ Add User</Text>
+          </TouchableOpacity>
+        }
+      />
 
       <View style={styles.filterContainer}>
         {['all', 'admin', 'guard', 'client'].map((role) => (
@@ -590,7 +592,7 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
           </View>
         </View>
       </Modal>
-    </View>
+    </SafeAreaWrapper>
   );
 };
 

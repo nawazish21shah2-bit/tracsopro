@@ -9,7 +9,9 @@ import {
 } from 'react-native';
 import { globalStyles, COLORS, SPACING } from '../../styles/globalStyles';
 import { AppScreen, AppCard, AppButton } from '../../components/ui/AppComponents';
-import { AppHeader } from '../../components/ui/AppHeader';
+import SharedHeader from '../../components/ui/SharedHeader';
+import GuardProfileDrawer from '../../components/guard/GuardProfileDrawer';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 import { LocationCard } from '../../components/ui/LocationCard';
 import { MenuIcon, BellIcon, UserIcon, MapPinIcon, ExternalLinkIcon, CheckCircleIcon } from '../../components/ui/FeatherIcons';
 
@@ -84,9 +86,7 @@ const JobsScreen: React.FC = () => {
     Alert.alert('Job Details', 'Opening detailed job information...');
   };
 
-  const handleMenuPress = () => {
-    console.log('Menu pressed');
-  };
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
 
   const handleNotificationPress = () => {
     console.log('Notification pressed');
@@ -94,10 +94,16 @@ const JobsScreen: React.FC = () => {
 
   return (
     <AppScreen>
-      <AppHeader
+      <SharedHeader
+        variant="guard"
         title="Jobs"
-        onMenuPress={handleMenuPress}
         onNotificationPress={handleNotificationPress}
+        profileDrawer={
+          <GuardProfileDrawer
+            visible={isDrawerVisible}
+            onClose={closeDrawer}
+          />
+        }
       />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>

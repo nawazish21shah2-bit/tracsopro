@@ -46,25 +46,25 @@ class ApiService {
     this.setupInterceptors();
   }
 
-  // Public API methods for direct use
-  async get(url: string, config?: any): Promise<AxiosResponse> {
-    return this.api.get(url, config);
+  // Lightweight raw helpers for feature modules
+  public getRaw<T = any>(path: string, config?: any) {
+    return this.api.get<T>(path, config);
   }
 
-  async post(url: string, data?: any, config?: any): Promise<AxiosResponse> {
-    return this.api.post(url, data, config);
+  public postRaw<T = any>(path: string, data?: any, config?: any) {
+    return this.api.post<T>(path, data, config);
   }
 
-  async put(url: string, data?: any, config?: any): Promise<AxiosResponse> {
-    return this.api.put(url, data, config);
+  public putRaw<T = any>(path: string, data?: any, config?: any) {
+    return this.api.put<T>(path, data, config);
   }
 
-  async patch(url: string, data?: any, config?: any): Promise<AxiosResponse> {
-    return this.api.patch(url, data, config);
+  public patchRaw<T = any>(path: string, data?: any, config?: any) {
+    return this.api.patch<T>(path, data, config);
   }
 
-  async delete(url: string, config?: any): Promise<AxiosResponse> {
-    return this.api.delete(url, config);
+  public deleteRaw<T = any>(path: string, config?: any) {
+    return this.api.delete<T>(path, config);
   }
 
   private setupInterceptors() {

@@ -17,7 +17,9 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RootState } from '../../store';
 import { globalStyles, COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS } from '../../styles/globalStyles';
 import { AppScreen, AppCard, AppButton } from '../../components/ui/AppComponents';
-import { AppHeader } from '../../components/ui/AppHeader';
+import SharedHeader from '../../components/ui/SharedHeader';
+import GuardProfileDrawer from '../../components/guard/GuardProfileDrawer';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 import { MenuIcon, BellIcon, MapPinIcon, AlertTriangleIcon, AlertCircleIcon, FileTextIcon } from '../../components/ui/FeatherIcons';
 
 type ReportsScreenNavigationProp = StackNavigationProp<any, 'Reports'>;
@@ -113,9 +115,7 @@ const ReportsScreen: React.FC = () => {
     );
   };
 
-  const handleMenuPress = () => {
-    console.log('Menu pressed');
-  };
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
 
   const handleNotificationPress = () => {
     console.log('Notification pressed');
@@ -215,10 +215,16 @@ const ReportsScreen: React.FC = () => {
 
   return (
     <AppScreen>
-      <AppHeader
+      <SharedHeader
+        variant="guard"
         title="My Reports"
-        onMenuPress={handleMenuPress}
         onNotificationPress={handleNotificationPress}
+        profileDrawer={
+          <GuardProfileDrawer
+            visible={isDrawerVisible}
+            onClose={closeDrawer}
+          />
+        }
       />
       
       <ScrollView 

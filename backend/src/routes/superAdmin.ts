@@ -139,6 +139,36 @@ router.put('/companies/:id', async (req, res) => {
 });
 
 /**
+ * GET /api/super-admin/companies/:id
+ * Get a single security company by ID
+ */
+router.get('/companies/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const company = await SuperAdminService.getSecurityCompany(id);
+    res.json(company);
+  } catch (error) {
+    console.error('Error getting security company:', error);
+    res.status(500).json({ error: 'Failed to get security company' });
+  }
+});
+
+/**
+ * DELETE /api/super-admin/companies/:id
+ * Delete a security company by ID
+ */
+router.delete('/companies/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await SuperAdminService.deleteSecurityCompany(id);
+    res.json(result);
+  } catch (error) {
+    console.error('Error deleting security company:', error);
+    res.status(500).json({ error: 'Failed to delete security company' });
+  }
+});
+
+/**
  * PATCH /api/super-admin/companies/:id/status
  * Toggle security company status (activate/suspend)
  */
@@ -262,6 +292,26 @@ router.put('/settings', async (req, res) => {
   } catch (error) {
     console.error('Error updating platform settings:', error);
     res.status(500).json({ error: 'Failed to update platform settings' });
+  }
+});
+
+/**
+ * POST /api/super-admin/impersonate
+ * Impersonate a user and get access tokens
+ */
+router.post('/impersonate', async (req: any, res) => {
+  try {
+    const { targetUserId } = req.body || {};
+    if (!targetUserId) {
+      return res.status(400).json({ error: 'targetUserId is required' });
+    }
+
+    const actingUserId = req.userId as string;
+    const result = await SuperAdminService.impersonateUser({ targetUserId, actingUserId });
+    res.json(result);
+  } catch (error) {
+    console.error('Error impersonating user:', error);
+    res.status(500).json({ error: 'Failed to impersonate user' });
   }
 });
 

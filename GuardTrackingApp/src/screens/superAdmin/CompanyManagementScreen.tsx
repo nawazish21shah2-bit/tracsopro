@@ -19,9 +19,10 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { UserIcon, ReportsIcon, ShiftsIcon } from '../../components/ui/AppIcons';
 import { superAdminService, SecurityCompany } from '../../services/superAdminService';
+import { useNavigation } from '@react-navigation/native';
 
 const CompanyManagementScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const [companies, setCompanies] = useState<SecurityCompany[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -77,6 +78,14 @@ const CompanyManagementScreen: React.FC = () => {
       case 'CANCELLED': return COLORS.textSecondary;
       default: return COLORS.textSecondary;
     }
+  };
+
+  const handleViewDetails = (companyId: string) => {
+    navigation.navigate('CompanyDetails', { companyId });
+  };
+
+  const handleAddCompany = () => {
+    navigation.navigate('CreateCompany');
   };
 
   const CompanyCard: React.FC<{ company: SecurityCompany }> = ({ company }) => (
