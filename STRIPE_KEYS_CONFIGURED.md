@@ -4,8 +4,8 @@ Your Stripe test API keys have been added to `backend/.env`.
 
 ## What's Been Done
 
-✅ **Publishable Key** added: `pk_test_51SVpTpLEsN8TIkgKDnKDuj9xtgOWuO2SM...`
-✅ **Secret Key** added: `sk_test_51SVpTpLEsN8TIkgKEOqTp39aj0n7GBtdq...`
+✅ **Publishable Key** added: `pk_test_...` (your actual key)
+✅ **Secret Key** added: `sk_test_...` (your actual key)
 
 ## Next Steps
 
