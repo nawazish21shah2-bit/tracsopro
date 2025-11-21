@@ -29,17 +29,27 @@ export const getPlans = async (_req: AuthenticatedRequest, res: Response) => {
  */
 export const createSubscriptionCheckout = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { securityCompanyId, priceId, trialDays } = req.body;
-    if (!securityCompanyId || !priceId) {
-      return res.status(400).json({ success: false, message: 'securityCompanyId and priceId are required' });
+    const { priceId, trialDays } = req.body;
+    const securityCompanyId = (req as any).securityCompanyId || req.body.securityCompanyId;
+    
+    if (!securityCompanyId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Security company ID not found. User must be associated with a security company.' 
+      });
     }
+    
+    if (!priceId) {
+      return res.status(400).json({ success: false, message: 'priceId is required' });
+    }
+    
     const svc = PaymentService.getInstance();
     const session = await svc.createSubscriptionCheckoutSession({
       securityCompanyId,
       priceId,
       trialDays: typeof trialDays === 'number' ? trialDays : 14,
-      successUrl: process.env.STRIPE_SUCCESS_URL,
-      cancelUrl: process.env.STRIPE_CANCEL_URL,
+      successUrl: process.env.STRIPE_SUCCESS_URL || 'https://example.com/success',
+      cancelUrl: process.env.STRIPE_CANCEL_URL || 'https://example.com/cancel',
     });
     res.status(201).json({ success: true, data: session });
   } catch (error) {
@@ -53,12 +63,20 @@ export const createSubscriptionCheckout = async (req: AuthenticatedRequest, res:
  */
 export const getBillingPortal = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { securityCompanyId } = req.query as { securityCompanyId?: string };
+    const securityCompanyId = (req as any).securityCompanyId || (req.query as any).securityCompanyId;
+    
     if (!securityCompanyId) {
-      return res.status(400).json({ success: false, message: 'securityCompanyId is required' });
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Security company ID not found. User must be associated with a security company.' 
+      });
     }
+    
     const svc = PaymentService.getInstance();
-    const session = await svc.createBillingPortalSession({ securityCompanyId, returnUrl: process.env.BILLING_PORTAL_RETURN_URL });
+    const session = await svc.createBillingPortalSession({ 
+      securityCompanyId, 
+      returnUrl: process.env.BILLING_PORTAL_RETURN_URL || 'https://example.com/account' 
+    });
     res.json({ success: true, data: session });
   } catch (error) {
     logger.error('Error creating billing portal session:', error);
@@ -88,17 +106,14 @@ export const createPaymentIntent = async (req: AuthenticatedRequest, res: Respon
       });
     }
 
-    // Mock payment intent (replace with actual Stripe integration)
-    const paymentIntent = {
-      id: `pi_${Date.now()}`,
+    const svc = PaymentService.getInstance();
+    const paymentIntent = await svc.createPaymentIntent({
+      clientId,
       amount,
       currency,
-      clientSecret: `pi_${Date.now()}_secret_${Math.random().toString(36).substr(2, 9)}`,
-      status: 'requires_payment_method',
-      clientId,
       description: description || 'Security services payment',
       metadata: metadata || {},
-    };
+    });
 
     logger.info(`Payment intent created: ${paymentIntent.id} for client ${clientId}`);
 
@@ -138,29 +153,21 @@ export const createInvoice = async (req: AuthenticatedRequest, res: Response) =>
       });
     }
 
-    // Calculate total amount
-    const totalAmount = items.reduce((sum: number, item: any) => {
-      return sum + (item.quantity * item.unitPrice);
-    }, 0);
-
-    // Mock invoice (replace with actual Stripe integration)
-    const invoice = {
-      id: `inv_${Date.now()}`,
+    const svc = PaymentService.getInstance();
+    const invoice = await svc.createInvoice({
       clientId,
-      amount: totalAmount,
-      currency,
-      description: description || 'Security services invoice',
-      status: 'open',
-      dueDate: dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      createdAt: new Date().toISOString(),
-      items: items.map((item: any, index: number) => ({
-        id: `item_${Date.now()}_${index}`,
-        ...item,
-        totalPrice: item.quantity * item.unitPrice,
+      items: items.map((item: any) => ({
+        description: item.description,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        serviceType: item.serviceType || 'guard_service',
       })),
-    };
+      description: description || 'Security services invoice',
+      dueDate: dueDate ? new Date(dueDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      currency,
+    });
 
-    logger.info(`Invoice created: ${invoice.id} for client ${clientId} - $${totalAmount}`);
+    logger.info(`Invoice created: ${invoice.id} for client ${clientId} - $${invoice.amount}`);
 
     res.status(201).json({
       success: true,
@@ -198,40 +205,10 @@ export const generateMonthlyInvoice = async (req: AuthenticatedRequest, res: Res
       });
     }
 
-    // Mock monthly invoice generation
+    const svc = PaymentService.getInstance();
+    const invoice = await svc.generateMonthlyInvoice(clientId, year, month);
+
     const monthName = new Date(year, month - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    
-    const mockItems = [
-      {
-        id: 'item_1',
-        description: `Guard Services - ${monthName}`,
-        quantity: 160, // hours
-        unitPrice: 25,
-        totalPrice: 4000,
-        serviceType: 'guard_service',
-      },
-      {
-        id: 'item_2',
-        description: 'Overtime Premium (1.5x rate)',
-        quantity: 20, // overtime hours
-        unitPrice: 37.5,
-        totalPrice: 750,
-        serviceType: 'overtime',
-      },
-    ];
-
-    const invoice = {
-      id: `inv_monthly_${Date.now()}`,
-      clientId,
-      amount: 4750,
-      currency: 'usd',
-      description: `Security Services - ${monthName}`,
-      status: 'open',
-      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      createdAt: new Date().toISOString(),
-      items: mockItems,
-    };
-
     logger.info(`Monthly invoice generated: ${invoice.id} for ${monthName} - $${invoice.amount}`);
 
     res.status(201).json({
@@ -262,27 +239,8 @@ export const getPaymentMethods = async (req: AuthenticatedRequest, res: Response
       });
     }
 
-    // Mock payment methods
-    const paymentMethods = [
-      {
-        id: 'pm_1',
-        type: 'card',
-        last4: '4242',
-        brand: 'visa',
-        expiryMonth: 12,
-        expiryYear: 2025,
-        isDefault: true,
-      },
-      {
-        id: 'pm_2',
-        type: 'card',
-        last4: '0005',
-        brand: 'mastercard',
-        expiryMonth: 8,
-        expiryYear: 2026,
-        isDefault: false,
-      },
-    ];
+    const svc = PaymentService.getInstance();
+    const paymentMethods = await svc.getClientPaymentMethods(clientId);
 
     res.json({
       success: true,
@@ -312,10 +270,8 @@ export const createSetupIntent = async (req: AuthenticatedRequest, res: Response
       });
     }
 
-    // Mock setup intent
-    const setupIntent = {
-      clientSecret: `seti_${Date.now()}_secret_${Math.random().toString(36).substr(2, 9)}`,
-    };
+    const svc = PaymentService.getInstance();
+    const setupIntent = await svc.createSetupIntent(clientId);
 
     res.json({
       success: true,
@@ -353,7 +309,9 @@ export const setupAutomaticPayments = async (req: AuthenticatedRequest, res: Res
       });
     }
 
-    // Mock setup automatic payments
+    const svc = PaymentService.getInstance();
+    await svc.setupAutomaticPayments(clientId, paymentMethodId);
+
     logger.info(`Automatic payments set up for client ${clientId} with payment method ${paymentMethodId}`);
 
     res.json({
@@ -407,28 +365,10 @@ export const getInvoices = async (req: AuthenticatedRequest, res: Response) => {
       });
     }
 
-    // Mock invoices
-    const mockInvoices = [
-      {
-        id: 'inv_1',
-        amount: 4750,
-        currency: 'usd',
-        description: 'Security Services - November 2024',
-        status: 'paid',
-        dueDate: '2024-12-15T00:00:00.000Z',
-        createdAt: '2024-11-15T00:00:00.000Z',
-        paidAt: '2024-11-20T00:00:00.000Z',
-      },
-      {
-        id: 'inv_2',
-        amount: 3200,
-        currency: 'usd',
-        description: 'Security Services - October 2024',
-        status: 'open',
-        dueDate: '2024-12-01T00:00:00.000Z',
-        createdAt: '2024-10-15T00:00:00.000Z',
-      },
-    ];
+    // TODO: Implement database query for invoices
+    // For now, return empty array - invoices should be stored in database
+    // when created via createInvoice or generateMonthlyInvoice
+    const mockInvoices: any[] = [];
 
     const filteredInvoices = status 
       ? mockInvoices.filter(inv => inv.status === status)

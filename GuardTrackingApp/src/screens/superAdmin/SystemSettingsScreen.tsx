@@ -2,8 +2,8 @@
  * System Settings Screen - System configuration and settings
  */
 
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { useNavigation } from '@react-navigation/native';
@@ -36,6 +36,51 @@ const SystemSettingsScreen: React.FC = () => {
     debugMode: false,
   });
 
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const loadSettings = async () => {
+    try {
+      setLoading(true);
+      const data = await superAdminService.getPlatformSettings();
+      
+      // Transform backend settings to local state
+      setSettings({
+        emailNotifications: data.GENERAL?.['notifications.email'] !== 'false',
+        pushNotifications: data.GENERAL?.['notifications.push'] !== 'false',
+        maintenanceMode: data.GENERAL?.['maintenance.mode'] === 'true',
+        autoBackup: data.GENERAL?.['backup.auto'] !== 'false',
+        debugMode: data.GENERAL?.['debug.mode'] === 'true',
+      });
+    } catch (error) {
+      console.error('Error loading settings:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveSettings = async () => {
+    try {
+      setSaving(true);
+      await superAdminService.updatePlatformSettings({
+        GENERAL: {
+          'notifications.email': settings.emailNotifications.toString(),
+          'notifications.push': settings.pushNotifications.toString(),
+          'maintenance.mode': settings.maintenanceMode.toString(),
+          'backup.auto': settings.autoBackup.toString(),
+          'debug.mode': settings.debugMode.toString(),
+        },
+      });
+      Alert.alert('Success', 'Settings saved successfully');
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      Alert.alert('Error', 'Failed to save settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleLogout = async () => {
     Alert.alert(
       'Logout',
@@ -67,6 +112,8 @@ const SystemSettingsScreen: React.FC = () => {
       ...prev,
       [key]: value,
     }));
+    // Auto-save on toggle
+    setTimeout(() => saveSettings(), 500);
   };
 
   const settingsData: SettingItem[] = [

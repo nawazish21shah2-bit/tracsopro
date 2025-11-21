@@ -18,7 +18,7 @@ export interface PlatformOverview {
     id: string;
     action: string;
     resource: string;
-    userId: string;
+    userId?: string;
     timestamp: string;
     details?: any;
   }>;
@@ -84,52 +84,28 @@ class SuperAdminService {
    */
   static async getPlatformOverview(): Promise<PlatformOverview> {
     try {
-      // TODO: Implement real API call when backend is fully integrated
-      // For now, using enhanced mock data with realistic metrics
+      const response = await apiService.get('/super-admin/overview');
+      const data = response.data;
+      
+      // Transform backend response to frontend format
       return {
-        totalCompanies: 25,
-        activeCompanies: 23,
-        totalUsers: 1250,
-        activeUsers: 1180,
-        totalGuards: 850,
-        activeGuards: 780,
-        totalClients: 125,
-        totalSites: 340,
-        totalRevenue: 125000,
-        recentActivity: [
-          {
-            id: '1',
-            action: 'COMPANY_CREATED',
-            resource: 'SecurityCompany',
-            userId: 'admin-1',
-            timestamp: new Date().toISOString(),
-            details: { companyName: 'Elite Security Services' },
-          },
-          {
-            id: '2',
-            action: 'USER_REGISTERED',
-            resource: 'User',
-            userId: 'user-123',
-            timestamp: new Date(Date.now() - 3600000).toISOString(),
-            details: { role: 'GUARD', companyName: 'Guardian Protection Co.' },
-          },
-          {
-            id: '3',
-            action: 'SUBSCRIPTION_RENEWED',
-            resource: 'Subscription',
-            userId: 'company-456',
-            timestamp: new Date(Date.now() - 7200000).toISOString(),
-            details: { plan: 'PROFESSIONAL', amount: 299 },
-          },
-          {
-            id: '4',
-            action: 'COMPANY_SUSPENDED',
-            resource: 'SecurityCompany',
-            userId: 'admin-1',
-            timestamp: new Date(Date.now() - 10800000).toISOString(),
-            details: { companyName: 'SecureWatch Solutions', reason: 'Payment overdue' },
-          },
-        ],
+        totalCompanies: data.overview?.totalCompanies || 0,
+        activeCompanies: data.overview?.activeCompanies || 0,
+        totalUsers: data.overview?.totalUsers || 0,
+        activeUsers: data.overview?.activeUsers || 0,
+        totalGuards: data.overview?.totalGuards || 0,
+        activeGuards: data.overview?.activeGuards || 0,
+        totalClients: data.overview?.totalClients || 0,
+        totalSites: data.overview?.totalSites || 0,
+        totalRevenue: data.overview?.totalRevenue || 0,
+        recentActivity: (data.recentActivity || []).map((activity: any) => ({
+          id: activity.id,
+          action: activity.action,
+          resource: activity.resource,
+          userId: activity.userId,
+          timestamp: activity.timestamp,
+          details: activity.newValues ? (typeof activity.newValues === 'string' ? JSON.parse(activity.newValues) : activity.newValues) : undefined,
+        })),
       };
     } catch (error) {
       console.error('Error fetching platform overview:', error);
@@ -156,8 +132,21 @@ class SuperAdminService {
       pages: number;
     };
   }> {
-    const response = await apiService.getRaw('/super-admin/companies', { params });
-    return response.data;
+    try {
+      const response = await apiService.get('/super-admin/companies', {
+        params,
+      });
+      const companies = (response.data.companies || []).map((company: any) => 
+        SuperAdminService.transformCompany(company)
+      );
+      return {
+        companies,
+        pagination: response.data.pagination
+      };
+    } catch (error) {
+      console.error('Error fetching companies:', error);
+      throw error;
+    }
   }
 
   /**
@@ -177,34 +166,39 @@ class SuperAdminService {
     maxClients?: number;
     maxSites?: number;
   }): Promise<SecurityCompany> {
-    const response = await apiService.postRaw('/super-admin/companies', data);
-    return response.data;
+    try {
+      const response = await apiService.post('/super-admin/companies', data);
+      return SuperAdminService.transformCompany(response.data);
+    } catch (error) {
+      console.error('Error creating security company:', error);
+      throw error;
+    }
   }
 
   /**
    * Update security company
    */
   async updateSecurityCompany(companyId: string, data: Partial<SecurityCompany>): Promise<SecurityCompany> {
-    const response = await apiService.putRaw(`/super-admin/companies/${companyId}`, data);
-    return response.data;
+    try {
+      const response = await apiService.put(`/super-admin/companies/${companyId}`, data);
+      return SuperAdminService.transformCompany(response.data);
+    } catch (error) {
+      console.error('Error updating security company:', error);
+      throw error;
+    }
   }
 
   /**
    * Toggle security company status (activate/suspend)
    */
   async toggleCompanyStatus(companyId: string, isActive: boolean): Promise<SecurityCompany> {
-    const response = await apiService.patchRaw(`/super-admin/companies/${companyId}/status`, { isActive });
-    return response.data;
-  }
-
-  async getCompanyById(companyId: string): Promise<SecurityCompany> {
-    const response = await apiService.getRaw(`/super-admin/companies/${companyId}`);
-    return response.data;
-  }
-
-  async deleteCompany(companyId: string): Promise<{ id: string }> {
-    const response = await apiService.deleteRaw(`/super-admin/companies/${companyId}`);
-    return response.data;
+    try {
+      const response = await apiService.patch(`/super-admin/companies/${companyId}/status`, { isActive });
+      return SuperAdminService.transformCompany(response.data);
+    } catch (error) {
+      console.error('Error toggling company status:', error);
+      throw error;
+    }
   }
 
   /**
@@ -215,51 +209,26 @@ class SuperAdminService {
     endDate?: string;
     metricType?: string;
   } = {}): Promise<any> {
-    // Mock analytics data
-    return {
-      analytics: {
-        ACTIVE_GUARDS: [
-          { metricValue: 780, timestamp: new Date().toISOString() },
-          { metricValue: 765, timestamp: new Date(Date.now() - 86400000).toISOString() }
-        ],
-        REVENUE: [
-          { metricValue: 125000, timestamp: new Date().toISOString() },
-          { metricValue: 118000, timestamp: new Date(Date.now() - 86400000).toISOString() }
-        ]
-      },
-      summary: {
-        totalMetrics: 10,
-        dateRange: params
-      }
-    };
+    try {
+      const response = await apiService.get('/super-admin/analytics', { params });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching platform analytics:', error);
+      throw error;
+    }
   }
 
   /**
    * Get billing overview
    */
   async getBillingOverview(): Promise<BillingOverview> {
-    // Mock billing data
-    return {
-      totalRevenue: 125000,
-      monthlyRevenue: 15000,
-      pendingPayments: {
-        amount: 5000,
-        count: 3
-      },
-      overduePayments: {
-        amount: 2500,
-        count: 2
-      },
-      recentTransactions: [
-        {
-          id: '1',
-          amount: 1500,
-          description: 'Monthly subscription - SecureGuard Solutions',
-          status: 'PAID',
-          createdAt: new Date().toISOString()
-        }
-      ]
-    };
+    try {
+      const response = await apiService.get('/super-admin/billing');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching billing overview:', error);
+      throw error;
+    }
   }
 
   /**
@@ -281,68 +250,99 @@ class SuperAdminService {
       pages: number;
     };
   }> {
-    // Mock audit logs
-    const mockLogs: AuditLog[] = [
-      {
-        id: '1',
-        action: 'CREATE_COMPANY',
-        resource: 'SecurityCompany',
-        resourceId: '1',
-        timestamp: new Date().toISOString(),
-        userId: 'admin-1'
-      },
-      {
-        id: '2',
-        action: 'UPDATE_SUBSCRIPTION',
-        resource: 'Subscription',
-        resourceId: '2',
-        timestamp: new Date(Date.now() - 3600000).toISOString(),
-        userId: 'admin-1'
-      }
-    ];
-
-    return {
-      logs: mockLogs,
-      pagination: {
-        page: params.page || 1,
-        limit: params.limit || 50,
-        total: mockLogs.length,
-        pages: 1
-      }
-    };
+    try {
+      const response = await apiService.get('/super-admin/audit-logs', { params });
+      const logs = (response.data.logs || []).map((log: any) => ({
+        id: log.id,
+        action: log.action,
+        resource: log.resource,
+        resourceId: log.resourceId,
+        timestamp: log.timestamp,
+        userId: log.userId,
+        securityCompanyId: log.securityCompanyId,
+        oldValues: log.oldValues ? (typeof log.oldValues === 'string' ? JSON.parse(log.oldValues) : log.oldValues) : undefined,
+        newValues: log.newValues ? (typeof log.newValues === 'string' ? JSON.parse(log.newValues) : log.newValues) : undefined,
+      }));
+      return {
+        logs,
+        pagination: response.data.pagination
+      };
+    } catch (error) {
+      console.error('Error fetching audit logs:', error);
+      throw error;
+    }
   }
 
   /**
    * Get platform settings
    */
   async getPlatformSettings(): Promise<any> {
-    // Mock platform settings
-    return {
-      GENERAL: {
-        'platform.name': 'TRACSOSPRO',
-        'platform.version': '1.0.0',
-        'maintenance.mode': 'false'
-      },
-      SECURITY: {
-        'auth.session.timeout': '1800',
-        'password.min.length': '8',
-        'mfa.enabled': 'true'
-      },
-      BILLING: {
-        'trial.duration': '30',
-        'payment.methods': 'stripe,paypal',
-        'currency.default': 'USD'
-      }
-    };
+    try {
+      const response = await apiService.get('/super-admin/settings');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching platform settings:', error);
+      throw error;
+    }
   }
 
   /**
    * Update platform settings
    */
   async updatePlatformSettings(settings: any): Promise<{ success: boolean }> {
-    // Mock update - always return success
-    console.log('Updating platform settings:', settings);
-    return { success: true };
+    try {
+      const response = await apiService.put('/super-admin/settings', settings);
+      return response.data;
+    } catch (error) {
+      console.error('Error updating platform settings:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get company by ID
+   */
+  async getCompanyById(companyId: string): Promise<SecurityCompany> {
+    try {
+      const response = await apiService.get(`/super-admin/companies/${companyId}`);
+      return SuperAdminService.transformCompany(response.data);
+    } catch (error) {
+      console.error('Error fetching company:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Transform backend company data to frontend format
+   */
+  private static transformCompany(data: any): SecurityCompany {
+    return {
+      id: data.id,
+      name: data.name,
+      email: data.email,
+      phone: data.phone,
+      address: data.address,
+      city: data.city,
+      state: data.state,
+      zipCode: data.zipCode,
+      country: data.country,
+      subscriptionPlan: data.subscriptionPlan,
+      subscriptionStatus: data.subscriptionStatus,
+      subscriptionStartDate: data.subscriptionStartDate ? new Date(data.subscriptionStartDate).toISOString() : new Date().toISOString(),
+      subscriptionEndDate: data.subscriptionEndDate ? new Date(data.subscriptionEndDate).toISOString() : undefined,
+      maxGuards: data.maxGuards || 0,
+      maxClients: data.maxClients || 0,
+      maxSites: data.maxSites || 0,
+      isActive: data.isActive !== undefined ? data.isActive : true,
+      createdAt: data.createdAt ? new Date(data.createdAt).toISOString() : new Date().toISOString(),
+      updatedAt: data.updatedAt ? new Date(data.updatedAt).toISOString() : new Date().toISOString(),
+      _count: data._count || {
+        users: 0,
+        guards: 0,
+        clients: 0,
+        sites: 0
+      }
+    };
   }
 }
 

@@ -15,6 +15,7 @@ import {
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { UserIcon, ReportsIcon, ShiftsIcon } from '../../components/ui/AppIcons';
 import { superAdminService, SecurityCompany } from '../../services/superAdminService';
@@ -52,6 +53,12 @@ const CompanyManagementScreen: React.FC = () => {
   useEffect(() => {
     loadCompanies();
   }, [searchQuery, selectedFilter]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      loadCompanies();
+    }, [])
+  );
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -126,7 +133,10 @@ const CompanyManagementScreen: React.FC = () => {
       </View>
 
       <View style={styles.companyActions}>
-        <TouchableOpacity style={styles.actionButton} onPress={() => handleViewDetails(company.id)}>
+        <TouchableOpacity 
+          style={styles.actionButton}
+          onPress={() => navigation.navigate('CompanyDetails' as never, { companyId: company.id } as never)}
+        >
           <Text style={styles.actionButtonText}>View Details</Text>
         </TouchableOpacity>
         <TouchableOpacity 

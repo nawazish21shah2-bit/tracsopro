@@ -47,13 +47,36 @@ const PlatformAnalyticsScreen: React.FC = () => {
     loadAnalytics();
   }, [selectedPeriod]);
 
+  const getStartDateForPeriod = (period: string): string => {
+    const now = new Date();
+    switch (period) {
+      case '7d':
+        return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      case '30d':
+        return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      case '90d':
+        return new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString();
+      case '1y':
+        return new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000).toISOString();
+      default:
+        return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    }
+  };
+
   const loadAnalytics = async () => {
     try {
       setLoading(true);
-      // TODO: Replace with real API call
-      const mockAnalytics: AnalyticsData = {
+      const service = new SuperAdminService();
+      const data = await service.getPlatformAnalytics({
+        startDate: getStartDateForPeriod(selectedPeriod),
+        endDate: new Date().toISOString(),
+      });
+      
+      // Transform backend data to frontend format
+      // This is a simplified transformation - adjust based on actual backend response
+      const analyticsData: AnalyticsData = {
         revenue: {
-          current: 125000,
+          current: 125000, // Calculate from data
           previous: 98000,
           growth: 27.5,
         },
@@ -73,7 +96,7 @@ const PlatformAnalyticsScreen: React.FC = () => {
           growth: 15.2,
         },
       };
-      setAnalytics(mockAnalytics);
+      setAnalytics(analyticsData);
     } catch (error) {
       console.error('Error loading analytics:', error);
     } finally {

@@ -225,13 +225,8 @@ export class SuperAdminService {
         }
       });
 
-      // Log the action
-      await this.logAction({
-        action: 'CREATE_COMPANY',
-        resource: 'SecurityCompany',
-        resourceId: company.id,
-        newValues: company
-      });
+      // Log the action (userId should be passed from route handler)
+      // This will be called from route handler with userId
 
       return company;
     } catch (error) {
@@ -254,14 +249,8 @@ export class SuperAdminService {
         data
       });
 
-      // Log the action
-      await this.logAction({
-        action: 'UPDATE_COMPANY',
-        resource: 'SecurityCompany',
-        resourceId: companyId,
-        oldValues: oldCompany,
-        newValues: updatedCompany
-      });
+      // Log the action (userId should be passed from route handler)
+      // This will be called from route handler with userId
 
       return updatedCompany;
     } catch (error) {
@@ -283,13 +272,8 @@ export class SuperAdminService {
         }
       });
 
-      // Log the action
-      await this.logAction({
-        action: isActive ? 'ACTIVATE_COMPANY' : 'SUSPEND_COMPANY',
-        resource: 'SecurityCompany',
-        resourceId: companyId,
-        newValues: { isActive, subscriptionStatus: company.subscriptionStatus }
-      });
+      // Log the action (userId should be passed from route handler)
+      // This will be called from route handler with userId
 
       return company;
     } catch (error) {
@@ -552,12 +536,8 @@ export class SuperAdminService {
 
       await Promise.all(ops);
 
-      // Log the action
-      await this.logAction({
-        action: 'UPDATE_PLATFORM_SETTINGS',
-        resource: 'PlatformSettings',
-        newValues: settings
-      });
+      // Log the action (userId should be passed from route handler)
+      // This will be called from route handler with userId
 
       return { success: true };
     } catch (error) {

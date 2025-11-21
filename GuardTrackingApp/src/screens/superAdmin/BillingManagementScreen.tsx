@@ -37,57 +37,23 @@ const BillingManagementScreen: React.FC<{ navigation?: any }> = ({ navigation: n
   const loadBillingData = async () => {
     try {
       setLoading(true);
-      // Mock billing data
-      const mockData: BillingRecord[] = [
-        {
-          id: '1',
-          companyName: 'Elite Security Services',
-          amount: 100,
-          status: 'PAID',
-          dueDate: '2024-12-15',
-          plan: 'PROFESSIONAL',
-          billingCycle: 'MONTHLY',
-        },
-        {
-          id: '2',
-          companyName: 'Guardian Protection Co.',
-          amount: 3000,
-          status: 'PENDING',
-          dueDate: '2024-12-20',
-          plan: 'ENTERPRISE',
-          billingCycle: 'YEARLY',
-        },
-        {
-          id: '3',
-          companyName: 'SecureWatch Solutions',
-          amount: 30,
-          status: 'OVERDUE',
-          dueDate: '2024-11-30',
-          plan: 'BASIC',
-          billingCycle: 'MONTHLY',
-        },
-        {
-          id: '4',
-          companyName: 'Apex Security Group',
-          amount: 1000,
-          status: 'PAID',
-          dueDate: '2024-12-10',
-          plan: 'PROFESSIONAL',
-          billingCycle: 'YEARLY',
-        },
-        {
-          id: '5',
-          companyName: 'Shield Defense Inc.',
-          amount: 300,
-          status: 'PENDING',
-          dueDate: '2024-12-25',
-          plan: 'ENTERPRISE',
-          billingCycle: 'MONTHLY',
-        },
-      ];
-      setBillingRecords(mockData);
+      const billing = await superAdminService.getBillingOverview();
+      
+      // Transform backend data to frontend format
+      const records: BillingRecord[] = (billing.recentTransactions || []).map((transaction: any) => ({
+        id: transaction.id,
+        companyName: transaction.securityCompany?.name || 'Unknown Company',
+        amount: transaction.amount || 0,
+        status: transaction.status || 'PENDING',
+        dueDate: transaction.dueDate || transaction.createdAt,
+        plan: transaction.subscriptionPlan || 'BASIC',
+      }));
+      
+      setBillingRecords(records);
     } catch (error) {
       console.error('Error loading billing data:', error);
+      // Fallback to empty array on error
+      setBillingRecords([]);
     } finally {
       setLoading(false);
     }
