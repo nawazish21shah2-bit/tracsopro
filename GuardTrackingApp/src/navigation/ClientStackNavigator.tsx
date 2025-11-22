@@ -10,6 +10,10 @@ import ChatListScreen from '../screens/chat/ChatListScreen';
 import PaymentScreen from '../screens/client/PaymentScreen';
 import InvoiceDetailsScreen from '../screens/client/InvoiceDetailsScreen';
 import PaymentMethodsScreen from '../screens/client/PaymentMethodsScreen';
+import NotificationSettingsScreen from '../screens/settings/NotificationSettingsScreen';
+import ProfileEditScreen from '../screens/settings/ProfileEditScreen';
+import SupportContactScreen from '../screens/settings/SupportContactScreen';
+import CompanyDetailsScreen from '../screens/settings/CompanyDetailsScreen';
 
 export type ClientStackParamList = {
   ClientTabs: undefined;
@@ -17,6 +21,10 @@ export type ClientStackParamList = {
   SiteDetails: { siteId: string };
   CreateShift: undefined;
   ClientNotifications: undefined;
+  NotificationSettings: undefined;
+  ProfileEdit: undefined;
+  SupportContact: undefined;
+  CompanyDetails: undefined;
   IndividualChatScreen: {
     chatId: string;
     chatName: string;
@@ -45,6 +53,26 @@ const ClientStackNavigator: React.FC = () => {
       <Stack.Screen 
         name="ClientNotifications" 
         component={ClientNotifications} 
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="NotificationSettings" 
+        component={NotificationSettingsScreen} 
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="ProfileEdit" 
+        component={ProfileEditScreen} 
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="SupportContact" 
+        component={SupportContactScreen} 
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="CompanyDetails" 
+        component={CompanyDetailsScreen} 
         options={{ headerShown: false }}
       />
       <Stack.Screen 

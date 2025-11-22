@@ -75,6 +75,7 @@ interface GuardHeaderProps extends BaseHeaderProps {
 interface AdminHeaderProps extends BaseHeaderProps {
   variant?: 'admin';
   onNotificationPress?: () => void;
+  onMenuPress?: () => void;
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
   notificationCount?: number;
@@ -85,6 +86,7 @@ interface AdminHeaderProps extends BaseHeaderProps {
 interface SuperAdminHeaderProps extends BaseHeaderProps {
   variant?: 'superAdmin';
   onNotificationPress?: () => void;
+  onMenuPress?: () => void;
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
   notificationCount?: number;
@@ -386,20 +388,20 @@ const AdminHeaderComponent: React.FC<AdminHeaderProps> = ({
   title,
   showLogo = false,
   onNotificationPress,
+  onMenuPress,
   leftIcon,
   rightIcon,
   notificationCount,
   profileDrawer,
   style,
 }) => {
-  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
   const insets = useSafeAreaInsets();
   const topPadding = Math.max(insets.top, Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0);
 
   const renderLeft = () => {
     if (leftIcon) return leftIcon;
     return (
-      <TouchableOpacity style={sharedStyles.iconButton} onPress={openDrawer}>
+      <TouchableOpacity style={sharedStyles.iconButton} onPress={onMenuPress}>
         <MenuIcon size={24} color={COLORS.textPrimary} />
       </TouchableOpacity>
     );
@@ -437,19 +439,9 @@ const AdminHeaderComponent: React.FC<AdminHeaderProps> = ({
     );
   };
 
-  // Clone profileDrawer to pass drawer state if it's a React element
+  // Render profileDrawer as-is (props should be set by parent component)
   const renderProfileDrawer = () => {
-    if (!profileDrawer) return null;
-    
-    // If profileDrawer is a React element, clone it and pass the drawer state
-    if (React.isValidElement(profileDrawer)) {
-      return React.cloneElement(profileDrawer as React.ReactElement<any>, {
-        visible: isDrawerVisible,
-        onClose: closeDrawer,
-      });
-    }
-    
-    return profileDrawer;
+    return profileDrawer || null;
   };
 
   return (
@@ -469,20 +461,20 @@ const SuperAdminHeaderComponent: React.FC<SuperAdminHeaderProps> = ({
   title,
   showLogo = false,
   onNotificationPress,
+  onMenuPress,
   leftIcon,
   rightIcon,
   notificationCount,
   profileDrawer,
   style,
 }) => {
-  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
   const insets = useSafeAreaInsets();
   const topPadding = Math.max(insets.top, Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0);
 
   const renderLeft = () => {
     if (leftIcon) return leftIcon;
     return (
-      <TouchableOpacity style={sharedStyles.iconButton} onPress={openDrawer}>
+      <TouchableOpacity style={sharedStyles.iconButton} onPress={onMenuPress}>
         <MenuIcon size={24} color={COLORS.textPrimary} />
       </TouchableOpacity>
     );
@@ -520,19 +512,9 @@ const SuperAdminHeaderComponent: React.FC<SuperAdminHeaderProps> = ({
     );
   };
 
-  // Clone profileDrawer to pass drawer state if it's a React element
+  // Render profileDrawer as-is (props should be set by parent component)
   const renderProfileDrawer = () => {
-    if (!profileDrawer) return null;
-    
-    // If profileDrawer is a React element, clone it and pass the drawer state
-    if (React.isValidElement(profileDrawer)) {
-      return React.cloneElement(profileDrawer as React.ReactElement<any>, {
-        visible: isDrawerVisible,
-        onClose: closeDrawer,
-      });
-    }
-    
-    return profileDrawer;
+    return profileDrawer || null;
   };
 
   return (

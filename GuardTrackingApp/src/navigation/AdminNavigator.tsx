@@ -28,6 +28,9 @@ import SiteManagementScreen from '../screens/admin/SiteManagementScreen';
 import AdminAnalyticsScreen from '../screens/admin/AdminAnalyticsScreen';
 import AdminSettingsScreen from '../screens/admin/AdminSettingsScreen';
 import AdminSubscriptionScreen from '../screens/admin/AdminSubscriptionScreen';
+import NotificationSettingsScreen from '../screens/settings/NotificationSettingsScreen';
+import ProfileEditScreen from '../screens/settings/ProfileEditScreen';
+import SupportContactScreen from '../screens/settings/SupportContactScreen';
 
 export type AdminTabParamList = {
   Dashboard: undefined;
@@ -47,6 +50,9 @@ export type AdminStackParamList = {
   AdminAnalytics: undefined;
   AdminSettings: undefined;
   AdminSubscription: undefined;
+  AdminNotificationSettings: undefined;
+  AdminProfileEdit: undefined;
+  AdminSupportContact: undefined;
 };
 
 const Tab = createBottomTabNavigator<AdminTabParamList>();
@@ -67,6 +73,19 @@ const ReportsStack = () => (
     <Stack.Screen name="IncidentReview" component={IncidentReviewScreen} />
     <Stack.Screen name="AdminAnalytics" component={AdminAnalyticsScreen} />
   </Stack.Navigator>
+);
+
+// Wrapper components for settings screens with admin variant
+const AdminNotificationSettingsWrapper: React.FC = () => (
+  <NotificationSettingsScreen variant="admin" />
+);
+
+const AdminProfileEditWrapper: React.FC = () => (
+  <ProfileEditScreen variant="admin" />
+);
+
+const AdminSupportContactWrapper: React.FC = () => (
+  <SupportContactScreen variant="admin" />
 );
 
 const AdminTabNavigator: React.FC = () => {
@@ -175,6 +194,18 @@ const AdminNavigator: React.FC = () => {
       <Stack.Screen name="AdminAnalytics" component={AdminAnalyticsScreen} />
       <Stack.Screen name="AdminSettings" component={AdminSettingsScreen} />
       <Stack.Screen name="AdminSubscription" component={AdminSubscriptionScreen} />
+      <Stack.Screen 
+        name="AdminNotificationSettings" 
+        component={AdminNotificationSettingsWrapper} 
+      />
+      <Stack.Screen 
+        name="AdminProfileEdit" 
+        component={AdminProfileEditWrapper} 
+      />
+      <Stack.Screen 
+        name="AdminSupportContact" 
+        component={AdminSupportContactWrapper} 
+      />
     </Stack.Navigator>
   );
 };

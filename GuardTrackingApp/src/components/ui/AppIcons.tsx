@@ -80,6 +80,10 @@ export const HomeIcon: React.FC<CommonIconProps> = ({ size = 24, color = COLORS.
   <SvgIcon Svg={HomeSvg} size={size} color={color} style={style} />
 );
 
+export const DashboardIcon: React.FC<CommonIconProps> = ({ size = 24, color = COLORS.textPrimary, style }) => (
+  <SvgIcon Svg={MenuSvg} size={size} color={color} style={style} />
+);
+
 export const ShiftsIcon: React.FC<CommonIconProps> = ({ size = 24, color = COLORS.textPrimary, style }) => (
   <SvgIcon Svg={CalendarSvg} size={size} color={color} style={style} />
 );
@@ -307,6 +311,7 @@ export const MoreHorizontalIcon: React.FC<CommonIconProps> = ({ size = 24, color
 // Export a default object for easy imports
 const AppIcons = {
   HomeIcon,
+  DashboardIcon,
   ShiftsIcon,
   ReportsIcon,
   JobsIcon,

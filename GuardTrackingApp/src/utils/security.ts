@@ -75,14 +75,20 @@ class SecurityManager {
    */
   async storeTokens(tokenData: TokenData): Promise<boolean> {
     try {
+      // Validate tokenData before processing
+      if (!tokenData || !tokenData.accessToken) {
+        console.error('Error storing tokens: Invalid token data provided');
+        return false;
+      }
+
       const encodedData = this.encode(JSON.stringify(tokenData));
       await AsyncStorage.setItem(`${this.config.tokenPrefix}tokens`, encodedData);
       this.lastTokenStoreTime = Date.now();
       if (__DEV__) {
         console.log('💾 Tokens stored successfully', {
-          tokenLength: tokenData.accessToken.length,
-          expiresAt: new Date(tokenData.expiresAt).toISOString(),
-          tokenType: tokenData.tokenType,
+          tokenLength: tokenData.accessToken?.length || 0,
+          expiresAt: tokenData.expiresAt ? new Date(tokenData.expiresAt).toISOString() : 'N/A',
+          tokenType: tokenData.tokenType || 'Bearer',
           storedAt: new Date(this.lastTokenStoreTime).toISOString()
         });
       }

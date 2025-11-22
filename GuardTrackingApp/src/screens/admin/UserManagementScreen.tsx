@@ -422,6 +422,7 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
         variant="admin"
         title="User Management"
         showLogo={false}
+        onMenuPress={openDrawer}
         profileDrawer={
           <AdminProfileDrawer
             visible={isDrawerVisible}

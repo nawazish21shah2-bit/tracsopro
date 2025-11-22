@@ -19,7 +19,6 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { UserIcon, ReportsIcon, ShiftsIcon } from '../../components/ui/AppIcons';
 import { superAdminService, SecurityCompany } from '../../services/superAdminService';
-import { useNavigation } from '@react-navigation/native';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SuperAdminProfileDrawer from '../../components/superAdmin/SuperAdminProfileDrawer';
@@ -166,6 +165,7 @@ const CompanyManagementScreen: React.FC = () => {
       <SharedHeader
         variant="superAdmin"
         title="Company Management"
+        onMenuPress={openDrawer}
         onNotificationPress={() => {
           // Handle notification press
         }}

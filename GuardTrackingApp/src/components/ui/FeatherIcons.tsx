@@ -332,6 +332,10 @@ export const ArrowRightIcon: React.FC<Omit<FeatherIconProps, 'name'>> = (props) 
   <FeatherIcon name="arrowRight" {...props} />
 );
 
+export const ArrowLeftIcon: React.FC<Omit<FeatherIconProps, 'name'>> = (props) => (
+  <FeatherIcon name="arrowLeft" {...props} />
+);
+
 export const SearchIcon: React.FC<Omit<FeatherIconProps, 'name'>> = (props) => (
   <FeatherIcon name="search" {...props} />
 );
@@ -354,6 +358,18 @@ export const RefreshCwIcon: React.FC<Omit<FeatherIconProps, 'name'>> = (props) =
 
 export const WifiOffIcon: React.FC<Omit<FeatherIconProps, 'name'>> = (props) => (
   <FeatherIcon name="wifiOff" {...props} />
+);
+
+export const CameraIcon: React.FC<Omit<FeatherIconProps, 'name'>> = (props) => (
+  <FeatherIcon name="camera" {...props} />
+);
+
+export const MicIcon: React.FC<Omit<FeatherIconProps, 'name'>> = (props) => (
+  <FeatherIcon name="mic" {...props} />
+);
+
+export const CloudIcon: React.FC<Omit<FeatherIconProps, 'name'>> = (props) => (
+  <FeatherIcon name="cloud" {...props} />
 );
 
 export default FeatherIcon;

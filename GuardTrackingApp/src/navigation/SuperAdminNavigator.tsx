@@ -28,6 +28,7 @@ import AuditLogsScreen from '../screens/superAdmin/AuditLogsScreen';
 import CompanyDetailsScreen from '../screens/superAdmin/CompanyDetailsScreen';
 import CreateCompanyScreen from '../screens/superAdmin/CreateCompanyScreen';
 import BuyPlanScreen from '../screens/superAdmin/BuyPlanScreen';
+import PaymentDetailScreen from '../screens/superAdmin/PaymentDetailScreen';
 
 export type SuperAdminTabParamList = {
   Dashboard: undefined;
@@ -44,6 +45,7 @@ export type SuperAdminStackParamList = {
   CreateCompany: undefined;
   PlatformAnalytics: undefined;
   BillingManagement: undefined;
+  PaymentDetail: { paymentId: string };
   SystemSettings: undefined;
   AuditLogs: undefined;
   BuyPlan: undefined;
@@ -66,6 +68,14 @@ const AnalyticsStack = () => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
     <Stack.Screen name="PlatformAnalytics" component={PlatformAnalyticsScreen} />
     <Stack.Screen name="AuditLogs" component={AuditLogsScreen} />
+  </Stack.Navigator>
+);
+
+// Create a stack navigator for billing screens
+const BillingStack = () => (
+  <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Screen name="BillingManagement" component={BillingManagementScreen} />
+    <Stack.Screen name="PaymentDetail" component={PaymentDetailScreen} />
   </Stack.Navigator>
 );
 
@@ -142,7 +152,7 @@ const SuperAdminTabNavigator: React.FC = () => {
       />
       <Tab.Screen 
         name="Billing" 
-        component={BillingManagementScreen}
+        component={BillingStack}
         options={{
           tabBarLabel: 'Billing',
         }}
@@ -172,6 +182,7 @@ const SuperAdminNavigator: React.FC = () => {
       <Stack.Screen name="CreateCompany" component={CreateCompanyScreen} />
       <Stack.Screen name="PlatformAnalytics" component={PlatformAnalyticsScreen} />
       <Stack.Screen name="BillingManagement" component={BillingManagementScreen} />
+      <Stack.Screen name="PaymentDetail" component={PaymentDetailScreen} />
       <Stack.Screen name="SystemSettings" component={SystemSettingsScreen} />
       <Stack.Screen name="AuditLogs" component={AuditLogsScreen} />
       <Stack.Screen name="BuyPlan" component={BuyPlanScreen} />

@@ -9,6 +9,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ErrorHandler } from '../utils/errorHandler';
 import { cacheService } from './cacheService';
 import notificationService from './notificationService';
+import WebSocketService from './WebSocketService';
+import { store } from '../store';
 
 interface LocationData {
   latitude: number;
@@ -443,11 +445,34 @@ class LocationTrackingService {
    */
   private async syncLocationToBackend(location: LocationData, shiftId?: string): Promise<void> {
     try {
-      await cacheService.addToSyncQueue('location_update', {
-        shiftId,
-        location,
-        timestamp: Date.now(),
-      });
+      // Get guard ID from store
+      const state = store.getState();
+      const guardId = state.auth.user?.id;
+      
+      if (!guardId) {
+        console.warn('No guard ID available for location update');
+        return;
+      }
+
+      // Send via WebSocket if connected (real-time)
+      if (WebSocketService.isSocketConnected()) {
+        WebSocketService.sendLocationUpdate({
+          guardId,
+          latitude: location.latitude,
+          longitude: location.longitude,
+          accuracy: location.accuracy,
+          timestamp: location.timestamp || Date.now(),
+          batteryLevel: undefined, // Could be added if battery monitoring is available
+        });
+      } else {
+        // Fallback to sync queue if WebSocket is not connected
+        await cacheService.addToSyncQueue('location_update', {
+          guardId,
+          shiftId,
+          location,
+          timestamp: Date.now(),
+        });
+      }
     } catch (error) {
       ErrorHandler.handleError(error, 'sync_location_backend', false);
     }

@@ -14,9 +14,11 @@ import {
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../store';
-import { globalStyles, COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
+import { globalStyles, COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import WebSocketService from '../../services/WebSocketService';
 import { ErrorHandler } from '../../utils/errorHandler';
+import { AlertCircleIcon, AlertTriangleIcon, FileTextIcon, MapPinIcon, ClockIcon } from '../ui/FeatherIcons';
+import { CheckCircleIcon, UserIcon } from '../ui/AppIcons';
 
 interface ActivityItem {
   id: string;
@@ -210,17 +212,44 @@ const LiveActivityFeed: React.FC<LiveActivityFeedProps> = ({
   };
 
   const getActivityIcon = (type: ActivityItem['type']) => {
+    const iconSize = 20;
     switch (type) {
-      case 'check_in': return '✅';
-      case 'check_out': return '🚪';
-      case 'incident': return '⚠️';
-      case 'shift_start': return '🟢';
-      case 'shift_end': return '🔴';
-      case 'break_start': return '⏸️';
-      case 'break_end': return '▶️';
-      case 'emergency': return '🚨';
-      default: return '📋';
+      case 'check_in':
+        return <UserIcon size={iconSize} color={COLORS.success} />;
+      case 'check_out':
+        return <CheckCircleIcon size={iconSize} color={COLORS.info} />;
+      case 'incident':
+        return <AlertTriangleIcon size={iconSize} color={COLORS.warning} />;
+      case 'shift_start':
+        return <CheckCircleIcon size={iconSize} color={COLORS.success} />;
+      case 'shift_end':
+        return <AlertCircleIcon size={iconSize} color={COLORS.error} />;
+      case 'break_start':
+      case 'break_end':
+        return <ClockIcon size={iconSize} color={COLORS.textSecondary} />;
+      case 'emergency':
+        return <AlertCircleIcon size={iconSize} color={COLORS.error} />;
+      default:
+        return <FileTextIcon size={iconSize} color={COLORS.textSecondary} />;
     }
+  };
+
+  const getActivityIconBgColor = (type: ActivityItem['type'], severity?: string) => {
+    if (type === 'emergency' || severity === 'critical') return '#FEEBEB'; // Light red
+    if (type === 'incident' && severity === 'high') return '#FFF4E6'; // Light orange
+    if (type === 'incident' && severity === 'medium') return '#FFF8E1'; // Light yellow
+    if (type === 'check_in' || type === 'shift_start') return '#E8F5E9'; // Light green
+    if (type === 'check_out' || type === 'shift_end') return '#E3F2FD'; // Light blue
+    return '#F5F5F5'; // Light gray
+  };
+
+  const getActivityIconColor = (type: ActivityItem['type'], severity?: string) => {
+    if (type === 'emergency' || severity === 'critical') return COLORS.error;
+    if (type === 'incident' && severity === 'high') return '#FF8800';
+    if (type === 'incident' && severity === 'medium') return COLORS.warning;
+    if (type === 'check_in' || type === 'shift_start') return COLORS.success;
+    if (type === 'check_out' || type === 'shift_end') return COLORS.info;
+    return COLORS.textSecondary;
   };
 
   const getActivityColor = (type: ActivityItem['type'], severity?: string) => {
@@ -285,8 +314,13 @@ const LiveActivityFeed: React.FC<LiveActivityFeedProps> = ({
       style={styles.activityItem}
       onPress={() => onActivityPress?.(item)}
     >
-      <View style={styles.activityIcon}>
-        <Text style={styles.iconText}>{getActivityIcon(item.type)}</Text>
+      <View style={[
+        styles.activityIcon,
+        {
+          backgroundColor: getActivityIconBgColor(item.type, item.severity),
+        }
+      ]}>
+        {getActivityIcon(item.type)}
       </View>
       
       <View style={styles.activityContent}>
@@ -388,7 +422,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.backgroundPrimary,
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.xs,
-    borderRadius: 12,
+    borderRadius: BORDER_RADIUS.lg,
   },
   liveDot: {
     width: 6,
@@ -403,9 +437,9 @@ const styles = StyleSheet.create({
   },
   liveToggle: {
     backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.md,
+    paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.xs,
-    borderRadius: 16,
+    borderRadius: BORDER_RADIUS.xl,
   },
   liveToggleText: {
     fontSize: TYPOGRAPHY.fontSize.sm,
@@ -419,9 +453,9 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
   },
   filterButton: {
-    paddingHorizontal: SPACING.md,
+    paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.xs,
-    borderRadius: 16,
+    borderRadius: BORDER_RADIUS.xl,
     backgroundColor: COLORS.backgroundSecondary,
   },
   filterButtonActive: {
@@ -429,6 +463,7 @@ const styles = StyleSheet.create({
   },
   filterButtonText: {
     fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.regular,
     color: COLORS.textSecondary,
   },
   filterButtonTextActive: {
@@ -440,23 +475,22 @@ const styles = StyleSheet.create({
   },
   activityItem: {
     flexDirection: 'row',
-    backgroundColor: COLORS.backgroundSecondary,
-    borderRadius: 12,
-    padding: SPACING.md,
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
     marginBottom: SPACING.sm,
     position: 'relative',
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    ...SHADOWS.small,
   },
   activityIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.backgroundPrimary,
+    width: 48,
+    height: 48,
+    borderRadius: BORDER_RADIUS.lg,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: SPACING.md,
-  },
-  iconText: {
-    fontSize: 18,
+    marginRight: SPACING.lg,
   },
   activityContent: {
     flex: 1,
@@ -493,7 +527,7 @@ const styles = StyleSheet.create({
   severityBadge: {
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.xs,
-    borderRadius: 8,
+    borderRadius: BORDER_RADIUS.md,
   },
   severityText: {
     fontSize: TYPOGRAPHY.fontSize.xs,
@@ -506,8 +540,8 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 4,
-    borderTopRightRadius: 12,
-    borderBottomRightRadius: 12,
+    borderTopRightRadius: BORDER_RADIUS.lg,
+    borderBottomRightRadius: BORDER_RADIUS.lg,
   },
 });
 

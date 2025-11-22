@@ -185,6 +185,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
     <SharedHeader
       variant="admin"
       showLogo={true}
+      onMenuPress={openDrawer}
       onNotificationPress={() => {
         // Handle notification press
       }}

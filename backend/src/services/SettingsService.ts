@@ -11,10 +11,11 @@ export interface NotificationSettings {
 }
 
 export interface ProfileSettings {
-  firstName: string;
-  lastName: string;
-  phone: string;
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
   timezone?: string;
+  language?: string;
 }
 
 export interface SupportTicket {
@@ -24,7 +25,7 @@ export interface SupportTicket {
 }
 
 export class SettingsService {
-  async getNotificationSettings(userId: string): Promise<NotificationSettings> {
+  async getNotificationSettings(userId: string): Promise<NotificationSettings & { timezone?: string; language?: string }> {
     try {
       // Check if user settings exist
       let userSettings = await prisma.userSettings.findUnique({
@@ -40,7 +41,8 @@ export class SettingsService {
             emailNotifications: true,
             smsNotifications: false,
             shiftReminders: true,
-            incidentAlerts: true
+            incidentAlerts: true,
+            language: 'en'
           }
         });
       }
@@ -50,7 +52,9 @@ export class SettingsService {
         emailNotifications: userSettings.emailNotifications,
         smsNotifications: userSettings.smsNotifications,
         shiftReminders: userSettings.shiftReminders,
-        incidentAlerts: userSettings.incidentAlerts
+        incidentAlerts: userSettings.incidentAlerts,
+        timezone: userSettings.timezone || undefined,
+        language: userSettings.language || 'en'
       };
     } catch (error) {
       console.error('Error getting notification settings:', error);
@@ -58,18 +62,33 @@ export class SettingsService {
     }
   }
 
-  async updateNotificationSettings(userId: string, settings: Partial<NotificationSettings>): Promise<NotificationSettings> {
+  async updateNotificationSettings(userId: string, settings: Partial<NotificationSettings & { timezone?: string; language?: string }>): Promise<NotificationSettings & { timezone?: string; language?: string }> {
     try {
+      const updateData: any = {};
+      
+      // Update notification settings
+      if (settings.pushNotifications !== undefined) updateData.pushNotifications = settings.pushNotifications;
+      if (settings.emailNotifications !== undefined) updateData.emailNotifications = settings.emailNotifications;
+      if (settings.smsNotifications !== undefined) updateData.smsNotifications = settings.smsNotifications;
+      if (settings.shiftReminders !== undefined) updateData.shiftReminders = settings.shiftReminders;
+      if (settings.incidentAlerts !== undefined) updateData.incidentAlerts = settings.incidentAlerts;
+      
+      // Update timezone and language if provided
+      if (settings.timezone !== undefined) updateData.timezone = settings.timezone || null;
+      if (settings.language !== undefined) updateData.language = settings.language || 'en';
+
       const updatedSettings = await prisma.userSettings.upsert({
         where: { userId },
-        update: settings,
+        update: updateData,
         create: {
           userId,
           pushNotifications: settings.pushNotifications ?? true,
           emailNotifications: settings.emailNotifications ?? true,
           smsNotifications: settings.smsNotifications ?? false,
           shiftReminders: settings.shiftReminders ?? true,
-          incidentAlerts: settings.incidentAlerts ?? true
+          incidentAlerts: settings.incidentAlerts ?? true,
+          timezone: settings.timezone || null,
+          language: settings.language || 'en'
         }
       });
 
@@ -78,7 +97,9 @@ export class SettingsService {
         emailNotifications: updatedSettings.emailNotifications,
         smsNotifications: updatedSettings.smsNotifications,
         shiftReminders: updatedSettings.shiftReminders,
-        incidentAlerts: updatedSettings.incidentAlerts
+        incidentAlerts: updatedSettings.incidentAlerts,
+        timezone: updatedSettings.timezone || undefined,
+        language: updatedSettings.language || 'en'
       };
     } catch (error) {
       console.error('Error updating notification settings:', error);
@@ -98,20 +119,34 @@ export class SettingsService {
           phone: true,
           role: true,
           createdAt: true,
+          userSettings: {
+            select: {
+              timezone: true,
+              language: true
+            }
+          },
           guard: {
             select: {
               experience: true,
               certificationUrls: true,
-              status: true
+              status: true,
+              employeeId: true,
+              department: true
             }
           },
           client: {
             select: {
+              id: true,
               accountType: true,
               companyName: true,
+              companyRegistrationNumber: true,
+              taxId: true,
               address: true,
               city: true,
-              state: true
+              state: true,
+              zipCode: true,
+              country: true,
+              website: true
             }
           }
         }
@@ -121,33 +156,134 @@ export class SettingsService {
         throw new Error('User not found');
       }
 
-      return user;
+      // Merge user settings with user data
+      return {
+        ...user,
+        timezone: user.userSettings?.timezone || null,
+        language: user.userSettings?.language || 'en'
+      };
     } catch (error) {
       console.error('Error getting profile settings:', error);
       throw new Error('Failed to get profile settings');
     }
   }
 
+  async updateCompanyDetails(userId: string, companyData: {
+    companyName?: string;
+    companyRegistrationNumber?: string;
+    taxId?: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+    country?: string;
+    website?: string;
+  }): Promise<any> {
+    try {
+      // Get client record
+      const client = await prisma.client.findUnique({
+        where: { userId },
+        select: { id: true }
+      });
+
+      if (!client) {
+        throw new Error('Client record not found');
+      }
+
+      // Update client details
+      const updateData: any = {};
+      if (companyData.companyName !== undefined) updateData.companyName = companyData.companyName;
+      if (companyData.companyRegistrationNumber !== undefined) updateData.companyRegistrationNumber = companyData.companyRegistrationNumber;
+      if (companyData.taxId !== undefined) updateData.taxId = companyData.taxId;
+      if (companyData.address !== undefined) updateData.address = companyData.address;
+      if (companyData.city !== undefined) updateData.city = companyData.city;
+      if (companyData.state !== undefined) updateData.state = companyData.state;
+      if (companyData.zipCode !== undefined) updateData.zipCode = companyData.zipCode;
+      if (companyData.country !== undefined) updateData.country = companyData.country;
+      if (companyData.website !== undefined) updateData.website = companyData.website;
+
+      const updatedClient = await prisma.client.update({
+        where: { id: client.id },
+        data: updateData,
+        select: {
+          id: true,
+          companyName: true,
+          companyRegistrationNumber: true,
+          taxId: true,
+          address: true,
+          city: true,
+          state: true,
+          zipCode: true,
+          country: true,
+          website: true
+        }
+      });
+
+      return updatedClient;
+    } catch (error) {
+      console.error('Error updating company details:', error);
+      throw new Error('Failed to update company details');
+    }
+  }
+
   async updateProfileSettings(userId: string, profileData: Partial<ProfileSettings>): Promise<any> {
     try {
+      // Update user profile
+      const updateData: any = {};
+      if (profileData.firstName !== undefined) updateData.firstName = profileData.firstName;
+      if (profileData.lastName !== undefined) updateData.lastName = profileData.lastName;
+      if (profileData.phone !== undefined) updateData.phone = profileData.phone;
+
       const updatedUser = await prisma.user.update({
         where: { id: userId },
-        data: {
-          firstName: profileData.firstName,
-          lastName: profileData.lastName,
-          phone: profileData.phone
-        },
+        data: updateData,
         select: {
           id: true,
           firstName: true,
           lastName: true,
           email: true,
           phone: true,
-          role: true
+          role: true,
+          createdAt: true
         }
       });
 
-      return updatedUser;
+      // Update user settings (timezone and language)
+      if (profileData.timezone !== undefined || profileData.language !== undefined) {
+        const settingsUpdate: any = {};
+        if (profileData.timezone !== undefined) settingsUpdate.timezone = profileData.timezone;
+        if (profileData.language !== undefined) settingsUpdate.language = profileData.language;
+
+        await prisma.userSettings.upsert({
+          where: { userId },
+          update: settingsUpdate,
+          create: {
+            userId,
+            timezone: profileData.timezone || null,
+            language: profileData.language || 'en',
+            pushNotifications: true,
+            emailNotifications: true,
+            smsNotifications: false,
+            shiftReminders: true,
+            incidentAlerts: true
+          }
+        });
+      }
+
+      // Get updated settings for response
+      const userSettings = await prisma.userSettings.findUnique({
+        where: { userId },
+        select: {
+          timezone: true,
+          language: true
+        }
+      });
+
+      return {
+        ...updatedUser,
+        timezone: userSettings?.timezone || null,
+        language: userSettings?.language || 'en'
+      };
     } catch (error) {
       console.error('Error updating profile settings:', error);
       throw new Error('Failed to update profile settings');
@@ -156,19 +292,48 @@ export class SettingsService {
 
   async createSupportTicket(userId: string, ticketData: SupportTicket): Promise<any> {
     try {
+      // Map lowercase category to enum
+      const categoryMap: Record<string, 'TECHNICAL' | 'BILLING' | 'GENERAL' | 'URGENT'> = {
+        'technical': 'TECHNICAL',
+        'billing': 'BILLING',
+        'general': 'GENERAL',
+        'urgent': 'URGENT'
+      };
+
+      const category = categoryMap[ticketData.category.toLowerCase()] || 'GENERAL';
+
+      // Validate required fields
+      if (!ticketData.subject || !ticketData.message) {
+        throw new Error('Subject and message are required');
+      }
+
       const ticket = await prisma.supportTicket.create({
         data: {
           userId,
-          subject: ticketData.subject,
-          message: ticketData.message,
-          category: ticketData.category,
-          status: 'OPEN'
+          subject: ticketData.subject.trim(),
+          message: ticketData.message.trim(),
+          category: category,
+          status: 'OPEN',
+          priority: category === 'URGENT' ? 'URGENT' : category === 'TECHNICAL' ? 'HIGH' : 'NORMAL'
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true
+            }
+          }
         }
       });
 
       return ticket;
     } catch (error) {
       console.error('Error creating support ticket:', error);
+      if (error instanceof Error) {
+        throw error;
+      }
       throw new Error('Failed to create support ticket');
     }
   }
@@ -177,23 +342,41 @@ export class SettingsService {
     try {
       const skip = (page - 1) * limit;
 
+      // First, get the guard record to find shifts
+      const guard = await prisma.guard.findUnique({
+        where: { userId },
+        select: { id: true }
+      });
+
+      if (!guard) {
+        return {
+          shifts: [],
+          pagination: {
+            page,
+            limit,
+            total: 0,
+            pages: 0
+          }
+        };
+      }
+
       const shifts = await prisma.shift.findMany({
         where: {
-          guardId: userId,
+          guardId: guard.id,
           status: 'COMPLETED'
         },
         select: {
           id: true,
-          startTime: true,
-          endTime: true,
-          checkInTime: true,
-          checkOutTime: true,
-          actualDuration: true,
+          scheduledStartTime: true,
+          scheduledEndTime: true,
+          actualStartTime: true,
+          actualEndTime: true,
           locationName: true,
-          locationAddress: true
+          locationAddress: true,
+          totalBreakTime: true
         },
         orderBy: {
-          startTime: 'desc'
+          scheduledStartTime: 'desc'
         },
         skip,
         take: limit
@@ -201,7 +384,7 @@ export class SettingsService {
 
       const total = await prisma.shift.count({
         where: {
-          guardId: userId,
+          guardId: guard.id,
           status: 'COMPLETED'
         }
       });
@@ -225,21 +408,41 @@ export class SettingsService {
     try {
       const skip = (page - 1) * limit;
 
+      // First, get the guard record to find shifts
+      const guard = await prisma.guard.findUnique({
+        where: { userId },
+        select: { id: true }
+      });
+
+      if (!guard) {
+        return {
+          jobs: [],
+          pagination: {
+            page,
+            limit,
+            total: 0,
+            pages: 0
+          }
+        };
+      }
+
       const shifts = await prisma.shift.findMany({
         where: {
-          guardId: userId,
+          guardId: guard.id,
           status: 'COMPLETED'
         },
         select: {
           id: true,
-          startTime: true,
-          endTime: true,
-          actualDuration: true,
+          scheduledStartTime: true,
+          scheduledEndTime: true,
+          actualStartTime: true,
+          actualEndTime: true,
           locationName: true,
-          locationAddress: true
+          locationAddress: true,
+          totalBreakTime: true
         },
         orderBy: {
-          startTime: 'desc'
+          scheduledStartTime: 'desc'
         },
         skip,
         take: limit
@@ -247,7 +450,7 @@ export class SettingsService {
 
       const total = await prisma.shift.count({
         where: {
-          guardId: userId,
+          guardId: guard.id,
           status: 'COMPLETED'
         }
       });

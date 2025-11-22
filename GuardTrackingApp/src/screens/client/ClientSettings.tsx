@@ -33,23 +33,29 @@ const ClientSettings: React.FC = () => {
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
 
   const handleProfile = () => {
-    Alert.alert('Profile', 'Open client profile settings');
+    navigation.navigate('ProfileEdit');
   };
 
   const handleCompanyDetails = () => {
-    Alert.alert('Company Details', 'Open company information settings');
+    navigation.navigate('CompanyDetails');
   };
 
   const handleManageSites = () => {
-    Alert.alert('Manage Sites', 'Open sites & shifts management');
+    // Navigate to sites management (usually in the main client tabs)
+    // For now, show a message that this is available in the main navigation
+    Alert.alert(
+      'Manage Sites & Shifts',
+      'Site and shift management is available in the main navigation menu.',
+      [{ text: 'OK' }]
+    );
   };
 
   const handleNotifications = () => {
-    navigation.navigate('ClientNotifications');
+    navigation.navigate('NotificationSettings');
   };
 
   const handleSupport = () => {
-    Alert.alert('Support', 'Contact our support team');
+    navigation.navigate('SupportContact');
   };
 
   const handleLogout = () => {

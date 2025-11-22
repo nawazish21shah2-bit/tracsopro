@@ -14,6 +14,7 @@ import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SuperAdminProfileDrawer from '../../components/superAdmin/SuperAdminProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import { superAdminService } from '../../services/superAdminService';
 
 interface SettingItem {
   id: string;
@@ -28,6 +29,8 @@ const SystemSettingsScreen: React.FC = () => {
   const navigation = useNavigation();
   const dispatch = useDispatch<AppDispatch>();
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState({
     emailNotifications: true,
     pushNotifications: true,
@@ -223,6 +226,7 @@ const SystemSettingsScreen: React.FC = () => {
       <SharedHeader
         variant="superAdmin"
         title="System Settings"
+        onMenuPress={openDrawer}
         onNotificationPress={() => {
           // Handle notification press
         }}

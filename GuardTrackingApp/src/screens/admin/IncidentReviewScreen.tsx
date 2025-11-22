@@ -24,7 +24,7 @@ import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 import { ReportsIcon, EmergencyIcon, CheckCircleIcon } from '../../components/ui/AppIcons';
-import { FeatherIcon } from '../../components/ui/FeatherIcons';
+import { CameraIcon, MicIcon, CloudIcon } from '../../components/ui/FeatherIcons';
 
 interface IncidentReviewScreenProps {
   navigation: any;
@@ -187,15 +187,21 @@ const IncidentReviewScreen: React.FC<IncidentReviewScreenProps> = ({ navigation 
       
       <View style={styles.incidentMeta}>
         <View style={styles.metaItem}>
-          <FeatherIcon name="camera" size={14} color={COLORS.textSecondary} />
+          <View style={styles.metaIcon}>
+            <CameraIcon size={16} color={COLORS.textSecondary} />
+          </View>
           <Text style={styles.metaText}>{item.mediaFiles.length} files</Text>
         </View>
         <View style={styles.metaItem}>
-          <FeatherIcon name="mic" size={14} color={COLORS.textSecondary} />
+          <View style={styles.metaIcon}>
+            <MicIcon size={16} color={COLORS.textSecondary} />
+          </View>
           <Text style={styles.metaText}>{item.voiceTranscription ? 'Voice' : 'No voice'}</Text>
         </View>
         <View style={styles.metaItem}>
-          <FeatherIcon name="cloud" size={14} color={COLORS.textSecondary} />
+          <View style={styles.metaIcon}>
+            <CloudIcon size={16} color={COLORS.textSecondary} />
+          </View>
           <Text style={styles.metaText}>{item.syncStatus}</Text>
         </View>
       </View>
@@ -271,6 +277,7 @@ const IncidentReviewScreen: React.FC<IncidentReviewScreenProps> = ({ navigation 
         variant="admin"
         title="Incident Review"
         showLogo={false}
+        onMenuPress={openDrawer}
         profileDrawer={
           <AdminProfileDrawer
             visible={isDrawerVisible}
@@ -446,7 +453,13 @@ const styles = StyleSheet.create({
   metaItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.xs / 2,
+    gap: SPACING.xs,
+  },
+  metaIcon: {
+    width: 16,
+    height: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   metaText: {
     fontSize: TYPOGRAPHY.fontSize.xs,

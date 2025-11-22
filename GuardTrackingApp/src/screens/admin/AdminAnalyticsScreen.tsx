@@ -3,7 +3,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Dimensions } from 'react-native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
@@ -119,6 +119,10 @@ const AdminAnalyticsScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
         variant="admin"
         title="Analytics & Reports"
         showLogo={false}
+        onMenuPress={openDrawer}
+        onNotificationPress={() => {
+          // Handle notification press
+        }}
         profileDrawer={
           <AdminProfileDrawer
             visible={isDrawerVisible}
@@ -166,38 +170,46 @@ const AdminAnalyticsScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
       >
         {/* Metrics Cards */}
         <View style={styles.metricsGrid}>
-          <AdminStatsCard
-            icon={<ReportsIcon size={24} color={COLORS.primary} />}
-            value={metrics.totalReports.toString()}
-            label="Total Reports"
-            subLabel="All time"
-            iconBgColor="#DBEAFE"
-            iconColor={COLORS.primary}
-          />
-          <AdminStatsCard
-            icon={<CheckCircleIcon size={24} color={COLORS.success} />}
-            value={metrics.completedReports.toString()}
-            label="Completed"
-            subLabel="Successfully generated"
-            iconBgColor="#DCFCE7"
-            iconColor={COLORS.success}
-          />
-          <AdminStatsCard
-            icon={<ClockIcon size={24} color={COLORS.warning} />}
-            value={metrics.pendingReports.toString()}
-            label="Pending"
-            subLabel="In progress"
-            iconBgColor="#FEF3C7"
-            iconColor={COLORS.warning}
-          />
-          <AdminStatsCard
-            icon={<EmergencyIcon size={24} color={COLORS.error} />}
-            value={metrics.failedReports.toString()}
-            label="Failed"
-            subLabel="Requires attention"
-            iconBgColor="#FEE2E2"
-            iconColor={COLORS.error}
-          />
+          <View style={styles.metricCardWrapper}>
+            <AdminStatsCard
+              icon={<ReportsIcon size={24} color={COLORS.primary} />}
+              value={metrics.totalReports.toString()}
+              label="Total Reports"
+              subLabel="All time"
+              iconBgColor="#DBEAFE"
+              iconColor={COLORS.primary}
+            />
+          </View>
+          <View style={styles.metricCardWrapper}>
+            <AdminStatsCard
+              icon={<CheckCircleIcon size={24} color={COLORS.success} />}
+              value={metrics.completedReports.toString()}
+              label="Completed"
+              subLabel="Successfully generated"
+              iconBgColor="#DCFCE7"
+              iconColor={COLORS.success}
+            />
+          </View>
+          <View style={styles.metricCardWrapper}>
+            <AdminStatsCard
+              icon={<ClockIcon size={24} color={COLORS.warning} />}
+              value={metrics.pendingReports.toString()}
+              label="Pending"
+              subLabel="In progress"
+              iconBgColor="#FEF3C7"
+              iconColor={COLORS.warning}
+            />
+          </View>
+          <View style={styles.metricCardWrapper}>
+            <AdminStatsCard
+              icon={<EmergencyIcon size={24} color={COLORS.error} />}
+              value={metrics.failedReports.toString()}
+              label="Failed"
+              subLabel="Requires attention"
+              iconBgColor="#FEE2E2"
+              iconColor={COLORS.error}
+            />
+          </View>
         </View>
 
         {/* Performance Metrics */}
@@ -333,6 +345,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.lg,
     gap: SPACING.md,
+    justifyContent: 'space-between',
+  },
+  metricCardWrapper: {
+    width: (Dimensions.get('window').width - (SPACING.lg * 2) - SPACING.md) / 2,
   },
   section: {
     backgroundColor: COLORS.backgroundPrimary,

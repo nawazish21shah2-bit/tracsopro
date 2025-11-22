@@ -202,11 +202,6 @@ export const SuperAdminProfileDrawer: React.FC<SuperAdminProfileDrawerProps> = (
       onRequestClose={onClose}
     >
       <View style={styles.modalContainer}>
-        <TouchableOpacity
-          style={styles.backdrop}
-          activeOpacity={1}
-          onPress={onClose}
-        />
         <Animated.View
           style={[
             styles.drawerContainer,
@@ -254,6 +249,11 @@ export const SuperAdminProfileDrawer: React.FC<SuperAdminProfileDrawerProps> = (
             </View>
           </ScrollView>
         </Animated.View>
+        <TouchableOpacity
+          style={styles.backdrop}
+          activeOpacity={1}
+          onPress={onClose}
+        />
       </View>
     </Modal>
   );
@@ -264,18 +264,18 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
   },
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
   drawerContainer: {
     width: Dimensions.get('window').width * 0.85,
     backgroundColor: COLORS.backgroundPrimary,
     shadowColor: '#000',
-    shadowOffset: { width: -2, height: 0 },
+    shadowOffset: { width: 2, height: 0 },
     shadowOpacity: 0.25,
     shadowRadius: 10,
     elevation: 10,
+  },
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   scrollView: {
     flex: 1,

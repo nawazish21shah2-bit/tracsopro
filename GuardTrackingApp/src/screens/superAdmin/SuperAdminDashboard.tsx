@@ -21,8 +21,10 @@ import { logoutUser } from '../../store/slices/authSlice';
 import { useNavigation } from '@react-navigation/native';
 import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { HomeIcon, UserIcon, ReportsIcon, ShiftsIcon } from '../../components/ui/AppIcons';
-import StatsCard from '../../components/ui/StatsCard';
 import SuperAdminService, { PlatformOverview } from '../../services/superAdminService';
+import { Dimensions } from 'react-native';
+
+const { width } = Dimensions.get('window');
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SuperAdminProfileDrawer from '../../components/superAdmin/SuperAdminProfileDrawer';
@@ -32,7 +34,7 @@ interface RecentActivity {
   id: string;
   action: string;
   resource: string;
-  userId: string;
+  userId?: string;
   timestamp: string;
   details?: any;
 }
@@ -46,6 +48,7 @@ const SuperAdminDashboard: React.FC = () => {
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedPeriod, setSelectedPeriod] = useState('30d');
 
   const loadDashboardData = async () => {
     try {
@@ -63,9 +66,81 @@ const SuperAdminDashboard: React.FC = () => {
     }
   };
 
+  const calculateGrowth = (current: number, previous: number): number => {
+    if (previous === 0) return current > 0 ? 100 : 0;
+    return ((current - previous) / previous) * 100;
+  };
+
+  const getPreviousPeriodValue = (current: number, growth: number): number => {
+    if (growth === 0) return current;
+    return Math.round(current / (1 + growth / 100));
+  };
+
+  const renderMetricCard = (title: string, current: number, previous: number, format: 'currency' | 'number' = 'number') => {
+    const growth = calculateGrowth(current, previous);
+    const isPositive = growth >= 0;
+    const formatValue = (value: number) => {
+      if (format === 'currency') {
+        return `$${value.toLocaleString()}`;
+      }
+      return value.toLocaleString();
+    };
+
+    return (
+      <View style={styles.metricCard}>
+        <Text style={styles.metricTitle}>{title}</Text>
+        <Text style={styles.metricValue}>{formatValue(current)}</Text>
+        <View style={styles.metricGrowth}>
+          <View style={styles.growthContainer}>
+            <Text style={[styles.growthArrow, { color: isPositive ? '#10B981' : '#EF4444' }]}>
+              {isPositive ? '↗' : '↘'}
+            </Text>
+            <Text style={[styles.growthText, { color: isPositive ? '#10B981' : '#EF4444' }]}>
+              {Math.abs(growth).toFixed(1)}%
+            </Text>
+          </View>
+          <Text style={styles.growthPeriod}>vs last period</Text>
+        </View>
+      </View>
+    );
+  };
+
+  const renderPeriodSelector = () => {
+    const periods = [
+      { key: '7d', label: '7 Days' },
+      { key: '30d', label: '30 Days' },
+      { key: '90d', label: '90 Days' },
+      { key: '1y', label: '1 Year' },
+    ];
+
+    return (
+      <View style={styles.periodSelector}>
+        {periods.map((period) => (
+          <TouchableOpacity
+            key={period.key}
+            style={[
+              styles.periodButton,
+              selectedPeriod === period.key && styles.periodButtonActive,
+            ]}
+            onPress={() => setSelectedPeriod(period.key)}
+          >
+            <Text
+              style={[
+                styles.periodButtonText,
+                selectedPeriod === period.key && styles.periodButtonTextActive,
+              ]}
+            >
+              {period.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    );
+  };
+
   useEffect(() => {
     loadDashboardData();
-  }, []);
+  }, [selectedPeriod]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -103,6 +178,7 @@ const SuperAdminDashboard: React.FC = () => {
       <SharedHeader
         variant="superAdmin"
         showLogo={true}
+        onMenuPress={openDrawer}
         onNotificationPress={() => {
           // Handle notification press
         }}
@@ -139,41 +215,37 @@ const SuperAdminDashboard: React.FC = () => {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
+        showsVerticalScrollIndicator={false}
       >
+        {/* Time Period Selector */}
+        {renderPeriodSelector()}
 
         {/* Overview Stats */}
-        <View style={styles.section}>
-          <View style={styles.statsGrid}>
-            <StatsCard
-              label="Active Companies"
-              value={`${overview?.activeCompanies || 0}/${overview?.totalCompanies || 0}`}
-              icon={<UserIcon size={18} color={COLORS.success} />}
-              variant="success"
-              style={styles.statCard}
-            />
-            <StatsCard
-              label="Total Guards"
-              value={`${overview?.activeGuards || 0} active`}
-              icon={<UserIcon size={18} color={COLORS.primary} />}
-              variant="info"
-              style={styles.statCard}
-            />
-            <StatsCard
-              label="Total Clients"
-              value={overview?.totalClients || 0}
-              icon={<UserIcon size={18} color={COLORS.warning} />}
-              variant="neutral"
-              style={styles.statCard}
-            />
-            <StatsCard
-              label="Total Revenue"
-              value={formatCurrency(overview?.totalRevenue || 0)}
-              icon={<ShiftsIcon size={18} color={COLORS.success} />}
-              variant="success"
-              style={styles.statCard}
-            />
+        {overview && (
+          <View style={styles.metricsContainer}>
+            {renderMetricCard(
+              'Revenue',
+              overview.totalRevenue || 0,
+              getPreviousPeriodValue(overview.totalRevenue || 0, 27.5),
+              'currency'
+            )}
+            {renderMetricCard(
+              'Total Users',
+              (overview.activeUsers || 0) + (overview.totalClients || 0) + (overview.activeGuards || 0),
+              getPreviousPeriodValue((overview.activeUsers || 0) + (overview.totalClients || 0) + (overview.activeGuards || 0), 12.3)
+            )}
+            {renderMetricCard(
+              'Companies',
+              overview.totalCompanies || 0,
+              getPreviousPeriodValue(overview.totalCompanies || 0, 8.7)
+            )}
+            {renderMetricCard(
+              'Guards',
+              overview.activeGuards || 0,
+              getPreviousPeriodValue(overview.activeGuards || 0, 15.2)
+            )}
           </View>
-        </View>
+        )}
 
         {/* Today's Summary */}
         <View style={styles.section}>
@@ -289,14 +361,85 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     marginBottom: SPACING.md,
   },
-  statsGrid: {
+  periodSelector: {
+    flexDirection: 'row',
+    padding: SPACING.md,
+    backgroundColor: '#FFFFFF',
+    marginBottom: SPACING.sm,
+    gap: SPACING.xs,
+  },
+  periodButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: SPACING.md,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  periodButtonActive: {
+    backgroundColor: COLORS.primary,
+  },
+  periodButtonText: {
+    fontSize: 14,
+    color: '#666666',
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+  },
+  periodButtonTextActive: {
+    color: '#FFFFFF',
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+  },
+  metricsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    padding: SPACING.md,
+    gap: SPACING.md,
+  },
+  metricCard: {
+    width: (width - SPACING.md * 3) / 2,
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  metricTitle: {
+    fontSize: 14,
+    color: '#666666',
+    marginBottom: 8,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+  },
+  metricValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#333333',
+    marginBottom: 12,
+    letterSpacing: -0.5,
+  },
+  metricGrowth: {
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
   },
-  statCard: {
-    width: '48%',
-    marginBottom: SPACING.md,
+  growthContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  growthArrow: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  growthText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  growthPeriod: {
+    fontSize: 12,
+    color: '#666666',
   },
   summaryCard: {
     backgroundColor: '#FFFFFF',

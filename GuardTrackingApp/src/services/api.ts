@@ -67,6 +67,28 @@ class ApiService {
     return this.api.delete<T>(path, config);
   }
 
+  // Public convenience methods that wrap the axios instance
+  // These methods include authentication headers automatically via interceptors
+  public get<T = any>(path: string, config?: any) {
+    return this.api.get<T>(path, config);
+  }
+
+  public post<T = any>(path: string, data?: any, config?: any) {
+    return this.api.post<T>(path, data, config);
+  }
+
+  public put<T = any>(path: string, data?: any, config?: any) {
+    return this.api.put<T>(path, data, config);
+  }
+
+  public patch<T = any>(path: string, data?: any, config?: any) {
+    return this.api.patch<T>(path, data, config);
+  }
+
+  public delete<T = any>(path: string, config?: any) {
+    return this.api.delete<T>(path, config);
+  }
+
   private setupInterceptors() {
     // Request interceptor to add auth token and logging
     this.api.interceptors.request.use(

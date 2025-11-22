@@ -25,7 +25,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   style,
 }) => {
   const insets = useSafeAreaInsets();
-  const topPadding = Math.max(insets.top, Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0);
+  // const topPadding = Math.max(insets.top, Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0);
 
   const renderLeft = () => {
     if (leftIcon) return leftIcon;
@@ -66,7 +66,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   };
 
   return (
-    <View style={[styles.container, { paddingTop: topPadding + SPACING.sm }, style]}>
+    <View style={[styles.container, style]}>
       {renderLeft()}
       {renderCenter()}
       {renderRight()}

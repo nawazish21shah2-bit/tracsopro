@@ -315,4 +315,117 @@ router.post('/impersonate', async (req: any, res) => {
   }
 });
 
+/**
+ * GET /api/super-admin/payments
+ * Get payment records with filters and pagination
+ */
+router.get('/payments', async (req, res) => {
+  try {
+    const { 
+      page, 
+      limit, 
+      status, 
+      companyId, 
+      type, 
+      startDate, 
+      endDate,
+      search 
+    } = req.query;
+    
+    const result = await SuperAdminService.getPaymentRecords({
+      page: page ? parseInt(page as string) : undefined,
+      limit: limit ? parseInt(limit as string) : undefined,
+      status: status as string,
+      companyId: companyId as string,
+      type: type as string,
+      startDate: startDate ? new Date(startDate as string) : undefined,
+      endDate: endDate ? new Date(endDate as string) : undefined,
+      search: search as string
+    });
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Error getting payment records:', error);
+    res.status(500).json({ error: 'Failed to get payment records' });
+  }
+});
+
+/**
+ * GET /api/super-admin/payments/:id
+ * Get payment record by ID
+ */
+router.get('/payments/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const record = await SuperAdminService.getPaymentRecordById(id);
+    res.json(record);
+  } catch (error: any) {
+    console.error('Error getting payment record:', error);
+    if (error.message === 'Payment record not found') {
+      res.status(404).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: 'Failed to get payment record' });
+    }
+  }
+});
+
+/**
+ * PATCH /api/super-admin/payments/:id/status
+ * Update payment record status
+ */
+router.patch('/payments/:id/status', async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    const { status, paidDate, paymentMethod } = req.body;
+    
+    if (!status) {
+      return res.status(400).json({ error: 'Status is required' });
+    }
+
+    const record = await SuperAdminService.updatePaymentStatus(
+      id,
+      status,
+      paidDate ? new Date(paidDate) : undefined,
+      paymentMethod
+    );
+
+    // Log the action
+    await SuperAdminService.logAction({
+      userId: req.userId,
+      action: 'UPDATE_PAYMENT_STATUS',
+      resource: 'BillingRecord',
+      resourceId: id,
+      newValues: { status, paidDate, paymentMethod },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
+    
+    res.json(record);
+  } catch (error) {
+    console.error('Error updating payment status:', error);
+    res.status(500).json({ error: 'Failed to update payment status' });
+  }
+});
+
+/**
+ * GET /api/super-admin/payments/analytics
+ * Get payment analytics
+ */
+router.get('/payments/analytics', async (req, res) => {
+  try {
+    const { startDate, endDate, companyId } = req.query;
+    
+    const analytics = await SuperAdminService.getPaymentAnalytics({
+      startDate: startDate ? new Date(startDate as string) : undefined,
+      endDate: endDate ? new Date(endDate as string) : undefined,
+      companyId: companyId as string
+    });
+    
+    res.json(analytics);
+  } catch (error) {
+    console.error('Error getting payment analytics:', error);
+    res.status(500).json({ error: 'Failed to get payment analytics' });
+  }
+});
+
 export default router;

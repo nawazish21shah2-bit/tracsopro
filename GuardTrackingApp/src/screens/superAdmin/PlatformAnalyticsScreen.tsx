@@ -175,6 +175,7 @@ const PlatformAnalyticsScreen: React.FC = () => {
       <SharedHeader
         variant="superAdmin"
         title="Platform Analytics"
+        onMenuPress={openDrawer}
         onNotificationPress={() => {
           // Handle notification press
         }}

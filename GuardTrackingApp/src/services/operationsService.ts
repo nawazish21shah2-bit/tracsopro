@@ -111,7 +111,7 @@ class OperationsService {
         success: boolean;
         data: EmergencyAlert[];
         count: number;
-      }>('/emergency/active');
+      }>('/emergency/alerts/active');
       
       if (response.data.success) {
         return response.data.data;
@@ -131,7 +131,7 @@ class OperationsService {
       const response = await apiService.postRaw<{
         success: boolean;
         message: string;
-      }>(`/emergency/${alertId}/acknowledge`, {});
+      }>(`/emergency/alert/${alertId}/acknowledge`, {});
       
       return response.data.success;
     } catch (error) {

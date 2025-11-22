@@ -16,6 +16,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RootState, AppDispatch } from '../../store';
 import { logoutUser, updateUserProfile } from '../../store/slices/authSlice';
 import { User, UserRole } from '../../types';
+import { settingsService } from '../../services/settingsService';
 
 type ProfileScreenNavigationProp = StackNavigationProp<any, 'Profile'>;
 
@@ -27,15 +28,22 @@ const ProfileScreen: React.FC = () => {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [locationTrackingEnabled, setLocationTrackingEnabled] = useState(true);
   const [darkModeEnabled, setDarkModeEnabled] = useState(false);
+  const [loadingSettings, setLoadingSettings] = useState(false);
 
   useEffect(() => {
-    // Load user preferences from storage
     loadUserPreferences();
   }, []);
 
   const loadUserPreferences = async () => {
-    // In a real app, you'd load these from AsyncStorage or user settings
-    // For now, using default values
+    try {
+      setLoadingSettings(true);
+      const settings = await settingsService.getNotificationSettings();
+      setNotificationsEnabled(settings.pushNotifications);
+    } catch (error) {
+      console.error('Error loading notification settings:', error);
+    } finally {
+      setLoadingSettings(false);
+    }
   };
 
   const handleLogout = () => {
@@ -62,9 +70,16 @@ const ProfileScreen: React.FC = () => {
     Alert.alert('Change Password', 'Password change functionality will be implemented');
   };
 
-  const handleNotificationToggle = (value: boolean) => {
+  const handleNotificationToggle = async (value: boolean) => {
     setNotificationsEnabled(value);
-    // Save preference to storage
+    try {
+      await settingsService.updateNotificationSettings({ pushNotifications: value });
+    } catch (error) {
+      console.error('Error updating notification settings:', error);
+      // Revert on error
+      setNotificationsEnabled(!value);
+      Alert.alert('Error', 'Failed to update notification settings');
+    }
   };
 
   const handleLocationToggle = (value: boolean) => {
@@ -182,6 +197,7 @@ const ProfileScreen: React.FC = () => {
           <Switch
             value={notificationsEnabled}
             onValueChange={handleNotificationToggle}
+            disabled={loadingSettings}
             trackColor={{ false: '#767577', true: '#81b0ff' }}
             thumbColor={notificationsEnabled ? '#007AFF' : '#f4f3f4'}
           />

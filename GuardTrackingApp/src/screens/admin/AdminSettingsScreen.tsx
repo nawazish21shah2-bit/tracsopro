@@ -57,6 +57,7 @@ const AdminSettingsScreen: React.FC<{ navigation?: any }> = ({ navigation: propN
       <SharedHeader
         variant="admin"
         title="Admin Settings"
+        onMenuPress={openDrawer}
         onNotificationPress={() => {
           // Handle notification press
         }}
@@ -77,8 +78,15 @@ const AdminSettingsScreen: React.FC<{ navigation?: any }> = ({ navigation: propN
             key={option.id} 
             style={styles.settingItem}
             onPress={() => {
-              if (option.id === 'subscription') {
+              if (option.id === 'profile') {
+                navigation.navigate('AdminProfileEdit' as never);
+              } else if (option.id === 'subscription') {
                 navigation.navigate('AdminSubscription' as never);
+              } else if (option.id === 'notifications') {
+                navigation.navigate('AdminNotificationSettings' as never);
+              } else if (option.id === 'system') {
+                // TODO: Navigate to system settings when implemented
+                Alert.alert('System Settings', 'System settings screen coming soon');
               }
             }}
           >

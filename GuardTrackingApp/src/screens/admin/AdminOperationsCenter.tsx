@@ -16,11 +16,12 @@ import {
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../store';
-import { globalStyles, COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
+import { globalStyles, COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import InteractiveMapView from '../../components/client/InteractiveMapView';
 import LiveActivityFeed from '../../components/client/LiveActivityFeed';
 import { ErrorHandler } from '../../utils/errorHandler';
 import { ReportsIcon, UserIcon, EmergencyIcon, SettingsIcon } from '../../components/ui/AppIcons';
+import { MapPinIcon, ClockIcon, AlertCircleIcon } from '../../components/ui/FeatherIcons';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
@@ -292,40 +293,55 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
         <TouchableOpacity 
           style={styles.guardStatusCard}
           onPress={() => handleGuardSelect(item.guardId)}
+          activeOpacity={0.7}
         >
-          <View style={styles.guardHeader}>
-            <Text style={styles.guardName}>{item.guardName}</Text>
+          <View style={styles.guardCardHeader}>
+            <View style={styles.guardCardInfo}>
+              <Text style={styles.guardName}>{item.guardName}</Text>
+              <Text style={styles.guardSite}>{item.currentSite || 'No Site'}</Text>
+            </View>
             <View style={[
               styles.guardStatusBadge,
               { backgroundColor: getGuardStatusColor(item.status) }
             ]}>
-              <Text style={styles.guardStatusText}>{item.status.toUpperCase()}</Text>
+              <Text style={styles.guardStatusText}>
+                {item.status === 'active' ? 'ACTIVE' : 
+                 item.status === 'on_break' ? 'ON BREAK' : 
+                 item.status === 'emergency' ? 'EMERGENCY' : 'OFFLINE'}
+              </Text>
             </View>
           </View>
           
-          <Text style={styles.guardSite}>{item.currentSite}</Text>
           <Text style={styles.guardShiftTime}>
             Shift: {formatDuration(item.shiftStart)}
           </Text>
           
-          <View style={styles.guardMetrics}>
-            {item.batteryLevel && (
-              <Text style={styles.guardMetric}>
-                🔋 {item.batteryLevel}%
+          <View style={styles.guardCardFooter}>
+            <View style={styles.guardFooterItem}>
+              <View style={styles.guardFooterIcon}>
+                <MapPinIcon size={16} color={COLORS.error} />
+              </View>
+              <Text style={styles.guardFooterText}>
+                ±{item.location.accuracy}m
               </Text>
-            )}
-            <Text style={styles.guardMetric}>
-              📍 ±{item.location.accuracy}m
-            </Text>
-            <Text style={styles.guardMetric}>
-              🕐 {formatTimeAgo(item.lastUpdate)}
-            </Text>
+            </View>
+            <View style={styles.guardFooterItem}>
+              <View style={styles.guardFooterIcon}>
+                <ClockIcon size={16} color={COLORS.info} />
+              </View>
+              <Text style={styles.guardFooterText}>
+                {formatTimeAgo(item.lastUpdate)}
+              </Text>
+            </View>
           </View>
           
           {item.emergencyAlert && (
             <View style={styles.emergencyBanner}>
+              <View style={styles.emergencyIcon}>
+                <AlertCircleIcon size={16} color={COLORS.textInverse} />
+              </View>
               <Text style={styles.emergencyBannerText}>
-                🚨 EMERGENCY: {item.emergencyAlert.message}
+                EMERGENCY: {item.emergencyAlert.message}
               </Text>
             </View>
           )}
@@ -349,8 +365,9 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
       ].map((view) => {
         const isActive = selectedView === (view.key as any);
         const IconComponent = view.icon;
-        // Icon color: white when active, gray when inactive
+        // Icon color: white when active, #7A7A7A when inactive
         const iconColor = isActive ? COLORS.textInverse : '#7A7A7A';
+        const textColor = isActive ? COLORS.textInverse : '#7A7A7A';
         return (
           <TouchableOpacity
             key={view.key}
@@ -359,13 +376,15 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
               isActive && styles.viewButtonActive,
             ]}
             onPress={() => setSelectedView(view.key as any)}
+            activeOpacity={0.7}
           >
             <View style={styles.viewIcon}>
-              <IconComponent size={18} color={iconColor} />
+              <IconComponent size={20} color={iconColor} />
             </View>
             <Text style={[
               styles.viewLabel,
               isActive && styles.viewLabelActive,
+              { color: textColor }
             ]}>
               {view.label}
             </Text>
@@ -408,6 +427,7 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
       <SharedHeader
         variant="admin"
         title="Operations Center"
+        onMenuPress={openDrawer}
         onNotificationPress={() => {
           // Handle notification press
         }}
@@ -501,7 +521,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.backgroundSecondary,
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.xs,
-    borderRadius: 12,
+    borderRadius: BORDER_RADIUS.lg,
   },
   liveDot: {
     width: 6,
@@ -516,45 +536,48 @@ const styles = StyleSheet.create({
   },
   liveToggle: {
     backgroundColor: COLORS.backgroundPrimary,
-    paddingHorizontal: SPACING.md,
+    paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.xs,
-    borderRadius: 16,
+    borderRadius: BORDER_RADIUS.xl,
   },
   liveToggleText: {
     fontSize: TYPOGRAPHY.fontSize.sm,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
     color: COLORS.primary,
   },
-  // View Selector - Exact Figma Specs: Corner radius 11, Padding H:16 V:10, Fill #ECECEC (inactive), accent (active)
+  // View Selector - Tab navigation for Overview, Guards, Alerts, Analytics
   viewSelector: {
     flexDirection: 'row',
     backgroundColor: COLORS.backgroundSecondary,
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.xs,
+    gap: SPACING.xs,
   },
   viewButton: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 10, // Figma: V:10
-    paddingHorizontal: 16, // Figma: H:16
-    borderRadius: 11, // Figma: Corner radius 11
-    marginHorizontal: SPACING.xs,
-    backgroundColor: '#ECECEC', // Figma: Fill #ECECEC (inactive)
+    justifyContent: 'center',
+    paddingVertical: 10, // Exact: 10px vertical
+    paddingHorizontal: 16, // Exact: 16px horizontal
+    borderRadius: 11, // Exact: 11px corner radius
+    backgroundColor: '#ECECEC', // Inactive tab background
+    minHeight: 59, // Ensure consistent height
   },
   viewButtonActive: {
-    backgroundColor: COLORS.primary, // Figma: accent (active)
+    backgroundColor: COLORS.primary,
   },
   viewIcon: {
-    marginBottom: SPACING.xs,
+    marginBottom: SPACING.xs / 2,
     justifyContent: 'center',
     alignItems: 'center',
+    height: 20,
   },
   viewLabel: {
     fontSize: TYPOGRAPHY.fontSize.xs,
-    color: COLORS.textSecondary,
+    fontWeight: TYPOGRAPHY.fontWeight.regular,
+    textAlign: 'center',
   },
   viewLabelActive: {
-    color: COLORS.textInverse,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
   content: {
@@ -563,7 +586,7 @@ const styles = StyleSheet.create({
   overviewContainer: {
     padding: SPACING.md,
   },
-  // Metrics Grid - Exact Figma Specs
+  // Metrics Grid - Overview statistics cards
   metricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -573,19 +596,13 @@ const styles = StyleSheet.create({
   metricCard: {
     flex: 1,
     minWidth: '45%',
-    backgroundColor: '#FFFFFF', // Figma: Fill #FFFFFF
-    borderRadius: 12, // Figma: Corner radius 12
-    padding: SPACING.md,
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
     position: 'relative',
-    borderWidth: 1, // Figma: Stroke weight 1
-    borderColor: '#DCDCDC', // Figma: Stroke #DCDCDC
-    borderStyle: 'solid',
-    // Figma: Drop shadow - X:0, Y:4, Blur:4, Spread:0, Color:#DCDCDC 25%
-    shadowColor: '#DCDCDC',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 4,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    ...SHADOWS.medium,
   },
   metricValue: {
     fontSize: TYPOGRAPHY.fontSize.xl,
@@ -621,18 +638,13 @@ const styles = StyleSheet.create({
   },
   emergencyAlert: {
     flexDirection: 'row',
-    backgroundColor: '#FEEBEB', // Figma: Fill #FEEBEB
-    borderWidth: 2, // Figma: Stroke weight 2
-    borderColor: '#DC2626', // Figma: Stroke #DC2626
-    borderRadius: 12, // Figma: Corner radius 12
-    padding: SPACING.md,
+    backgroundColor: '#FEEBEB',
+    borderWidth: 2,
+    borderColor: COLORS.error,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
     marginBottom: SPACING.sm,
-    // Figma: Drop shadow - X:0, Y:2, Blur:6, Spread:0, Color:#000000 14%
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.14,
-    shadowRadius: 6,
-    elevation: 3,
+    ...SHADOWS.small,
   },
   emergencyContent: {
     flex: 1,
@@ -653,10 +665,10 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
   },
   emergencyStatusBadge: {
-    backgroundColor: '#DC2626',
+    backgroundColor: COLORS.error,
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.xs,
-    borderRadius: 8,
+    borderRadius: BORDER_RADIUS.md,
     alignSelf: 'flex-start',
     height: 20,
     justifyContent: 'center',
@@ -677,31 +689,22 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
   },
   mapContainer: {
-    borderRadius: 12, // Figma: Corner radius 12
+    borderRadius: BORDER_RADIUS.lg,
     overflow: 'hidden',
-    borderWidth: 1, // Figma: Stroke weight 1
-    borderColor: '#DCDCDC', // Figma: Stroke #DCDCDC
-    // Figma: Drop shadow - X:0, Y:4, Blur:4, Spread:0, Color:#DCDCDC 25%
-    shadowColor: '#DCDCDC',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 4,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    ...SHADOWS.medium,
     backgroundColor: COLORS.backgroundPrimary,
   },
-  // Guard Detail Card - Exact Figma Specs
+  // Guard Detail Card - Shows selected guard details
   guardDetailCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: SPACING.md,
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
     marginTop: SPACING.sm,
     borderWidth: 1,
-    borderColor: '#DCDCDC',
-    shadowColor: '#DCDCDC',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 4,
+    borderColor: COLORS.borderCard,
+    ...SHADOWS.medium,
   },
   closeButton: {
     position: 'absolute',
@@ -756,72 +759,102 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   guardMonitoringContent: {
-    padding: SPACING.md,
+    padding: SPACING.lg,
+    paddingBottom: SPACING.xxl,
   },
   guardStatusCard: {
-    backgroundColor: COLORS.backgroundSecondary,
-    borderRadius: 12,
-    padding: SPACING.md,
-    marginBottom: SPACING.sm,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    ...SHADOWS.small,
   },
-  guardHeader: {
+  guardCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.xs,
+    alignItems: 'flex-start',
+    marginBottom: SPACING.sm,
+  },
+  guardCardInfo: {
+    flex: 1,
+    marginRight: SPACING.md,
   },
   guardName: {
     fontSize: TYPOGRAPHY.fontSize.md,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
     color: COLORS.textPrimary,
+    marginBottom: SPACING.xs / 2,
+  },
+  guardSite: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.regular,
+    color: COLORS.textSecondary,
   },
   guardStatusBadge: {
-    paddingHorizontal: SPACING.sm,
+    paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.xs,
-    borderRadius: 8,
+    borderRadius: BORDER_RADIUS.md,
+    alignSelf: 'flex-start',
   },
   guardStatusText: {
     fontSize: TYPOGRAPHY.fontSize.xs,
     fontWeight: TYPOGRAPHY.fontWeight.bold,
     color: COLORS.textInverse,
-  },
-  guardSite: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.xs,
+    letterSpacing: 0.5,
   },
   guardShiftTime: {
     fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.regular,
     color: COLORS.textSecondary,
     marginBottom: SPACING.sm,
   },
-  guardMetrics: {
+  guardCardFooter: {
     flexDirection: 'row',
-    gap: SPACING.md,
+    alignItems: 'center',
+    gap: SPACING.lg,
   },
-  guardMetric: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
+  guardFooterItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  guardFooterIcon: {
+    width: 16,
+    height: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  guardFooterText: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.regular,
     color: COLORS.textSecondary,
   },
   emergencyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: COLORS.error,
-    borderRadius: 8,
+    borderRadius: BORDER_RADIUS.md,
     padding: SPACING.sm,
-    marginTop: SPACING.sm,
+    marginTop: SPACING.md,
+    gap: SPACING.sm,
+  },
+  emergencyIcon: {
+    width: 16,
+    height: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   emergencyBannerText: {
+    flex: 1,
     fontSize: TYPOGRAPHY.fontSize.sm,
     fontWeight: TYPOGRAPHY.fontWeight.bold,
     color: COLORS.textInverse,
   },
   alertsContainer: {
     flex: 1,
-    backgroundColor: COLORS.backgroundSecondary,
+    backgroundColor: COLORS.backgroundPrimary,
   },
   analyticsContainer: {
     padding: SPACING.xl,

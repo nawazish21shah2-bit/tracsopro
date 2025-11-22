@@ -18,14 +18,15 @@ import {
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { logoutUser } from '../../store/slices/authSlice';
-import { globalStyles, COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
+import { globalStyles, COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { ErrorHandler } from '../../utils/errorHandler';
 import apiService from '../../services/api';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
-import { ShiftsIcon, UserIcon, EmergencyIcon } from '../../components/ui/AppIcons';
+import { ShiftsIcon, UserIcon, EmergencyIcon, LocationIcon, ClockIcon } from '../../components/ui/AppIcons';
+import { ArrowLeftIcon, ArrowRightIcon } from '../../components/ui/FeatherIcons';
 
 interface ScheduledShift {
   id: string;
@@ -188,12 +189,13 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
   const loadGuards = async () => {
     try {
       const response = await apiService.getGuards(1, 50);
-      if (!response.success || !response.data || !response.data.items) {
+      const responseData = response.data as any;
+      if (!response.success || !responseData || !responseData.items) {
         console.warn('Failed to load guards, falling back to mock guards');
         return;
       }
 
-      const backendGuards = response.data.items as any[];
+      const backendGuards = responseData.items as any[];
 
       const mapped: Guard[] = backendGuards.map((g, index) => {
         const name = `${g.firstName || ''} ${g.lastName || ''}`.trim() || g.email || `Guard ${index + 1}`;
@@ -436,7 +438,7 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
             setSelectedDate(prevDate.toISOString().split('T')[0]);
           }}
         >
-          <Text style={styles.dateButtonText}>←</Text>
+          <ArrowLeftIcon size={20} color={COLORS.textInverse} />
         </TouchableOpacity>
         
         <Text style={styles.selectedDate}>
@@ -456,7 +458,7 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
             setSelectedDate(nextDate.toISOString().split('T')[0]);
           }}
         >
-          <Text style={styles.dateButtonText}>→</Text>
+          <ArrowRightIcon size={20} color={COLORS.textInverse} />
         </TouchableOpacity>
       </View>
 
@@ -471,10 +473,20 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
               </View>
             </View>
             
-            <Text style={styles.shiftSite}>{item.siteName}</Text>
-            <Text style={styles.shiftTime}>
-              {item.startTime} - {item.endTime} ({calculateShiftHours(item.startTime, item.endTime)}h)
-            </Text>
+            <View style={styles.shiftInfoRow}>
+              <View style={styles.shiftInfoIconContainer}>
+                <LocationIcon size={16} color={COLORS.textSecondary} />
+              </View>
+              <Text style={styles.shiftSite}>{item.siteName}</Text>
+            </View>
+            <View style={styles.shiftInfoRow}>
+              <View style={styles.shiftInfoIconContainer}>
+                <ClockIcon size={16} color={COLORS.textSecondary} />
+              </View>
+              <Text style={styles.shiftTime}>
+                {item.startTime} - {item.endTime} ({calculateShiftHours(item.startTime, item.endTime)}h)
+              </Text>
+            </View>
             
             {item.conflicts && item.conflicts.length > 0 && (
               <View style={styles.conflictsSection}>
@@ -531,8 +543,14 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
                   ]}
                   onPress={() => setNewShift(prev => ({ ...prev, guardId: item.id }))}
                 >
-                  <Text style={styles.optionText}>{item.name}</Text>
-                  <Text style={styles.optionSubtext}>
+                  <Text style={[
+                    styles.optionText,
+                    newShift.guardId === item.id && styles.optionTextSelected,
+                  ]}>{item.name}</Text>
+                  <Text style={[
+                    styles.optionSubtext,
+                    newShift.guardId === item.id && styles.optionSubtextSelected,
+                  ]}>
                     {item.currentWeekHours}/{item.maxHoursPerWeek}h this week
                   </Text>
                 </TouchableOpacity>
@@ -555,8 +573,14 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
                   ]}
                   onPress={() => setNewShift(prev => ({ ...prev, siteId: item.id }))}
                 >
-                  <Text style={styles.optionText}>{item.name}</Text>
-                  <Text style={styles.optionSubtext}>{item.priority} priority</Text>
+                  <Text style={[
+                    styles.optionText,
+                    newShift.siteId === item.id && styles.optionTextSelected,
+                  ]}>{item.name}</Text>
+                  <Text style={[
+                    styles.optionSubtext,
+                    newShift.siteId === item.id && styles.optionSubtextSelected,
+                  ]}>{item.priority} priority</Text>
                 </TouchableOpacity>
               )}
               keyExtractor={(item) => item.id}
@@ -624,6 +648,7 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
       <SharedHeader
         variant="admin"
         title="Shift Scheduling"
+        onMenuPress={openDrawer}
         onNotificationPress={() => {
           // Handle notification press
         }}
@@ -641,13 +666,32 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
 
         <View style={styles.viewSelector}>
         {[
-          { key: 'calendar', label: 'Calendar', icon: ShiftsIcon },
-          { key: 'conflicts', label: 'Conflicts', icon: EmergencyIcon },
-          { key: 'guards', label: 'Guards', icon: UserIcon },
+          { 
+            key: 'calendar', 
+            label: 'Calendar', 
+            icon: ShiftsIcon,
+            iconBgColor: (isActive: boolean) => isActive ? 'rgba(255, 255, 255, 0.2)' : COLORS.secondary,
+            iconColor: (isActive: boolean) => isActive ? COLORS.textInverse : COLORS.primary,
+          },
+          { 
+            key: 'conflicts', 
+            label: 'Conflicts', 
+            icon: EmergencyIcon,
+            iconBgColor: (isActive: boolean) => isActive ? 'rgba(255, 255, 255, 0.2)' : '#FEEBEB',
+            iconColor: (isActive: boolean) => isActive ? COLORS.textInverse : COLORS.error,
+          },
+          { 
+            key: 'guards', 
+            label: 'Guards', 
+            icon: UserIcon,
+            iconBgColor: (isActive: boolean) => isActive ? 'rgba(255, 255, 255, 0.2)' : '#DCFCE7',
+            iconColor: (isActive: boolean) => isActive ? COLORS.textInverse : COLORS.success,
+          },
         ].map((view) => {
           const isActive = selectedView === view.key;
           const IconComponent = view.icon;
-          const iconColor = isActive ? COLORS.textInverse : '#7A7A7A';
+          const iconBgColor = view.iconBgColor(isActive);
+          const iconColor = view.iconColor(isActive);
           return (
             <TouchableOpacity
               key={view.key}
@@ -657,8 +701,14 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
               ]}
               onPress={() => setSelectedView(view.key as any)}
             >
-              <View style={styles.viewTabIcon}>
-                <IconComponent size={18} color={iconColor} />
+              <View style={styles.viewTabIconContainer}>
+                <View style={[
+                  styles.viewTabIcon, 
+                  { backgroundColor: iconBgColor },
+                  isActive && styles.viewTabIconActive
+                ]}>
+                  <IconComponent size={18} color={iconColor} />
+                </View>
               </View>
               <Text style={[
                 styles.viewTabText,
@@ -701,17 +751,13 @@ const styles = StyleSheet.create({
   },
   stickyAddButton: {
     position: 'absolute',
-    bottom: 20,
-    left: 20,
+    bottom: SPACING.lg,
+    right: SPACING.lg,
     backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: 25,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderRadius: BORDER_RADIUS.lg,
+    ...SHADOWS.medium,
     zIndex: 1000,
   },
   stickyAddButtonText: {
@@ -721,26 +767,38 @@ const styles = StyleSheet.create({
   },
   viewSelector: {
     flexDirection: 'row',
-    backgroundColor: COLORS.backgroundSecondary,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
+    backgroundColor: COLORS.backgroundPrimary,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    gap: SPACING.sm,
   },
   viewTab: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 11,
-    marginHorizontal: SPACING.xs,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.sm + 2,
+    borderRadius: BORDER_RADIUS.lg - 1,
+    minHeight: 59,
+    justifyContent: 'center',
     backgroundColor: '#ECECEC',
   },
   viewTabActive: {
     backgroundColor: COLORS.primary,
   },
-  viewTabIcon: {
-    marginBottom: SPACING.xs,
+  viewTabIconContainer: {
+    marginBottom: SPACING.sm + 2,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  viewTabIcon: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: BORDER_RADIUS.md,
+  },
+  viewTabIconActive: {
+    // Background color is set dynamically in component
   },
   viewTabText: {
     fontSize: TYPOGRAPHY.fontSize.xs,
@@ -748,33 +806,31 @@ const styles = StyleSheet.create({
   },
   viewTabTextActive: {
     color: COLORS.textInverse,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
   },
   calendarContainer: {
     flex: 1,
-    padding: SPACING.md,
+    padding: SPACING.lg,
   },
   dateSelector: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: SPACING.lg,
-    backgroundColor: COLORS.backgroundSecondary,
-    borderRadius: 12,
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    ...SHADOWS.small,
   },
   dateButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: BORDER_RADIUS.round,
     backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  dateButtonText: {
-    color: COLORS.textInverse,
-    fontSize: TYPOGRAPHY.fontSize.lg,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
   },
   selectedDate: {
     fontSize: TYPOGRAPHY.fontSize.md,
@@ -783,10 +839,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   shiftCard: {
-    backgroundColor: COLORS.backgroundSecondary,
-    borderRadius: 12,
-    padding: SPACING.md,
-    marginBottom: SPACING.sm,
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    ...SHADOWS.small,
   },
   shiftHeader: {
     flexDirection: 'row',
@@ -800,24 +859,39 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
   },
   statusBadge: {
-    paddingHorizontal: SPACING.sm,
+    paddingHorizontal: SPACING.sm + 2,
     paddingVertical: SPACING.xs,
-    borderRadius: 8,
+    borderRadius: BORDER_RADIUS.md,
+    minWidth: 70,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   statusText: {
     fontSize: TYPOGRAPHY.fontSize.xs,
     fontWeight: TYPOGRAPHY.fontWeight.bold,
     color: COLORS.textInverse,
   },
+  shiftInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.xs,
+  },
+  shiftInfoIconContainer: {
+    width: 16,
+    height: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: SPACING.xs,
+  },
   shiftSite: {
     fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.textSecondary,
-    marginBottom: SPACING.xs,
+    flex: 1,
   },
   shiftTime: {
     fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.textPrimary,
-    marginBottom: SPACING.xs,
+    flex: 1,
   },
   conflictsSection: {
     marginTop: SPACING.sm,
@@ -845,8 +919,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: SPACING.md,
+    padding: SPACING.lg,
     backgroundColor: COLORS.backgroundSecondary,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderCard,
   },
   modalTitle: {
     fontSize: TYPOGRAPHY.fontSize.lg,
@@ -871,24 +947,35 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
   },
   optionItem: {
-    backgroundColor: COLORS.backgroundSecondary,
-    borderRadius: 8,
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: BORDER_RADIUS.md,
     padding: SPACING.md,
     marginRight: SPACING.sm,
     minWidth: 120,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    ...SHADOWS.small,
   },
   optionItemSelected: {
     backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   optionText: {
     fontSize: TYPOGRAPHY.fontSize.sm,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
     color: COLORS.textPrimary,
   },
+  optionTextSelected: {
+    color: COLORS.textInverse,
+  },
   optionSubtext: {
     fontSize: TYPOGRAPHY.fontSize.xs,
     color: COLORS.textSecondary,
     marginTop: SPACING.xs,
+  },
+  optionSubtextSelected: {
+    color: COLORS.textInverse,
+    opacity: 0.9,
   },
   timeSection: {
     flexDirection: 'row',
@@ -899,17 +986,22 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   timeField: {
-    backgroundColor: COLORS.backgroundSecondary,
-    borderRadius: 8,
-    padding: SPACING.sm,
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
     fontSize: TYPOGRAPHY.fontSize.md,
     color: COLORS.textPrimary,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
   },
   conflictPreview: {
-    backgroundColor: COLORS.backgroundSecondary,
-    borderRadius: 8,
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: BORDER_RADIUS.md,
     padding: SPACING.md,
     marginBottom: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    ...SHADOWS.small,
   },
   conflictPreviewTitle: {
     fontSize: TYPOGRAPHY.fontSize.sm,
@@ -922,10 +1014,11 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xs,
   },
   createButton: {
-    backgroundColor: COLORS.success,
-    borderRadius: 8,
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.md,
     padding: SPACING.md,
     alignItems: 'center',
+    ...SHADOWS.small,
   },
   createButtonText: {
     color: COLORS.textInverse,

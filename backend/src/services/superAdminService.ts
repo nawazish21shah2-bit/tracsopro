@@ -583,6 +583,293 @@ export class SuperAdminService {
       throw new Error('Failed to impersonate user');
     }
   }
+
+  /**
+   * Get payment records with filters and pagination
+   */
+  static async getPaymentRecords(params: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    companyId?: string;
+    type?: string;
+    startDate?: Date;
+    endDate?: Date;
+    search?: string;
+  }) {
+    try {
+      const { 
+        page = 1, 
+        limit = 20, 
+        status, 
+        companyId, 
+        type, 
+        startDate, 
+        endDate,
+        search 
+      } = params;
+      const skip = (page - 1) * limit;
+
+      const where: any = {};
+      
+      if (status) where.status = status;
+      if (companyId) where.securityCompanyId = companyId;
+      if (type) where.type = type;
+      if (startDate || endDate) {
+        where.createdAt = {};
+        if (startDate) where.createdAt.gte = startDate;
+        if (endDate) where.createdAt.lte = endDate;
+      }
+      if (search) {
+        where.OR = [
+          { description: { contains: search, mode: 'insensitive' } },
+          { invoiceNumber: { contains: search, mode: 'insensitive' } },
+          { securityCompany: { name: { contains: search, mode: 'insensitive' } } }
+        ];
+      }
+
+      const [records, total] = await Promise.all([
+        prisma.billingRecord.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            securityCompany: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                subscriptionPlan: true
+              }
+            }
+          }
+        }),
+        prisma.billingRecord.count({ where })
+      ]);
+
+      return {
+        records,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit)
+        }
+      };
+    } catch (error) {
+      console.error('Error getting payment records:', error);
+      throw new Error('Failed to get payment records');
+    }
+  }
+
+  /**
+   * Get payment record by ID
+   */
+  static async getPaymentRecordById(paymentId: string) {
+    try {
+      const record = await prisma.billingRecord.findUnique({
+        where: { id: paymentId },
+        include: {
+          securityCompany: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+              address: true,
+              city: true,
+              state: true,
+              zipCode: true,
+              country: true,
+              subscriptionPlan: true,
+              subscriptionStatus: true
+            }
+          },
+          subscription: {
+            select: {
+              id: true,
+              plan: true,
+              status: true,
+              billingCycle: true
+            }
+          }
+        }
+      });
+
+      if (!record) {
+        throw new Error('Payment record not found');
+      }
+
+      return record;
+    } catch (error) {
+      console.error('Error getting payment record:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update payment record status
+   */
+  static async updatePaymentStatus(
+    paymentId: string, 
+    status: string, 
+    paidDate?: Date,
+    paymentMethod?: string
+  ) {
+    try {
+      const updateData: any = { status };
+      
+      if (status === 'PAID' && paidDate) {
+        updateData.paidDate = paidDate;
+      }
+      if (paymentMethod) {
+        updateData.paymentMethod = paymentMethod;
+      }
+
+      const record = await prisma.billingRecord.update({
+        where: { id: paymentId },
+        data: updateData,
+        include: {
+          securityCompany: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
+        }
+      });
+
+      return record;
+    } catch (error) {
+      console.error('Error updating payment status:', error);
+      throw new Error('Failed to update payment status');
+    }
+  }
+
+  /**
+   * Get payment analytics
+   */
+  static async getPaymentAnalytics(params: {
+    startDate?: Date;
+    endDate?: Date;
+    companyId?: string;
+  }) {
+    try {
+      const { startDate, endDate, companyId } = params;
+      
+      const where: any = {};
+      if (companyId) where.securityCompanyId = companyId;
+      if (startDate || endDate) {
+        where.paidDate = {};
+        if (startDate) where.paidDate.gte = startDate;
+        if (endDate) where.paidDate.lte = endDate;
+      }
+
+      const [
+        totalRevenue,
+        monthlyRevenue,
+        byStatus,
+        byType,
+        byCompany,
+        recentPayments
+      ] = await Promise.all([
+        // Total revenue
+        prisma.billingRecord.aggregate({
+          where: { ...where, status: 'PAID' },
+          _sum: { amount: true },
+          _count: true
+        }),
+        // Monthly revenue
+        prisma.billingRecord.aggregate({
+          where: {
+            ...where,
+            status: 'PAID',
+            paidDate: {
+              gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+            }
+          },
+          _sum: { amount: true },
+          _count: true
+        }),
+        // By status
+        prisma.billingRecord.groupBy({
+          by: ['status'],
+          where,
+          _sum: { amount: true },
+          _count: true
+        }),
+        // By type
+        prisma.billingRecord.groupBy({
+          by: ['type'],
+          where: { ...where, status: 'PAID' },
+          _sum: { amount: true },
+          _count: true
+        }),
+        // By company (top 10)
+        prisma.billingRecord.groupBy({
+          by: ['securityCompanyId'],
+          where: { ...where, status: 'PAID' },
+          _sum: { amount: true },
+          _count: true,
+          orderBy: { _sum: { amount: 'desc' } },
+          take: 10
+        }),
+        // Recent payments
+        prisma.billingRecord.findMany({
+          where: { ...where, status: 'PAID' },
+          take: 10,
+          orderBy: { paidDate: 'desc' },
+          include: {
+            securityCompany: {
+              select: {
+                name: true
+              }
+            }
+          }
+        })
+      ]);
+
+      // Get company names for top companies
+      const companyIds = byCompany.map(c => c.securityCompanyId);
+      const companies = await prisma.securityCompany.findMany({
+        where: { id: { in: companyIds } },
+        select: { id: true, name: true }
+      });
+      const companyMap = new Map(companies.map(c => [c.id, c.name]));
+
+      return {
+        totalRevenue: {
+          amount: totalRevenue._sum.amount || 0,
+          count: totalRevenue._count
+        },
+        monthlyRevenue: {
+          amount: monthlyRevenue._sum.amount || 0,
+          count: monthlyRevenue._count
+        },
+        byStatus: byStatus.map(s => ({
+          status: s.status,
+          amount: s._sum.amount || 0,
+          count: s._count
+        })),
+        byType: byType.map(t => ({
+          type: t.type,
+          amount: t._sum.amount || 0,
+          count: t._count
+        })),
+        topCompanies: byCompany.map(c => ({
+          companyId: c.securityCompanyId,
+          companyName: companyMap.get(c.securityCompanyId) || 'Unknown',
+          amount: c._sum.amount || 0,
+          count: c._count
+        })),
+        recentPayments
+      };
+    } catch (error) {
+      console.error('Error getting payment analytics:', error);
+      throw new Error('Failed to get payment analytics');
+    }
+  }
 }
 
 export default SuperAdminService;

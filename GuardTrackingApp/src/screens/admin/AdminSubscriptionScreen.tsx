@@ -53,7 +53,21 @@ const AdminSubscriptionScreen: React.FC = () => {
       setLoading(true);
       
       // Get admin's security company
-      const companyResponse = await apiService.get('/admin/company');
+      let companyResponse;
+      try {
+        companyResponse = await apiService.get('/admin/company');
+      } catch (error: any) {
+        if (error.response?.status === 404) {
+          Alert.alert(
+            'Company Not Found',
+            'Your account is not associated with a security company. Please contact support to set up your company account.',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+        throw error;
+      }
+      
       const company = companyResponse.data.data;
       
       if (!company) {
@@ -64,10 +78,27 @@ const AdminSubscriptionScreen: React.FC = () => {
       setSecurityCompanyId(company.id);
       
       // Get plans and subscription in parallel
-      const [plansData, subscriptionResponse] = await Promise.all([
-        paymentService.getPlans(),
-        apiService.get('/admin/subscription'),
-      ]);
+      let plansData, subscriptionResponse;
+      try {
+        [plansData, subscriptionResponse] = await Promise.all([
+          paymentService.getPlans(),
+          apiService.get('/admin/subscription'),
+        ]);
+      } catch (error: any) {
+        if (error.response?.status === 404) {
+          // Company exists but no subscription yet - this is okay
+          plansData = await paymentService.getPlans();
+          setPlans(plansData.plans);
+          setCurrentSubscription({
+            plan: company.subscriptionPlan || 'BASIC',
+            status: company.subscriptionStatus || 'TRIAL',
+            currentPeriodEnd: company.subscriptionEndDate,
+            cancelAtPeriodEnd: false,
+          });
+          return;
+        }
+        throw error;
+      }
       
       setPlans(plansData.plans);
       
@@ -81,9 +112,10 @@ const AdminSubscriptionScreen: React.FC = () => {
       });
     } catch (error: any) {
       console.error('Error loading subscription data:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to load subscription information';
       Alert.alert(
         'Error',
-        error.response?.data?.message || 'Failed to load subscription information'
+        errorMessage
       );
     } finally {
       setLoading(false);

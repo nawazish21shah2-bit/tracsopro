@@ -23,4 +23,8 @@ router.post('/support/contact', settingsController.submitSupportRequest.bind(set
 router.get('/attendance-history', settingsController.getAttendanceHistory.bind(settingsController));
 router.get('/past-jobs', settingsController.getPastJobs.bind(settingsController));
 
+// Client-specific settings
+router.get('/company', settingsController.getCompanyDetails.bind(settingsController));
+router.put('/company', settingsController.updateCompanyDetails.bind(settingsController));
+
 export default router;

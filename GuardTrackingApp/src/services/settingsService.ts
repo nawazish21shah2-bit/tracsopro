@@ -1,5 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import { store } from '../store';
+import { logoutUser } from '../store/slices/authSlice';
+import { securityManager } from '../utils/security';
 
 // Use 10.0.2.2 for Android emulator, localhost for iOS simulator
 const API_BASE_URL = __DEV__ 
@@ -68,7 +71,25 @@ export interface PastJob {
 class SettingsService {
   private async getAuthToken(): Promise<string | null> {
     try {
-      return await AsyncStorage.getItem('authToken');
+      // First try to get token from securityManager (preferred method)
+      const tokens = await securityManager.getTokens();
+      if (tokens?.accessToken) {
+        return tokens.accessToken;
+      }
+      
+      // Fallback to direct AsyncStorage (for backward compatibility)
+      const token = await AsyncStorage.getItem('authToken');
+      if (token) {
+        return token;
+      }
+      
+      // Also check Redux store as last resort
+      const state = store.getState();
+      if (state.auth?.token) {
+        return state.auth.token;
+      }
+      
+      return null;
     } catch (error) {
       console.error('Error getting auth token:', error);
       return null;
@@ -77,6 +98,10 @@ class SettingsService {
 
   private async makeRequest(endpoint: string, options: RequestInit = {}) {
     const token = await this.getAuthToken();
+    
+    if (!token) {
+      throw new Error('No authentication token found. Please login again.');
+    }
     
     const response = await fetch(`${API_BASE_URL}/settings${endpoint}`, {
       ...options,
@@ -89,7 +114,18 @@ class SettingsService {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      const errorMessage = errorData.message || `HTTP error! status: ${response.status}`;
+      
+      // Handle 401 Unauthorized - token expired or invalid
+      if (response.status === 401) {
+        // Clear invalid token
+        await AsyncStorage.removeItem('authToken');
+        // Dispatch logout action to clear Redux state
+        store.dispatch(logoutUser());
+        throw new Error('Your session has expired. Please login again.');
+      }
+      
+      throw new Error(errorMessage);
     }
 
     return response.json();
@@ -161,6 +197,30 @@ class SettingsService {
     };
   }> {
     const response = await this.makeRequest(`/past-jobs?page=${page}&limit=${limit}`);
+    return response.data;
+  }
+
+  // Client-specific settings
+  async getCompanyDetails(): Promise<any> {
+    const response = await this.makeRequest('/company');
+    return response.data;
+  }
+
+  async updateCompanyDetails(companyData: {
+    companyName?: string;
+    companyRegistrationNumber?: string;
+    taxId?: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+    country?: string;
+    website?: string;
+  }): Promise<any> {
+    const response = await this.makeRequest('/company', {
+      method: 'PUT',
+      body: JSON.stringify(companyData),
+    });
     return response.data;
   }
 }

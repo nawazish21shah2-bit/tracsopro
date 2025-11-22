@@ -7,15 +7,19 @@ import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth.js';
 import { logger } from '../utils/logger.js';
 import prisma from '../config/database.js';
-import { TrackingService } from '../services/trackingService.js';
 import { EmergencyService } from '../services/emergencyService.js';
 import { GuardStatus, ShiftAssignmentStatus } from '@prisma/client';
 
-const trackingService = new TrackingService();
 const emergencyService = EmergencyService.getInstance();
 
+// Constants
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const MS_TO_MINUTES = 1000 * 60;
+const DECIMAL_PLACES = 1;
+
 /**
- * Get operations metrics
+ * Get operations metrics for admin dashboard
+ * Returns: guard counts, site coverage, response times, and incident statistics
  */
 export const getOperationsMetrics = async (req: AuthRequest, res: Response) => {
   try {
@@ -24,101 +28,67 @@ export const getOperationsMetrics = async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
-    // Get all guards
-    const totalGuards = await prisma.guard.count();
+    // Guard Statistics
+    const [totalGuards, activeGuards, offlineGuards, activeBreaks] = await Promise.all([
+      prisma.guard.count(),
+      prisma.guard.count({
+        where: { status: { in: [GuardStatus.ON_DUTY, GuardStatus.ACTIVE] } },
+      }),
+      prisma.guard.count({ where: { status: GuardStatus.OFF_DUTY } }),
+      prisma.shiftBreak.findMany({
+        where: { endTime: null, shift: { status: 'IN_PROGRESS' } },
+        select: { shift: { select: { guardId: true } } },
+        distinct: ['shiftId'],
+      }),
+    ]);
 
-    // Get active guards (on duty)
-    const activeGuards = await prisma.guard.count({
-      where: {
-        status: {
-          in: [GuardStatus.ON_DUTY, GuardStatus.ACTIVE],
-        },
-      },
-    });
-
-    // Get guards on break (guards with active shift breaks)
-    const activeBreaks = await prisma.shiftBreak.findMany({
-      where: {
-        endTime: null,
-        shift: {
-          status: 'IN_PROGRESS',
-        },
-      },
-      select: {
-        shift: {
-          select: {
-            guardId: true,
-          },
-        },
-      },
-      distinct: ['shiftId'],
-    });
     const guardsOnBreak = activeBreaks.length;
 
-    // Get offline guards
-    const offlineGuards = await prisma.guard.count({
-      where: {
-        status: GuardStatus.OFF_DUTY,
-      },
-    });
-
-    // Get active emergency alerts
+    // Emergency Alerts
     const activeAlerts = await emergencyService.getActiveEmergencyAlerts();
     const emergencyAlerts = activeAlerts.length;
 
-    // Calculate site coverage (guards assigned to active sites / total active sites)
-    const activeSites = await prisma.location.count({
-      where: { isActive: true },
-    });
-    
-    const sitesWithGuardsResult = await prisma.locationAssignment.findMany({
-      where: {
-        status: 'ACTIVE',
-        location: { isActive: true },
-      },
-      select: {
-        locationId: true,
-      },
-      distinct: ['locationId'],
-    });
+    // Site Coverage
+    const [activeSites, sitesWithGuardsResult] = await Promise.all([
+      prisma.location.count({ where: { isActive: true } }),
+      prisma.locationAssignment.findMany({
+        where: { status: 'ACTIVE', location: { isActive: true } },
+        select: { locationId: true },
+        distinct: ['locationId'],
+      }),
+    ]);
     const sitesWithGuards = sitesWithGuardsResult.length;
-
     const siteCoverage = activeSites > 0 ? (sitesWithGuards / activeSites) * 100 : 0;
 
-    // Calculate average response time (from incidents)
-    const recentIncidents = await prisma.incident.findMany({
-      where: {
-        createdAt: {
-          gte: new Date(Date.now() - 24 * 60 * 60 * 1000), // Last 24 hours
-        },
-        resolvedAt: { not: null },
-      },
-      select: {
-        createdAt: true,
-        resolvedAt: true,
-      },
-    });
-
-    let averageResponseTime = 0;
-    if (recentIncidents.length > 0) {
-      const totalResponseTime = recentIncidents.reduce((sum, incident) => {
-        if (incident.resolvedAt) {
-          const responseTime = incident.resolvedAt.getTime() - incident.createdAt.getTime();
-          return sum + responseTime / (1000 * 60); // Convert to minutes
-        }
-        return sum;
-      }, 0);
-      averageResponseTime = totalResponseTime / recentIncidents.length;
-    }
-
-    // Get incidents today
+    // Response Time & Incidents
+    const last24Hours = new Date(Date.now() - ONE_DAY_MS);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const incidentsToday = await prisma.incident.count({
-      where: {
-        createdAt: { gte: today },
-      },
-    });
+
+    const [recentIncidents, incidentsToday] = await Promise.all([
+      prisma.incident.findMany({
+        where: {
+          createdAt: { gte: last24Hours },
+          resolvedAt: { not: null },
+        },
+        select: { createdAt: true, resolvedAt: true },
+      }),
+      prisma.incident.count({ where: { createdAt: { gte: today } } }),
+    ]);
+
+    // Calculate average response time
+    const averageResponseTime = recentIncidents.length > 0
+      ? recentIncidents.reduce((sum, incident) => {
+          if (incident.resolvedAt) {
+            const responseTime = (incident.resolvedAt.getTime() - incident.createdAt.getTime()) / MS_TO_MINUTES;
+            return sum + responseTime;
+          }
+          return sum;
+        }, 0) / recentIncidents.length
+      : 0;
+
+    // Round to 1 decimal place
+    const roundToOneDecimal = (value: number) => Math.round(value * 10) / 10;
 
     const metrics = {
       totalGuards,
@@ -126,15 +96,12 @@ export const getOperationsMetrics = async (req: AuthRequest, res: Response) => {
       guardsOnBreak,
       offlineGuards,
       emergencyAlerts,
-      siteCoverage: Math.round(siteCoverage * 10) / 10, // Round to 1 decimal
-      averageResponseTime: Math.round(averageResponseTime * 10) / 10, // Round to 1 decimal
+      siteCoverage: roundToOneDecimal(siteCoverage),
+      averageResponseTime: roundToOneDecimal(averageResponseTime),
       incidentsToday,
     };
 
-    res.json({
-      success: true,
-      data: metrics,
-    });
+    res.json({ success: true, data: metrics });
   } catch (error) {
     logger.error('Error getting operations metrics:', error);
     res.status(500).json({
@@ -147,6 +114,7 @@ export const getOperationsMetrics = async (req: AuthRequest, res: Response) => {
 
 /**
  * Get guard statuses for operations center
+ * Returns: real-time status, location, shift info, and emergency alerts for all guards
  */
 export const getGuardStatuses = async (req: AuthRequest, res: Response) => {
   try {
@@ -155,74 +123,71 @@ export const getGuardStatuses = async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
-    // Get all guards with their latest location and current shift
+    // Fetch all guards with user info
     const guards = await prisma.guard.findMany({
       include: {
         user: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-          },
+          select: { id: true, firstName: true, lastName: true },
         },
       },
     });
 
+    // Get active emergency alerts once (shared across all guards)
+    const activeAlerts = await emergencyService.getActiveEmergencyAlerts();
+
+    // Process each guard's status
     const guardStatuses = await Promise.all(
       guards.map(async (guard) => {
-        // Get latest location
-        const latestLocation = await prisma.trackingRecord.findFirst({
-          where: { guardId: guard.id },
-          orderBy: { timestamp: 'desc' },
-        });
-
-        // Get current shift assignment
-        const currentShift = await prisma.shiftAssignment.findFirst({
-          where: {
-            guardId: guard.id,
-            status: ShiftAssignmentStatus.IN_PROGRESS,
-          },
-          include: {
-            shiftPosting: {
-              include: {
-                site: true,
-              },
+        const [latestLocation, currentShift] = await Promise.all([
+          prisma.trackingRecord.findFirst({
+            where: { guardId: guard.id },
+            orderBy: { timestamp: 'desc' },
+          }),
+          prisma.shiftAssignment.findFirst({
+            where: {
+              guardId: guard.id,
+              status: ShiftAssignmentStatus.IN_PROGRESS,
             },
-            site: true,
-          },
-        });
+            include: {
+              shiftPosting: { include: { site: true } },
+              site: true,
+            },
+          }),
+        ]);
 
-        // Check for active emergency alert
-        const activeAlerts = await emergencyService.getActiveEmergencyAlerts();
+        // Find guard's emergency alert
         const guardAlert = activeAlerts.find(alert => alert.guardId === guard.id);
 
-        // Determine status
-        let status: 'active' | 'on_break' | 'offline' | 'emergency' = 'offline';
-        if (guardAlert) {
-          status = 'emergency';
-        } else if (guard.status === GuardStatus.ON_DUTY || guard.status === GuardStatus.ACTIVE) {
-          status = 'active';
-        } else if (guard.status === GuardStatus.OFF_DUTY) {
-          status = 'offline';
-        }
+        // Determine guard status
+        const status = guardAlert
+          ? 'emergency'
+          : guard.status === GuardStatus.ON_DUTY || guard.status === GuardStatus.ACTIVE
+          ? 'active'
+          : guard.status === GuardStatus.OFF_DUTY
+          ? 'offline'
+          : 'offline';
 
+        // Build location data
+        const location = latestLocation
+          ? {
+              latitude: latestLocation.latitude,
+              longitude: latestLocation.longitude,
+              accuracy: latestLocation.accuracy || 0,
+              timestamp: latestLocation.timestamp.getTime(),
+            }
+          : {
+              latitude: 0,
+              longitude: 0,
+              accuracy: 0,
+              timestamp: Date.now(),
+            };
+
+        // Build response object
         return {
           guardId: guard.id,
           guardName: `${guard.user.firstName} ${guard.user.lastName}`,
           status,
-          location: latestLocation
-            ? {
-                latitude: latestLocation.latitude,
-                longitude: latestLocation.longitude,
-                accuracy: latestLocation.accuracy || 0,
-                timestamp: latestLocation.timestamp.getTime(),
-              }
-            : {
-                latitude: 0,
-                longitude: 0,
-                accuracy: 0,
-                timestamp: Date.now(),
-              },
+          location,
           currentSite: currentShift?.site?.name || currentShift?.shiftPosting?.site?.name || 'No Site',
           siteId: currentShift?.siteId,
           shiftStart: currentShift?.startTime?.getTime() || Date.now(),
@@ -240,10 +205,7 @@ export const getGuardStatuses = async (req: AuthRequest, res: Response) => {
       })
     );
 
-    res.json({
-      success: true,
-      data: guardStatuses,
-    });
+    res.json({ success: true, data: guardStatuses });
   } catch (error) {
     logger.error('Error getting guard statuses:', error);
     res.status(500).json({

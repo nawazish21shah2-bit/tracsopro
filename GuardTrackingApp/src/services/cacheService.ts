@@ -233,6 +233,30 @@ export class CacheService {
       case 'break_end':
         // await shiftService.endBreak(item.data);
         break;
+      case 'location_update':
+        // Send location update via WebSocket if available, otherwise via API
+        const WebSocketService = require('./WebSocketService').default;
+        if (WebSocketService.isSocketConnected()) {
+          WebSocketService.sendLocationUpdate({
+            guardId: item.data.guardId,
+            latitude: item.data.location.latitude,
+            longitude: item.data.location.longitude,
+            accuracy: item.data.location.accuracy,
+            timestamp: item.data.timestamp || Date.now(),
+            batteryLevel: item.data.location.batteryLevel,
+          });
+        } else {
+          // Fallback to API call if WebSocket not available
+          const apiService = require('./api').default;
+          await apiService.recordLocation(item.data.guardId, {
+            latitude: item.data.location.latitude,
+            longitude: item.data.location.longitude,
+            accuracy: item.data.location.accuracy,
+            batteryLevel: item.data.location.batteryLevel,
+            timestamp: item.data.timestamp || Date.now(),
+          });
+        }
+        break;
       default:
         throw new Error(`Unknown sync action: ${item.action}`);
     }

@@ -232,6 +232,88 @@ class SuperAdminService {
   }
 
   /**
+   * Get payment records with filters
+   */
+  async getPaymentRecords(params: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    companyId?: string;
+    type?: string;
+    startDate?: string;
+    endDate?: string;
+    search?: string;
+  } = {}): Promise<{
+    records: any[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      pages: number;
+    };
+  }> {
+    try {
+      const response = await apiService.get('/super-admin/payments', { params });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching payment records:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get payment record by ID
+   */
+  async getPaymentRecordById(paymentId: string): Promise<any> {
+    try {
+      const response = await apiService.get(`/super-admin/payments/${paymentId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching payment record:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update payment status
+   */
+  async updatePaymentStatus(
+    paymentId: string,
+    status: string,
+    paidDate?: string,
+    paymentMethod?: string
+  ): Promise<any> {
+    try {
+      const response = await apiService.patch(`/super-admin/payments/${paymentId}/status`, {
+        status,
+        paidDate,
+        paymentMethod,
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error updating payment status:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get payment analytics
+   */
+  async getPaymentAnalytics(params: {
+    startDate?: string;
+    endDate?: string;
+    companyId?: string;
+  } = {}): Promise<any> {
+    try {
+      const response = await apiService.get('/super-admin/payments/analytics', { params });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching payment analytics:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Get system audit logs
    */
   async getAuditLogs(params: {

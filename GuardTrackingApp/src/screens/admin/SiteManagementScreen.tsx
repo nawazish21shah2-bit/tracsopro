@@ -5,8 +5,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
-import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
-import { LocationIcon, UserIcon, SettingsIcon } from '../../components/ui/AppIcons';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
+import { LocationIcon, SettingsIcon } from '../../components/ui/AppIcons';
 import apiService from '../../services/api';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
@@ -221,25 +221,32 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
   const renderSiteItem = ({ item }: { item: Site }) => (
     <View style={styles.siteCard}>
       <View style={styles.siteHeader}>
-        <LocationIcon size={24} color={COLORS.primary} />
+        <View style={styles.locationIconContainer}>
+          <LocationIcon size={20} color={COLORS.primary} />
+        </View>
         <View style={styles.siteInfo}>
-          <Text style={styles.siteName}>{item.name}</Text>
+          <View style={styles.siteNameRow}>
+            <Text style={styles.siteName}>{item.name}</Text>
+            <View style={[styles.statusBadge, { backgroundColor: item.status === 'active' ? COLORS.success : COLORS.error }]}>
+              <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
+            </View>
+          </View>
           <Text style={styles.siteAddress}>{item.address}</Text>
           {item.clientName && (
             <Text style={styles.clientText}>Client: {item.clientName}</Text>
           )}
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: item.status === 'active' ? COLORS.success : COLORS.error }]}>
-          <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
-        </View>
       </View>
-      <View style={styles.siteStats}>
+      <View style={styles.separator} />
+      <View style={styles.siteActions}>
         <TouchableOpacity style={styles.actionButton} onPress={() => openEditSite(item.id)}>
-          <SettingsIcon size={16} color={COLORS.primary} />
+          <View style={styles.actionIconContainer}>
+            <SettingsIcon size={16} color={COLORS.primary} />
+          </View>
           <Text style={styles.actionText}>Edit</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionButton} onPress={() => handleDeleteSite(item.id)}>
-          <Text style={[styles.actionText, { color: COLORS.error }]}>Delete</Text>
+          <Text style={styles.deleteText}>Delete</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -250,6 +257,7 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
       <SharedHeader
         variant="admin"
         title="Site Management"
+        onMenuPress={openDrawer}
         onNotificationPress={() => {
           // Handle notification press
         }}
@@ -458,39 +466,135 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: SPACING.md, backgroundColor: COLORS.primary, marginTop: 50, },
   backButton: { color: COLORS.textInverse, fontSize: TYPOGRAPHY.fontSize.md },
   headerTitle: { color: COLORS.textInverse, fontSize: TYPOGRAPHY.fontSize.lg, fontWeight: TYPOGRAPHY.fontWeight.bold },
-  addButton: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, borderRadius: 8 },
+  addButton: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, borderRadius: BORDER_RADIUS.md },
   addButtonText: { color: COLORS.textInverse, fontSize: TYPOGRAPHY.fontSize.sm, fontWeight: TYPOGRAPHY.fontWeight.semibold },
-  listContainer: { padding: SPACING.md },
-  siteCard: { backgroundColor: COLORS.backgroundSecondary, borderRadius: 12, padding: SPACING.md, marginBottom: SPACING.sm },
-  siteHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.sm },
-  siteInfo: { flex: 1, marginLeft: SPACING.md },
-  siteName: { fontSize: TYPOGRAPHY.fontSize.md, fontWeight: TYPOGRAPHY.fontWeight.semibold, color: COLORS.textPrimary },
-  siteAddress: { fontSize: TYPOGRAPHY.fontSize.sm, color: COLORS.textSecondary },
-  clientText: { fontSize: TYPOGRAPHY.fontSize.xs, color: COLORS.textSecondary, marginTop: SPACING.xs },
-  statusBadge: { paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, borderRadius: 8 },
-  statusText: { fontSize: TYPOGRAPHY.fontSize.xs, fontWeight: TYPOGRAPHY.fontWeight.bold, color: COLORS.textInverse },
-  siteStats: { paddingTop: SPACING.sm, borderTopWidth: 1, borderTopColor: COLORS.borderLight },
-  statText: { fontSize: TYPOGRAPHY.fontSize.sm, color: COLORS.textSecondary },
-  actionButton: { flexDirection: 'row', alignItems: 'center', marginRight: SPACING.md },
-  actionText: { fontSize: TYPOGRAPHY.fontSize.sm, color: COLORS.primary },
+  contentWrapper: { flex: 1, backgroundColor: COLORS.backgroundPrimary },
+  listContainer: { padding: SPACING.lg },
+  siteCard: {
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    ...SHADOWS.small,
+  },
+  siteHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  locationIconContainer: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: SPACING.md,
+    backgroundColor: COLORS.secondary,
+    borderRadius: BORDER_RADIUS.md,
+  },
+  siteInfo: {
+    flex: 1,
+  },
+  siteNameRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.xs,
+  },
+  siteName: {
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    color: COLORS.textPrimary,
+    flex: 1,
+    marginRight: SPACING.sm,
+  },
+  siteAddress: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.xs,
+  },
+  clientText: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.xs,
+  },
+  statusBadge: {
+    paddingHorizontal: SPACING.sm + 2,
+    paddingVertical: SPACING.xs,
+    borderRadius: BORDER_RADIUS.md,
+    minWidth: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusText: {
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    color: COLORS.textInverse,
+  },
+  separator: {
+    height: 1,
+    backgroundColor: COLORS.borderCard,
+    marginVertical: SPACING.md,
+  },
+  siteActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.lg,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  actionIconContainer: {
+    width: 16,
+    height: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionText: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.primary,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+  },
+  deleteText: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.error,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+  },
+  stickyAddButton: {
+    position: 'absolute',
+    bottom: SPACING.lg,
+    right: SPACING.lg,
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.lg,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    ...SHADOWS.medium,
+  },
+  stickyAddButtonText: {
+    color: COLORS.textInverse,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
+  },
   modalContainer: { flex: 1, backgroundColor: COLORS.backgroundPrimary },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: SPACING.md, backgroundColor: COLORS.backgroundSecondary },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: SPACING.lg, backgroundColor: COLORS.backgroundSecondary, borderBottomWidth: 1, borderBottomColor: COLORS.borderCard },
   modalTitle: { fontSize: TYPOGRAPHY.fontSize.lg, fontWeight: TYPOGRAPHY.fontWeight.bold, color: COLORS.textPrimary },
   closeButton: { fontSize: TYPOGRAPHY.fontSize.xl, color: COLORS.textSecondary },
-  modalContent: { flex: 1, padding: SPACING.md },
+  modalContent: { flex: 1, padding: SPACING.lg },
   formField: { marginBottom: SPACING.lg },
   fieldLabel: { fontSize: TYPOGRAPHY.fontSize.md, fontWeight: TYPOGRAPHY.fontWeight.semibold, color: COLORS.textPrimary, marginBottom: SPACING.sm },
-  fieldInput: { backgroundColor: COLORS.backgroundSecondary, borderRadius: 8, padding: SPACING.sm, fontSize: TYPOGRAPHY.fontSize.md, color: COLORS.textPrimary },
-  roleOption: { flex: 1, backgroundColor: COLORS.backgroundSecondary, borderRadius: 8, padding: SPACING.sm, alignItems: 'center' },
-  roleOptionSelected: { backgroundColor: COLORS.primary },
+  fieldInput: { backgroundColor: COLORS.backgroundSecondary, borderRadius: BORDER_RADIUS.md, padding: SPACING.md, fontSize: TYPOGRAPHY.fontSize.md, color: COLORS.textPrimary, borderWidth: 1, borderColor: COLORS.borderCard },
+  roleOption: { flex: 1, backgroundColor: COLORS.backgroundSecondary, borderRadius: BORDER_RADIUS.md, padding: SPACING.md, alignItems: 'center', borderWidth: 1, borderColor: COLORS.borderCard },
+  roleOptionSelected: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
   roleOptionText: { fontSize: TYPOGRAPHY.fontSize.sm, color: COLORS.textPrimary },
   roleOptionTextSelected: { color: COLORS.textInverse, fontWeight: TYPOGRAPHY.fontWeight.semibold },
-  dropdownContainer: { maxHeight: 200, borderRadius: 8, backgroundColor: COLORS.backgroundSecondary },
-  dropdownItem: { padding: SPACING.sm, borderBottomWidth: 1, borderBottomColor: COLORS.borderLight },
+  dropdownContainer: { maxHeight: 200, borderRadius: BORDER_RADIUS.md, backgroundColor: COLORS.backgroundSecondary, borderWidth: 1, borderColor: COLORS.borderCard, ...SHADOWS.small },
+  dropdownItem: { padding: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.borderCard },
   dropdownItemSelected: { backgroundColor: COLORS.primaryLight },
   dropdownText: { fontSize: TYPOGRAPHY.fontSize.sm, color: COLORS.textPrimary },
   dropdownTextSelected: { color: COLORS.textInverse, fontWeight: TYPOGRAPHY.fontWeight.semibold },
-  createButton: { backgroundColor: COLORS.success, borderRadius: 8, padding: SPACING.md, alignItems: 'center', marginTop: SPACING.lg },
+  createButton: { backgroundColor: COLORS.primary, borderRadius: BORDER_RADIUS.md, padding: SPACING.md, alignItems: 'center', marginTop: SPACING.lg, ...SHADOWS.small },
   createButtonText: { color: COLORS.textInverse, fontSize: TYPOGRAPHY.fontSize.md, fontWeight: TYPOGRAPHY.fontWeight.bold },
 });
 
