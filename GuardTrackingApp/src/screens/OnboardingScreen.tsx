@@ -11,6 +11,7 @@ import {
   Image,
   Animated,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useTheme } from '../utils/theme';
@@ -19,6 +20,8 @@ import Logo from '../assets/images/tracSOpro-logo.png';
 import Step1 from '../assets/images/intro/step-1.svg';
 import Step2 from '../assets/images/intro/step-2.svg';
 import Step3 from '../assets/images/intro/step-3.svg';
+
+const ONBOARDING_KEY = 'hasSeenOnboarding';
 
 type OnboardingScreenNavigationProp = StackNavigationProp<any, 'Onboarding'>;
 
@@ -70,17 +73,29 @@ const OnboardingScreen: React.FC = () => {
     }))
   ).current;
 
-  const handleNext = () => {
+  const markOnboardingComplete = async () => {
+    try {
+      await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
+    } catch (error) {
+      console.error('Error saving onboarding status:', error);
+    }
+  };
+
+  const handleNext = async () => {
     if (currentSlide < slides.length - 1) {
       const nextSlide = currentSlide + 1;
       setCurrentSlide(nextSlide);
       scrollViewRef.current?.scrollTo({ x: nextSlide * width, animated: true });
     } else {
+      // Mark onboarding as complete when user reaches the last slide
+      await markOnboardingComplete();
       navigation.navigate('Login');
     }
   };
 
-  const handleSkip = () => {
+  const handleSkip = async () => {
+    // Mark onboarding as complete when user skips
+    await markOnboardingComplete();
     navigation.navigate('Login');
   };
 

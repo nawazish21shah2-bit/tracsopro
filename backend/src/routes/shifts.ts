@@ -2,6 +2,9 @@ import express from 'express';
 import {
   getActiveShift,
   getUpcomingShifts,
+  getTodayShifts,
+  getPastShifts,
+  getWeeklyShiftSummary,
   createShift,
   checkInToShift,
   checkOutFromShift,
@@ -26,9 +29,12 @@ router.use(authenticate);
 
 // Phase 2: Shift Management Routes
 
-// Get active/upcoming shifts
+// Get shifts
 router.get('/active', getActiveShift);
 router.get('/upcoming', getUpcomingShifts);
+router.get('/today', getTodayShifts);
+router.get('/past', getPastShifts);
+router.get('/weekly-summary', getWeeklyShiftSummary);
 
 // Get shift statistics
 router.get('/statistics', getShiftStatistics);

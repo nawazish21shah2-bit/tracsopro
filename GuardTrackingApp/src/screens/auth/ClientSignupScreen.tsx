@@ -13,9 +13,12 @@ import {
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
+import { useDispatch } from 'react-redux';
+import { AppDispatch } from '../../store';
+import { registerUser } from '../../store/slices/authSlice';
 import Icon from 'react-native-vector-icons/Ionicons';
 import Button from '../../components/common/Button';
-import { AuthStackParamList } from '../../types';
+import { AuthStackParamList, UserRole } from '../../types';
 import Logo from '../../assets/images/tracSOpro-logo.png';
 
 type ClientSignupScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'ClientSignup'>;
@@ -24,6 +27,7 @@ type ClientSignupScreenRouteProp = RouteProp<AuthStackParamList, 'ClientSignup'>
 const ClientSignupScreen: React.FC = () => {
   const navigation = useNavigation<ClientSignupScreenNavigationProp>();
   const route = useRoute<ClientSignupScreenRouteProp>();
+  const dispatch = useDispatch<AppDispatch>();
   const accountType = route.params?.accountType || 'individual';
 
   const [formData, setFormData] = useState({
@@ -103,22 +107,26 @@ const ClientSignupScreen: React.FC = () => {
         email: formData.email.toLowerCase().trim(),
         phone: fullPhoneNumber,
         password: formData.password,
-        role: 'CLIENT',
+        confirmPassword: formData.password, // Backend doesn't need this, but type requires it
+        role: UserRole.CLIENT,
         accountType: accountType.toUpperCase(),
       };
 
-      console.log('Client Registration Data:', registrationData);
-
-      // TODO: Make actual API call to register client
-      // For now, simulate API call
-      await new Promise<void>(resolve => setTimeout(resolve, 1500));
-
-      // Navigate to Client OTP verification
-      navigation.navigate('ClientOTP', { 
-        email: formData.email,
-        accountType,
-        isPasswordReset: false 
-      });
+      // Call registration API via Redux
+      const result = await dispatch(registerUser(registrationData));
+      
+      if (registerUser.fulfilled.match(result)) {
+        // Registration successful - userId and email are now in Redux state
+        navigation.navigate('ClientOTP', { 
+          email: formData.email,
+          accountType,
+          isPasswordReset: false 
+        });
+      } else {
+        // Registration failed
+        const errorMessage = result.payload as string;
+        Alert.alert('Registration Failed', errorMessage || 'Failed to create account. Please try again.');
+      }
     } catch (error) {
       Alert.alert('Error', 'Failed to create account. Please try again.');
     } finally {

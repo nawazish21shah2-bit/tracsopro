@@ -29,6 +29,7 @@ import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SuperAdminProfileDrawer from '../../components/superAdmin/SuperAdminProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
 
 interface RecentActivity {
   id: string;
@@ -49,17 +50,23 @@ const SuperAdminDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState('30d');
+  const [error, setError] = useState<string | null>(null);
 
   const loadDashboardData = async () => {
     try {
+      setError(null);
       const data = await SuperAdminService.getPlatformOverview();
       // Extract overview data (excluding recentActivity)
       const { recentActivity, ...overviewData } = data;
       setOverview(overviewData);
       setRecentActivity(recentActivity);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading dashboard data:', error);
-      Alert.alert('Error', 'Failed to load dashboard data');
+      const errorMessage = error?.message || 'Failed to load dashboard data';
+      setError(errorMessage);
+      if (!refreshing) {
+        Alert.alert('Error', errorMessage);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -163,12 +170,68 @@ const SuperAdminDashboard: React.FC = () => {
     });
   };
 
-  if (loading) {
+  // Error handling
+  const isNetworkError = error?.toLowerCase().includes('network') || 
+                         error?.toLowerCase().includes('timeout') ||
+                         error?.toLowerCase().includes('connection');
+
+  if (loading && !overview) {
     return (
       <SafeAreaWrapper>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading dashboard...</Text>
-        </View>
+        <SharedHeader
+          variant="superAdmin"
+          showLogo={true}
+          onMenuPress={openDrawer}
+          onNotificationPress={() => {}}
+          notificationCount={0}
+          profileDrawer={
+            <SuperAdminProfileDrawer
+              visible={isDrawerVisible}
+              onClose={closeDrawer}
+              onNavigateToCompanies={() => closeDrawer()}
+              onNavigateToAnalytics={() => closeDrawer()}
+              onNavigateToBilling={() => closeDrawer()}
+              onNavigateToSystemSettings={() => closeDrawer()}
+              onNavigateToAuditLogs={() => closeDrawer()}
+            />
+          }
+        />
+        <LoadingOverlay visible={true} message="Loading dashboard..." />
+      </SafeAreaWrapper>
+    );
+  }
+
+  if (error && !overview) {
+    return (
+      <SafeAreaWrapper>
+        <SharedHeader
+          variant="superAdmin"
+          showLogo={true}
+          onMenuPress={openDrawer}
+          onNotificationPress={() => {}}
+          notificationCount={0}
+          profileDrawer={
+            <SuperAdminProfileDrawer
+              visible={isDrawerVisible}
+              onClose={closeDrawer}
+              onNavigateToCompanies={() => closeDrawer()}
+              onNavigateToAnalytics={() => closeDrawer()}
+              onNavigateToBilling={() => closeDrawer()}
+              onNavigateToSystemSettings={() => closeDrawer()}
+              onNavigateToAuditLogs={() => closeDrawer()}
+            />
+          }
+        />
+        {isNetworkError ? (
+          <NetworkError 
+            onRetry={loadDashboardData}
+          />
+        ) : (
+          <ErrorState 
+            error={error}
+            onRetry={loadDashboardData}
+          />
+        )}
       </SafeAreaWrapper>
     );
   }

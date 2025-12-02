@@ -37,27 +37,28 @@ const GuardHomeScreen: React.FC = () => {
   };
 
   const handleNavigateToProfile = () => {
-    Alert.alert('Profile', 'Navigate to profile screen');
+    navigation.navigate('GuardTabs', { screen: 'Profile' });
   };
 
   const handleNavigateToPastJobs = () => {
-    Alert.alert('Past Jobs', 'Navigate to past jobs screen');
+    navigation.navigate('GuardTabs', { screen: 'Jobs' });
   };
 
   const handleNavigateToAssignedSites = () => {
-    Alert.alert('Assigned Sites', 'Navigate to assigned sites screen');
+    navigation.navigate('GuardTabs', { screen: 'MyShifts' });
   };
 
   const handleNavigateToAttendance = () => {
-    Alert.alert('Attendance', 'Navigate to attendance screen');
+    navigation.navigate('GuardTabs', { screen: 'Reports' });
   };
 
   const handleNavigateToNotifications = () => {
-    Alert.alert('Notification Settings', 'Navigate to notification settings');
+    navigation.navigate('GuardTabs', { screen: 'Profile' });
   };
 
   const handleNavigateToSupport = () => {
-    Alert.alert('Support', 'Navigate to support screen');
+    // Navigate to chat or support screen when available
+    navigation.navigate('ChatListScreen');
   };
 
   const handleLogout = async () => {

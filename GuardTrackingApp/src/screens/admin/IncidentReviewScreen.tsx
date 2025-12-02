@@ -17,7 +17,9 @@ import {
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { logoutUser } from '../../store/slices/authSlice';
-import enhancedIncidentService, { EnhancedIncident } from '../../services/enhancedIncidentService';
+import apiService from '../../services/api';
+import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
+import { RefreshControl } from 'react-native';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
@@ -59,37 +61,119 @@ const IncidentReviewScreen: React.FC<IncidentReviewScreenProps> = ({ navigation 
       ]
     );
   };
-  const [incidents, setIncidents] = useState<EnhancedIncident[]>([]);
-  const [selectedIncident, setSelectedIncident] = useState<EnhancedIncident | null>(null);
+  interface IncidentReport {
+    id: string;
+    title: string;
+    type: string;
+    severity: 'critical' | 'high' | 'medium' | 'low';
+    description: string;
+    status: 'pending' | 'under_review' | 'approved' | 'rejected';
+    reportedAt: string;
+    mediaFiles: any[];
+    voiceTranscription?: string;
+    syncStatus?: string;
+    guard?: {
+      user?: {
+        firstName?: string;
+        lastName?: string;
+        email?: string;
+      };
+    };
+  }
+
+  const [incidents, setIncidents] = useState<IncidentReport[]>([]);
+  const [selectedIncident, setSelectedIncident] = useState<IncidentReport | null>(null);
   const [reviewModal, setReviewModal] = useState(false);
   const [reviewNotes, setReviewNotes] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'under_review'>('pending');
-
-  useEffect(() => {
-    initializeService();
-  }, []);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     loadIncidents();
   }, [filterStatus]);
 
-  const initializeService = async () => {
+  const loadIncidents = async () => {
     try {
-      await enhancedIncidentService.initialize();
-      loadIncidents();
-    } catch (error) {
-      console.error('Error initializing incident service:', error);
+      setLoading(true);
+      setError(null);
+
+      const response = await apiService.getAllIncidentReports({
+        page: 1,
+        limit: 100,
+      });
+
+      if (!response.success || !response.data) {
+        throw new Error(response.message || 'Failed to load incident reports');
+      }
+
+      const backendReports = response.data.reports || [];
+      
+      // Transform backend reports to match UI format
+      const transformedReports: IncidentReport[] = backendReports.map((report: any) => {
+        // Map reportType to a title
+        const title = report.reportType 
+          ? report.reportType.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
+          : 'Incident Report';
+        
+        // Map status
+        let status: IncidentReport['status'] = 'pending';
+        if (report.status === 'APPROVED') status = 'approved';
+        else if (report.status === 'REJECTED') status = 'rejected';
+        else if (report.status === 'UNDER_REVIEW') status = 'under_review';
+        else status = 'pending';
+
+        // Map severity (default to medium if not provided)
+        let severity: IncidentReport['severity'] = 'medium';
+        if (report.severity) {
+          const sev = report.severity.toLowerCase();
+          if (sev === 'critical' || sev === 'high' || sev === 'medium' || sev === 'low') {
+            severity = sev as IncidentReport['severity'];
+          }
+        }
+
+        return {
+          id: report.id,
+          title,
+          type: report.reportType || 'incident',
+          severity,
+          description: report.description || '',
+          status,
+          reportedAt: report.submittedAt || report.createdAt || new Date().toISOString(),
+          mediaFiles: report.media || [],
+          voiceTranscription: report.voiceTranscription,
+          syncStatus: 'synced',
+          guard: report.guard,
+        };
+      });
+
+      // Filter by status
+      let filtered = transformedReports;
+      if (filterStatus !== 'all') {
+        filtered = transformedReports.filter(r => r.status === filterStatus);
+      }
+
+      setIncidents(filtered);
+    } catch (error: any) {
+      console.error('Error loading incident reports:', error);
+      const errorMessage = error.message || 'Failed to load incident reports';
+      setError(errorMessage);
+      if (!refreshing) {
+        Alert.alert('Error', errorMessage);
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  const loadIncidents = () => {
-    const allIncidents = enhancedIncidentService.getIncidents({
-      status: filterStatus === 'all' ? undefined : filterStatus as any,
-    });
-    setIncidents(allIncidents);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadIncidents();
   };
 
-  const handleReviewIncident = (incident: EnhancedIncident) => {
+  const handleReviewIncident = (incident: IncidentReport) => {
     setSelectedIncident(incident);
     setReviewNotes('');
     setReviewModal(true);
@@ -98,10 +182,23 @@ const IncidentReviewScreen: React.FC<IncidentReviewScreenProps> = ({ navigation 
   const handleApproveIncident = async () => {
     if (!selectedIncident) return;
 
-    // In a real implementation, this would update the backend
-    Alert.alert('Success', 'Incident approved successfully');
-    setReviewModal(false);
-    loadIncidents();
+    try {
+      const response = await apiService.updateIncidentReport(selectedIncident.id, {
+        status: 'APPROVED',
+        reviewNotes: reviewNotes.trim() || undefined,
+      });
+
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to approve incident');
+      }
+
+      Alert.alert('Success', 'Incident approved successfully');
+      setReviewModal(false);
+      setReviewNotes('');
+      await loadIncidents();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to approve incident');
+    }
   };
 
   const handleRejectIncident = async () => {
@@ -112,13 +209,26 @@ const IncidentReviewScreen: React.FC<IncidentReviewScreenProps> = ({ navigation 
       return;
     }
 
-    // In a real implementation, this would update the backend
-    Alert.alert('Success', 'Incident rejected with notes');
-    setReviewModal(false);
-    loadIncidents();
+    try {
+      const response = await apiService.updateIncidentReport(selectedIncident.id, {
+        status: 'REJECTED',
+        reviewNotes: reviewNotes.trim(),
+      });
+
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to reject incident');
+      }
+
+      Alert.alert('Success', 'Incident rejected with notes');
+      setReviewModal(false);
+      setReviewNotes('');
+      await loadIncidents();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to reject incident');
+    }
   };
 
-  const getSeverityColor = (severity: EnhancedIncident['severity']) => {
+  const getSeverityColor = (severity: IncidentReport['severity']) => {
     switch (severity) {
       case 'critical': return '#DC2626'; // Red
       case 'high': return '#F59E0B'; // Orange
@@ -128,7 +238,7 @@ const IncidentReviewScreen: React.FC<IncidentReviewScreenProps> = ({ navigation 
     }
   };
 
-  const getStatusColor = (status: EnhancedIncident['status']) => {
+  const getStatusColor = (status: IncidentReport['status']) => {
     switch (status) {
       case 'pending': return '#F59E0B'; // Orange
       case 'under_review': return COLORS.primary; // Blue
@@ -138,7 +248,7 @@ const IncidentReviewScreen: React.FC<IncidentReviewScreenProps> = ({ navigation 
     }
   };
 
-  const getStatusLabel = (status: EnhancedIncident['status']) => {
+  const getStatusLabel = (status: IncidentReport['status']) => {
     switch (status) {
       case 'pending': return 'Pending';
       case 'under_review': return 'Under Review';
@@ -148,7 +258,7 @@ const IncidentReviewScreen: React.FC<IncidentReviewScreenProps> = ({ navigation 
     }
   };
 
-  const renderIncidentItem = ({ item }: { item: EnhancedIncident }) => (
+  const renderIncidentItem = ({ item }: { item: IncidentReport }) => (
     <TouchableOpacity 
       style={styles.incidentCard}
       onPress={() => handleReviewIncident(item)}
@@ -321,14 +431,43 @@ const IncidentReviewScreen: React.FC<IncidentReviewScreenProps> = ({ navigation 
         })}
       </View>
       
-      <FlatList
-        data={incidents}
-        renderItem={renderIncidentItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContainer}
-        showsVerticalScrollIndicator={false}
-        style={styles.list}
-      />
+      {loading && !incidents.length ? (
+        <LoadingOverlay visible={true} message="Loading incident reports..." />
+      ) : error && !incidents.length ? (
+        <View style={styles.errorContainer}>
+          {error.toLowerCase().includes('network') || 
+           error.toLowerCase().includes('timeout') ||
+           error.toLowerCase().includes('connection') ? (
+            <NetworkError onRetry={loadIncidents} />
+          ) : (
+            <ErrorState error={error} onRetry={loadIncidents} />
+          )}
+        </View>
+      ) : (
+        <FlatList
+          data={incidents}
+          renderItem={renderIncidentItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContainer}
+          showsVerticalScrollIndicator={false}
+          style={styles.list}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[COLORS.primary]}
+              tintColor={COLORS.primary}
+            />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No incident reports found</Text>
+            </View>
+          }
+        />
+      )}
+      
+      {loading && incidents.length > 0 && <LoadingOverlay visible={true} message="Refreshing..." />}
       
       {renderReviewModal()}
     </SafeAreaWrapper>
@@ -564,6 +703,22 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.fontSize.md,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
     color: COLORS.textInverse,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  emptyContainer: {
+    padding: SPACING.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyText: {
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
   },
 });
 

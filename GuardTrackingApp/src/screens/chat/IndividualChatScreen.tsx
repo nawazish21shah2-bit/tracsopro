@@ -57,86 +57,63 @@ const IndividualChatScreen: React.FC = () => {
 
   const loadMessages = async () => {
     try {
-      // Mock messages matching your design
-      const mockMessages: Message[] = [
-        {
-          id: 'msg_1',
-          content: 'Lorem ipsum dolor sit amet consectetur. Gravida viverra.',
-          senderId: 'other_user',
-          timestamp: new Date(Date.now() - 300000), // 5 minutes ago
-          isRead: true,
-          isOwn: false,
-        },
-        {
-          id: 'msg_2',
-          content: 'Lorem ipsum dolor sit amet consectetur. Velit bibendum maecenas platea diam.',
-          senderId: user?.id || 'current_user',
-          timestamp: new Date(Date.now() - 240000), // 4 minutes ago
-          isRead: true,
-          isOwn: true,
-        },
-        {
-          id: 'msg_3',
-          content: 'Lorem ipsum dolor sit amet consectetur. Velit bibendum maecenas platea diam.',
-          senderId: user?.id || 'current_user',
-          timestamp: new Date(Date.now() - 180000), // 3 minutes ago
-          isRead: true,
-          isOwn: true,
-        },
-        {
-          id: 'msg_4',
-          content: 'Lorem ipsum dolor sit amet consectetur. Gravida viverra.',
-          senderId: 'other_user',
-          timestamp: new Date(Date.now() - 120000), // 2 minutes ago
-          isRead: true,
-          isOwn: false,
-        },
-        {
-          id: 'msg_5',
-          content: 'Lorem ipsum dolor sit amet consectetur. Gravida viverra.',
-          senderId: 'other_user',
-          timestamp: new Date(Date.now() - 60000), // 1 minute ago
-          isRead: true,
-          isOwn: false,
-        },
-        {
-          id: 'msg_6',
-          content: 'Lorem ipsum dolor sit amet consectetur. Velit bibendum maecenas platea diam.',
-          senderId: user?.id || 'current_user',
-          timestamp: new Date(Date.now() - 30000), // 30 seconds ago
-          isRead: false,
-          isOwn: true,
-        },
-        {
-          id: 'msg_7',
-          content: 'Lorem ipsum dolor sit amet consectetur. Velit bibendum maecenas platea diam.',
-          senderId: user?.id || 'current_user',
-          timestamp: new Date(),
-          isRead: false,
-          isOwn: true,
-        },
-      ];
-
-      setMessages(mockMessages);
+      setLoading(true);
+      const apiService = (await import('../../services/api')).default;
+      const response = await apiService.getChatMessages(chatId, 1, 50);
+      
+      if (!response.success || !response.data) {
+        console.error('Failed to load messages:', response.message);
+        setMessages([]);
+        return;
+      }
+      
+      // Transform API messages to match Message interface
+      const transformedMessages: Message[] = response.data.map((msg: any) => ({
+        id: msg.id,
+        content: msg.content || msg.message,
+        senderId: msg.senderId,
+        timestamp: new Date(msg.timestamp),
+        isRead: msg.isRead || msg.readBy?.includes(user?.id) || false,
+        isOwn: msg.senderId === user?.id,
+      }));
+      
+      setMessages(transformedMessages);
+      
+      // Mark messages as read when viewing
+      if (transformedMessages.length > 0 && user?.id) {
+        const unreadMessageIds = transformedMessages
+          .filter(msg => !msg.isRead && !msg.isOwn)
+          .map(msg => msg.id);
+        
+        if (unreadMessageIds.length > 0) {
+          await apiService.markChatMessagesAsRead(chatId, unreadMessageIds);
+        }
+      }
     } catch (error) {
       console.error('Error loading messages:', error);
+      setMessages([]);
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleSendMessage = async () => {
-    if (!inputText.trim()) return;
+    if (!inputText.trim() || !user) return;
 
-    const newMessage: Message = {
-      id: `msg_${Date.now()}`,
-      content: inputText.trim(),
-      senderId: user?.id || 'current_user',
+    const messageText = inputText.trim();
+    setInputText('');
+
+    // Optimistically add message to UI
+    const tempMessage: Message = {
+      id: `temp_${Date.now()}`,
+      content: messageText,
+      senderId: user.id,
       timestamp: new Date(),
       isRead: false,
       isOwn: true,
     };
 
-    setMessages(prev => [...prev, newMessage]);
-    setInputText('');
+    setMessages(prev => [...prev, tempMessage]);
 
     // Scroll to bottom
     setTimeout(() => {
@@ -144,11 +121,34 @@ const IndividualChatScreen: React.FC = () => {
     }, 100);
 
     try {
-      // TODO: Send message to backend
-      console.log('Sending message:', newMessage);
-    } catch (error) {
+      // Send message to backend via API service
+      const apiService = (await import('../../services/api')).default;
+      const response = await apiService.sendChatMessage(chatId, messageText, 'text');
+
+      if (!response.success || !response.data) {
+        throw new Error(response.message || 'Failed to send message');
+      }
+
+      const sentMessage = response.data;
+
+      // Replace temp message with actual message from server
+      setMessages(prev => prev.map(msg => 
+        msg.id === tempMessage.id 
+          ? {
+              id: sentMessage.id,
+              content: sentMessage.content || sentMessage.message,
+              senderId: sentMessage.senderId,
+              timestamp: new Date(sentMessage.timestamp),
+              isRead: sentMessage.isRead || sentMessage.readBy?.includes(user.id) || false,
+              isOwn: true,
+            }
+          : msg
+      ));
+    } catch (error: any) {
       console.error('Error sending message:', error);
-      Alert.alert('Error', 'Failed to send message');
+      // Remove temp message on error
+      setMessages(prev => prev.filter(msg => msg.id !== tempMessage.id));
+      Alert.alert('Error', error.message || 'Failed to send message. Please try again.');
     }
   };
 

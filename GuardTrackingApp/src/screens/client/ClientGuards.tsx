@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,8 @@ import {
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
+  RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
@@ -14,9 +16,11 @@ import SharedHeader from '../../components/ui/SharedHeader';
 import ClientProfileDrawer from '../../components/client/ClientProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { ClientStackParamList } from '../../navigation/ClientStackNavigator';
+import { fetchMyGuards } from '../../store/slices/clientSlice';
+import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
 
 interface GuardData {
   id: string;
@@ -35,44 +39,53 @@ const ClientGuards: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const navigation = useNavigation<StackNavigationProp<ClientStackParamList>>();
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+  const [refreshing, setRefreshing] = useState(false);
 
-  const [guards, setGuards] = useState<GuardData[]>([
-    {
-      id: '1',
-      name: 'Mark Husdon',
-      pastJobs: 13,
-      rating: 4.5,
-      availability: 'Available today',
-      status: 'Active',
-    },
-    {
-      id: '2',
-      name: 'Mark Husdon',
-      pastJobs: 13,
-      rating: 4.5,
-      availability: 'Available today',
-      status: 'Active',
-    },
-    {
-      id: '3',
-      name: 'Mark Husdon',
-      pastJobs: 13,
-      rating: 4.5,
-      availability: 'Available today',
-      status: 'Active',
-    },
-    {
-      id: '4',
-      name: 'Mark Husdon',
-      pastJobs: 13,
-      rating: 4.5,
-      availability: 'Available today',
-      status: 'Active',
-    },
-  ]);
+  // Redux state
+  const { 
+    guards, 
+    guardsLoading, 
+    guardsError 
+  } = useSelector((state: RootState) => state.client);
+
+  const loadGuards = useCallback(async () => {
+    try {
+      await dispatch(fetchMyGuards({ page: 1, limit: 50 }));
+    } catch (error) {
+      console.error('Error loading guards:', error);
+    }
+  }, [dispatch]);
+
+  useEffect(() => {
+    loadGuards();
+  }, [loadGuards]);
+
+  // Refresh data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadGuards();
+    }, [loadGuards])
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadGuards();
+    } catch (error) {
+      console.error('Error refreshing guards:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadGuards]);
+
+  // Check for network errors
+  const isNetworkError = guardsError?.toLowerCase().includes('network') || 
+                         guardsError?.toLowerCase().includes('connection') ||
+                         guardsError?.toLowerCase().includes('econnrefused') ||
+                         guardsError?.toLowerCase().includes('enotfound');
 
   const handlePostNewShift = () => {
-    console.log('Post new shift');
+    navigation.navigate('CreateShift');
   };
 
   const handleGuardPress = (guardId: string) => {
@@ -104,16 +117,58 @@ const ClientGuards: React.FC = () => {
         }
       />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {guards.map((guard) => (
-          <GuardCard
-            key={guard.id}
-            guard={guard}
-            onPress={() => handleGuardPress(guard.id)}
-            onHire={() => handleHireGuard(guard.id)}
-            showHireButton={true}
-          />
-        ))}
+      <LoadingOverlay
+        visible={guardsLoading && guards.length === 0}
+        message="Loading guards..."
+      />
+
+      {guardsError && guards.length === 0 && !guardsLoading && (
+        <View style={styles.errorContainer}>
+          {isNetworkError ? (
+            <NetworkError
+              onRetry={loadGuards}
+              style={styles.errorState}
+            />
+          ) : (
+            <ErrorState
+              error={guardsError}
+              onRetry={loadGuards}
+              style={styles.errorState}
+            />
+          )}
+        </View>
+      )}
+
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {guardsLoading && guards.length > 0 ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color="#1C6CA9" />
+            <Text style={styles.loadingText}>Updating guards...</Text>
+          </View>
+        ) : null}
+
+        {guards && guards.length > 0 ? (
+          guards.map((guard) => (
+            <GuardCard
+              key={guard.id}
+              guard={guard}
+              onPress={() => handleGuardPress(guard.id)}
+              onHire={() => handleHireGuard(guard.id)}
+              showHireButton={true}
+            />
+          ))
+        ) : !guardsLoading && !guardsError ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>No guards available</Text>
+            <Text style={styles.emptySubtext}>Available guards will appear here</Text>
+          </View>
+        ) : null}
       </ScrollView>
     </SafeAreaWrapper>
   );
@@ -138,6 +193,42 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 20,
+  },
+  errorContainer: {
+    flex: 1,
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 200,
+  },
+  errorState: {
+    flex: 1,
+  },
+  loadingContainer: {
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#666666',
+  },
+  emptyContainer: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333333',
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#666666',
+    textAlign: 'center',
   },
 });
 

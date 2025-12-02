@@ -8,12 +8,9 @@ import {
 } from '../types/shift.types';
 import { securityManager } from '../utils/security';
 
-// Use 10.0.2.2 for Android emulator, localhost for iOS simulator
-const API_URL = __DEV__
-  ? Platform.OS === 'android'
-    ? 'http://10.0.2.2:3000/api'
-    : 'http://localhost:3000/api'
-  : 'http://localhost:3000/api';
+import { getApiBaseUrl } from '../config/apiConfig';
+
+const API_URL = getApiBaseUrl();
 
 // Create axios instance with auth interceptor
 const createAuthAxios = async () => {
@@ -170,23 +167,36 @@ class ShiftService {
    * Get shift statistics
    */
   async getShiftStatistics(params: { startDate?: string; endDate?: string } = {}): Promise<ShiftStats> {
-    const api = await createAuthAxios();
-    const response = await api.get<{ success: boolean; data: ShiftStats }>('/shifts/statistics', {
-      params,
-    });
-    
-    // Handle response format
-    if (response.data.success && response.data.data) {
-      return response.data.data;
+    try {
+      const api = await createAuthAxios();
+      const response = await api.get<{ success: boolean; data: ShiftStats }>('/shifts/statistics', {
+        params,
+      });
+      
+      // Handle response format
+      if (response.data.success && response.data.data) {
+        return response.data.data;
+      }
+      
+      // Return default stats if no data
+      return {
+        completedShifts: 0,
+        missedShifts: 0,
+        totalSites: 0,
+        incidentReports: 0,
+      };
+    } catch (error: any) {
+      // Handle 404 or other errors gracefully
+      if (error.response?.status === 404) {
+        return {
+          completedShifts: 0,
+          missedShifts: 0,
+          totalSites: 0,
+          incidentReports: 0,
+        };
+      }
+      throw error;
     }
-    
-    // Return default stats if no data
-    return {
-      completedShifts: 0,
-      missedShifts: 0,
-      totalSites: 0,
-      incidentReports: 0,
-    };
   }
 
   /**

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   StatusBar,
   Platform,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigation, useFocusEffect, DrawerActions } from '@react-navigation/native';
@@ -17,10 +18,11 @@ import { RootState, AppDispatch } from '../../store';
 import SiteCard from '../../components/client/SiteCard';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { ClientStackParamList } from '../../navigation/ClientStackNavigator';
-import { siteService, Site } from '../../services/siteService';
 import SharedHeader from '../../components/ui/SharedHeader';
 import ClientProfileDrawer from '../../components/client/ClientProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import { fetchMySites } from '../../store/slices/clientSlice';
+import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
 
 interface SiteData {
   id: string;
@@ -38,10 +40,44 @@ const ClientSites: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const navigation = useNavigation<StackNavigationProp<ClientStackParamList>>();
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
-
-  const [sites, setSites] = useState<Site[]>([]);
-  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Redux state
+  const { 
+    sites, 
+    sitesLoading, 
+    sitesError 
+  } = useSelector((state: RootState) => state.client);
+
+  const loadSites = useCallback(async () => {
+    try {
+      await dispatch(fetchMySites({ page: 1, limit: 50 }));
+    } catch (error) {
+      console.error('Error loading sites:', error);
+    }
+  }, [dispatch]);
+
+  useEffect(() => {
+    loadSites();
+  }, [loadSites]);
+
+  // Refresh data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadSites();
+    }, [loadSites])
+  );
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadSites();
+    } catch (error) {
+      console.error('Error refreshing sites:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadSites]);
 
   const handleNotificationPress = () => {
     navigation.navigate('ClientNotifications');
@@ -65,36 +101,11 @@ const ClientSites: React.FC = () => {
     });
   };
 
-  const fetchSites = async () => {
-    try {
-      setLoading(true);
-      const response = await siteService.getClientSites();
-      setSites(response.sites);
-    } catch (error) {
-      console.error('Error fetching sites:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRefresh = async () => {
-    try {
-      setRefreshing(true);
-      const response = await siteService.getClientSites();
-      setSites(response.sites);
-    } catch (error) {
-      console.error('Error refreshing sites:', error);
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  // Fetch sites on component mount
-  useFocusEffect(
-    React.useCallback(() => {
-      fetchSites();
-    }, [])
-  );
+  // Check for network errors
+  const isNetworkError = sitesError?.toLowerCase().includes('network') || 
+                         sitesError?.toLowerCase().includes('connection') ||
+                         sitesError?.toLowerCase().includes('econnrefused') ||
+                         sitesError?.toLowerCase().includes('enotfound');
 
   return (
     <SafeAreaWrapper>
@@ -117,6 +128,28 @@ const ClientSites: React.FC = () => {
         }
       />
 
+      <LoadingOverlay
+        visible={sitesLoading && sites.length === 0}
+        message="Loading sites..."
+      />
+
+      {sitesError && sites.length === 0 && !sitesLoading && (
+        <View style={styles.errorContainer}>
+          {isNetworkError ? (
+            <NetworkError
+              onRetry={loadSites}
+              style={styles.errorState}
+            />
+          ) : (
+            <ErrorState
+              error={sitesError}
+              onRetry={loadSites}
+              style={styles.errorState}
+            />
+          )}
+        </View>
+      )}
+
       <ScrollView 
         style={styles.content} 
         showsVerticalScrollIndicator={false}
@@ -124,27 +157,61 @@ const ClientSites: React.FC = () => {
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
       >
-        {loading && sites.length === 0 ? (
+        {sitesLoading && sites.length > 0 ? (
           <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Loading sites...</Text>
+            <ActivityIndicator size="small" color="#1C6CA9" />
+            <Text style={styles.loadingText}>Updating sites...</Text>
           </View>
-        ) : sites.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No sites found</Text>
-            <Text style={styles.emptySubtext}>Sites are created and managed by your security provider.</Text>
-          </View>
-        ) : (
-          sites.map((site) => {
+        ) : null}
+
+        {sites && sites.length > 0 ? (
+          sites.map((site: any) => {
+            // Get active guard assignment from site data
+            const activeAssignment = site.shiftAssignments?.[0];
+            const guard = activeAssignment?.guard;
+            const guardName = guard?.user 
+              ? `${guard.user.firstName} ${guard.user.lastName}`
+              : 'No guard assigned';
+            
+            // Determine status based on assignment
+            let status: 'Active' | 'Upcoming' | 'Missed' = 'Upcoming';
+            if (activeAssignment) {
+              if (activeAssignment.status === 'IN_PROGRESS') {
+                status = 'Active';
+              } else if (activeAssignment.status === 'ASSIGNED') {
+                status = 'Upcoming';
+              }
+            }
+
+            // Format shift time
+            const formatTime = (dateString?: string) => {
+              if (!dateString) return '--:--';
+              try {
+                const date = new Date(dateString);
+                return date.toLocaleTimeString('en-US', { 
+                  hour: '2-digit', 
+                  minute: '2-digit',
+                  hour12: true 
+                });
+              } catch {
+                return '--:--';
+              }
+            };
+
             // Transform Site to SiteData for SiteCard compatibility
             const siteData: SiteData = {
               id: site.id,
               name: site.name,
               address: site.address,
-              guardName: 'Mark Husdon', // Mock guard name
-              status: 'Active' as const, // Mock active status for demo
-              guardId: 'guard_1', // Mock guard ID for chat functionality
-              shiftTime: '08:00 - 20:00',
-              checkInTime: '08:12 am',
+              guardName: guardName,
+              status: status,
+              guardId: guard?.id || undefined,
+              shiftTime: activeAssignment 
+                ? `${formatTime(activeAssignment.startTime)} - ${formatTime(activeAssignment.endTime)}`
+                : 'No shift scheduled',
+              checkInTime: activeAssignment?.checkInTime 
+                ? formatTime(activeAssignment.checkInTime)
+                : undefined,
             };
             
             return (
@@ -157,7 +224,18 @@ const ClientSites: React.FC = () => {
               />
             );
           })
-        )}
+        ) : !sitesLoading && !sitesError ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>No sites found</Text>
+            <Text style={styles.emptySubtext}>Add a new site to get started</Text>
+            <TouchableOpacity 
+              style={styles.addSiteButton}
+              onPress={() => navigation.navigate('AddSite')}
+            >
+              <Text style={styles.addSiteButtonText}>Add New Site</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
       </ScrollView>
     </SafeAreaWrapper>
   );
@@ -205,6 +283,29 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666666',
     textAlign: 'center',
+    marginBottom: 16,
+  },
+  addSiteButton: {
+    backgroundColor: '#1C6CA9',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  addSiteButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  errorContainer: {
+    flex: 1,
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 200,
+  },
+  errorState: {
+    flex: 1,
   },
 });
 

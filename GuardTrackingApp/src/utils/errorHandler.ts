@@ -29,7 +29,7 @@ export class ErrorHandler {
     this.addToHistory(appError);
 
     // Log to console in development
-    if (__DEV__) {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
       console.error('App Error:', appError);
     }
 

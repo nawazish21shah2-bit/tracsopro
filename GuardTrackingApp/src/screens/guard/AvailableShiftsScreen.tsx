@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,10 +6,12 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { Search, MapPin, Clock, DollarSign, Users, Filter } from 'react-native-feather';
+import apiService from '../../services/api';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { GuardStackParamList } from '../../navigation/GuardStackNavigator';
 
@@ -43,95 +45,70 @@ const AvailableShiftsScreen: React.FC = () => {
 
   const loadAvailableShifts = async () => {
     try {
-      // TODO: Replace with actual API call
-      // Simulate API call
-      await new Promise<void>(resolve => setTimeout(resolve, 1000));
+      const result = await apiService.getAvailableShiftPostings(1, 50);
       
-      // Mock data
-      setShifts([
-        {
-          id: '1',
-          title: 'Night Security Guard',
-          siteName: 'Downtown Office Building',
-          address: '123 Main Street, New York, NY',
-          startTime: '2024-11-03T18:00:00Z',
-          endTime: '2024-11-04T06:00:00Z',
-          hourlyRate: 25.00,
-          maxGuards: 1,
-          appliedGuards: 0,
-          requirements: 'Licensed security guard with 2+ years experience',
-          description: 'Overnight security coverage for office building',
-          clientName: 'ABC Property Management',
-          distance: 2.3,
-          postedAt: '2024-11-01T10:00:00Z'
-        },
-        {
-          id: '2',
-          title: 'Weekend Security Coverage',
-          siteName: 'Shopping Mall',
-          address: '456 Commerce Ave, New York, NY',
-          startTime: '2024-11-04T08:00:00Z',
-          endTime: '2024-11-04T20:00:00Z',
-          hourlyRate: 22.00,
-          maxGuards: 2,
-          appliedGuards: 1,
-          requirements: 'Valid security license required',
-          description: 'Weekend security patrol for shopping center',
-          clientName: 'Mall Security Inc',
-          distance: 5.7,
-          postedAt: '2024-11-01T14:30:00Z'
-        },
-        {
-          id: '3',
-          title: 'Event Security',
-          siteName: 'Convention Center',
-          address: '789 Event Plaza, New York, NY',
-          startTime: '2024-11-05T16:00:00Z',
-          endTime: '2024-11-06T02:00:00Z',
-          hourlyRate: 30.00,
-          maxGuards: 3,
-          appliedGuards: 2,
-          requirements: 'Event security experience preferred',
-          description: 'Security for corporate event and conference',
-          clientName: 'Event Solutions LLC',
-          distance: 8.1,
-          postedAt: '2024-11-02T09:15:00Z'
-        }
-      ]);
-    } catch (error) {
+      if (result.success && result.data) {
+        const shiftPostings = result.data.shiftPostings || result.data || [];
+        
+        // Transform API response to match ShiftPosting interface
+        const transformedShifts: ShiftPosting[] = shiftPostings.map((sp: any) => ({
+          id: sp.id,
+          title: sp.title || 'Security Shift',
+          siteName: sp.site?.name || sp.siteName || 'Site',
+          address: sp.site?.address || sp.address || '',
+          startTime: sp.startTime,
+          endTime: sp.endTime,
+          hourlyRate: sp.hourlyRate || 0,
+          maxGuards: sp.maxGuards || 1,
+          appliedGuards: sp.applications?.filter((app: any) => app.status === 'APPROVED').length || 0,
+          requirements: sp.requirements || '',
+          description: sp.description || '',
+          clientName: sp.client?.user ? `${sp.client.user.firstName} ${sp.client.user.lastName}` : sp.clientName || 'Client',
+          distance: sp.distance || 0, // Calculate distance if location available
+          postedAt: sp.createdAt || sp.postedAt || new Date().toISOString()
+        }));
+        
+        setShifts(transformedShifts);
+      } else {
+        // Fallback to empty array if API fails
+        setShifts([]);
+      }
+    } catch (error: any) {
       console.error('Error loading shifts:', error);
+      // Fallback to empty array on error
+      setShifts([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  const handleRefresh = () => {
+  const handleRefresh = useCallback(() => {
     setRefreshing(true);
     loadAvailableShifts();
-  };
+  }, []);
 
-  const handleShiftPress = (shiftId: string) => {
+  const handleShiftPress = useCallback((shiftId: string) => {
     navigation.navigate('ShiftDetails', { shiftId });
-  };
+  }, [navigation]);
 
-  const handleApplyForShift = (shiftId: string) => {
+  const handleApplyForShift = useCallback((shiftId: string) => {
     navigation.navigate('ApplyForShift', { shiftId });
-  };
+  }, [navigation]);
 
-  const formatDateTime = (dateString: string) => {
+  const formatDateTime = useCallback((dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
+  }, []);
 
-  const calculateDuration = (start: string, end: string) => {
+  const calculateDuration = useCallback((start: string, end: string) => {
     const startDate = new Date(start);
     const endDate = new Date(end);
     const hours = Math.abs(endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60);
     return hours;
-  };
+  }, []);
 
-  const getFilteredShifts = () => {
+  const filteredShifts = useMemo(() => {
     switch (filter) {
       case 'nearby':
         return shifts.filter(shift => shift.distance <= 5);
@@ -140,9 +117,7 @@ const AvailableShiftsScreen: React.FC = () => {
       default:
         return shifts;
     }
-  };
-
-  const filteredShifts = getFilteredShifts();
+  }, [shifts, filter]);
 
   return (
     <SafeAreaWrapper>
@@ -195,7 +170,8 @@ const AvailableShiftsScreen: React.FC = () => {
       >
         {loading ? (
           <View style={styles.loadingContainer}>
-            <Text>Loading available shifts...</Text>
+            <ActivityIndicator size="large" color="#1C6CA9" />
+            <Text style={styles.loadingText}>Loading available shifts...</Text>
           </View>
         ) : filteredShifts.length > 0 ? (
           filteredShifts.map((shift) => (
@@ -322,6 +298,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8F9FA',
   },
   loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#666666',
+  },
+  emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',

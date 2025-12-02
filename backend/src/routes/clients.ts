@@ -19,6 +19,7 @@ router.get('/my-guards', authorize('CLIENT'), clientController.getMyGuards);
 router.get('/my-reports', authorize('CLIENT'), clientController.getMyReports);
 router.get('/my-sites', authorize('CLIENT'), clientController.getMySites);
 router.get('/my-notifications', authorize('CLIENT'), clientController.getMyNotifications);
+router.put('/reports/:reportId/respond', authorize('CLIENT'), clientController.respondToReport);
 
 // Admin routes
 router.get('/:id', authorize('ADMIN'), clientController.getClientById);

@@ -17,9 +17,8 @@ class WebSocketService {
       return;
     }
 
-    const baseURL = __DEV__ 
-      ? 'http://localhost:3000' 
-      : 'https://your-production-api.com';
+    const { getWebSocketUrl } = require('../config/apiConfig');
+    const baseURL = getWebSocketUrl();
 
     this.socket = io(baseURL, {
       auth: {

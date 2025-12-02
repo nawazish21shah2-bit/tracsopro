@@ -1,5 +1,5 @@
 import prisma from '../config/database.js';
-import { NotFoundError, ValidationError } from '../utils/errors.js';
+import { NotFoundError, ValidationError, UnauthorizedError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 
 interface ClientProfileUpdateData {
@@ -254,16 +254,88 @@ export class ClientService {
   }
 
   async getDashboardStats(clientId: string) {
-    // Mock data for dashboard stats - in real implementation, these would be calculated from actual data
-    const stats = {
-      guardsOnDuty: 5,
-      missedShifts: 1,
-      activeSites: 5,
-      newReports: 2,
-    };
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
 
-    logger.info(`Dashboard stats requested for client: ${clientId}`);
-    return stats;
+      // Get guards on duty (shifts in progress today)
+      const guardsOnDuty = await prisma.shift.count({
+        where: {
+          clientId,
+          status: 'IN_PROGRESS',
+          scheduledStartTime: {
+            gte: today,
+            lt: tomorrow,
+          },
+        },
+      });
+
+      // Get missed shifts (no-show shifts today)
+      const missedShifts = await prisma.shift.count({
+        where: {
+          clientId,
+          status: 'NO_SHOW',
+          scheduledStartTime: {
+            gte: today,
+            lt: tomorrow,
+          },
+        },
+      });
+
+      // Get active sites (sites with active assignments)
+      const activeSites = await prisma.site.count({
+        where: {
+          clientId,
+          shiftAssignments: {
+            some: {
+              status: { in: ['ASSIGNED', 'IN_PROGRESS'] }
+            }
+          }
+        },
+      });
+
+      // Get new reports (reports from last 24 hours)
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      
+      const clientSites = await prisma.site.findMany({
+        where: { clientId },
+        select: { id: true }
+      });
+      const siteIds = clientSites.map(site => site.id);
+      
+      const assignments = await prisma.shiftAssignment.findMany({
+        where: {
+          siteId: { in: siteIds }
+        },
+        select: { id: true }
+      });
+      const assignmentIds = assignments.map(a => a.id);
+
+      const newReports = await prisma.shiftReport.count({
+        where: {
+          shiftId: { in: assignmentIds },
+          submittedAt: {
+            gte: yesterday,
+          },
+        },
+      });
+
+      const stats = {
+        guardsOnDuty,
+        missedShifts,
+        activeSites,
+        newReports,
+      };
+
+      logger.info(`Dashboard stats requested for client: ${clientId}`, stats);
+      return stats;
+    } catch (error) {
+      logger.error('Error fetching dashboard stats:', error);
+      throw error;
+    }
   }
 
   async getClientGuards(clientId: string, page: number = 1, limit: number = 50) {
@@ -413,73 +485,240 @@ export class ClientService {
   }
 
   async getClientReports(clientId: string, page: number = 1, limit: number = 50) {
-    // Mock data for client reports - in real implementation, this would fetch reports for client's sites
-    const reports = [
-      {
-        id: '1',
-        type: 'Medical Emergency',
-        guardName: 'Mark Husdon',
-        site: 'Site Alpha',
-        time: '10:30 Am',
-        description: 'Visitor collapsed in main lobby',
-        status: 'Respond',
-        checkInTime: '08:12 am',
-      },
-      {
-        id: '2',
-        type: 'Incident',
-        guardName: 'Mark Husdon',
-        site: 'Site Alpha',
-        time: '10:30 Am',
-        description: 'Unauthorized vehicle in parking area. License plate recorded',
-        status: 'New',
-        checkInTime: '08:12 am',
-      },
-    ];
+    try {
+      const skip = (page - 1) * limit;
 
-    logger.info(`Reports list requested for client: ${clientId}`);
-    return {
-      reports,
-      pagination: {
-        page,
-        limit,
-        total: reports.length,
-        pages: Math.ceil(reports.length / limit),
-      },
-    };
+      // Get assignment reports for client's sites using AssignmentReport model
+      const [reports, total] = await Promise.all([
+        prisma.assignmentReport.findMany({
+          where: {
+            shiftAssignment: {
+              shiftPosting: {
+                clientId: clientId
+              }
+            }
+          },
+          include: {
+            shiftAssignment: {
+              include: {
+                shiftPosting: {
+                  include: {
+                    site: {
+                      select: { name: true, address: true }
+                    }
+                  }
+                }
+              }
+            },
+            guard: {
+              include: {
+                user: {
+                  select: { firstName: true, lastName: true, email: true }
+                }
+              }
+            }
+          },
+          orderBy: { submittedAt: 'desc' },
+          skip,
+          take: limit
+        }),
+        prisma.assignmentReport.count({
+          where: {
+            shiftAssignment: {
+              shiftPosting: {
+                clientId: clientId
+              }
+            }
+          }
+        })
+      ]);
+
+      // Transform reports to match frontend format
+      const transformedReports = reports.map((report) => {
+        const guardUser = report.guard?.user;
+        const guardName = guardUser 
+          ? `${guardUser.firstName} ${guardUser.lastName}`
+          : 'Unknown Guard';
+        
+        // Map report type from AssignmentReportType
+        let type: 'Medical Emergency' | 'Incident' | 'Violation' | 'Maintenance' = 'Incident';
+        switch (report.type) {
+          case 'MEDICAL_EMERGENCY':
+            type = 'Medical Emergency';
+            break;
+          case 'INCIDENT':
+          case 'SECURITY_BREACH':
+            type = 'Incident';
+            break;
+          case 'MAINTENANCE':
+            type = 'Maintenance';
+            break;
+          default:
+            type = 'Incident';
+        }
+
+        // Map status based on report status field
+        let status: 'Respond' | 'New' | 'Reviewed' = 'New';
+        if (report.status === 'SUBMITTED' || report.status === 'NEW') {
+          status = 'New';
+        } else if (report.status === 'REVIEWED' || report.status === 'ACKNOWLEDGED') {
+          status = 'Reviewed';
+        } else if (report.status === 'PENDING_RESPONSE' || report.status === 'REQUIRES_ACTION') {
+          status = 'Respond';
+        }
+
+        const siteName = report.shiftAssignment?.shiftPosting?.site?.name || 'Unknown Site';
+        const checkInTime = report.shiftAssignment?.checkInTime;
+
+        return {
+          id: report.id,
+          type,
+          guardName,
+          site: siteName,
+          time: new Date(report.submittedAt).toLocaleTimeString('en-US', { 
+            hour: '2-digit', 
+            minute: '2-digit',
+            hour12: true 
+          }),
+          description: report.description,
+          status,
+          checkInTime: checkInTime
+            ? new Date(checkInTime).toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: true 
+              })
+            : undefined,
+          guardId: report.guard?.id,
+        };
+      });
+
+      logger.info(`Reports list requested for client: ${clientId}, found ${transformedReports.length} reports`);
+      return {
+        reports: transformedReports,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit),
+        },
+      };
+    } catch (error) {
+      logger.error('Error fetching client reports:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update assignment report status (client response)
+   */
+  async respondToReport(reportId: string, clientId: string, status: string, responseNotes?: string) {
+    try {
+      // Verify report belongs to client's sites
+      const report = await prisma.assignmentReport.findUnique({
+        where: { id: reportId },
+        include: {
+          shiftAssignment: {
+            include: {
+              shiftPosting: {
+                select: { clientId: true }
+              }
+            }
+          }
+        }
+      });
+
+      if (!report) {
+        throw new NotFoundError('Report not found');
+      }
+
+      if (report.shiftAssignment.shiftPosting.clientId !== clientId) {
+        throw new UnauthorizedError('Access denied: This report does not belong to your sites');
+      }
+
+      // Update report status
+      const updatedReport = await prisma.assignmentReport.update({
+        where: { id: reportId },
+        data: {
+          status: status,
+          updatedAt: new Date(),
+        },
+        include: {
+          shiftAssignment: {
+            include: {
+              shiftPosting: {
+                include: { site: true }
+              }
+            }
+          },
+          guard: {
+            include: {
+              user: {
+                select: { firstName: true, lastName: true, email: true }
+              }
+            }
+          }
+        }
+      });
+
+      logger.info(`Report ${reportId} status updated to ${status} by client ${clientId}`);
+      return updatedReport;
+    } catch (error) {
+      logger.error('Error responding to report:', error);
+      throw error;
+    }
   }
 
   async getClientSites(clientId: string, page: number = 1, limit: number = 50) {
-    // Mock data for client sites - in real implementation, this would fetch client's sites
-    const sites = [
-      {
-        id: '1',
-        name: 'Park View Plaza',
-        address: '1321 Baker Street, NY',
-        guardName: 'Mark Husdon',
-        status: 'Active',
-        checkInTime: '08:12 am',
-      },
-      {
-        id: '2',
-        name: 'Central Library',
-        address: '1321 Baker Street, NY',
-        guardName: 'Mark Husdon',
-        status: 'Upcoming',
-        shiftTime: '09:00 am - 07:00 pm',
-      },
-    ];
+    try {
+      const skip = (page - 1) * limit;
 
-    logger.info(`Sites list requested for client: ${clientId}`);
-    return {
-      sites,
-      pagination: {
-        page,
-        limit,
-        total: sites.length,
-        pages: Math.ceil(sites.length / limit),
-      },
-    };
+      const [sites, total] = await Promise.all([
+        prisma.site.findMany({
+          where: { clientId },
+          include: {
+            shiftPostings: {
+              where: { status: 'OPEN' },
+              select: { id: true, title: true, startTime: true, endTime: true }
+            },
+            shiftAssignments: {
+              where: { 
+                status: { in: ['ASSIGNED', 'IN_PROGRESS'] }
+              },
+              include: {
+                guard: {
+                  include: {
+                    user: {
+                      select: { firstName: true, lastName: true }
+                    }
+                  }
+                }
+              },
+              orderBy: { startTime: 'desc' },
+              take: 1, // Get only the most recent active assignment
+            }
+          },
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: limit
+        }),
+        prisma.site.count({ where: { clientId } })
+      ]);
+
+      logger.info(`Sites list requested for client: ${clientId}, found ${sites.length} sites`);
+      return {
+        sites,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit),
+        },
+      };
+    } catch (error) {
+      logger.error('Error fetching client sites:', error);
+      throw error;
+    }
   }
 
   async getClientNotifications(clientId: string, page: number = 1, limit: number = 50) {

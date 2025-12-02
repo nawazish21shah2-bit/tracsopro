@@ -10,6 +10,9 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { ArrowLeft, MapPin, Clock, CheckCircle, XCircle, Camera } from 'react-native-feather';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../store';
+import apiService from '../../services/api';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 
 const { width } = Dimensions.get('window');
@@ -46,25 +49,28 @@ const CheckInOutScreen: React.FC = () => {
 
   const loadAssignment = async () => {
     try {
-      // TODO: Replace with actual API call
-      // Simulate API call
-      await new Promise<void>(resolve => setTimeout(resolve, 1000));
+      const result = await apiService.getShiftById(assignmentId);
       
-      // Mock data
-      setAssignment({
-        id: assignmentId,
-        shiftTitle: 'Night Security Guard',
-        siteName: 'Downtown Office Building',
-        address: '123 Main Street, New York, NY 10001',
-        startTime: '2024-11-03T18:00:00Z',
-        endTime: '2024-11-04T06:00:00Z',
-        status: 'ASSIGNED', // This would be dynamic based on actual status
-        checkInTime: undefined,
-        checkOutTime: undefined,
-        notes: ''
-      });
-    } catch (error) {
-      Alert.alert('Error', 'Failed to load assignment details');
+      if (result.success && result.data) {
+        const shift = result.data;
+        setAssignment({
+          id: assignmentId,
+          shiftTitle: shift.title || shift.locationName || 'Security Shift',
+          siteName: shift.locationName || shift.siteName || 'Site',
+          address: shift.locationAddress || shift.address || '',
+          startTime: shift.startTime || shift.scheduledStartTime,
+          endTime: shift.endTime || shift.scheduledEndTime,
+          status: shift.status === 'IN_PROGRESS' ? 'IN_PROGRESS' :
+                 shift.status === 'COMPLETED' ? 'COMPLETED' : 'ASSIGNED',
+          checkInTime: shift.checkInTime || shift.actualStartTime,
+          checkOutTime: shift.checkOutTime || shift.actualEndTime,
+          notes: shift.notes || ''
+        });
+      } else {
+        Alert.alert('Error', result.message || 'Failed to load assignment details');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to load assignment details');
     } finally {
       setLoading(false);
     }
@@ -75,24 +81,49 @@ const CheckInOutScreen: React.FC = () => {
 
     setProcessing(true);
     try {
-      // TODO: Get current location and integrate with backend API
-      console.log('Checking in for assignment:', assignmentId, notes);
-      
-      // Simulate API call
-      await new Promise<void>(resolve => setTimeout(resolve, 1500));
-      
-      // Update local state
-      setAssignment(prev => prev ? {
-        ...prev,
-        status: 'IN_PROGRESS',
-        checkInTime: new Date().toISOString(),
-        notes: notes
-      } : null);
+      // Get current location
+      let location = {
+        latitude: 0,
+        longitude: 0,
+        accuracy: 10,
+        address: 'Current location'
+      };
 
-      Alert.alert('Success', 'You have successfully checked in to your shift!');
-      setNotes('');
-    } catch (error) {
-      Alert.alert('Error', 'Failed to check in. Please try again.');
+      try {
+        const { Geolocation } = require('react-native');
+        const position = await new Promise<any>((resolve, reject) => {
+          Geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+          });
+        });
+        location.latitude = position.coords.latitude;
+        location.longitude = position.coords.longitude;
+        location.accuracy = position.coords.accuracy || 10;
+      } catch (locError) {
+        console.warn('Could not get location:', locError);
+        Alert.alert('Location Error', 'Could not get your location. Check-in will proceed without location data.');
+      }
+
+      const result = await apiService.checkInToShift(assignmentId, location);
+      
+      if (result.success) {
+        // Update local state
+        setAssignment(prev => prev ? {
+          ...prev,
+          status: 'IN_PROGRESS',
+          checkInTime: new Date().toISOString(),
+          notes: notes
+        } : null);
+
+        Alert.alert('Success', result.message || 'You have successfully checked in to your shift!');
+        setNotes('');
+      } else {
+        Alert.alert('Error', result.message || 'Failed to check in. Please try again.');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to check in. Please try again.');
     } finally {
       setProcessing(false);
     }
@@ -103,32 +134,57 @@ const CheckInOutScreen: React.FC = () => {
 
     setProcessing(true);
     try {
-      // TODO: Get current location and integrate with backend API
-      console.log('Checking out from assignment:', assignmentId, notes);
-      
-      // Simulate API call
-      await new Promise<void>(resolve => setTimeout(resolve, 1500));
-      
-      // Update local state
-      setAssignment(prev => prev ? {
-        ...prev,
-        status: 'COMPLETED',
-        checkOutTime: new Date().toISOString(),
-        notes: prev.notes ? `${prev.notes}\n\nCheck-out: ${notes}` : notes
-      } : null);
+      // Get current location
+      let location = {
+        latitude: 0,
+        longitude: 0,
+        accuracy: 10,
+        address: 'Current location'
+      };
 
-      Alert.alert(
-        'Shift Completed',
-        'You have successfully checked out. Thank you for your service!',
-        [
-          {
-            text: 'OK',
-            onPress: () => navigation.goBack()
-          }
-        ]
-      );
-    } catch (error) {
-      Alert.alert('Error', 'Failed to check out. Please try again.');
+      try {
+        const { Geolocation } = require('react-native');
+        const position = await new Promise<any>((resolve, reject) => {
+          Geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+          });
+        });
+        location.latitude = position.coords.latitude;
+        location.longitude = position.coords.longitude;
+        location.accuracy = position.coords.accuracy || 10;
+      } catch (locError) {
+        console.warn('Could not get location:', locError);
+        Alert.alert('Location Error', 'Could not get your location. Check-out will proceed without location data.');
+      }
+
+      const result = await apiService.checkOutFromShift(assignmentId, location, notes);
+      
+      if (result.success) {
+        // Update local state
+        setAssignment(prev => prev ? {
+          ...prev,
+          status: 'COMPLETED',
+          checkOutTime: new Date().toISOString(),
+          notes: prev.notes ? `${prev.notes}\n\nCheck-out: ${notes}` : notes
+        } : null);
+
+        Alert.alert(
+          'Shift Completed',
+          result.message || 'You have successfully checked out. Thank you for your service!',
+          [
+            {
+              text: 'OK',
+              onPress: () => navigation.goBack()
+            }
+          ]
+        );
+      } else {
+        Alert.alert('Error', result.message || 'Failed to check out. Please try again.');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to check out. Please try again.');
     } finally {
       setProcessing(false);
     }

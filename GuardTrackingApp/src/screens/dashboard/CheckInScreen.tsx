@@ -10,6 +10,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { Clock, MapPin, Calendar, User } from 'react-native-feather';
+import apiService from '../../services/api';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { GuardStackParamList } from '../../navigation/GuardStackNavigator';
 
@@ -34,33 +35,39 @@ const CheckInScreen: React.FC = () => {
 
   const loadTodayAssignments = async () => {
     try {
-      // TODO: Replace with actual API call
-      // Simulate API call
-      await new Promise<void>(resolve => setTimeout(resolve, 1000));
+      const result = await apiService.getUpcomingShifts();
       
-      // Mock data for today's assignments
-      setAssignments([
-        {
-          id: '1',
-          shiftTitle: 'Night Security Guard',
-          siteName: 'Downtown Office Building',
-          address: '123 Main Street, New York, NY',
-          startTime: '2024-11-03T18:00:00Z',
-          endTime: '2024-11-04T06:00:00Z',
-          status: 'ASSIGNED'
-        },
-        {
-          id: '2',
-          shiftTitle: 'Weekend Security Coverage',
-          siteName: 'Shopping Mall',
-          address: '456 Commerce Ave, New York, NY',
-          startTime: '2024-11-04T08:00:00Z',
-          endTime: '2024-11-04T20:00:00Z',
-          status: 'IN_PROGRESS'
-        }
-      ]);
-    } catch (error) {
+      if (result.success && result.data) {
+        // Transform API response to match Assignment interface
+        const shifts = Array.isArray(result.data) ? result.data : [];
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        const todayAssignments: Assignment[] = shifts
+          .filter((shift: any) => {
+            const shiftDate = new Date(shift.startTime || shift.scheduledStartTime);
+            return shiftDate >= today;
+          })
+          .map((shift: any) => ({
+            id: shift.id,
+            shiftTitle: shift.title || shift.locationName || 'Security Shift',
+            siteName: shift.locationName || shift.siteName || 'Site',
+            address: shift.locationAddress || shift.address || '',
+            startTime: shift.startTime || shift.scheduledStartTime,
+            endTime: shift.endTime || shift.scheduledEndTime,
+            status: shift.status === 'IN_PROGRESS' ? 'IN_PROGRESS' : 
+                   shift.status === 'COMPLETED' ? 'COMPLETED' : 'ASSIGNED'
+          }));
+        
+        setAssignments(todayAssignments);
+      } else {
+        // Fallback to empty array if API fails
+        setAssignments([]);
+      }
+    } catch (error: any) {
       console.error('Error loading assignments:', error);
+      Alert.alert('Error', 'Failed to load assignments. Please try again.');
+      setAssignments([]);
     } finally {
       setLoading(false);
     }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   Dimensions,
   StatusBar,
   Platform,
+  RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
@@ -21,12 +23,13 @@ import InteractiveMapView from '../../components/client/InteractiveMapView';
 import ShiftCard from '../../components/client/ShiftCard';
 import { fetchDashboardStats, fetchMyGuards } from '../../store/slices/clientSlice';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { ClientStackParamList } from '../../navigation/ClientStackNavigator';
 import SharedHeader from '../../components/ui/SharedHeader';
 import ClientProfileDrawer from '../../components/client/ClientProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
 
 const { width } = Dimensions.get('window');
 
@@ -49,23 +52,66 @@ interface GuardData {
 
 const ClientDashboard: React.FC = () => {
   const { user } = useSelector((state: RootState) => state.auth);
-  const { dashboardStats, guards, loading, guardsLoading } = useSelector((state: RootState) => state.client);
+  const { 
+    dashboardStats, 
+    guards, 
+    loading, 
+    guardsLoading,
+    error,
+    guardsError,
+  } = useSelector((state: RootState) => state.client);
   const navigation = useNavigation<StackNavigationProp<ClientStackParamList>>();
   const dispatch = useDispatch<AppDispatch>();
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    dispatch(fetchDashboardStats());
-    dispatch(fetchMyGuards({ page: 1, limit: 10 }));
+  const loadDashboardData = useCallback(async () => {
+    try {
+      await Promise.all([
+        dispatch(fetchDashboardStats()),
+        dispatch(fetchMyGuards({ page: 1, limit: 10 })),
+      ]);
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+    }
   }, [dispatch]);
 
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
+
+  // Refresh data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadDashboardData();
+    }, [loadDashboardData])
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadDashboardData();
+    } catch (error) {
+      console.error('Error refreshing dashboard:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadDashboardData]);
+
   const handleAssignNewShift = () => {
-    console.log('Assign new shift');
+    navigation.navigate('CreateShift');
   };
 
   const handleGuardPress = (guardId: string) => {
+    // Navigate to guard details when available
     console.log('Guard pressed:', guardId);
   };
+
+  // Check for network errors
+  const isNetworkError = error?.toLowerCase().includes('network') || 
+                         error?.toLowerCase().includes('connection') ||
+                         error?.toLowerCase().includes('econnrefused') ||
+                         error?.toLowerCase().includes('enotfound');
 
   return (
     <SafeAreaWrapper>
@@ -110,7 +156,13 @@ const ClientDashboard: React.FC = () => {
         }
       />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
         {/* Stats Cards */}
         <View style={styles.statsContainer}>
           <View style={styles.statsRow}>
@@ -158,10 +210,39 @@ const ClientDashboard: React.FC = () => {
           </TouchableOpacity>
         </View>
 
+        {/* Loading Overlay */}
+        <LoadingOverlay
+          visible={loading && !dashboardStats && guards.length === 0}
+          message="Loading dashboard..."
+        />
+
+        {/* Error State */}
+        {error && !dashboardStats && guards.length === 0 && !loading && (
+          <View style={styles.errorContainer}>
+            {isNetworkError ? (
+              <NetworkError
+                onRetry={loadDashboardData}
+                style={styles.errorState}
+              />
+            ) : (
+              <ErrorState
+                error={error}
+                onRetry={loadDashboardData}
+                style={styles.errorState}
+              />
+            )}
+          </View>
+        )}
+
         {/* Today's Shifts - Shift Cards */}
         <View style={styles.shiftsSection}>
           <Text style={styles.sectionTitle}>Today's Shifts</Text>
-          {guards && guards.length > 0 ? (
+          {guardsLoading && guards.length === 0 ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#1C6CA9" />
+              <Text style={styles.loadingText}>Loading shifts...</Text>
+            </View>
+          ) : guards && guards.length > 0 ? (
             guards.map((guard) => {
               // Transform guard data to shift card format
               const shiftCardData = {
@@ -406,6 +487,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666666',
     textAlign: 'center',
+  },
+  errorContainer: {
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 200,
+  },
+  errorState: {
+    flex: 1,
+  },
+  loadingContainer: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#666666',
   },
 });
 

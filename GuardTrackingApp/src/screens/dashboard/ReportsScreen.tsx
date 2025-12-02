@@ -16,6 +16,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootState } from '../../store';
+import apiService from '../../services/api';
 import { 
   fetchGuardReports, 
   createReport,
@@ -97,19 +98,25 @@ const ReportsScreen: React.FC = () => {
       return;
     }
 
+    if (reportText.trim().length < 10) {
+      Alert.alert('Error', 'Report must be at least 10 characters long');
+      return;
+    }
+
     try {
-      await dispatch(createReport({
+      const result = await dispatch(createReport({
         shiftId: activeShift.id,
         reportType: ReportType.SHIFT,
         content: reportText.trim(),
-      }) as any);
+      }) as any).unwrap();
       
       setReportText('');
       Alert.alert('Success', 'Report submitted successfully');
       // Refresh reports list
       await dispatch(fetchGuardReports(50) as any);
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to submit report');
+      const errorMessage = error?.message || error?.payload || 'Failed to submit report. Please try again.';
+      Alert.alert('Error', errorMessage);
     }
   };
 
@@ -117,18 +124,67 @@ const ReportsScreen: React.FC = () => {
     navigation.navigate('AddIncidentReport');
   };
 
-  const handleEmergencyAlert = () => {
+  const handleEmergencyAlert = async () => {
     Alert.alert(
       'Emergency Alert',
-      'Are you sure you want to send an emergency alert?',
+      'Are you sure you want to send an emergency alert? This will notify all supervisors and administrators.',
       [
         { text: 'Cancel', style: 'cancel' },
         { 
           text: 'Send Alert', 
           style: 'destructive',
-          onPress: () => {
-            // TODO: Implement emergency alert API call
-            Alert.alert('Emergency Alert Sent', 'Help is on the way!');
+          onPress: async () => {
+            try {
+              // Get current location if available
+              // For now, using default location - in production, get from LocationService
+              const location = {
+                latitude: 0, // Will be replaced with actual location
+                longitude: 0, // Will be replaced with actual location
+                accuracy: 10,
+                address: 'Current location'
+              };
+
+              // Try to get actual location
+              try {
+                const Geolocation = require('react-native-geolocation-service').default;
+                const position = await new Promise<any>((resolve, reject) => {
+                  Geolocation.getCurrentPosition(
+                    resolve,
+                    reject,
+                    {
+                      enableHighAccuracy: true,
+                      timeout: 10000,
+                      maximumAge: 0
+                    }
+                  );
+                });
+                location.latitude = position.coords.latitude;
+                location.longitude = position.coords.longitude;
+                location.accuracy = position.coords.accuracy || 10;
+              } catch (locError) {
+                console.warn('Could not get location:', locError);
+              }
+
+              const result = await apiService.triggerEmergencyAlert({
+                type: 'PANIC',
+                severity: 'CRITICAL',
+                location: {
+                  latitude: location.latitude,
+                  longitude: location.longitude,
+                  accuracy: location.accuracy,
+                  address: location.address
+                },
+                message: 'Emergency alert triggered by guard'
+              });
+
+              if (result.success) {
+                Alert.alert('Emergency Alert Sent', 'Help is on the way! All supervisors have been notified.');
+              } else {
+                Alert.alert('Error', result.message || 'Failed to send emergency alert. Please try again.');
+              }
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'Failed to send emergency alert. Please try again.');
+            }
           }
         },
       ]

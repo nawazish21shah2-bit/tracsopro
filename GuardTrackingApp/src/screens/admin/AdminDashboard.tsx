@@ -16,6 +16,7 @@ import {
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { logoutUser } from '../../store/slices/authSlice';
+import { fetchDashboardStats, fetchRecentActivity } from '../../store/slices/adminSlice';
 import { globalStyles, COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { 
   UserIcon, 
@@ -36,6 +37,8 @@ import QuickActionCard from '../../components/ui/QuickActionCard';
 import RecentActivityCard from '../../components/ui/RecentActivityCard';
 import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
+import { RefreshControl } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -60,19 +63,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+  
+  // Redux state
+  const { dashboardMetrics, dashboardLoading, dashboardError, recentActivity, activityLoading } = useSelector(
+    (state: RootState) => state.admin
+  );
 
-  const [metrics, setMetrics] = useState<DashboardMetrics>({
-    totalGuards: 24,
-    activeGuards: 22,
-    totalSites: 12,
-    activeSites: 10,
-    todayIncidents: 6,
-    pendingIncidents: 1,
-    emergencyAlerts: 0,
-    scheduledShifts: 32,
-    revenue: 45600,
-    clientSatisfaction: 4.8,
-  });
+  const [refreshing, setRefreshing] = useState(false);
 
   const [quickActions] = useState([
     {
@@ -123,21 +120,32 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
   ]);
 
   useEffect(() => {
-    loadDashboardMetrics();
+    loadDashboardData();
   }, []);
 
-  const loadDashboardMetrics = async () => {
-    // In real implementation, fetch from API
-    // Simulated real-time updates
-    const interval = setInterval(() => {
-      setMetrics(prev => ({
-        ...prev,
-        activeGuards: prev.activeGuards + (Math.random() > 0.7 ? (Math.random() > 0.5 ? 1 : -1) : 0),
-        todayIncidents: prev.todayIncidents + (Math.random() > 0.95 ? 1 : 0),
-      }));
-    }, 30000);
+  const loadDashboardData = async () => {
+    try {
+      await Promise.all([
+        dispatch(fetchDashboardStats()),
+        dispatch(fetchRecentActivity(10)),
+      ]);
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+    }
+  };
 
-    return () => clearInterval(interval);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        dispatch(fetchDashboardStats()),
+        dispatch(fetchRecentActivity(10)),
+      ]);
+    } catch (error) {
+      console.error('Error refreshing dashboard:', error);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const handleQuickAction = (action: any) => {
@@ -189,7 +197,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
       onNotificationPress={() => {
         // Handle notification press
       }}
-      notificationCount={metrics.emergencyAlerts}
+      notificationCount={dashboardMetrics?.emergencyAlerts || 0}
       profileDrawer={
         <AdminProfileDrawer
           visible={isDrawerVisible}
@@ -227,51 +235,59 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
     />
   );
 
-  const renderMetricsOverview = () => (
-    <View style={styles.metricsContainer}>
-      <View style={styles.metricsGrid}>
-        <AdminStatsCard
-          label="Active Guards"
-          value={`${metrics.activeGuards}/${metrics.totalGuards}`}
-          subLabel="2 On Leave"
-          icon={<UserIcon size={20} color="#16A34A" />}
-          iconBgColor="#DCFCE7"
-          iconColor="#16A34A"
-          style={styles.statCard}
-        />
-        
-        <AdminStatsCard
-          label="Active Sites"
-          value={`${metrics.activeSites}/${metrics.totalSites}`}
-          subLabel="All Operational"
-          icon={<LocationIcon size={20} color="#1976D2" />}
-          iconBgColor="#DBEAFE"
-          iconColor="#1976D2"
-          style={styles.statCard}
-        />
-        
-        <AdminStatsCard
-          label="Today's Report"
-          value={metrics.todayIncidents}
-          subLabel="1 Pending"
-          icon={<ReportsIcon size={20} color="#6B7280" />}
-          iconBgColor="#F3F4F6"
-          iconColor="#6B7280"
-          style={styles.statCard}
-        />
-        
-        <AdminStatsCard
-          label="Scheduled Shifts"
-          value={metrics.scheduledShifts}
-          subLabel="This Week"
-          icon={<ShiftsIcon size={20} color="#EC4899" />}
-          iconBgColor="#FCE7F3"
-          iconColor="#EC4899"
-          style={styles.statCard}
-        />
+  const renderMetricsOverview = () => {
+    if (!dashboardMetrics) {
+      return null;
+    }
+
+    const guardsOnLeave = dashboardMetrics.totalGuards - dashboardMetrics.activeGuards;
+    
+    return (
+      <View style={styles.metricsContainer}>
+        <View style={styles.metricsGrid}>
+          <AdminStatsCard
+            label="Active Guards"
+            value={`${dashboardMetrics.activeGuards}/${dashboardMetrics.totalGuards}`}
+            subLabel={guardsOnLeave > 0 ? `${guardsOnLeave} On Leave` : 'All Active'}
+            icon={<UserIcon size={20} color="#16A34A" />}
+            iconBgColor="#DCFCE7"
+            iconColor="#16A34A"
+            style={styles.statCard}
+          />
+          
+          <AdminStatsCard
+            label="Active Sites"
+            value={`${dashboardMetrics.activeSites}/${dashboardMetrics.totalSites}`}
+            subLabel="All Operational"
+            icon={<LocationIcon size={20} color="#1976D2" />}
+            iconBgColor="#DBEAFE"
+            iconColor="#1976D2"
+            style={styles.statCard}
+          />
+          
+          <AdminStatsCard
+            label="Today's Report"
+            value={dashboardMetrics.todayIncidents}
+            subLabel={dashboardMetrics.pendingIncidents > 0 ? `${dashboardMetrics.pendingIncidents} Pending` : 'All Reviewed'}
+            icon={<ReportsIcon size={20} color="#6B7280" />}
+            iconBgColor="#F3F4F6"
+            iconColor="#6B7280"
+            style={styles.statCard}
+          />
+          
+          <AdminStatsCard
+            label="Scheduled Shifts"
+            value={dashboardMetrics.scheduledShifts}
+            subLabel="This Week"
+            icon={<ShiftsIcon size={20} color="#EC4899" />}
+            iconBgColor="#FCE7F3"
+            iconColor="#EC4899"
+            style={styles.statCard}
+          />
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   const renderQuickActions = () => (
     <View style={styles.quickActionsContainer}>
@@ -321,46 +337,43 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
   );
 
   const renderRecentActivity = () => {
-    const activities = [
-      {
-        id: '1',
-        text: 'John Smith checked in at Central Office',
-        time: '2 minutes ago',
-        icon: <UserIcon size={20} color="#16A34A" />,
-        iconColor: '#16A34A',
-        shadowColor: '#16A34A', // Green shadow for check-in
-      },
-      {
-        id: '2',
-        text: 'New incident reported at Warehouse A',
-        time: '15 minutes ago',
-        icon: <ReportsIcon size={20} color="#F59E0B" />,
-        iconColor: '#F59E0B',
-        shadowColor: '#F59E0B', // Orange shadow for incidents
-      },
-      {
-        id: '3',
-        text: 'Sarah Johnson completed night shift',
-        time: '1 hour ago',
-        icon: <ShiftsIcon size={20} color="#3B82F6" />,
-        iconColor: '#3B82F6',
-        shadowColor: '#3B82F6', // Blue shadow for shifts
-      },
-    ];
+    if (!recentActivity || recentActivity.length === 0) {
+      return (
+        <View style={styles.recentActivityContainer}>
+          <Text style={styles.sectionTitle}>Recent Activity</Text>
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>No recent activity</Text>
+          </View>
+        </View>
+      );
+    }
+
+    const getIcon = (iconType: string, iconColor: string) => {
+      switch (iconType) {
+        case 'check-in':
+          return <UserIcon size={20} color={iconColor} />;
+        case 'check-out':
+          return <ShiftsIcon size={20} color={iconColor} />;
+        case 'schedule':
+          return <ShiftsIcon size={20} color={iconColor} />;
+        default:
+          return <ReportsIcon size={20} color={iconColor} />;
+      }
+    };
 
     return (
       <View style={styles.recentActivityContainer}>
         <Text style={styles.sectionTitle}>Recent Activity</Text>
         
         <View style={styles.activityList}>
-          {activities.map((activity) => (
+          {recentActivity.map((activity) => (
             <RecentActivityCard
               key={activity.id}
               text={activity.text}
               time={activity.time}
-              icon={activity.icon}
+              icon={getIcon(activity.icon, activity.iconColor)}
               iconColor={activity.iconColor}
-              shadowColor={activity.shadowColor}
+              shadowColor={activity.iconColor}
             />
           ))}
         </View>
@@ -368,15 +381,60 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
     );
   };
 
+  // Error handling
+  const isNetworkError = dashboardError?.toLowerCase().includes('network') || 
+                         dashboardError?.toLowerCase().includes('timeout') ||
+                         dashboardError?.toLowerCase().includes('connection');
+
+  if (dashboardLoading && !dashboardMetrics) {
+    return (
+      <SafeAreaWrapper>
+        {renderHeader()}
+        <LoadingOverlay visible={true} message="Loading dashboard..." />
+      </SafeAreaWrapper>
+    );
+  }
+
+  if (dashboardError && !dashboardMetrics) {
+    return (
+      <SafeAreaWrapper>
+        {renderHeader()}
+        {isNetworkError ? (
+          <NetworkError 
+            onRetry={loadDashboardData}
+          />
+        ) : (
+          <ErrorState 
+            error={dashboardError}
+            onRetry={loadDashboardData}
+          />
+        )}
+      </SafeAreaWrapper>
+    );
+  }
+
   return (
     <SafeAreaWrapper>
       {renderHeader()}
       
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[COLORS.primary]}
+            tintColor={COLORS.primary}
+          />
+        }
+      >
         {renderMetricsOverview()}
         {renderQuickActions()}
         {renderRecentActivity()}
       </ScrollView>
+      
+      {dashboardLoading && <LoadingOverlay visible={true} message="Refreshing..." />}
     </SafeAreaWrapper>
   );
 };
@@ -496,6 +554,15 @@ const styles = StyleSheet.create({
   },
   activityList: {
     gap: 0,
+  },
+  emptyState: {
+    padding: SPACING.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyStateText: {
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textSecondary,
   },
 });
 

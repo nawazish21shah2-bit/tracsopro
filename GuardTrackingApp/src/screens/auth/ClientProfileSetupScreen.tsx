@@ -13,9 +13,13 @@ import {
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
+import { useDispatch } from 'react-redux';
 import Icon from 'react-native-vector-icons/Ionicons';
 import Button from '../../components/common/Button';
 import { AuthStackParamList } from '../../types';
+import { AppDispatch } from '../../store';
+import { getCurrentUser } from '../../store/slices/authSlice';
+import apiService from '../../services/api';
 import Logo from '../../assets/images/tracSOpro-logo.png';
 
 type ClientProfileSetupScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'ClientProfileSetup'>;
@@ -39,6 +43,7 @@ interface ProfileData {
 const ClientProfileSetupScreen: React.FC = () => {
   const navigation = useNavigation<ClientProfileSetupScreenNavigationProp>();
   const route = useRoute<ClientProfileSetupScreenRouteProp>();
+  const dispatch = useDispatch<AppDispatch>();
   const accountType = route.params?.accountType || 'individual';
 
   const [profileData, setProfileData] = useState<ProfileData>({
@@ -121,26 +126,29 @@ const ClientProfileSetupScreen: React.FC = () => {
         }),
       };
 
-      console.log('Client Profile Data:', profileUpdateData);
-
-      // TODO: Make actual API call to update client profile
-      // For now, simulate API call
-      await new Promise<void>(resolve => setTimeout(resolve, 2000));
+      // Call API to update client profile
+      const result = await apiService.updateClientProfile(profileUpdateData);
       
-      // Navigate to dashboard after successful profile creation
-      Alert.alert(
-        'Profile Created',
-        `Your ${accountType} client profile has been created successfully!`,
-        [
-          {
-            text: 'Continue',
-            onPress: () => {
-              // TODO: Navigate to Client Dashboard
-              console.log('Navigate to Client Dashboard');
+      if (result.success) {
+        // Refresh user data to get updated profile
+        await dispatch(getCurrentUser());
+        
+        Alert.alert(
+          'Profile Created',
+          `Your ${accountType} client profile has been created successfully!`,
+          [
+            {
+              text: 'Continue',
+              onPress: () => {
+                // Navigation will be handled by AppNavigator based on auth state
+                console.log('Profile setup complete');
+              }
             }
-          }
-        ]
-      );
+          ]
+        );
+      } else {
+        Alert.alert('Error', result.message || 'Failed to create profile. Please try again.');
+      }
     } catch (error) {
       Alert.alert('Error', 'Failed to create profile. Please try again.');
     } finally {

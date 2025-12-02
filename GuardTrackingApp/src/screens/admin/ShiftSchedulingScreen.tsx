@@ -198,7 +198,11 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
       const backendGuards = responseData.items as any[];
 
       const mapped: Guard[] = backendGuards.map((g, index) => {
-        const name = `${g.firstName || ''} ${g.lastName || ''}`.trim() || g.email || `Guard ${index + 1}`;
+        // Access user data from nested user object
+        const firstName = g.user?.firstName || '';
+        const lastName = g.user?.lastName || '';
+        const email = g.user?.email || '';
+        const name = `${firstName} ${lastName}`.trim() || email || `Guard ${index + 1}`;
         // Dummy schedule/skills for UI only
         const skills = ['patrol', 'access_control', 'emergency_response'];
         const maxHoursPerWeek = 40;

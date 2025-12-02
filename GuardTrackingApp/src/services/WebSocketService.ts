@@ -51,10 +51,14 @@ class WebSocketService {
   private socket: Socket | null = null;
   private isConnected: boolean = false;
   private reconnectAttempts: number = 0;
-  private maxReconnectAttempts: number = 5;
-  private reconnectInterval: number = 5000; // 5 seconds
+  private maxReconnectAttempts: number = 10;
+  private baseReconnectInterval: number = 1000; // Start with 1 second
+  private maxReconnectInterval: number = 30000; // Max 30 seconds
+  private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private userId: string | null = null;
   private userRole: string | null = null;
+  private connectionState: 'disconnected' | 'connecting' | 'connected' | 'reconnecting' = 'disconnected';
+  private messageQueue: Array<{ event: string; data: any }> = [];
 
   constructor() {
     this.setupEventHandlers();
@@ -80,12 +84,10 @@ class WebSocketService {
       this.userId = user.id;
       this.userRole = user.role;
 
-      // Determine server URL
-      const baseURL = __DEV__
-        ? (require('react-native').Platform.OS === 'android'
-            ? 'http://10.0.2.2:3000'
-            : 'http://localhost:3000')
-        : 'https://your-production-api.com';
+      // Get WebSocket URL from centralized configuration
+      // See src/config/apiConfig.ts to configure production URLs
+      const { getWebSocketUrl } = require('../config/apiConfig');
+      const baseURL = getWebSocketUrl();
 
       // Create socket connection
       this.socket = io(baseURL, {
@@ -124,11 +126,22 @@ class WebSocketService {
 
     this.socket.on('connect', () => {
       this.isConnected = true;
+      this.connectionState = 'connected';
       this.reconnectAttempts = 0;
+      
+      // Clear reconnect timeout
+      if (this.reconnectTimeout) {
+        clearTimeout(this.reconnectTimeout);
+        this.reconnectTimeout = null;
+      }
+      
       logger.info('WebSocket connected');
 
       // Authenticate with server
       this.authenticate();
+
+      // Process any queued messages
+      this.processMessageQueue();
     });
 
     this.socket.on('disconnect', (reason) => {
@@ -198,30 +211,89 @@ class WebSocketService {
   }
 
   /**
-   * Attempt to reconnect
+   * Attempt to reconnect with exponential backoff
    */
   private attemptReconnect(): void {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       logger.error('Max reconnection attempts reached');
+      this.connectionState = 'disconnected';
       return;
     }
 
     this.reconnectAttempts++;
-    logger.info(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+    this.connectionState = 'reconnecting';
+    
+    // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s (max)
+    const delay = Math.min(
+      this.baseReconnectInterval * Math.pow(2, this.reconnectAttempts - 1),
+      this.maxReconnectInterval
+    );
 
-    setTimeout(() => {
-      if (this.socket) {
+    logger.info(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts}) in ${delay}ms`);
+
+    // Clear any existing timeout
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+    }
+
+    this.reconnectTimeout = setTimeout(() => {
+      if (this.socket && !this.isConnected) {
         this.socket.connect();
+      } else if (!this.socket) {
+        // Recreate connection if socket was destroyed
+        this.connect();
       }
-    }, this.reconnectInterval * this.reconnectAttempts);
+    }, delay);
+  }
+
+  /**
+   * Get current connection state
+   */
+  getConnectionState(): 'disconnected' | 'connecting' | 'connected' | 'reconnecting' {
+    return this.connectionState;
+  }
+
+  /**
+   * Queue message for sending when connection is restored
+   */
+  private queueMessage(event: string, data: any): void {
+    this.messageQueue.push({ event, data });
+    // Limit queue size to prevent memory issues
+    if (this.messageQueue.length > 100) {
+      this.messageQueue = this.messageQueue.slice(-50);
+    }
+  }
+
+  /**
+   * Process queued messages when connection is restored
+   */
+  private processMessageQueue(): void {
+    if (this.messageQueue.length === 0 || !this.isConnected || !this.socket) {
+      return;
+    }
+
+    logger.info(`Processing ${this.messageQueue.length} queued messages`);
+    const queue = [...this.messageQueue];
+    this.messageQueue = [];
+
+    queue.forEach(({ event, data }) => {
+      try {
+        this.socket?.emit(event, data);
+      } catch (error) {
+        logger.error(`Error sending queued message:`, error);
+        // Re-queue failed messages
+        this.messageQueue.push({ event, data });
+      }
+    });
   }
 
   /**
    * Send location update (for guards)
    */
   sendLocationUpdate(locationData: LocationUpdate): void {
-    if (!this.socket || !this.isConnected) {
-      logger.warn('Cannot send location update: WebSocket not connected');
+    if (!this.isConnected || !this.socket) {
+      logger.warn('WebSocket not connected, queueing location update');
+      this.queueMessage('location_update', locationData);
       return;
     }
 
@@ -233,8 +305,9 @@ class WebSocketService {
    * Send geofence event
    */
   sendGeofenceEvent(eventData: GeofenceEvent): void {
-    if (!this.socket || !this.isConnected) {
-      logger.warn('Cannot send geofence event: WebSocket not connected');
+    if (!this.isConnected || !this.socket) {
+      logger.warn('WebSocket not connected, queueing geofence event');
+      this.queueMessage('geofence_event', eventData);
       return;
     }
 
@@ -259,8 +332,9 @@ class WebSocketService {
    * Send shift status update
    */
   sendShiftStatusUpdate(data: { guardId: string; shiftId: string; status: string; location?: LocationUpdate }): void {
-    if (!this.socket || !this.isConnected) {
-      logger.warn('Cannot send shift status update: WebSocket not connected');
+    if (!this.isConnected || !this.socket) {
+      logger.warn('WebSocket not connected, queueing shift status update');
+      this.queueMessage('shift_status_update', data);
       return;
     }
 
@@ -272,8 +346,9 @@ class WebSocketService {
    * Send chat message
    */
   sendMessage(message: Omit<ChatMessage, 'id' | 'timestamp' | 'readBy'>): void {
-    if (!this.socket || !this.isConnected) {
-      logger.warn('Cannot send message: WebSocket not connected');
+    if (!this.isConnected || !this.socket) {
+      logger.warn('WebSocket not connected, queueing message');
+      this.queueMessage('message', message);
       return;
     }
 

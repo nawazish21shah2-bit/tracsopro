@@ -187,6 +187,30 @@ export class ClientController {
       next(error);
     }
   }
+
+  async respondToReport(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { reportId } = req.params;
+      const { status, responseNotes } = req.body;
+      const client = await clientService.getClientByUserId(req.userId!);
+      
+      if (!status) {
+        return res.status(400).json({
+          success: false,
+          message: 'Status is required',
+        });
+      }
+
+      const result = await clientService.respondToReport(reportId, client.id, status, responseNotes);
+      res.json({
+        success: true,
+        data: result,
+        message: 'Report response saved successfully',
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 const clientController = new ClientController();

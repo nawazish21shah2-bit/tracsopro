@@ -40,94 +40,80 @@ const ChatListScreen: React.FC = () => {
 
   const loadChats = async () => {
     try {
-      // Mock data matching your design
-      const mockChats: ChatItem[] = [
-        {
-          id: 'chat_1',
-          name: 'Harley T.',
-          lastMessage: 'Lorem ipsum dolor sit amet consectetur.',
-          timestamp: 'now',
-          avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b786?w=150&h=150&fit=crop&crop=face',
-          unreadCount: 0,
-          isOnline: true,
-        },
-        {
-          id: 'chat_2',
-          name: 'Oliver Smith',
-          lastMessage: 'Lorem ipsum dolor sit amet consectetur.',
-          timestamp: 'Yest',
-          avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face',
-          unreadCount: 0,
-          isOnline: false,
-        },
-        {
-          id: 'chat_3',
-          name: 'Amelia Johnson',
-          lastMessage: 'Lorem ipsum dolor sit amet consectetur.',
-          timestamp: 'now',
-          avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop&crop=face',
-          unreadCount: 0,
-          isOnline: true,
-        },
-        {
-          id: 'chat_4',
-          name: 'Harley T.',
-          lastMessage: 'Lorem ipsum dolor sit amet consectetur.',
-          timestamp: 'now',
-          avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b786?w=150&h=150&fit=crop&crop=face',
-          unreadCount: 0,
-          isOnline: true,
-        },
-        {
-          id: 'chat_5',
-          name: 'Harley T.',
-          lastMessage: 'Lorem ipsum dolor sit amet consectetur.',
-          timestamp: 'now',
-          avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b786?w=150&h=150&fit=crop&crop=face',
-          unreadCount: 0,
-          isOnline: true,
-        },
-        {
-          id: 'chat_6',
-          name: 'Amelia Johnson',
-          lastMessage: 'Lorem ipsum dolor sit amet consectetur.',
-          timestamp: 'now',
-          avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop&crop=face',
-          unreadCount: 0,
-          isOnline: true,
-        },
-        {
-          id: 'chat_7',
-          name: 'Amelia Johnson',
-          lastMessage: 'Lorem ipsum dolor sit amet consectetur.',
-          timestamp: 'now',
-          avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop&crop=face',
-          unreadCount: 0,
-          isOnline: true,
-        },
-        {
-          id: 'chat_8',
-          name: 'Amelia Johnson',
-          lastMessage: 'Lorem ipsum dolor sit amet consectetur.',
-          timestamp: 'now',
-          avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop&crop=face',
-          unreadCount: 0,
-          isOnline: true,
-        },
-        {
-          id: 'chat_9',
-          name: 'Amelia Johnson',
-          lastMessage: 'Lorem ipsum dolor sit amet consectetur.',
-          timestamp: 'now',
-          avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop&crop=face',
-          unreadCount: 0,
-          isOnline: true,
-        },
-      ];
+      const apiService = (await import('../../services/api')).default;
+      const response = await apiService.getChatRooms();
+      
+      if (!response.success || !response.data) {
+        console.error('Failed to load chats:', response.message);
+        setChats([]);
+        return;
+      }
 
-      setChats(mockChats);
+      // Transform backend chat data to ChatItem format
+      const transformedChats: ChatItem[] = response.data.map((chat: any) => {
+        // Get other participant's info for direct chats
+        let chatName = chat.name || 'Chat';
+        let avatar: string | undefined;
+        let isOnline = false;
+
+        if (chat.type === 'direct' && chat.participants) {
+          const otherParticipant = chat.participants.find((p: any) => 
+            p.userId !== user?.id && p.user
+          );
+          if (otherParticipant?.user) {
+            chatName = `${otherParticipant.user.firstName} ${otherParticipant.user.lastName}`.trim();
+            avatar = otherParticipant.user.avatar;
+            isOnline = otherParticipant.user.isOnline || false;
+          }
+        }
+
+        // Format timestamp
+        let timestamp = 'now';
+        if (chat.lastMessageAt || chat.lastMessage?.timestamp) {
+          const lastMsgTime = chat.lastMessageAt 
+            ? new Date(chat.lastMessageAt) 
+            : new Date(chat.lastMessage.timestamp);
+          const now = new Date();
+          const diffMs = now.getTime() - lastMsgTime.getTime();
+          const diffMins = Math.floor(diffMs / 60000);
+          const diffHours = Math.floor(diffMs / 3600000);
+          const diffDays = Math.floor(diffMs / 86400000);
+
+          if (diffMins < 1) {
+            timestamp = 'now';
+          } else if (diffMins < 60) {
+            timestamp = `${diffMins}m`;
+          } else if (diffHours < 24) {
+            timestamp = `${diffHours}h`;
+          } else if (diffDays === 1) {
+            timestamp = 'Yest';
+          } else {
+            timestamp = lastMsgTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          }
+        }
+
+        return {
+          id: chat.id,
+          name: chatName,
+          lastMessage: chat.lastMessage?.content || chat.lastMessage?.message || '',
+          timestamp,
+          avatar,
+          unreadCount: chat.unreadCount || 0,
+          isOnline,
+        };
+      });
+
+      // Sort by last message time (most recent first)
+      transformedChats.sort((a, b) => {
+        const timeA = a.timestamp === 'now' ? 0 : a.timestamp.includes('m') ? 1 : a.timestamp.includes('h') ? 2 : 3;
+        const timeB = b.timestamp === 'now' ? 0 : b.timestamp.includes('m') ? 1 : b.timestamp.includes('h') ? 2 : 3;
+        return timeA - timeB;
+      });
+
+      setChats(transformedChats);
     } catch (error) {
       console.error('Error loading chats:', error);
+      setChats([]);
     }
   };
 
@@ -138,7 +124,7 @@ const ChatListScreen: React.FC = () => {
   };
 
   const handleChatPress = (chat: ChatItem) => {
-    (navigation as any).navigate('ChatScreen', { 
+    (navigation as any).navigate('IndividualChatScreen', { 
       chatId: chat.id, 
       chatName: chat.name,
       avatar: chat.avatar 

@@ -74,7 +74,7 @@ const MainTabNavigator: React.FC = () => {
   const isSuperAdmin = userRole === 'SUPER_ADMIN' || user?.email === 'superadmin@tracsopro.com';
 
   // Debug logging for troubleshooting
-  if (__DEV__) {
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
     console.log('MainTabNavigator - User Role:', userRole);
     console.log('MainTabNavigator - Is Client:', isClient);
     console.log('MainTabNavigator - Is Admin:', isAdmin);

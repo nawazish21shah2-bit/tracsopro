@@ -67,19 +67,48 @@ export const fetchChatRooms = createAsyncThunk(
   'chat/fetchRooms',
   async (_, { rejectWithValue }) => {
     try {
-      // This would typically fetch from API
-      // For now, return default support room
-      const defaultRooms: ChatRoom[] = [
-        {
-          id: 'support',
-          name: 'Support',
-          type: 'support',
-          participants: ['current_user', 'admin'],
-          unreadCount: 0,
+      const apiService = (await import('../../services/api')).default;
+      const response = await apiService.getChatRooms();
+      
+      if (!response.success || !response.data) {
+        return rejectWithValue(response.message || 'Failed to fetch chat rooms');
+      }
+
+      // Transform backend chat format to frontend ChatRoom format
+      const rooms: ChatRoom[] = response.data.map((chat: any) => {
+        // Get other participant's name for direct chats
+        let roomName = chat.name;
+        if (!roomName && chat.type === 'direct' && chat.participants) {
+          const otherParticipant = chat.participants.find((p: any) => p.userId !== chat.currentUserId);
+          if (otherParticipant?.user) {
+            roomName = `${otherParticipant.user.firstName} ${otherParticipant.user.lastName}`.trim();
+          }
+        }
+
+        return {
+          id: chat.id,
+          name: roomName || 'Chat',
+          type: chat.type === 'direct' ? 'direct' : chat.type === 'group' ? 'group' : 'support',
+          participants: chat.participants?.map((p: any) => p.userId) || [],
+          lastMessage: chat.lastMessage ? {
+            id: chat.lastMessage.id,
+            senderId: chat.lastMessage.senderId,
+            senderName: chat.lastMessage.sender?.firstName 
+              ? `${chat.lastMessage.sender.firstName} ${chat.lastMessage.sender.lastName}`.trim()
+              : 'Unknown',
+            senderRole: chat.lastMessage.sender?.role || 'GUARD',
+            roomId: chat.id,
+            message: chat.lastMessage.content,
+            messageType: chat.lastMessage.messageType || 'text',
+            timestamp: new Date(chat.lastMessage.timestamp || chat.lastMessageAt).getTime(),
+            readBy: chat.lastMessage.readBy || [],
+          } : undefined,
+          unreadCount: chat.unreadCount || 0,
           isActive: true,
-        },
-      ];
-      return defaultRooms;
+        };
+      });
+
+      return rooms;
     } catch (error: any) {
       return rejectWithValue(error.message || 'Failed to fetch chat rooms');
     }
@@ -90,9 +119,33 @@ export const fetchMessages = createAsyncThunk(
   'chat/fetchMessages',
   async (roomId: string, { rejectWithValue }) => {
     try {
-      // This would typically fetch from API
-      // For now, return empty array
-      return { roomId, messages: [] };
+      const apiService = (await import('../../services/api')).default;
+      const response = await apiService.getChatMessages(roomId);
+      
+      if (!response.success || !response.data) {
+        return rejectWithValue(response.message || 'Failed to fetch messages');
+      }
+
+      // Transform backend message format to frontend ChatMessage format
+      const messages: ChatMessage[] = response.data.map((msg: any) => ({
+        id: msg.id,
+        senderId: msg.senderId,
+        senderName: msg.sender?.firstName 
+          ? `${msg.sender.firstName} ${msg.sender.lastName}`.trim()
+          : 'Unknown',
+        senderRole: msg.sender?.role || 'GUARD',
+        roomId: msg.chatId,
+        message: msg.content,
+        messageType: msg.messageType || 'text',
+        timestamp: new Date(msg.timestamp).getTime(),
+        readBy: msg.readBy || [],
+        fileUrl: msg.fileUrl,
+        fileName: msg.fileName,
+        fileSize: msg.fileSize,
+        location: msg.location,
+      }));
+
+      return { roomId, messages };
     } catch (error: any) {
       return rejectWithValue(error.message || 'Failed to fetch messages');
     }

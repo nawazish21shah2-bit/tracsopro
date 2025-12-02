@@ -93,9 +93,51 @@ export class AuthService {
       // Generate and send OTP
       const otp = otpService.generateOTP();
       await otpService.storeOTP(user.id, otp);
-      await otpService.sendOTPEmail(user.email, otp, user.firstName);
       
-      logger.info(`User registered: ${user.email}, ID: ${user.id}, OTP sent`);
+      // Try to send OTP email, but don't fail registration if email fails in dev mode
+      try {
+        await otpService.sendOTPEmail(user.email, otp, user.firstName);
+        logger.info(`User registered: ${user.email}, ID: ${user.id}, OTP sent`);
+      } catch (emailError: any) {
+        // In development mode, if email fails due to missing SMTP, bypass OTP
+        const isDevMode = process.env.NODE_ENV !== 'production';
+        const isSmtpError = emailError.message?.includes('SMTP') || emailError.message?.includes('email authentication');
+        
+        if (isDevMode && isSmtpError) {
+          logger.warn(`SMTP not configured - bypassing OTP verification for dev mode. OTP: ${otp}`);
+          
+          // Mark email as verified automatically in dev mode when SMTP is missing
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { isEmailVerified: true },
+          });
+          
+          const token = signAccessToken(user.id);
+          const refreshToken = signRefreshToken(user.id);
+          
+          return {
+            token,
+            refreshToken,
+            user: {
+              id: user.id,
+              email: user.email,
+              firstName: user.firstName,
+              lastName: user.lastName,
+              phone: user.phone,
+              role: user.role,
+              isActive: user.isActive,
+              createdAt: user.createdAt,
+            },
+            expiresIn: getTokenExpiresIn(),
+            message: `Registration successful (OTP bypassed - SMTP not configured). DEV OTP: ${otp}`,
+          };
+        } else {
+          // In production or non-SMTP errors, throw the error
+          logger.error(`Failed to send OTP email for user ${user.id}:`, emailError);
+          throw emailError;
+        }
+      }
+      
       // Return user info without tokens (they'll get tokens after OTP verification)
       return {
         userId: user.id,

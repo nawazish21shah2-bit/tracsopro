@@ -3,12 +3,9 @@ import { Platform } from 'react-native';
 import { securityManager } from '../utils/security';
 import api from './api';
 
-// Use 10.0.2.2 for Android emulator, localhost for iOS simulator
-const API_BASE_URL = __DEV__ 
-  ? Platform.OS === 'android' 
-    ? 'http://10.0.2.2:3000/api' 
-    : 'http://localhost:3000/api'
-  : 'http://localhost:3000/api';
+import { getApiBaseUrl } from '../config/apiConfig';
+
+const API_BASE_URL = getApiBaseUrl();
 
 export interface CreateSiteData {
   name: string;

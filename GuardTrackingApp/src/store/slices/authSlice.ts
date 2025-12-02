@@ -3,6 +3,7 @@ import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { User, AuthState, LoginForm, RegisterForm, UserRole } from '../../types';
 import apiService from '../../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { securityManager } from '../../utils/security';
 
 // Initial state
 const initialState: AuthState = {
@@ -123,7 +124,7 @@ export const logoutUser = createAsyncThunk(
 
 export const getCurrentUser = createAsyncThunk(
   'auth/getCurrentUser',
-  async (_, { rejectWithValue }) => {
+  async (_, { rejectWithValue, getState }) => {
     try {
       const response = await apiService.getCurrentUser();
       if (response.success && response.data) {
@@ -134,10 +135,36 @@ export const getCurrentUser = createAsyncThunk(
         };
         return userWithName;
       } else {
-        return rejectWithValue(response.message || 'Failed to get user data');
+        // Check if it's an authentication error vs network error
+        const isAuthError = response.message?.includes('Unauthorized') || 
+                           response.message?.includes('401') ||
+                           response.message?.includes('token');
+        
+        // Check if tokens are still valid
+        const tokensValid = await securityManager.areTokensValid();
+        const shouldLogout = isAuthError && !tokensValid;
+        
+        return rejectWithValue({ 
+          message: response.message || 'Failed to get user data',
+          isAuthError,
+          shouldLogout
+        });
       }
     } catch (error: any) {
-      return rejectWithValue(error.message || 'Failed to get user data');
+      // Check if it's an authentication error
+      const isAuthError = error.message?.includes('Unauthorized') || 
+                         error.message?.includes('401') ||
+                         error.response?.status === 401;
+      
+      // Check if tokens are still valid - if not, we should logout
+      const tokensValid = await securityManager.areTokensValid();
+      const shouldLogout = isAuthError && !tokensValid;
+      
+      return rejectWithValue({ 
+        message: error.message || 'Failed to get user data',
+        isAuthError,
+        shouldLogout
+      });
     }
   }
 );
@@ -321,8 +348,34 @@ const authSlice = createSlice({
       })
       .addCase(getCurrentUser.rejected, (state, action) => {
         state.isLoading = false;
-        state.error = action.payload as string;
-        state.isAuthenticated = false;
+        const payload = action.payload as any;
+        const errorMessage = typeof payload === 'string' ? payload : payload?.message || 'Failed to get user data';
+        const isAuthError = typeof payload === 'object' && payload?.isAuthError;
+        const shouldLogout = typeof payload === 'object' && payload?.shouldLogout;
+        
+        state.error = errorMessage;
+        
+        // Only set isAuthenticated to false if:
+        // 1. It's explicitly marked as shouldLogout (tokens are invalid)
+        // 2. It's an auth error AND user was not already authenticated (initial check failed)
+        // Don't log out on network errors or temporary failures
+        if (shouldLogout) {
+          // Tokens are invalid, user should be logged out
+          state.isAuthenticated = false;
+          state.user = null;
+          state.token = null;
+          state.refreshToken = null;
+        } else if (isAuthError && !state.isAuthenticated) {
+          // Only log out if we weren't already authenticated (initial check)
+          state.isAuthenticated = false;
+        } else if (isAuthError && state.isAuthenticated) {
+          // If already authenticated but got auth error, the token refresh interceptor should handle it
+          // Don't auto-logout - keep user authenticated and let interceptor retry
+          if (__DEV__) {
+            console.warn('getCurrentUser failed with auth error but user is authenticated. Token refresh should handle this.');
+          }
+        }
+        // For network errors or other non-auth errors, keep authentication state
       });
 
     // Update profile

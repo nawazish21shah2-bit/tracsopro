@@ -5,6 +5,7 @@
 import express from 'express';
 import { authenticateToken, authorize } from '../middleware/auth';
 import prisma from '../config/database';
+import adminService from '../services/adminService';
 
 const router = express.Router();
 
@@ -61,6 +62,55 @@ router.get('/company', authorize('ADMIN'), async (req: any, res) => {
     res.status(500).json({ 
       success: false, 
       message: 'Failed to get company information' 
+    });
+  }
+});
+
+/**
+ * GET /api/admin/dashboard/stats
+ * Get admin dashboard statistics
+ */
+router.get('/dashboard/stats', authorize('ADMIN'), async (req: any, res) => {
+  try {
+    const adminId = req.user?.id;
+    if (!adminId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Unauthorized',
+      });
+    }
+
+    const stats = await adminService.getDashboardStats(adminId);
+    res.json({
+      success: true,
+      data: stats,
+    });
+  } catch (error) {
+    console.error('Error getting admin dashboard stats:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get dashboard statistics',
+    });
+  }
+});
+
+/**
+ * GET /api/admin/dashboard/activity
+ * Get recent activity for admin dashboard
+ */
+router.get('/dashboard/activity', authorize('ADMIN'), async (req: any, res) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 10;
+    const activities = await adminService.getRecentActivity(limit);
+    res.json({
+      success: true,
+      data: activities,
+    });
+  } catch (error) {
+    console.error('Error getting recent activity:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get recent activity',
     });
   }
 });

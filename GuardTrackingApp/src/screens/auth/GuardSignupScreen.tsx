@@ -2,12 +2,15 @@ import React, { useState } from 'react';
 import { View, StatusBar, Alert, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { useDispatch } from 'react-redux';
+import { AppDispatch } from '../../store';
+import { registerUser } from '../../store/slices/authSlice';
 import Button from '../../components/common/Button';
 import AuthHeader from '../../components/auth/AuthHeader';
 import AuthInput from '../../components/auth/AuthInput';
 import PhoneInput from '../../components/auth/PhoneInput';
 import AuthFooter from '../../components/auth/AuthFooter';
-import { AuthStackParamList } from '../../types';
+import { AuthStackParamList, UserRole } from '../../types';
 import { authStyles } from '../../styles/authStyles';
 
 type GuardSignupScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'GuardSignup'>;
@@ -30,6 +33,7 @@ interface FormErrors {
 
 const GuardSignupScreen: React.FC = () => {
   const navigation = useNavigation<GuardSignupScreenNavigationProp>();
+  const dispatch = useDispatch<AppDispatch>();
   
   const [formData, setFormData] = useState<FormData>({
     fullName: '',
@@ -84,32 +88,39 @@ const GuardSignupScreen: React.FC = () => {
     setIsLoading(true);
     try {
       // Format phone number with country code
-      const fullPhoneNumber = `+1 ${formData.phoneNumber}`;
+      const fullPhoneNumber = `+1${formData.phoneNumber.replace(/\D/g, '')}`;
       
       // Split full name into first and last name
       const nameParts = formData.fullName.trim().split(' ');
       const firstName = nameParts[0];
       const lastName = nameParts.slice(1).join(' ') || firstName;
 
-      // TODO: Call registration API
+      // Call registration API via Redux
       const registrationData = {
         firstName,
         lastName,
         email: formData.email.toLowerCase().trim(),
         phone: fullPhoneNumber,
         password: formData.password,
-        role: 'GUARD',
+        confirmPassword: formData.password, // Backend doesn't need this, but type requires it
+        role: UserRole.GUARD,
       };
 
-      console.log('Guard Registration Data:', registrationData);
-      await new Promise<void>(resolve => setTimeout(resolve, 1500));
-
-      navigation.navigate('GuardOTP', { 
-        email: formData.email,
-        isPasswordReset: false 
-      });
-    } catch (error) {
-      Alert.alert('Error', 'Failed to create account. Please try again.');
+      const result = await dispatch(registerUser(registrationData));
+      
+      if (registerUser.fulfilled.match(result)) {
+        // Registration successful - userId and email are now in Redux state
+        navigation.navigate('GuardOTP', { 
+          email: formData.email,
+          isPasswordReset: false 
+        });
+      } else {
+        // Registration failed
+        const errorMessage = result.payload as string;
+        Alert.alert('Registration Failed', errorMessage || 'Failed to create account. Please try again.');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to create account. Please try again.');
     } finally {
       setIsLoading(false);
     }

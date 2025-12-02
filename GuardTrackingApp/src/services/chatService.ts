@@ -46,8 +46,10 @@ export interface ChatMessage {
   };
 }
 
+import { getApiBaseUrl } from '../config/apiConfig';
+
 class ChatService {
-  private baseUrl = 'http://localhost:3000/api';
+  private baseUrl = getApiBaseUrl();
 
   /**
    * Get chat rooms for current user based on their role

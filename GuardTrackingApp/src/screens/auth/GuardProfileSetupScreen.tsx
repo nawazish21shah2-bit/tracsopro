@@ -17,7 +17,8 @@ import { launchImageLibrary, ImagePickerResponse, MediaType } from 'react-native
 import Button from '../../components/common/Button';
 import { AuthStackParamList, UserRole } from '../../types';
 import { AppDispatch } from '../../store';
-import { setUser } from '../../store/slices/authSlice';
+import { getCurrentUser } from '../../store/slices/authSlice';
+import apiService from '../../services/api';
 import Logo from '../../assets/images/tracSOpro-logo.png';
 import { CameraIcon, IDCardIcon, CertificationIcon, PersonIcon, AppIcon } from '../../components/ui/AppIcons';
 
@@ -121,41 +122,41 @@ const GuardProfileSetupScreen: React.FC = () => {
 
     setIsLoading(true);
     try {
-      // TODO: Implement profile creation API call
-      await new Promise<void>(resolve => setTimeout(resolve, 2000));
+      // Upload images first (if any) - for now, we'll send URIs
+      // In production, you'd upload to S3/cloud storage first
+      const profileDataToSend = {
+        experience: profileData.experience,
+        profilePictureUrl: profileData.profilePicture,
+        idCardFrontUrl: profileData.idCardFront,
+        idCardBackUrl: profileData.idCardBack,
+        certificationUrls: profileData.certifications,
+      };
+
+      // Call API to update guard profile
+      const result = await apiService.updateGuardProfile(profileDataToSend);
       
-      // Navigate to dashboard after successful profile creation
-      Alert.alert(
-        'Profile Created',
-        'Your guard profile has been created successfully!',
-        [
-          {
-            text: 'Continue',
-            onPress: () => {
-              // Create a mock user object and set as authenticated
-              const mockUser = {
-                id: 'guard-123',
-                email: 'guard@example.com',
-                firstName: 'John',
-                lastName: 'Doe',
-                phone: '+1234567890',
-                role: UserRole.GUARD,
-                accountType: 'INDIVIDUAL' as const,
-                isActive: true,
-                isEmailVerified: true,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-              };
-              
-              // Set user as authenticated - this will trigger navigation to Main
-              dispatch(setUser(mockUser));
-              console.log('Profile setup complete, user authenticated');
+      if (result.success) {
+        // Refresh user data to get updated profile
+        await dispatch(getCurrentUser());
+        
+        Alert.alert(
+          'Profile Created',
+          'Your guard profile has been created successfully!',
+          [
+            {
+              text: 'Continue',
+              onPress: () => {
+                // Navigation will be handled by AppNavigator based on auth state
+                console.log('Profile setup complete');
+              }
             }
-          }
-        ]
-      );
-    } catch (error) {
-      Alert.alert('Error', 'Failed to create profile. Please try again.');
+          ]
+        );
+      } else {
+        Alert.alert('Error', result.message || 'Failed to create profile. Please try again.');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to create profile. Please try again.');
     } finally {
       setIsLoading(false);
     }

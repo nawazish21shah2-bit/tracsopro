@@ -9,8 +9,13 @@ import {
   Alert,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
 import { ArrowLeft, Send, MapPin, Clock, DollarSign, User } from 'react-native-feather';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../store';
+import apiService from '../../services/api';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
+import { GuardStackParamList } from '../../navigation/GuardStackNavigator';
 
 interface ShiftDetails {
   id: string;
@@ -43,27 +48,29 @@ const ApplyForShiftScreen: React.FC = () => {
 
   const loadShiftDetails = async () => {
     try {
-      // TODO: Replace with actual API call
-      // Simulate API call
-      await new Promise<void>(resolve => setTimeout(resolve, 1000));
+      const result = await apiService.getShiftPostingById(shiftId);
       
-      // Mock data
-      setShift({
-        id: shiftId,
-        title: 'Night Security Guard',
-        siteName: 'Downtown Office Building',
-        address: '123 Main Street, New York, NY 10001',
-        startTime: '2024-11-03T18:00:00Z',
-        endTime: '2024-11-04T06:00:00Z',
-        hourlyRate: 25.00,
-        maxGuards: 1,
-        appliedGuards: 0,
-        requirements: 'Licensed security guard with 2+ years experience. Must be available for overnight shifts.',
-        description: 'Overnight security coverage for office building. Responsibilities include monitoring entrances, conducting regular patrols, and maintaining security logs.',
-        clientName: 'ABC Property Management'
-      });
-    } catch (error) {
-      Alert.alert('Error', 'Failed to load shift details');
+      if (result.success && result.data) {
+        const sp = result.data;
+        setShift({
+          id: shiftId,
+          title: sp.title || 'Security Shift',
+          siteName: sp.site?.name || sp.siteName || 'Site',
+          address: sp.site?.address || sp.address || '',
+          startTime: sp.startTime,
+          endTime: sp.endTime,
+          hourlyRate: sp.hourlyRate || 0,
+          maxGuards: sp.maxGuards || 1,
+          appliedGuards: sp.applications?.filter((app: any) => app.status === 'APPROVED').length || 0,
+          requirements: sp.requirements || '',
+          description: sp.description || '',
+          clientName: sp.client?.user ? `${sp.client.user.firstName} ${sp.client.user.lastName}` : sp.clientName || 'Client'
+        });
+      } else {
+        Alert.alert('Error', result.message || 'Failed to load shift details');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to load shift details');
     } finally {
       setLoading(false);
     }
@@ -77,24 +84,24 @@ const ApplyForShiftScreen: React.FC = () => {
 
     setSubmitting(true);
     try {
-      // TODO: Integrate with backend API
-      console.log('Submitting application for shift:', shiftId, applicationMessage);
+      const result = await apiService.applyForShift(shiftId, applicationMessage.trim());
       
-      // Simulate API call
-      await new Promise<void>(resolve => setTimeout(resolve, 1500));
-      
-      Alert.alert(
-        'Application Submitted',
-        'Your application has been sent to the client. You will be notified when they review your application.',
-        [
-          {
-            text: 'OK',
-            onPress: () => navigation.goBack()
-          }
-        ]
-      );
-    } catch (error) {
-      Alert.alert('Error', 'Failed to submit application. Please try again.');
+      if (result.success) {
+        Alert.alert(
+          'Application Submitted',
+          result.message || 'Your application has been sent to the client. You will be notified when they review your application.',
+          [
+            {
+              text: 'OK',
+              onPress: () => navigation.goBack()
+            }
+          ]
+        );
+      } else {
+        Alert.alert('Error', result.message || 'Failed to submit application. Please try again.');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to submit application. Please try again.');
     } finally {
       setSubmitting(false);
     }

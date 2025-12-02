@@ -115,21 +115,65 @@ const PaymentScreen: React.FC = () => {
         },
       });
 
-      // TODO: Integrate with Stripe SDK for React Native
-      // For now, show success message
-      Alert.alert(
-        'Payment Initiated',
-        `Payment intent created. Amount: $${invoice.amount.toFixed(2)}. Please complete the payment using your payment method.`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              // Refresh invoices to get updated status
-              loadPaymentData();
+      // Initialize Stripe if not already done
+      try {
+        const stripeService = (await import('../../services/stripeService')).default;
+        if (!stripeService.isInitialized()) {
+          await stripeService.initialize();
+        }
+      } catch (error) {
+        console.error('Stripe initialization error:', error);
+        Alert.alert(
+          'Payment Error',
+          'Failed to initialize payment system. Please try again.',
+        );
+        return;
+      }
+
+      // Use Stripe PaymentSheet for payment
+      try {
+        // Initialize payment sheet
+        const { error: initError } = await initPaymentSheet({
+          paymentIntentClientSecret: paymentIntent.clientSecret,
+          merchantDisplayName: 'tracSOpro',
+        });
+
+        if (initError) {
+          throw new Error(initError.message);
+        }
+
+        // Present payment sheet
+        const { error: presentError } = await presentPaymentSheet();
+
+        if (presentError) {
+          if (presentError.code !== 'Canceled') {
+            throw new Error(presentError.message);
+          }
+          // User canceled - no error needed
+          return;
+        }
+
+        // Payment successful
+        Alert.alert(
+          'Payment Successful',
+          `Payment of $${invoice.amount.toFixed(2)} has been processed successfully.`,
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                // Refresh invoices to get updated status
+                loadPaymentData();
+              },
             },
-          },
-        ]
-      );
+          ]
+        );
+      } catch (error: any) {
+        console.error('Payment processing error:', error);
+        Alert.alert(
+          'Payment Failed',
+          error.message || 'There was an error processing your payment. Please try again.'
+        );
+      }
     } catch (error: any) {
       console.error('Error processing payment:', error);
       Alert.alert(

@@ -1,5 +1,5 @@
 // My Shifts Screen - Pixel Perfect Figma Implementation
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,9 @@ import {
   fetchTodayShifts,
   fetchUpcomingShifts,
   fetchPastShifts,
+  fetchActiveShift,
+  fetchWeeklyShiftSummary,
+  fetchShiftStatistics,
 } from '../../store/slices/shiftSlice';
 import { MenuIcon, BellIcon, MapPinIcon, AlertTriangleIcon, AlertCircleIcon, CheckCircleIcon, ClockIcon, FileTextIcon } from '../../components/ui/FeatherIcons';
 import { globalStyles, COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS } from '../../styles/globalStyles';
@@ -73,18 +76,21 @@ const MyShiftsScreen: React.FC = () => {
   const { 
     todayShifts, 
     upcomingShifts, 
-    pastShifts, 
+    pastShifts,
+    activeShift,
+    weeklyShifts,
+    stats,
     loading, 
     error 
   } = useSelector((state: RootState) => state.shifts);
   const { isAuthenticated } = useSelector((state: RootState) => state.auth);
 
-  // Use Redux data or fallback to mock data
-  const monthlyStats = {
-    completedShifts: 21,
-    missedShifts: 1,
-    totalSites: 5,
-    incidentReported: 2,
+  // Use Redux data or fallback to default stats
+  const monthlyStats = stats || {
+    completedShifts: 0,
+    missedShifts: 0,
+    totalSites: 0,
+    incidentReports: 0,
   };
 
   // Load data on mount
@@ -100,6 +106,9 @@ const MyShiftsScreen: React.FC = () => {
           dispatch(fetchTodayShifts() as any),
           dispatch(fetchUpcomingShifts() as any),
           dispatch(fetchPastShifts(20) as any),
+          dispatch(fetchActiveShift() as any),
+          dispatch(fetchWeeklyShiftSummary() as any),
+          dispatch(fetchShiftStatistics({}) as any),
         ]);
       } catch (error) {
         console.error('Error loading shifts data:', error);
@@ -108,7 +117,7 @@ const MyShiftsScreen: React.FC = () => {
     loadData();
   }, [dispatch, isAuthenticated]);
 
-  const onRefresh = async () => {
+  const onRefresh = useCallback(async () => {
     try {
       setRefreshing(true);
       dispatch(clearError() as any); // Clear any previous errors
@@ -121,13 +130,16 @@ const MyShiftsScreen: React.FC = () => {
         dispatch(fetchTodayShifts() as any),
         dispatch(fetchUpcomingShifts() as any),
         dispatch(fetchPastShifts(20) as any),
+        dispatch(fetchActiveShift() as any),
+        dispatch(fetchWeeklyShiftSummary() as any),
+        dispatch(fetchShiftStatistics({}) as any),
       ]);
     } catch (e) {
       console.error('Refresh error:', e);
     } finally {
       setRefreshing(false);
     }
-  };
+  }, [dispatch]);
 
   // Clear error when switching tabs
   useEffect(() => {
@@ -135,13 +147,13 @@ const MyShiftsScreen: React.FC = () => {
   }, [activeTab, dispatch]);
 
   // Handler functions
-  const handleMenuPress = () => {
+  const handleMenuPress = useCallback(() => {
     (navigation as any).dispatch(DrawerActions.openDrawer());
-  };
+  }, [navigation]);
 
-  const handleNotificationPress = () => {
+  const handleNotificationPress = useCallback(() => {
     // TODO: Implement notification functionality
-  };
+  }, []);
 
 
 
@@ -150,88 +162,24 @@ const MyShiftsScreen: React.FC = () => {
     console.log('Emergency alert');
   };
 
-  const [todayShift] = useState<ShiftData>({
-    id: '1',
-    location: 'Ocean View Vila',
-    address: '1321 Baker Street, NY',
-    status: 'active',
-    startTime: '08:00 am',
-    endTime: '07:00 pm',
-    duration: '11 hrs',
-    description: 'Make sure to check the parking lot for illegal parkings.',
-    clockedIn: '08:01 am',
-    timer: '03:22:32',
-  });
+  // Convert activeShift to ShiftData format
+  const todayShift: ShiftData | null = activeShift ? toShiftData(activeShift) : null;
 
-  const [mockUpcomingShifts] = useState<ShiftData[]>([
-    {
-      id: '2',
-      location: 'Ocean View Vila',
-      address: '1321 Baker Street, NY',
-      status: 'upcoming',
-      startTime: '08:00 am',
-      endTime: '07:00 pm',
-      duration: '10 hrs',
-      description: 'Make sure to check the parking lot for illegal parkings.',
-    },
-  ]);
-
-  const [weeklyShifts] = useState<WeeklyShift[]>([
-    {
-      date: '23-10-2025',
-      day: 'Monday',
-      site: 'Ocean Villas',
-      shiftTime: '08:00 Am - 07:00 Pm',
-      status: 'completed',
-      checkIn: '08:02 Am',
-      checkOut: '07:00',
-    },
-    {
-      date: '24-10-2025',
-      day: 'Tuesday',
-      site: 'Ocean Villas',
-      shiftTime: '08:00 Am - 07:00 Pm',
-      status: 'completed',
-      checkIn: '08:02 Am',
-      checkOut: '07:00',
-    },
-    {
-      date: '25-10-2025',
-      day: 'Wednesday',
-      site: 'Ocean Villas',
-      shiftTime: '08:00 Am - 07:00 Pm',
-      status: 'missed',
-      checkIn: '--:--',
-      checkOut: '--:--',
-    },
-    {
-      date: '26-10-2025',
-      day: 'Thursday',
-      site: 'Ocean Villas',
-      shiftTime: '08:00 Am - 07:00 Pm',
-      status: 'completed',
-      checkIn: '08:02 Am',
-      checkOut: '07:00',
-    },
-    {
-      date: '27-10-2025',
-      day: 'Friday',
-      site: 'Ocean Villas',
-      shiftTime: '08:00 Am - 07:00 Pm',
-      status: 'completed',
-      checkIn: '08:02 Am',
-      checkOut: '07:00',
-    },
-    {
-      date: '28-10-2025',
-      day: 'Saturday',
-      site: 'Ocean Villas',
-      shiftTime: '08:00 Am - 07:00 Pm',
-      status: 'completed',
-      checkIn: '08:02 Am',
-      checkOut: '07:00',
-    },
-  ]);
+  // Convert weeklyShifts from Redux to WeeklyShift format
+  const formattedWeeklyShifts: WeeklyShift[] = weeklyShifts && Array.isArray(weeklyShifts) 
+    ? weeklyShifts.map((shift: any) => {
+        const date = new Date(shift.startTime || shift.date);
+        return {
+          date: date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+          day: date.toLocaleDateString('en-US', { weekday: 'long' }),
+          site: shift.locationName || shift.site || 'Unknown Site',
+          shiftTime: `${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} - ${new Date(shift.endTime || shift.date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`,
+          status: shift.status === 'COMPLETED' ? 'completed' : 'missed',
+          checkIn: shift.checkInTime ? new Date(shift.checkInTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--',
+          checkOut: shift.checkOutTime ? new Date(shift.checkOutTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--',
+        };
+      })
+    : [];
 
   const handleAddIncidentReport = () => {
     navigation.navigate('AddIncidentReport');
@@ -268,7 +216,7 @@ const MyShiftsScreen: React.FC = () => {
         />
         <StatsCard
           label={'Incident\nReported'}
-          value={monthlyStats.incidentReported}
+          value={monthlyStats.incidentReports}
           icon={<FileTextIcon size={18} color={'#9E9E9E'} />}
           variant="neutral"
           style={styles.statItem}
@@ -361,7 +309,7 @@ const MyShiftsScreen: React.FC = () => {
         <Text style={[styles.tableHeaderText, { flex: 1 }]}>CHECK OUT</Text>
       </View>
 
-      {weeklyShifts.map((shift, index) => (
+      {formattedWeeklyShifts.length > 0 ? formattedWeeklyShifts.map((shift, index) => (
         <View key={index} style={styles.tableRow}>
           <View style={{ flex: 1.5 }}>
             <Text style={styles.tableCellDate}>{shift.date}</Text>
@@ -385,7 +333,11 @@ const MyShiftsScreen: React.FC = () => {
           <Text style={[styles.tableCellText, { flex: 1 }]}>{shift.checkIn}</Text>
           <Text style={[styles.tableCellText, { flex: 1 }]}>{shift.checkOut}</Text>
         </View>
-      ))}
+      )) : (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>No weekly shifts data available</Text>
+        </View>
+      )}
     </View>
   );
 
@@ -459,10 +411,20 @@ const MyShiftsScreen: React.FC = () => {
 
     switch (activeTab) {
       case 'today':
+        if (!todayShift && !loading) {
+          return (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No active shift today</Text>
+              <Text style={styles.emptySubtext}>You don't have any shifts scheduled for today</Text>
+            </View>
+          );
+        }
         return (
           <View>
-            {renderShiftCard(todayShift)}
-            {renderWeeklySummary()}
+            {todayShift && renderShiftCard(todayShift)}
+            {todayShifts && todayShifts.length > 0 && todayShifts.map((shift: any) => 
+              shift.id !== activeShift?.id && renderShiftCard(toShiftData(shift))
+            )}
           </View>
         );
       case 'upcoming':
@@ -477,11 +439,10 @@ const MyShiftsScreen: React.FC = () => {
         }
         return (
           <View>
-            {(
-              upcomingShifts && Array.isArray(upcomingShifts) && upcomingShifts.length
-                ? upcomingShifts.map(toShiftData)
-                : mockUpcomingShifts
-            ).map(renderShiftCard)}
+            {upcomingShifts && Array.isArray(upcomingShifts) && upcomingShifts.length > 0
+              ? upcomingShifts.map(toShiftData).map(renderShiftCard)
+              : null
+            }
           </View>
         );
       case 'past':

@@ -23,6 +23,8 @@ import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
+import { RefreshControl } from 'react-native';
 
 interface User {
   id: string;
@@ -46,6 +48,9 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
   const [users, setUsers] = useState<User[]>([]);
   const [selectedRole, setSelectedRole] = useState<'all' | 'admin' | 'guard' | 'client'>('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [newUser, setNewUser] = useState({
     name: '',
     email: '',
@@ -66,11 +71,22 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
 
   const loadUsers = async () => {
     try {
-      const response = await apiService.getAdminUsers();
+      setLoading(true);
+      setError(null);
+      
+      const roleMap: Record<string, 'ADMIN' | 'GUARD' | 'CLIENT' | 'SUPER_ADMIN' | undefined> = {
+        'all': undefined,
+        'admin': 'ADMIN',
+        'guard': 'GUARD',
+        'client': 'CLIENT',
+      };
+
+      const response = await apiService.getAdminUsers({
+        role: roleMap[selectedRole],
+      });
 
       if (!response.success || !response.data) {
-        console.warn('Failed to load users:', response.message);
-        return;
+        throw new Error(response.message || 'Failed to load users');
       }
 
       const backendUsers = response.data.users as any[];
@@ -98,8 +114,24 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
       setUsers(mappedUsers);
     } catch (error: any) {
       console.error('Failed to load users:', error);
-      Alert.alert('Error', error.message || 'Failed to load users');
+      const errorMessage = error.message || 'Failed to load users';
+      setError(errorMessage);
+      if (!refreshing) {
+        Alert.alert('Error', errorMessage);
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  useEffect(() => {
+    loadUsers();
+  }, [selectedRole]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadUsers();
   };
 
   const handleCreateUser = async () => {
@@ -130,15 +162,25 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
         role: roleMap[newUser.role],
       } as any);
 
-      if (!response.success || !response.data) {
-        Alert.alert('Error', response.message || 'Failed to create user');
+      if (!response.success) {
+        // Show detailed error message from backend
+        const errorMessage = response.message || response.errors?.join(', ') || 'Failed to create user';
+        Alert.alert('Error', errorMessage);
+        return;
+      }
+
+      // Handle both response formats (with userId or with user object)
+      const userId = response.data?.userId || response.data?.user?.id || response.data?.id;
+      
+      if (!userId) {
+        Alert.alert('Error', 'User created but could not get user ID');
         return;
       }
 
       const createdAt = new Date().toISOString();
 
       const user: User = {
-        id: response.data.userId || `user_${Date.now()}`,
+        id: userId,
         name: newUser.name,
         email: newUser.email.trim().toLowerCase(),
         role: newUser.role,
@@ -153,11 +195,42 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
 
       Alert.alert(
         'User created',
-        `User has been created successfully. Temporary password: ${tempPassword}`
+        `User has been created successfully.\n\nEmail: ${newUser.email}\nTemporary password: ${tempPassword}\n\nPlease share this password with the user.`
       );
     } catch (error: any) {
       console.error('Admin create user error:', error);
-      Alert.alert('Error', error.message || 'Failed to create user');
+      
+      // Provide detailed error messages
+      let errorMessage = 'Failed to create user. ';
+      
+      if (!error.response) {
+        // No response from server - network or server down
+        if (error.message?.includes('Network Error') || error.message?.includes('ECONNREFUSED')) {
+          errorMessage += 'Cannot connect to backend server. Please ensure:\n\n' +
+                         '1. Backend server is running\n' +
+                         '2. Backend is listening on port 3000\n' +
+                         '3. IP address is correct (192.168.1.7:3000)';
+        } else if (error.message?.includes('timeout')) {
+          errorMessage += 'Request timed out. The server may be slow or unresponsive.';
+        } else {
+          errorMessage += 'No response from server. Please check backend logs.';
+        }
+      } else {
+      // Server responded with error
+      const statusCode = error.response?.status;
+      const errorData = error.response?.data;
+      
+      if (statusCode === 409) {
+        // Email already registered
+        errorMessage = `User with email ${newUser.email} already exists. Please use a different email address.`;
+      } else if (errorData?.message) {
+        errorMessage = errorData.message;
+      } else {
+        errorMessage = error.message || 'Failed to create user. Please check the console for details.';
+      }
+      }
+      
+      Alert.alert('Error', errorMessage);
     }
   };
 
@@ -468,14 +541,41 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
       </View>
 
       <View style={styles.contentWrapper}>
-        <FlatList
-          data={filteredUsers}
-          renderItem={renderUserItem}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContainer}
-          showsVerticalScrollIndicator={false}
-        />
+        {loading && !users.length ? (
+          <LoadingOverlay visible={true} message="Loading users..." />
+        ) : error && !users.length ? (
+          <View style={styles.errorContainer}>
+            {error.toLowerCase().includes('network') || error.toLowerCase().includes('timeout') || error.toLowerCase().includes('connection') ? (
+              <NetworkError onRetry={loadUsers} />
+            ) : (
+              <ErrorState error={error} onRetry={loadUsers} />
+            )}
+          </View>
+        ) : (
+          <FlatList
+            data={filteredUsers}
+            renderItem={renderUserItem}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listContainer}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[COLORS.primary]}
+                tintColor={COLORS.primary}
+              />
+            }
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No users found</Text>
+              </View>
+            }
+          />
+        )}
       </View>
+      
+      {loading && users.length > 0 && <LoadingOverlay visible={true} message="Refreshing..." />}
 
       {/* Sticky Action Button */}
       <TouchableOpacity 
@@ -724,6 +824,22 @@ const styles = StyleSheet.create({
   listContainer: {
     padding: SPACING.lg,
     paddingBottom: SPACING.xl * 3,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.xl,
+  },
+  emptyText: {
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textSecondary,
   },
   userCard: {
     backgroundColor: COLORS.backgroundPrimary,

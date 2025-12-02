@@ -17,6 +17,7 @@ import {
   IncidentForm
 } from '../types';
 import { securityManager } from '../utils/security';
+import { getApiBaseUrl, getConfigInfo } from '../config/apiConfig';
 
 class ApiService {
   private api: AxiosInstance;
@@ -26,13 +27,9 @@ class ApiService {
   private isLoggingOut: boolean = false;
 
   constructor() {
-    // Use Android emulator loopback in dev so the app can reach the host machine
-    // 10.0.2.2 -> Android emulator; localhost for iOS/web/desktop
-    this.baseURL = __DEV__
-      ? (require('react-native').Platform.OS === 'android'
-          ? 'http://10.0.2.2:3000/api'
-          : 'http://localhost:3000/api')
-      : 'https://your-production-api.com/api';
+    // Get API URL from centralized configuration
+    // See src/config/apiConfig.ts to configure production URLs
+    this.baseURL = getApiBaseUrl();
     
     this.api = axios.create({
       baseURL: this.baseURL,
@@ -42,6 +39,11 @@ class ApiService {
         'Accept': 'application/json',
       },
     });
+
+    if (__DEV__) {
+      const configInfo = getConfigInfo();
+      console.log(`🌐 API Service initialized:`, configInfo);
+    }
 
     this.setupInterceptors();
   }
@@ -90,10 +92,40 @@ class ApiService {
   }
 
   private setupInterceptors() {
+    // List of public endpoints that don't require authentication
+    const publicEndpoints = [
+      '/auth/login',
+      '/auth/register',
+      '/auth/forgot-password',
+      '/auth/reset-password',
+      '/auth/verify-otp',
+      '/auth/resend-otp',
+      '/auth/refresh',
+    ];
+
+    // Enhanced network request tracking
+    const networkRequests = new Map<string, { startTime: number; url: string; method: string }>();
+
     // Request interceptor to add auth token and logging
     this.api.interceptors.request.use(
       async (config) => {
         try {
+          const isPublicEndpoint = publicEndpoints.some(endpoint => 
+            config.url?.includes(endpoint)
+          );
+
+          // Generate unique request ID for tracking
+          const requestId = securityManager.generateSessionId();
+          config.headers['X-Request-ID'] = requestId;
+
+          // Track request start time for performance monitoring
+          const startTime = Date.now();
+          networkRequests.set(requestId, {
+            startTime,
+            url: config.url || '',
+            method: config.method?.toUpperCase() || 'GET',
+          });
+
           const tokens = await securityManager.getTokens();
           if (tokens && tokens.accessToken) {
             config.headers.Authorization = `${tokens.tokenType || 'Bearer'} ${tokens.accessToken}`;
@@ -104,17 +136,49 @@ class ApiService {
                 isExpired: tokens.expiresAt <= Date.now()
               });
             }
-          } else {
-            if (__DEV__) {
-              console.log(`❌ No token found for ${config.method?.toUpperCase()} ${config.url}`);
-            }
+          } else if (!isPublicEndpoint && __DEV__) {
+            // Only log missing token warning for protected endpoints
+            console.log(`⚠️ No token found for ${config.method?.toUpperCase()} ${config.url} (protected endpoint)`);
           }
           
-          // Add request ID for tracking
-          config.headers['X-Request-ID'] = securityManager.generateSessionId();
-          
           if (__DEV__) {
-            console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`);
+            // Enhanced network logging with full details
+            const fullUrl = `${this.baseURL}${config.url}`;
+            const requestLog: any = {
+              '📤 REQUEST': `${config.method?.toUpperCase()} ${fullUrl}`,
+              'Request ID': requestId,
+              'Headers': {
+                ...Object.fromEntries(
+                  Object.entries(config.headers).filter(([key]) => 
+                    !['Authorization'].includes(key) // Hide sensitive headers in log
+                  )
+                ),
+                'Authorization': tokens?.accessToken ? `Bearer ${tokens.accessToken.substring(0, 20)}...` : 'None',
+              },
+            };
+
+            // Log request body for POST/PUT/PATCH (excluding sensitive data)
+            if (config.data && ['POST', 'PUT', 'PATCH'].includes(config.method?.toUpperCase() || '')) {
+              const isLoginRequest = config.url?.includes('/auth/login');
+              if (isLoginRequest) {
+                // Mask password in login requests
+                const safeData = { ...config.data };
+                if (safeData.password) safeData.password = '***';
+                if (safeData.email) safeData.email = safeData.email.substring(0, 3) + '***';
+                requestLog['Body'] = safeData;
+              } else {
+                requestLog['Body'] = typeof config.data === 'string' 
+                  ? JSON.parse(config.data || '{}') 
+                  : config.data;
+              }
+            }
+
+            // Only log request for public endpoints or when token exists (to reduce noise)
+            if (isPublicEndpoint || (tokens && tokens.accessToken)) {
+              console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+              console.log(JSON.stringify(requestLog, null, 2));
+              console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            }
           }
         } catch (error) {
           console.error('Request interceptor error:', error);
@@ -132,7 +196,32 @@ class ApiService {
     this.api.interceptors.response.use(
       (response: AxiosResponse) => {
         if (__DEV__) {
-          console.log(`API Response: ${response.status} ${response.config.url}`);
+          const requestId = response.config.headers['X-Request-ID'] as string;
+          const requestInfo = networkRequests.get(requestId);
+          const duration = requestInfo ? Date.now() - requestInfo.startTime : 0;
+          networkRequests.delete(requestId);
+
+          const fullUrl = `${this.baseURL}${response.config.url}`;
+          const responseLog: any = {
+            '📥 RESPONSE': `${response.status} ${response.config.method?.toUpperCase()} ${fullUrl}`,
+            'Duration': `${duration}ms`,
+            'Status': `${response.status} ${response.statusText}`,
+            'Headers': response.headers,
+          };
+
+          // Log response data (truncate large responses)
+          if (response.data) {
+            const dataStr = JSON.stringify(response.data);
+            if (dataStr.length > 1000) {
+              responseLog['Body'] = `${dataStr.substring(0, 1000)}... (truncated, ${dataStr.length} chars)`;
+            } else {
+              responseLog['Body'] = response.data;
+            }
+          }
+
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          console.log(JSON.stringify(responseLog, null, 2));
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         }
         return response;
       },
@@ -248,8 +337,16 @@ class ApiService {
           message = data?.message || `Server error (${status})`;
       }
     } else if (error.request) {
-      // Network error
-      message = 'Network error. Please check your connection.';
+      // Network error - provide more helpful message
+      if (__DEV__) {
+        console.error('🌐 Network Error Details:', {
+          url: error.config?.url,
+          baseURL: this.baseURL,
+          method: error.config?.method,
+          message: error.message
+        });
+      }
+      message = `Network error. Please check your connection and ensure the backend server is running at ${this.baseURL}`;
     } else {
       // Other error
       message = error.message || 'An unexpected error occurred';
@@ -448,18 +545,88 @@ class ApiService {
 
   async register(userData: RegisterForm): Promise<ApiResponse<any>> {
     try {
+      if (__DEV__) {
+        console.log('📝 Attempting registration:', {
+          email: userData.email,
+          role: userData.role,
+          baseURL: this.baseURL,
+        });
+      }
+      
       const response = await this.api.post('/auth/register', userData);
-      // New API returns { userId, email, role, accountType, message }
+      
+      // Handle different response formats
+      const responseData = response.data.data || response.data;
+      
+      if (__DEV__) {
+        console.log('✅ Registration response:', JSON.stringify(responseData, null, 2));
+      }
+      
       return {
         success: true,
-        data: response.data.data
+        data: responseData,
+        message: responseData?.message || 'Registration successful'
       };
     } catch (error: any) {
+      // Enhanced error logging
+      if (__DEV__) {
+        console.error('❌ Registration error details:', {
+          message: error.message,
+          code: error.code,
+          response: error.response?.data,
+          status: error.response?.status,
+          request: error.request ? 'Request sent but no response' : 'No request sent',
+          baseURL: this.baseURL,
+          url: error.config?.url,
+        });
+      }
+      
+      // Handle network errors (no response from server)
+      if (!error.response) {
+        const errorCode = error.code;
+        const errorMessage = error.message || '';
+        
+        let userFriendlyMessage = 'Registration failed. ';
+        
+        if (errorCode === 'ECONNREFUSED') {
+          userFriendlyMessage += `Cannot connect to backend server at ${this.baseURL}. Please ensure the backend server is running.`;
+        } else if (errorCode === 'ETIMEDOUT' || errorCode === 'ECONNABORTED') {
+          userFriendlyMessage += 'Request timed out. The server may be slow or unresponsive. Please try again.';
+        } else if (errorMessage.includes('Network Error') || errorMessage.includes('network')) {
+          userFriendlyMessage += 'Network error. Please check your internet connection and ensure the backend server is running.';
+        } else {
+          userFriendlyMessage += 'No response from server. Please check if the backend server is running and accessible.';
+        }
+        
+        return {
+          success: false,
+          data: null,
+          message: userFriendlyMessage,
+          errors: []
+        };
+      }
+      
+      // Extract detailed error information from response
+      const errorData = error.response?.data;
+      const statusCode = error.response?.status;
+      
+      let errorMessage = errorData?.message || 
+                        errorData?.error || 
+                        error.message || 
+                        'Registration failed';
+      
+      // Add status code context for 500 errors
+      if (statusCode === 500) {
+        errorMessage += ' (Server Error). Please check backend logs for details.';
+      }
+      
+      const errors = errorData?.errors || [];
+      
       return {
         success: false,
         data: null,
-        message: error.response?.data?.message || 'Registration failed',
-        errors: error.response?.data?.errors
+        message: errorMessage,
+        errors: errors
       };
     }
   }
@@ -1173,6 +1340,207 @@ class ApiService {
     }
   }
 
+  async updateGuardProfile(data: {
+    experience?: string;
+    profilePictureUrl?: string | null;
+    idCardFrontUrl?: string | null;
+    idCardBackUrl?: string | null;
+    certificationUrls?: string[];
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.put('/guards/profile', data);
+      return {
+        success: true,
+        data: response.data.data,
+        message: response.data.message || 'Guard profile updated successfully'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to update guard profile'
+      };
+    }
+  }
+
+  async applyForShift(shiftPostingId: string, message?: string): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.post(`/shift-postings/${shiftPostingId}/apply`, { message });
+      return {
+        success: true,
+        data: response.data.data,
+        message: response.data.message || 'Application submitted successfully'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to submit application'
+      };
+    }
+  }
+
+  async getUpcomingShifts(): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.get('/shifts/upcoming');
+      return {
+        success: true,
+        data: response.data.data || response.data,
+        message: 'Shifts fetched successfully'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: [],
+        message: error.response?.data?.message || 'Failed to fetch upcoming shifts'
+      };
+    }
+  }
+
+  async triggerEmergencyAlert(data: {
+    type: 'PANIC' | 'MEDICAL' | 'SECURITY' | 'FIRE' | 'CUSTOM';
+    severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+    location: {
+      latitude: number;
+      longitude: number;
+      accuracy?: number;
+      address?: string;
+    };
+    message?: string;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.post('/emergency/alert', data);
+      return {
+        success: true,
+        data: response.data.data,
+        message: response.data.message || 'Emergency alert sent successfully'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to send emergency alert'
+      };
+    }
+  }
+
+  async checkInToShift(shiftId: string, location: {
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+    address?: string;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.post(`/shifts/${shiftId}/check-in`, { location });
+      return {
+        success: true,
+        data: response.data.data,
+        message: response.data.message || 'Successfully checked in to shift'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.error || error.response?.data?.message || 'Failed to check in'
+      };
+    }
+  }
+
+  async checkOutFromShift(shiftId: string, location: {
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+    address?: string;
+  }, notes?: string): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.post(`/shifts/${shiftId}/check-out`, { location, notes });
+      return {
+        success: true,
+        data: response.data.data,
+        message: response.data.message || 'Successfully checked out from shift'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.error || error.response?.data?.message || 'Failed to check out'
+      };
+    }
+  }
+
+  async getShiftById(shiftId: string): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.get(`/shifts/${shiftId}`);
+      return {
+        success: true,
+        data: response.data.data || response.data,
+        message: 'Shift details fetched successfully'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to fetch shift details'
+      };
+    }
+  }
+
+  async getAvailableShiftPostings(page: number = 1, limit: number = 10, search?: string): Promise<ApiResponse<any>> {
+    try {
+      const params = new URLSearchParams();
+      params.append('page', String(page));
+      params.append('limit', String(limit));
+      if (search) params.append('search', search);
+      
+      const response = await this.api.get(`/shift-postings/available?${params.toString()}`);
+      return {
+        success: true,
+        data: response.data.data || response.data,
+        message: 'Shift postings fetched successfully'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: { shiftPostings: [], pagination: { page, limit, total: 0, pages: 0 } },
+        message: error.response?.data?.message || 'Failed to fetch shift postings'
+      };
+    }
+  }
+
+  async getShiftPostingById(shiftPostingId: string): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.get(`/shift-postings/${shiftPostingId}`);
+      return {
+        success: true,
+        data: response.data.data || response.data,
+        message: 'Shift posting details fetched successfully'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to fetch shift posting details'
+      };
+    }
+  }
+
+  async getSiteById(siteId: string): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.get(`/sites/${siteId}`);
+      return {
+        success: true,
+        data: response.data.data || response.data,
+        message: 'Site details fetched successfully'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to fetch site details'
+      };
+    }
+  }
+
   // Location Tracking Methods
   async recordLocation(guardId: string, locationData: any): Promise<ApiResponse<any>> {
     try {
@@ -1241,6 +1609,290 @@ class ApiService {
         success: false,
         data: null,
         message: error.response?.data?.message || 'Failed to fetch live locations'
+      };
+    }
+  }
+
+  // Admin Methods
+  async getAdminDashboardStats(): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.get('/admin/dashboard/stats');
+      return {
+        success: true,
+        data: response.data.data,
+        message: 'Dashboard statistics fetched successfully'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to fetch dashboard statistics'
+      };
+    }
+  }
+
+  async getAdminRecentActivity(limit: number = 10): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.get(`/admin/dashboard/activity?limit=${limit}`);
+      return {
+        success: true,
+        data: response.data.data,
+        message: 'Recent activity fetched successfully'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: [],
+        message: error.response?.data?.message || 'Failed to fetch recent activity'
+      };
+    }
+  }
+
+  async getAdminCompany(): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.get('/admin/company');
+      return {
+        success: true,
+        data: response.data.data,
+        message: 'Company information fetched successfully'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to fetch company information'
+      };
+    }
+  }
+
+  async getAdminSubscription(): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.get('/admin/subscription');
+      return {
+        success: true,
+        data: response.data.data,
+        message: 'Subscription information fetched successfully'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to fetch subscription information'
+      };
+    }
+  }
+
+  // Admin Incident Reports Methods
+  async getAllIncidentReports(params: {
+    page?: number;
+    limit?: number;
+    guardId?: string;
+    reportType?: string;
+    startDate?: string;
+    endDate?: string;
+  } = {}): Promise<ApiResponse<any>> {
+    try {
+      const { page = 1, limit = 10, guardId, reportType, startDate, endDate } = params;
+      const query = new URLSearchParams();
+      query.append('page', String(page));
+      query.append('limit', String(limit));
+      if (guardId) query.append('guardId', guardId);
+      if (reportType) query.append('reportType', reportType);
+      if (startDate) query.append('startDate', startDate);
+      if (endDate) query.append('endDate', endDate);
+
+      const response = await this.api.get(`/incident-reports/admin/all?${query.toString()}`);
+      return {
+        success: true,
+        data: response.data.data,
+        message: 'Incident reports fetched successfully'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to fetch incident reports'
+      };
+    }
+  }
+
+  async getIncidentReportStats(params: {
+    startDate?: string;
+    endDate?: string;
+    guardId?: string;
+  } = {}): Promise<ApiResponse<any>> {
+    try {
+      const { startDate, endDate, guardId } = params;
+      const query = new URLSearchParams();
+      if (startDate) query.append('startDate', startDate);
+      if (endDate) query.append('endDate', endDate);
+      if (guardId) query.append('guardId', guardId);
+
+      const response = await this.api.get(`/incident-reports/admin/stats?${query.toString()}`);
+      return {
+        success: true,
+        data: response.data.data,
+        message: 'Incident report statistics fetched successfully'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to fetch incident report statistics'
+      };
+    }
+  }
+
+  async updateIncidentReport(id: string, updateData: {
+    status?: string;
+    reviewNotes?: string;
+    [key: string]: any;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.put(`/incident-reports/${id}`, updateData);
+      return {
+        success: true,
+        data: response.data.data,
+        message: response.data.message || 'Incident report updated successfully'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to update incident report'
+      };
+    }
+  }
+
+  // Client report response
+  async respondToReport(reportId: string, status: string, responseNotes?: string): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.put(`/clients/reports/${reportId}/respond`, {
+        status,
+        responseNotes,
+      });
+      return {
+        success: true,
+        data: response.data.data,
+        message: response.data.message || 'Report response saved successfully'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to respond to report'
+      };
+    }
+  }
+
+  // Chat Methods
+  async getChatRooms(): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.get('/chat');
+      return {
+        success: true,
+        data: response.data.data,
+        message: 'Chat rooms fetched successfully'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: [],
+        message: error.response?.data?.message || 'Failed to fetch chat rooms'
+      };
+    }
+  }
+
+  async getChatMessages(chatId: string, page: number = 1, limit: number = 50): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.get(`/chat/${chatId}/messages?page=${page}&limit=${limit}`);
+      return {
+        success: true,
+        data: response.data.data,
+        message: 'Messages fetched successfully'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: [],
+        message: error.response?.data?.message || 'Failed to fetch messages'
+      };
+    }
+  }
+
+  async sendChatMessage(chatId: string, content: string, messageType: 'text' | 'image' | 'file' | 'location' = 'text'): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.post(`/chat/${chatId}/messages`, {
+        content,
+        messageType,
+      });
+      return {
+        success: true,
+        data: response.data.data,
+        message: 'Message sent successfully'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to send message'
+      };
+    }
+  }
+
+  async markChatMessagesAsRead(chatId: string, messageIds: string[]): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.post(`/chat/${chatId}/read`, {
+        messageIds,
+      });
+      return {
+        success: true,
+        data: response.data.data,
+        message: 'Messages marked as read'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to mark messages as read'
+      };
+    }
+  }
+
+  async createChat(type: 'direct' | 'group' | 'team', participantIds: string[], name?: string): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.post('/chat', {
+        type,
+        participantIds,
+        name,
+      });
+      return {
+        success: true,
+        data: response.data.data,
+        message: 'Chat created successfully'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to create chat'
+      };
+    }
+  }
+
+  async searchChats(query: string): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.get(`/chat/search?q=${encodeURIComponent(query)}`);
+      return {
+        success: true,
+        data: response.data.data,
+        message: 'Search completed successfully'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: [],
+        message: error.response?.data?.message || 'Failed to search chats'
       };
     }
   }

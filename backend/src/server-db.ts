@@ -20,13 +20,14 @@ const startServer = async () => {
     // Start live location broadcast
     websocketService.startLiveLocationBroadcast();
 
-    // Start server
-    server.listen(PORT, () => {
-      logger.info(`🚀 Server running on http://localhost:${PORT}`);
+    // Start server - listen on all interfaces (0.0.0.0) for network access
+    server.listen(PORT, '0.0.0.0', () => {
+      logger.info(`🚀 Server running on http://0.0.0.0:${PORT}`);
       logger.info(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-      logger.info(`🔗 API: http://localhost:${PORT}/api`);
+      logger.info(`🔗 API: http://localhost:${PORT}/api (or use your local IP)`);
       logger.info(`❤️  Health: http://localhost:${PORT}/api/health`);
-      logger.info(`🌐 WebSocket: ws://localhost:${PORT}`);
+      logger.info(`🌐 WebSocket: ws://localhost:${PORT} (or use your local IP)`);
+      logger.info(`📱 For physical devices, use: http://YOUR_LOCAL_IP:${PORT}`);
     });
 
     // Graceful shutdown

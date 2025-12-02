@@ -1,6 +1,7 @@
 // Authentication Navigator
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import OnboardingScreen from '../screens/OnboardingScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
 import RoleSelectionScreen from '../screens/auth/RoleSelectionScreen';
@@ -19,13 +20,40 @@ import ClientProfileSetupScreen from '../screens/auth/ClientProfileSetupScreen';
 import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
 import ResetPasswordScreen from '../screens/auth/ResetPasswordScreen';
 import { AuthStackParamList } from '../types';
+import LoadingSpinner from '../components/common/LoadingSpinner';
 
 const Stack = createStackNavigator<AuthStackParamList>();
 
+const ONBOARDING_KEY = 'hasSeenOnboarding';
+
 const AuthNavigator: React.FC = () => {
+  const [initialRoute, setInitialRoute] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    checkOnboardingStatus();
+  }, []);
+
+  const checkOnboardingStatus = async () => {
+    try {
+      const hasSeenOnboarding = await AsyncStorage.getItem(ONBOARDING_KEY);
+      setInitialRoute(hasSeenOnboarding === 'true' ? 'Login' : 'Onboarding');
+    } catch (error) {
+      console.error('Error checking onboarding status:', error);
+      // Default to onboarding if there's an error
+      setInitialRoute('Onboarding');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (isLoading || initialRoute === null) {
+    return <LoadingSpinner text="Loading..." overlay={false} />;
+  }
+
   return (
     <Stack.Navigator
-      initialRouteName="Onboarding"
+      initialRouteName={initialRoute as 'Onboarding' | 'Login'}
       screenOptions={{
         headerShown: false,
         gestureEnabled: true,

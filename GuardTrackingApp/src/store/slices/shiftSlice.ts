@@ -506,6 +506,61 @@ const shiftSlice = createSlice({
         state.checkOutLoading = false;
         state.error = action.payload as string;
       });
+
+    // Check In With Location
+    builder
+      .addCase(checkInToShiftWithLocation.pending, (state) => {
+        state.checkInLoading = true;
+        state.error = null;
+      })
+      .addCase(checkInToShiftWithLocation.fulfilled, (state, action) => {
+        state.checkInLoading = false;
+        state.activeShift = action.payload;
+        // Update shift in todayShifts array
+        const index = state.todayShifts.findIndex(s => s.id === action.payload.id);
+        if (index !== -1) {
+          state.todayShifts[index] = action.payload;
+        }
+      })
+      .addCase(checkInToShiftWithLocation.rejected, (state, action) => {
+        state.checkInLoading = false;
+        state.error = action.payload as string;
+      });
+
+    // Check Out With Location
+    builder
+      .addCase(checkOutFromShiftWithLocation.pending, (state) => {
+        state.checkOutLoading = true;
+        state.error = null;
+      })
+      .addCase(checkOutFromShiftWithLocation.fulfilled, (state, action) => {
+        state.checkOutLoading = false;
+        state.activeShift = null;
+        // Update shift in todayShifts array
+        const index = state.todayShifts.findIndex(s => s.id === action.payload.id);
+        if (index !== -1) {
+          state.todayShifts[index] = action.payload;
+        }
+      })
+      .addCase(checkOutFromShiftWithLocation.rejected, (state, action) => {
+        state.checkOutLoading = false;
+        state.error = action.payload as string;
+      });
+
+    // Fetch Shift Statistics
+    builder
+      .addCase(fetchShiftStatistics.pending, (state) => {
+        state.statisticsLoading = true;
+        state.error = null;
+      })
+      .addCase(fetchShiftStatistics.fulfilled, (state, action) => {
+        state.statisticsLoading = false;
+        state.stats = action.payload;
+      })
+      .addCase(fetchShiftStatistics.rejected, (state, action) => {
+        state.statisticsLoading = false;
+        state.error = action.payload as string;
+      });
   },
 });
 

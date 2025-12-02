@@ -45,11 +45,22 @@ const ForgotPasswordScreen: React.FC = () => {
     }
 
     try {
-      // For now, simulate sending OTP and navigate to email verification
-      // In real app, this would call the forgot password API
-      navigation.navigate('EmailVerification', { email, isPasswordReset: true });
-    } catch (error) {
-      Alert.alert('Error', 'An unexpected error occurred');
+      const result = await dispatch(forgotPassword(email));
+      
+      if (forgotPassword.fulfilled.match(result)) {
+        // OTP sent successfully - show success message and navigate to OTP screen
+        // For password reset, we navigate to GuardOTP with email and isPasswordReset flag
+        // The OTP screen will handle password reset flow differently
+        navigation.navigate('GuardOTP', { 
+          email, 
+          isPasswordReset: true 
+        });
+      } else {
+        const errorMessage = result.payload as string;
+        Alert.alert('Error', errorMessage || 'Failed to send reset code. Please try again.');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'An unexpected error occurred');
     }
   };
 
@@ -177,6 +188,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+  },
+  content: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    backgroundColor: '#007AFF',
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 32,
   },
   scrollContainer: {
     flexGrow: 1,

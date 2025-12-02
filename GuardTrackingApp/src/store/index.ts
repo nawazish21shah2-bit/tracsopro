@@ -16,6 +16,7 @@ import shiftReportReducer from './slices/shiftReportSlice';
 import clientReducer from './slices/clientSlice';
 import emergencyReducer from './slices/emergencySlice';
 import chatReducer from './slices/chatSliceNew';
+import adminReducer from './slices/adminSlice';
 
 // Persist configuration
 const persistConfig = {
@@ -37,6 +38,7 @@ const rootReducer = combineReducers({
   client: clientReducer,
   chat: chatReducer,
   emergency: emergencyReducer,
+  admin: adminReducer,
 });
 
 // Persisted reducer
@@ -51,7 +53,7 @@ export const store = configureStore({
         ignoredActions: ['persist/PERSIST', 'persist/REHYDRATE'],
       },
     }),
-  devTools: __DEV__,
+  devTools: typeof __DEV__ !== 'undefined' ? __DEV__ : false,
 });
 
 // Persistor

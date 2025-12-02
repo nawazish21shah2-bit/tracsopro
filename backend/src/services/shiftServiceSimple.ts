@@ -1,9 +1,8 @@
 // Simplified Shift Service for Phase 2 Testing
-import { PrismaClient, ShiftStatus } from '@prisma/client';
+import prisma from '../config/database.js';
 import { NotFoundError, BadRequestError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
-
-const prisma = new PrismaClient();
+import { ShiftAssignmentStatus } from '@prisma/client';
 
 export interface CreateShiftData {
   guardId: string;
@@ -163,7 +162,7 @@ class ShiftServiceSimple {
   }
 
   /**
-   * Get shift statistics for a guard (simplified)
+   * Get shift statistics for a guard (using ShiftAssignment)
    */
   async getGuardShiftStats(guardId: string, startDate?: Date, endDate?: Date): Promise<ShiftStats> {
     const whereClause: any = { guardId };
@@ -174,30 +173,54 @@ class ShiftServiceSimple {
       if (endDate) whereClause.startTime.lte = endDate;
     }
 
-    const shifts = await prisma.shift.findMany({
+    const assignments = await prisma.shiftAssignment.findMany({
       where: whereClause,
+      include: {
+        site: true,
+      },
     });
 
-    const completedShifts = shifts.filter(s => s.status === 'COMPLETED').length;
-    const missedShifts = shifts.filter(s => s.status === 'MISSED' || s.status === 'CANCELLED').length;
-    const totalSites = new Set(shifts.map(s => s.locationName)).size;
-    const incidentReports = 0; // Simplified for now
+    const completedShifts = assignments.filter(a => a.status === ShiftAssignmentStatus.COMPLETED).length;
+    const missedShifts = assignments.filter(a => 
+      a.status === ShiftAssignmentStatus.CANCELLED || a.status === ShiftAssignmentStatus.MISSED
+    ).length;
+    
+    // Get unique sites from assignments
+    const uniqueSiteIds = new Set(
+      assignments
+        .map(a => a.siteId)
+        .filter(id => id !== null)
+    );
+    const totalSites = uniqueSiteIds.size;
 
-    // Calculate total hours (simplified)
-    const completedShiftsWithTimes = shifts.filter(s => 
-      s.status === 'COMPLETED' && (s as any).actualStartTime && (s as any).actualEndTime
+    // Count incident reports from AssignmentReports
+    const assignmentIds = assignments.map(a => a.id);
+    const incidentReports = await prisma.assignmentReport.count({
+      where: {
+        shiftAssignmentId: { in: assignmentIds },
+        type: 'INCIDENT',
+      },
+    });
+
+    // Calculate total hours
+    const completedAssignments = assignments.filter(a => 
+      a.status === ShiftAssignmentStatus.COMPLETED && 
+      a.checkInTime && 
+      a.checkOutTime
     );
 
-    const totalMinutes = completedShiftsWithTimes.reduce((total, shift) => {
-      if ((shift as any).actualStartTime && (shift as any).actualEndTime) {
-        return total + Math.abs((shift as any).actualEndTime.getTime() - (shift as any).actualStartTime.getTime()) / (1000 * 60);
+    const totalMinutes = completedAssignments.reduce((total, assignment) => {
+      if (assignment.checkInTime && assignment.checkOutTime) {
+        const start = new Date(assignment.checkInTime).getTime();
+        const end = new Date(assignment.checkOutTime).getTime();
+        return total + Math.abs(end - start) / (1000 * 60);
       }
       return total;
     }, 0);
 
     const totalHours = Math.round((totalMinutes / 60) * 100) / 100;
-    const averageShiftDuration = completedShiftsWithTimes.length > 0 
-      ? Math.round((totalMinutes / completedShiftsWithTimes.length) / 60 * 100) / 100 
+    const averageShiftDuration = completedAssignments.length > 0 
+      ? Math.round((totalMinutes / completedAssignments.length) / 60 * 100) / 100 
       : 0;
 
     return {
@@ -211,34 +234,239 @@ class ShiftServiceSimple {
   }
 
   /**
-   * Get active shift for a guard
+   * Get active shift for a guard (using ShiftAssignment)
    */
   async getActiveShift(guardId: string) {
-    return await prisma.shift.findFirst({
+    const assignment = await prisma.shiftAssignment.findFirst({
       where: {
         guardId,
-        status: 'IN_PROGRESS',
+        status: ShiftAssignmentStatus.IN_PROGRESS,
+      },
+      include: {
+        shiftPosting: {
+          include: {
+            site: true,
+            client: {
+              include: {
+                user: {
+                  select: { firstName: true, lastName: true }
+                }
+              }
+            }
+          }
+        },
+        site: true,
       },
     });
+
+    if (!assignment) {
+      return null;
+    }
+
+    // Transform to match expected format
+    return this.transformAssignmentToShift(assignment);
   }
 
   /**
-   * Get upcoming shifts for a guard
+   * Get upcoming shifts for a guard (using ShiftAssignment)
    */
   async getUpcomingShifts(guardId: string, limit: number = 10) {
-    return await prisma.shift.findMany({
+    const assignments = await prisma.shiftAssignment.findMany({
       where: {
         guardId,
-        status: 'SCHEDULED',
-        scheduledStartTime: {
+        status: { in: [ShiftAssignmentStatus.ASSIGNED, ShiftAssignmentStatus.SCHEDULED] },
+        startTime: {
           gte: new Date(),
         },
-      } as any,
+      },
+      include: {
+        shiftPosting: {
+          include: {
+            site: true,
+            client: {
+              include: {
+                user: {
+                  select: { firstName: true, lastName: true }
+                }
+              }
+            }
+          }
+        },
+        site: true,
+      },
       orderBy: {
-        scheduledStartTime: 'asc',
-      } as any,
+        startTime: 'asc',
+      },
       take: limit,
     });
+
+    return assignments.map(a => this.transformAssignmentToShift(a));
+  }
+
+  /**
+   * Get today's shifts for a guard
+   */
+  async getTodayShifts(guardId: string) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const assignments = await prisma.shiftAssignment.findMany({
+      where: {
+        guardId,
+        startTime: {
+          gte: today,
+          lt: tomorrow,
+        },
+      },
+      include: {
+        shiftPosting: {
+          include: {
+            site: true,
+            client: {
+              include: {
+                user: {
+                  select: { firstName: true, lastName: true }
+                }
+              }
+            }
+          }
+        },
+        site: true,
+      },
+      orderBy: {
+        startTime: 'asc',
+      },
+    });
+
+    return assignments.map(a => this.transformAssignmentToShift(a));
+  }
+
+  /**
+   * Get past shifts for a guard
+   */
+  async getPastShifts(guardId: string, limit: number = 20) {
+    const assignments = await prisma.shiftAssignment.findMany({
+      where: {
+        guardId,
+        status: { in: [ShiftAssignmentStatus.COMPLETED, ShiftAssignmentStatus.CANCELLED] },
+        endTime: {
+          lt: new Date(),
+        },
+      },
+      include: {
+        shiftPosting: {
+          include: {
+            site: true,
+            client: {
+              include: {
+                user: {
+                  select: { firstName: true, lastName: true }
+                }
+              }
+            }
+          }
+        },
+        site: true,
+      },
+      orderBy: {
+        endTime: 'desc',
+      },
+      take: limit,
+    });
+
+    return assignments.map(a => this.transformAssignmentToShift(a));
+  }
+
+  /**
+   * Get weekly shift summary for a guard
+   */
+  async getWeeklyShiftSummary(guardId: string) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay()); // Start of week (Sunday)
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 7);
+
+    const assignments = await prisma.shiftAssignment.findMany({
+      where: {
+        guardId,
+        startTime: {
+          gte: startOfWeek,
+          lt: endOfWeek,
+        },
+      },
+      include: {
+        shiftPosting: {
+          include: {
+            site: true,
+            client: {
+              include: {
+                user: {
+                  select: { firstName: true, lastName: true }
+                }
+              }
+            }
+          }
+        },
+        site: true,
+      },
+      orderBy: {
+        startTime: 'asc',
+      },
+    });
+
+    return assignments.map(a => this.transformAssignmentToShift(a));
+  }
+
+  /**
+   * Transform ShiftAssignment to Shift format for frontend compatibility
+   */
+  private transformAssignmentToShift(assignment: any) {
+    const site = assignment.site || assignment.shiftPosting?.site;
+    const client = assignment.shiftPosting?.client;
+    
+    return {
+      id: assignment.id,
+      guardId: assignment.guardId,
+      locationName: site?.name || 'Unknown Site',
+      locationAddress: site?.address || '',
+      scheduledStartTime: assignment.startTime,
+      scheduledEndTime: assignment.endTime,
+      startTime: assignment.startTime,
+      endTime: assignment.endTime,
+      checkInTime: assignment.checkInTime,
+      checkOutTime: assignment.checkOutTime,
+      status: this.mapAssignmentStatusToShiftStatus(assignment.status),
+      description: assignment.shiftPosting?.description || '',
+      notes: assignment.notes || '',
+      site: site ? {
+        id: site.id,
+        name: site.name,
+        address: site.address,
+      } : null,
+      client: client ? {
+        id: client.id,
+        name: client.user ? `${client.user.firstName} ${client.user.lastName}` : 'Unknown Client',
+      } : null,
+    };
+  }
+
+  /**
+   * Map ShiftAssignmentStatus to ShiftStatus
+   */
+  private mapAssignmentStatusToShiftStatus(status: ShiftAssignmentStatus): string {
+    const statusMap: Record<ShiftAssignmentStatus, string> = {
+      ASSIGNED: 'SCHEDULED',
+      SCHEDULED: 'SCHEDULED',
+      IN_PROGRESS: 'IN_PROGRESS',
+      COMPLETED: 'COMPLETED',
+      CANCELLED: 'CANCELLED',
+      NO_SHOW: 'MISSED',
+    };
+    return statusMap[status] || 'SCHEDULED';
   }
 
   /**

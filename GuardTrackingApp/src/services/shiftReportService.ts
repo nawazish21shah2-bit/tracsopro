@@ -6,13 +6,9 @@ import {
 } from '../types/shift.types';
 import { securityManager } from '../utils/security';
 
-import { Platform } from 'react-native';
+import { getApiBaseUrl } from '../config/apiConfig';
 
-const API_URL = __DEV__
-  ? Platform.OS === 'android'
-    ? 'http://10.0.2.2:3000/api'
-    : 'http://localhost:3000/api'
-  : 'https://your-production-api.com/api'; // Replace with your production API URL
+const API_URL = getApiBaseUrl();
 
 // Create axios instance with auth interceptor
 const createAuthAxios = async () => {

@@ -5,7 +5,17 @@ import { logger } from '../utils/logger.js';
 
 // Helper to get guard ID from request
 function getGuardId(req: any): string | null {
-  return req.user?.guard?.id || req.user?.id || null;
+  // Use guardId from auth middleware if available (set when user has guard role)
+  if (req.guardId) {
+    return req.guardId;
+  }
+  // Fallback to user.guard.id if guardId not set
+  if (req.user?.guard?.id) {
+    return req.user.guard.id;
+  }
+  // If user is a guard role, guardId should be set by auth middleware
+  // If not set, return null (shouldn't happen in normal flow)
+  return null;
 }
 
 /**
@@ -104,6 +114,94 @@ export const getUpcomingShifts = async (req: Request, res: Response) => {
     res.status(500).json({ 
       success: false,
       error: error.message || 'Failed to get upcoming shifts' 
+    });
+  }
+};
+
+/**
+ * Get today's shifts
+ */
+export const getTodayShifts = async (req: Request, res: Response) => {
+  try {
+    const guardId = getGuardId(req as any);
+
+    if (!guardId) {
+      return res.status(401).json({ 
+        success: false,
+        error: 'Guard not found' 
+      });
+    }
+
+    const todayShifts = await shiftService.getTodayShifts(guardId);
+
+    res.json({
+      success: true,
+      data: todayShifts,
+    });
+  } catch (error: any) {
+    logger.error('Error getting today shifts:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message || 'Failed to get today shifts' 
+    });
+  }
+};
+
+/**
+ * Get past shifts
+ */
+export const getPastShifts = async (req: Request, res: Response) => {
+  try {
+    const guardId = getGuardId(req as any);
+    const limit = parseInt(req.query.limit as string) || 20;
+
+    if (!guardId) {
+      return res.status(401).json({ 
+        success: false,
+        error: 'Guard not found' 
+      });
+    }
+
+    const pastShifts = await shiftService.getPastShifts(guardId, limit);
+
+    res.json({
+      success: true,
+      data: pastShifts,
+    });
+  } catch (error: any) {
+    logger.error('Error getting past shifts:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message || 'Failed to get past shifts' 
+    });
+  }
+};
+
+/**
+ * Get weekly shift summary
+ */
+export const getWeeklyShiftSummary = async (req: Request, res: Response) => {
+  try {
+    const guardId = getGuardId(req as any);
+
+    if (!guardId) {
+      return res.status(401).json({ 
+        success: false,
+        error: 'Guard not found' 
+      });
+    }
+
+    const weeklyShifts = await shiftService.getWeeklyShiftSummary(guardId);
+
+    res.json({
+      success: true,
+      data: weeklyShifts,
+    });
+  } catch (error: any) {
+    logger.error('Error getting weekly shift summary:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message || 'Failed to get weekly shift summary' 
     });
   }
 };

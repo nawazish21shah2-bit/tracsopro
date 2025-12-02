@@ -20,6 +20,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootState, AppDispatch } from '../../store';
 import { clearError } from '../../store/slices/authSlice';
+import apiService from '../../services/api';
 import { AuthStackParamList } from '../../types';
 import { useTheme } from '../../utils/theme';
 import Button from '../../components/common/Button';
@@ -32,7 +33,7 @@ const ResetPasswordScreen: React.FC = () => {
   const navigation = useNavigation<ResetPasswordScreenNavigationProp>();
   const route = useRoute<ResetPasswordScreenRouteProp>();
   const dispatch = useDispatch<AppDispatch>();
-  const { isLoading, error } = useSelector((state: RootState) => state.auth);
+  const { error } = useSelector((state: RootState) => state.auth);
   const { theme } = useTheme();
   
   const email = route.params?.email || '';
@@ -45,6 +46,7 @@ const ResetPasswordScreen: React.FC = () => {
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({
@@ -70,19 +72,31 @@ const ResetPasswordScreen: React.FC = () => {
       return;
     }
 
+    if (!email || !otp) {
+      Alert.alert('Error', 'Missing email or OTP. Please start the password reset process again.');
+      navigation.navigate('ForgotPassword');
+      return;
+    }
+
+    setIsLoading(true);
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const result = await apiService.resetPassword(email, otp, formData.password);
       
-      Alert.alert(
-        'Success',
-        'Your password has been reset successfully. Please login with your new password.',
-        [
-          { text: 'OK', onPress: () => navigation.navigate('Login') }
-        ]
-      );
-    } catch (error) {
-      Alert.alert('Error', 'Failed to reset password. Please try again.');
+      if (result.success) {
+        Alert.alert(
+          'Success',
+          result.message || 'Your password has been reset successfully. Please login with your new password.',
+          [
+            { text: 'OK', onPress: () => navigation.navigate('Login') }
+          ]
+        );
+      } else {
+        Alert.alert('Error', result.message || 'Failed to reset password. Please try again.');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to reset password. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 

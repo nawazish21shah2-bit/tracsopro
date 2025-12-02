@@ -1,5 +1,5 @@
 // Enhanced Login Screen Component
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Image,
 } from 'react-native';
 import { ArrowRightIcon } from '../../components/ui/AppIcons';
+import { AppIcon } from '../../components/ui/AppIcons';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -24,6 +25,7 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorBoundary from '../../components/common/ErrorBoundary';
 import { createLoginValidator, ValidationResult } from '../../utils/validation';
 import { useTheme } from '../../utils/theme';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Logo from '../../assets/images/tracSOpro-logo.png';
 
 type LoginScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'Login'>;
@@ -42,6 +44,7 @@ const LoginScreen: React.FC = () => {
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [showPassword, setShowPassword] = useState(false);
   const [accountType, setAccountType] = useState<'individual' | 'company'>('individual');
+  const [rememberMe, setRememberMe] = useState(false);
   
   // Refs for input focus management
   const emailInputRef = React.useRef<TextInput>(null);
@@ -76,6 +79,16 @@ const LoginScreen: React.FC = () => {
     }
 
     try {
+      // Save credentials if remember me is checked
+      if (rememberMe) {
+        await AsyncStorage.setItem('rememberedEmail', formData.email);
+        await AsyncStorage.setItem('rememberedPassword', formData.password);
+      } else {
+        // Clear saved credentials if remember me is unchecked
+        await AsyncStorage.removeItem('rememberedEmail');
+        await AsyncStorage.removeItem('rememberedPassword');
+      }
+
       const result = await dispatch(loginUser(formData));
       if (loginUser.fulfilled.match(result)) {
         // Navigation will be handled by AppNavigator based on auth state
@@ -85,7 +98,7 @@ const LoginScreen: React.FC = () => {
     } catch (error) {
       Alert.alert('Error', 'An unexpected error occurred');
     }
-  }, [formData, validateForm, dispatch]);
+  }, [formData, validateForm, dispatch, rememberMe]);
 
   const navigateToRegister = useCallback(() => {
     navigation.navigate('RoleSelection');
@@ -94,6 +107,27 @@ const LoginScreen: React.FC = () => {
   const navigateToForgotPassword = useCallback(() => {
     navigation.navigate('ForgotPassword');
   }, [navigation]);
+
+  // Load saved credentials on mount
+  useEffect(() => {
+    const loadSavedCredentials = async () => {
+      try {
+        const savedEmail = await AsyncStorage.getItem('rememberedEmail');
+        const savedPassword = await AsyncStorage.getItem('rememberedPassword');
+        if (savedEmail && savedPassword) {
+          setFormData({
+            email: savedEmail,
+            password: savedPassword,
+          });
+          setRememberMe(true);
+        }
+      } catch (error) {
+        console.error('Error loading saved credentials:', error);
+      }
+    };
+
+    loadSavedCredentials();
+  }, []);
 
   // Clear error when component unmounts
   React.useEffect(() => {
@@ -156,10 +190,30 @@ const LoginScreen: React.FC = () => {
             />
           </View>
 
-          {/* Forgot Password */}
-          <TouchableOpacity onPress={navigateToForgotPassword} style={styles.forgotPasswordContainer}>
-            <Text style={styles.forgotText}>Forgot Password?</Text>
-          </TouchableOpacity>
+          {/* Remember Me and Forgot Password */}
+          <View style={styles.optionsContainer}>
+            <TouchableOpacity 
+              onPress={() => setRememberMe(!rememberMe)} 
+              style={styles.rememberContainer}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
+                {rememberMe && (
+                  <AppIcon 
+                    type="material" 
+                    name="check" 
+                    size={16} 
+                    color="#FFFFFF" 
+                  />
+                )}
+              </View>
+              <Text style={styles.rememberText}>Remember Me</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={navigateToForgotPassword} activeOpacity={0.7}>
+              <Text style={styles.forgotText}>Forgot Password?</Text>
+            </TouchableOpacity>
+          </View>
 
           <Button
             title={isLoading ? 'Signing In...' : 'Login'}
@@ -257,7 +311,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 16,
-    marginBottom: 32,
   },
   rememberContainer: {
     flexDirection: 'row',
@@ -266,22 +319,25 @@ const styles = StyleSheet.create({
   checkbox: {
     width: 20,
     height: 20,
-    borderWidth: 1,
-    borderColor: '#000000',
-    borderRadius: 3,
+    borderWidth: 1.5,
+    borderColor: '#1C6CA9',
+    borderRadius: 4,
     marginRight: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
+  checkboxChecked: {
+    backgroundColor: '#1C6CA9',
+    borderColor: '#1C6CA9',
   },
   rememberText: {
     fontFamily: 'Inter',
     fontWeight: '400',
     fontSize: 14,
     lineHeight: 17,
-    letterSpacing: -0.408,
+    letterSpacing: 0.01,
     color: '#151515',
-  },
-  forgotPasswordContainer: {
-    alignItems: 'flex-end',
-    marginTop: 16,
   },
   forgotText: {
     fontFamily: 'Inter',

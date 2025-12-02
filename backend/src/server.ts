@@ -254,6 +254,13 @@ app.put('/api/notifications/:id/read', authMiddleware, (req, res) => {
   res.json({ success: true, data: null });
 });
 
-app.listen(PORT, () => {
-  console.log(`Backend running on http://localhost:${PORT}`);
+// Listen on all network interfaces (0.0.0.0) to allow access from mobile devices
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Backend running on http://0.0.0.0:${PORT}`);
+  console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🔗 API: http://localhost:${PORT}/api (or use your local IP)`);
+  console.log(`📱 For mobile devices, use: http://YOUR_LOCAL_IP:${PORT}/api`);
+  console.log(`\n💡 To find your local IP:`);
+  console.log(`   Windows: ipconfig (look for IPv4 Address)`);
+  console.log(`   Mac/Linux: ifconfig or ip addr`);
 });

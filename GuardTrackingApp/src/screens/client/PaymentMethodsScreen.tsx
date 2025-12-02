@@ -17,6 +17,7 @@ import { useNavigation } from '@react-navigation/native';
 import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { CreditCardIcon, PlusIcon, TrashIcon, CheckCircleIcon } from '../../components/ui/AppIcons';
 import paymentService, { PaymentMethod } from '../../services/paymentService';
+import { initPaymentSheet, presentPaymentSheet } from '@stripe/stripe-react-native';
 
 const PaymentMethodsScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -46,28 +47,78 @@ const PaymentMethodsScreen: React.FC = () => {
 
   const handleAddPaymentMethod = async () => {
     try {
+      setLoading(true);
+      
+      // Create setup intent
       const setupIntent = await paymentService.createSetupIntent();
       
-      // TODO: Integrate with Stripe SDK to collect payment method
-      Alert.alert(
-        'Add Payment Method',
-        'Payment method setup initiated. Please complete the setup using the payment form.',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              // After successful setup, reload payment methods
-              loadPaymentMethods();
+      // Initialize Stripe if not already done
+      try {
+        const stripeService = (await import('../../services/stripeService')).default;
+        if (!stripeService.isInitialized()) {
+          await stripeService.initialize();
+        }
+      } catch (error) {
+        console.error('Stripe initialization error:', error);
+        Alert.alert(
+          'Error',
+          'Failed to initialize payment system. Please try again.',
+        );
+        return;
+      }
+
+      // Use Stripe PaymentSheet for setup intent
+      try {
+        // Initialize payment sheet with setup intent
+        const { error: initError } = await initPaymentSheet({
+          setupIntentClientSecret: setupIntent.clientSecret,
+          merchantDisplayName: 'tracSOpro',
+        });
+
+        if (initError) {
+          throw new Error(initError.message);
+        }
+
+        // Present payment sheet
+        const { error: presentError } = await presentPaymentSheet();
+
+        if (presentError) {
+          if (presentError.code !== 'Canceled') {
+            throw new Error(presentError.message);
+          }
+          // User canceled - no error needed
+          return;
+        }
+
+        // Payment method added successfully
+        Alert.alert(
+          'Success',
+          'Payment method added successfully.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                // Reload payment methods
+                loadPaymentMethods();
+              },
             },
-          },
-        ]
-      );
+          ]
+        );
+      } catch (error: any) {
+        console.error('Payment method setup error:', error);
+        Alert.alert(
+          'Error',
+          error.message || 'Failed to add payment method. Please try again.'
+        );
+      }
     } catch (error: any) {
       console.error('Error creating setup intent:', error);
       Alert.alert(
         'Error',
         error.response?.data?.message || 'Failed to initialize payment method setup'
       );
+    } finally {
+      setLoading(false);
     }
   };
 

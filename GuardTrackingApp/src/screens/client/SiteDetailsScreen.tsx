@@ -10,6 +10,7 @@ import {
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { ArrowLeft, MapPin, Users, Clock } from 'react-native-feather';
+import apiService from '../../services/api';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { ClientStackParamList } from '../../navigation/ClientStackNavigator';
 
@@ -53,48 +54,49 @@ const SiteDetailsScreen: React.FC = () => {
 
   const loadSiteDetails = async () => {
     try {
-      // TODO: Replace with actual API call
-      // Simulate API call
-      await new Promise<void>(resolve => setTimeout(resolve, 1000));
+      // Load site details
+      const siteResult = await apiService.getSiteById(siteId);
       
-      // Mock data
-      setSite({
-        id: siteId,
-        name: 'Downtown Office Building',
-        address: '123 Main Street',
-        city: 'New York',
-        state: 'NY',
-        zipCode: '10001',
-        description: 'Modern office building requiring 24/7 security coverage',
-        requirements: 'Licensed security guard with 2+ years experience',
-        contactPerson: 'John Smith',
-        contactPhone: '+1 (555) 123-4567',
-        status: 'Active',
-        createdAt: '2024-01-15'
-      });
+      if (siteResult.success && siteResult.data) {
+        const siteData = siteResult.data;
+        setSite({
+          id: siteId,
+          name: siteData.name || 'Site',
+          address: siteData.address || '',
+          city: siteData.city || '',
+          state: siteData.state || '',
+          zipCode: siteData.zipCode || '',
+          description: siteData.description || '',
+          requirements: siteData.requirements || '',
+          contactPerson: siteData.contactPerson || siteData.client?.user?.firstName + ' ' + siteData.client?.user?.lastName || '',
+          contactPhone: siteData.contactPhone || '',
+          status: siteData.isActive ? 'Active' : 'Inactive',
+          createdAt: siteData.createdAt || new Date().toISOString()
+        });
 
-      setShiftPostings([
-        {
-          id: '1',
-          title: 'Night Security Guard',
-          startTime: '2024-11-03T18:00:00Z',
-          endTime: '2024-11-04T06:00:00Z',
-          hourlyRate: 25.00,
-          status: 'Open',
-          applicationsCount: 3
-        },
-        {
-          id: '2',
-          title: 'Weekend Security Coverage',
-          startTime: '2024-11-04T08:00:00Z',
-          endTime: '2024-11-04T20:00:00Z',
-          hourlyRate: 22.00,
-          status: 'Filled',
-          applicationsCount: 5
+        // Load shift postings for this site
+        // Note: This would ideally be a separate endpoint like /sites/:id/shift-postings
+        // For now, we'll use client sites endpoint and filter
+        const sitesResult = await apiService.getClientSites(1, 100);
+        if (sitesResult.success && sitesResult.data?.sites) {
+          const foundSite = sitesResult.data.sites.find((s: any) => s.id === siteId);
+          if (foundSite && foundSite.shiftPostings) {
+            setShiftPostings(foundSite.shiftPostings.map((sp: any) => ({
+              id: sp.id,
+              title: sp.title,
+              startTime: sp.startTime,
+              endTime: sp.endTime,
+              hourlyRate: sp.hourlyRate || 0,
+              status: sp.status === 'OPEN' ? 'Open' : sp.status === 'FILLED' ? 'Filled' : 'Completed',
+              applicationsCount: sp.applications?.length || 0
+            })));
+          }
         }
-      ]);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to load site details');
+      } else {
+        Alert.alert('Error', siteResult.message || 'Failed to load site details');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to load site details');
     } finally {
       setLoading(false);
     }
