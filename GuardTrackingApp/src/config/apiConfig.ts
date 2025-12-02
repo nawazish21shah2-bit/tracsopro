@@ -14,10 +14,9 @@ import { Platform } from 'react-native';
 // ============================================
 // PRODUCTION CONFIGURATION
 // ============================================
-// Replace these with your Render backend URLs after deployment
-// Example: https://your-app-name.onrender.com/api
-const PRODUCTION_API_URL = 'https://your-app-name.onrender.com/api';
-const PRODUCTION_WS_URL = 'https://your-app-name.onrender.com';
+// Render backend URLs
+const PRODUCTION_API_URL = 'https://tracsopro.onrender.com/api';
+const PRODUCTION_WS_URL = 'https://tracsopro.onrender.com';
 
 // ============================================
 // DEVELOPMENT CONFIGURATION
