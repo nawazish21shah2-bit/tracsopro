@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "dev:db": "tsx watch src/server-db.ts",
-    "start": "tsx src/server-db.ts",
-    "build": "echo 'Build skipped - using tsx for production'",
+    "start": "npx tsx src/server-db.ts",
+    "build": "npm install && npx prisma generate",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
