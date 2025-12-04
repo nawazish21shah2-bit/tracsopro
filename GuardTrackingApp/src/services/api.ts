@@ -419,8 +419,9 @@ class ApiService {
   // Admin Shift Management (simple create for scheduling screen)
   async createAdminShift(data: {
     guardId: string;
-    locationName: string;
-    locationAddress: string;
+    siteId?: string; // Optional: if provided, will link shift to site and client
+    locationName?: string; // Optional if siteId provided
+    locationAddress?: string; // Optional if siteId provided
     scheduledStartTime: string;
     scheduledEndTime: string;
     description?: string;

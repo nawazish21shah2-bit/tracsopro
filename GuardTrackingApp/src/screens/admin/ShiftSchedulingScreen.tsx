@@ -381,8 +381,9 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
 
       const apiResponse = await apiService.createAdminShift({
         guardId: guard.id,
-        locationName: site.name,
-        locationAddress: site.address,
+        siteId: site.id, // Link shift to site (will automatically link to client)
+        locationName: site.name, // Fallback if siteId lookup fails
+        locationAddress: site.address, // Fallback if siteId lookup fails
         scheduledStartTime,
         scheduledEndTime,
         description: newShift.shiftType,

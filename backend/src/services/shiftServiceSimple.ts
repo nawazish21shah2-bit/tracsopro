@@ -12,6 +12,7 @@ export interface CreateShiftData {
   scheduledEndTime: Date;
   description?: string;
   notes?: string;
+  siteId?: string; // Optional: if provided, link shift to site and client
 }
 
 export interface CheckInData {
@@ -62,9 +63,39 @@ class ShiftServiceSimple {
       throw new NotFoundError('Guard not found');
     }
 
+    // If siteId is provided, validate and get clientId from site
+    let siteId: string | null = null;
+    let clientId: string | null = null;
+    
+    if (data.siteId) {
+      const site = await prisma.site.findUnique({
+        where: { id: data.siteId },
+        include: {
+          client: true,
+        },
+      });
+
+      if (!site) {
+        throw new NotFoundError('Site not found');
+      }
+
+      siteId = site.id;
+      clientId = site.clientId;
+      
+      // Use site's name and address if not provided
+      if (!data.locationName) {
+        data.locationName = site.name;
+      }
+      if (!data.locationAddress) {
+        data.locationAddress = site.address;
+      }
+    }
+
     const shift = await prisma.shift.create({
       data: {
         guardId: data.guardId,
+        siteId: siteId,
+        clientId: clientId,
         locationName: data.locationName,
         locationAddress: data.locationAddress,
         scheduledStartTime: data.scheduledStartTime,
@@ -72,9 +103,29 @@ class ShiftServiceSimple {
         description: data.description,
         notes: data.notes,
       } as any,
+      include: {
+        site: {
+          include: {
+            client: {
+              include: {
+                user: {
+                  select: { firstName: true, lastName: true, email: true }
+                }
+              }
+            }
+          }
+        },
+        client: {
+          include: {
+            user: {
+              select: { firstName: true, lastName: true, email: true }
+            }
+          }
+        },
+      },
     });
 
-    logger.info(`Shift created for guard ${data.guardId}: ${shift.id}`);
+    logger.info(`Shift created for guard ${data.guardId}${siteId ? ` at site ${siteId}` : ''}: ${shift.id}`);
     return shift;
   }
 
