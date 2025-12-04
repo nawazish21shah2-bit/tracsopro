@@ -234,9 +234,10 @@ class ShiftServiceSimple {
   }
 
   /**
-   * Get active shift for a guard (using ShiftAssignment)
+   * Get active shift for a guard (using ShiftAssignment and Shift)
    */
   async getActiveShift(guardId: string) {
+    // Check ShiftAssignment table first
     const assignment = await prisma.shiftAssignment.findFirst({
       where: {
         guardId,
@@ -259,24 +260,48 @@ class ShiftServiceSimple {
       },
     });
 
-    if (!assignment) {
-      return null;
+    if (assignment) {
+      return this.transformAssignmentToShift(assignment);
     }
 
-    // Transform to match expected format
-    return this.transformAssignmentToShift(assignment);
+    // Check Shift table for admin-created shifts
+    const shift = await prisma.shift.findFirst({
+      where: {
+        guardId,
+        status: 'IN_PROGRESS',
+      },
+      include: {
+        site: true,
+        client: {
+          include: {
+            user: {
+              select: { firstName: true, lastName: true }
+            }
+          }
+        },
+      },
+    });
+
+    if (shift) {
+      return this.transformShiftToShift(shift);
+    }
+
+    return null;
   }
 
   /**
-   * Get upcoming shifts for a guard (using ShiftAssignment)
+   * Get upcoming shifts for a guard (using ShiftAssignment and Shift)
    */
   async getUpcomingShifts(guardId: string, limit: number = 10) {
+    const now = new Date();
+    
+    // Get shifts from ShiftAssignment table
     const assignments = await prisma.shiftAssignment.findMany({
       where: {
         guardId,
-        status: { in: [ShiftAssignmentStatus.ASSIGNED, ShiftAssignmentStatus.SCHEDULED] },
+        status: ShiftAssignmentStatus.ASSIGNED,
         startTime: {
-          gte: new Date(),
+          gte: now,
         },
       },
       include: {
@@ -297,14 +322,46 @@ class ShiftServiceSimple {
       orderBy: {
         startTime: 'asc',
       },
-      take: limit,
     });
 
-    return assignments.map(a => this.transformAssignmentToShift(a));
+    // Get shifts from Shift table (admin-created shifts)
+    const shifts = await prisma.shift.findMany({
+      where: {
+        guardId,
+        status: { in: ['SCHEDULED'] },
+        scheduledStartTime: {
+          gte: now,
+        },
+      },
+      include: {
+        site: true,
+        client: {
+          include: {
+            user: {
+              select: { firstName: true, lastName: true }
+            }
+          }
+        },
+      },
+      orderBy: {
+        scheduledStartTime: 'asc',
+      },
+    });
+
+    // Transform and merge both sources
+    const assignmentShifts = assignments.map(a => this.transformAssignmentToShift(a));
+    const directShifts = shifts.map(s => this.transformShiftToShift(s));
+    
+    // Combine and sort by start time, then limit
+    const allShifts = [...assignmentShifts, ...directShifts]
+      .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
+      .slice(0, limit);
+
+    return allShifts;
   }
 
   /**
-   * Get today's shifts for a guard
+   * Get today's shifts for a guard (using ShiftAssignment and Shift)
    */
   async getTodayShifts(guardId: string) {
     const today = new Date();
@@ -312,6 +369,7 @@ class ShiftServiceSimple {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
+    // Get shifts from ShiftAssignment table
     const assignments = await prisma.shiftAssignment.findMany({
       where: {
         guardId,
@@ -340,19 +398,54 @@ class ShiftServiceSimple {
       },
     });
 
-    return assignments.map(a => this.transformAssignmentToShift(a));
+    // Get shifts from Shift table (admin-created shifts)
+    const shifts = await prisma.shift.findMany({
+      where: {
+        guardId,
+        scheduledStartTime: {
+          gte: today,
+          lt: tomorrow,
+        },
+      },
+      include: {
+        site: true,
+        client: {
+          include: {
+            user: {
+              select: { firstName: true, lastName: true }
+            }
+          }
+        },
+      },
+      orderBy: {
+        scheduledStartTime: 'asc',
+      },
+    });
+
+    // Transform and merge both sources
+    const assignmentShifts = assignments.map(a => this.transformAssignmentToShift(a));
+    const directShifts = shifts.map(s => this.transformShiftToShift(s));
+    
+    // Combine and sort by start time
+    const allShifts = [...assignmentShifts, ...directShifts]
+      .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+
+    return allShifts;
   }
 
   /**
-   * Get past shifts for a guard
+   * Get past shifts for a guard (using ShiftAssignment and Shift)
    */
   async getPastShifts(guardId: string, limit: number = 20) {
+    const now = new Date();
+
+    // Get shifts from ShiftAssignment table
     const assignments = await prisma.shiftAssignment.findMany({
       where: {
         guardId,
         status: { in: [ShiftAssignmentStatus.COMPLETED, ShiftAssignmentStatus.CANCELLED] },
         endTime: {
-          lt: new Date(),
+          lt: now,
         },
       },
       include: {
@@ -373,14 +466,46 @@ class ShiftServiceSimple {
       orderBy: {
         endTime: 'desc',
       },
-      take: limit,
     });
 
-    return assignments.map(a => this.transformAssignmentToShift(a));
+    // Get shifts from Shift table (admin-created shifts)
+    const shifts = await prisma.shift.findMany({
+      where: {
+        guardId,
+        status: { in: ['COMPLETED', 'CANCELLED', 'NO_SHOW'] },
+        scheduledEndTime: {
+          lt: now,
+        },
+      },
+      include: {
+        site: true,
+        client: {
+          include: {
+            user: {
+              select: { firstName: true, lastName: true }
+            }
+          }
+        },
+      },
+      orderBy: {
+        scheduledEndTime: 'desc',
+      },
+    });
+
+    // Transform and merge both sources
+    const assignmentShifts = assignments.map(a => this.transformAssignmentToShift(a));
+    const directShifts = shifts.map(s => this.transformShiftToShift(s));
+    
+    // Combine and sort by end time (descending), then limit
+    const allShifts = [...assignmentShifts, ...directShifts]
+      .sort((a, b) => new Date(b.endTime).getTime() - new Date(a.endTime).getTime())
+      .slice(0, limit);
+
+    return allShifts;
   }
 
   /**
-   * Get weekly shift summary for a guard
+   * Get weekly shift summary for a guard (using ShiftAssignment and Shift)
    */
   async getWeeklyShiftSummary(guardId: string) {
     const today = new Date();
@@ -390,6 +515,7 @@ class ShiftServiceSimple {
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 7);
 
+    // Get shifts from ShiftAssignment table
     const assignments = await prisma.shiftAssignment.findMany({
       where: {
         guardId,
@@ -418,7 +544,39 @@ class ShiftServiceSimple {
       },
     });
 
-    return assignments.map(a => this.transformAssignmentToShift(a));
+    // Get shifts from Shift table (admin-created shifts)
+    const shifts = await prisma.shift.findMany({
+      where: {
+        guardId,
+        scheduledStartTime: {
+          gte: startOfWeek,
+          lt: endOfWeek,
+        },
+      },
+      include: {
+        site: true,
+        client: {
+          include: {
+            user: {
+              select: { firstName: true, lastName: true }
+            }
+          }
+        },
+      },
+      orderBy: {
+        scheduledStartTime: 'asc',
+      },
+    });
+
+    // Transform and merge both sources
+    const assignmentShifts = assignments.map(a => this.transformAssignmentToShift(a));
+    const directShifts = shifts.map(s => this.transformShiftToShift(s));
+    
+    // Combine and sort by start time
+    const allShifts = [...assignmentShifts, ...directShifts]
+      .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+
+    return allShifts;
   }
 
   /**
@@ -455,16 +613,76 @@ class ShiftServiceSimple {
   }
 
   /**
+   * Transform Shift to Shift format for frontend compatibility
+   */
+  private transformShiftToShift(shift: any) {
+    const site = shift.site;
+    const client = shift.client;
+    
+    // Extract check-in/check-out times from location JSON if available
+    let checkInTime = null;
+    let checkOutTime = null;
+    
+    if (shift.checkInLocation && typeof shift.checkInLocation === 'object') {
+      checkInTime = shift.checkInLocation.timestamp ? new Date(shift.checkInLocation.timestamp) : null;
+    }
+    
+    if (shift.checkOutLocation && typeof shift.checkOutLocation === 'object') {
+      checkOutTime = shift.checkOutLocation.timestamp ? new Date(shift.checkOutLocation.timestamp) : null;
+    }
+    
+    return {
+      id: shift.id,
+      guardId: shift.guardId,
+      locationName: shift.locationName || site?.name || 'Unknown Site',
+      locationAddress: shift.locationAddress || site?.address || '',
+      scheduledStartTime: shift.scheduledStartTime,
+      scheduledEndTime: shift.scheduledEndTime,
+      startTime: shift.actualStartTime || shift.scheduledStartTime,
+      endTime: shift.actualEndTime || shift.scheduledEndTime,
+      checkInTime: checkInTime || shift.actualStartTime,
+      checkOutTime: checkOutTime || shift.actualEndTime,
+      status: this.mapShiftStatusToShiftStatus(shift.status),
+      description: shift.description || '',
+      notes: shift.notes || '',
+      site: site ? {
+        id: site.id,
+        name: site.name,
+        address: site.address,
+      } : null,
+      client: client ? {
+        id: client.id,
+        name: client.user ? `${client.user.firstName} ${client.user.lastName}` : 'Unknown Client',
+      } : null,
+    };
+  }
+
+  /**
    * Map ShiftAssignmentStatus to ShiftStatus
    */
   private mapAssignmentStatusToShiftStatus(status: ShiftAssignmentStatus): string {
     const statusMap: Record<ShiftAssignmentStatus, string> = {
       ASSIGNED: 'SCHEDULED',
+      IN_PROGRESS: 'IN_PROGRESS',
+      COMPLETED: 'COMPLETED',
+      CANCELLED: 'CANCELLED',
+      MISSED: 'NO_SHOW',
+    };
+    return statusMap[status] || 'SCHEDULED';
+  }
+
+  /**
+   * Map Shift status to ShiftStatus format
+   */
+  private mapShiftStatusToShiftStatus(status: string): string {
+    const statusMap: Record<string, string> = {
       SCHEDULED: 'SCHEDULED',
       IN_PROGRESS: 'IN_PROGRESS',
       COMPLETED: 'COMPLETED',
       CANCELLED: 'CANCELLED',
-      NO_SHOW: 'MISSED',
+      NO_SHOW: 'NO_SHOW',
+      ON_BREAK: 'IN_PROGRESS',
+      EARLY_END: 'COMPLETED',
     };
     return statusMap[status] || 'SCHEDULED';
   }
