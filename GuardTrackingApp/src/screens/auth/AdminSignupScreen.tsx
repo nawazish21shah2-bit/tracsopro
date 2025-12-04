@@ -23,14 +23,14 @@ import { AuthStackParamList, UserRole } from '../../types';
 import Logo from '../../assets/images/tracSOpro-logo.png';
 import { Country, defaultCountry } from '../../utils/countries';
 
-type ClientSignupScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'ClientSignup'>;
-type ClientSignupScreenRouteProp = RouteProp<AuthStackParamList, 'ClientSignup'>;
+type AdminSignupScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'AdminSignup'>;
+type AdminSignupScreenRouteProp = RouteProp<AuthStackParamList, 'AdminSignup'>;
 
-const ClientSignupScreen: React.FC = () => {
-  const navigation = useNavigation<ClientSignupScreenNavigationProp>();
-  const route = useRoute<ClientSignupScreenRouteProp>();
+const AdminSignupScreen: React.FC = () => {
+  const navigation = useNavigation<AdminSignupScreenNavigationProp>();
+  const route = useRoute<AdminSignupScreenRouteProp>();
   const dispatch = useDispatch<AppDispatch>();
-  const accountType = route.params?.accountType || 'individual';
+  const accountType = route.params?.accountType || 'company';
 
   const [formData, setFormData] = useState({
     fullName: '',
@@ -117,7 +117,7 @@ const ClientSignupScreen: React.FC = () => {
         phone: fullPhoneNumber,
         password: formData.password,
         confirmPassword: formData.password, // Backend doesn't need this, but type requires it
-        role: UserRole.CLIENT,
+        role: UserRole.ADMIN,
         accountType: accountType.toUpperCase(),
       };
 
@@ -133,11 +133,11 @@ const ClientSignupScreen: React.FC = () => {
           Alert.alert(
             'Registration Successful',
             payload.message || 'Your account has been created successfully.',
-            [{ text: 'Continue', onPress: () => navigation.navigate('ClientProfileSetup', { accountType }) }]
+            [{ text: 'Continue', onPress: () => navigation.navigate('AdminProfileSetup', { accountType }) }]
           );
         } else {
           // Normal flow - need OTP verification
-          navigation.navigate('ClientOTP', { 
+          navigation.navigate('AdminOTP', { 
             email: formData.email,
             accountType,
             isPasswordReset: false 
@@ -192,6 +192,7 @@ const ClientSignupScreen: React.FC = () => {
         {/* Title */}
         <View style={styles.titleContainer}>
           <Text style={styles.title}>SIGN UP</Text>
+          <Text style={styles.subtitle}>Company Administrator</Text>
         </View>
 
         {/* Form */}
@@ -218,7 +219,7 @@ const ClientSignupScreen: React.FC = () => {
           {/* Email */}
           <View style={styles.inputContainer}>
             <View style={[styles.inputWrapper, errors.email && styles.inputError]}>
-              <Icon name="person-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+              <Icon name="mail-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
               <TextInput
                 style={styles.textInput}
                 placeholder="Email Address"
@@ -364,6 +365,15 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     color: '#000000',
   },
+  subtitle: {
+    fontFamily: 'Inter',
+    fontWeight: '400',
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+    color: '#6B7280',
+    marginTop: 8,
+  },
   form: {
     marginBottom: 40,
   },
@@ -426,4 +436,5 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ClientSignupScreen;
+export default AdminSignupScreen;
+

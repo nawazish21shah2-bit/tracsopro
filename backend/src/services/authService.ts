@@ -31,10 +31,53 @@ export class AuthService {
     // Check if user exists
     const existingUser = await prisma.user.findUnique({
       where: { email: email.toLowerCase() },
+      select: {
+        id: true,
+        email: true,
+        isEmailVerified: true,
+        isActive: true,
+      },
     });
 
     if (existingUser) {
-      throw new ConflictError('Email already registered');
+      // If user exists but email is not verified, allow resending OTP
+      if (!existingUser.isEmailVerified) {
+        logger.info(`User ${existingUser.id} exists but email not verified. Resending OTP.`);
+        
+        // Generate and send new OTP
+        const otp = otpService.generateOTP();
+        await otpService.storeOTP(existingUser.id, otp);
+        
+        try {
+          await otpService.sendOTPEmail(existingUser.email, otp, firstName);
+          logger.info(`OTP resent to unverified user: ${existingUser.email}`);
+        } catch (emailError: any) {
+          // In dev mode, if SMTP is not configured, log OTP and continue
+          const isDevMode = process.env.NODE_ENV !== 'production';
+          const isSmtpError = emailError.message?.includes('SMTP') || 
+                            emailError.message?.includes('email authentication') ||
+                            emailError.message?.includes('Failed to send');
+          
+          if (isDevMode && isSmtpError) {
+            logger.warn(`SMTP not configured - OTP not sent via email. DEV OTP: ${otp}`);
+          } else {
+            logger.error(`Failed to resend OTP email:`, emailError);
+            throw emailError;
+          }
+        }
+        
+        // Return user info for OTP verification
+        return {
+          userId: existingUser.id,
+          email: existingUser.email,
+          role: role || 'GUARD',
+          accountType: accountType || null,
+          message: 'A new verification code has been sent to your email. Please verify your email to complete registration.',
+        };
+      }
+      
+      // If email is already verified, user should login instead
+      throw new ConflictError('Email already registered. Please login instead.');
     }
 
     // Hash password
@@ -101,7 +144,12 @@ export class AuthService {
       } catch (emailError: any) {
         // In development mode, if email fails due to missing SMTP, bypass OTP
         const isDevMode = process.env.NODE_ENV !== 'production';
-        const isSmtpError = emailError.message?.includes('SMTP') || emailError.message?.includes('email authentication');
+        const isSmtpError = emailError.message?.includes('SMTP') || 
+                          emailError.message?.includes('email authentication') ||
+                          emailError.message?.includes('Failed to send') ||
+                          emailError.message?.includes('ECONNECTION') ||
+                          emailError.code === 'EAUTH' ||
+                          emailError.code === 'ECONNECTION';
         
         if (isDevMode && isSmtpError) {
           logger.warn(`SMTP not configured - bypassing OTP verification for dev mode. OTP: ${otp}`);

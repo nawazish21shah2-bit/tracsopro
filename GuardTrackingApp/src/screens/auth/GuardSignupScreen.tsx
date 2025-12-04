@@ -12,6 +12,7 @@ import PhoneInput from '../../components/auth/PhoneInput';
 import AuthFooter from '../../components/auth/AuthFooter';
 import { AuthStackParamList, UserRole } from '../../types';
 import { authStyles } from '../../styles/authStyles';
+import { Country, defaultCountry } from '../../utils/countries';
 
 type GuardSignupScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'GuardSignup'>;
 
@@ -46,6 +47,7 @@ const GuardSignupScreen: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [selectedCountry, setSelectedCountry] = useState<Country>(defaultCountry);
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
@@ -62,8 +64,12 @@ const GuardSignupScreen: React.FC = () => {
 
     if (!formData.phoneNumber.trim()) {
       newErrors.phoneNumber = 'Phone number is required';
-    } else if (!/^\d{10}$/.test(formData.phoneNumber.replace(/\D/g, ''))) {
-      newErrors.phoneNumber = 'Please enter a valid phone number';
+    } else {
+      const phoneDigits = formData.phoneNumber.replace(/\D/g, '');
+      // Validate phone number length (minimum 7, maximum 15 digits)
+      if (phoneDigits.length < 7 || phoneDigits.length > 15) {
+        newErrors.phoneNumber = 'Please enter a valid phone number';
+      }
     }
 
     if (!formData.password) {
@@ -88,12 +94,13 @@ const GuardSignupScreen: React.FC = () => {
     setIsLoading(true);
     try {
       // Format phone number with country code
-      const fullPhoneNumber = `+1${formData.phoneNumber.replace(/\D/g, '')}`;
+      const phoneDigits = formData.phoneNumber.replace(/\D/g, '');
+      const fullPhoneNumber = `${selectedCountry.dialCode}${phoneDigits}`;
       
       // Split full name into first and last name
       const nameParts = formData.fullName.trim().split(' ');
       const firstName = nameParts[0];
-      const lastName = nameParts.slice(1).join(' ') || firstName;
+      const lastName = nameParts.slice(1).join(' ') || '';
 
       // Call registration API via Redux
       const registrationData = {
@@ -109,15 +116,42 @@ const GuardSignupScreen: React.FC = () => {
       const result = await dispatch(registerUser(registrationData));
       
       if (registerUser.fulfilled.match(result)) {
-        // Registration successful - userId and email are now in Redux state
-        navigation.navigate('GuardOTP', { 
-          email: formData.email,
-          isPasswordReset: false 
-        });
+        const payload = result.payload;
+        
+        // Check if tokens are returned (dev mode OTP bypass)
+        if (payload.token && payload.user) {
+          // OTP was bypassed - user is already authenticated, navigate to profile setup
+          Alert.alert(
+            'Registration Successful',
+            payload.message || 'Your account has been created successfully.',
+            [{ text: 'Continue', onPress: () => navigation.navigate('GuardProfileSetup') }]
+          );
+        } else {
+          // Normal flow - need OTP verification
+          navigation.navigate('GuardOTP', { 
+            email: formData.email,
+            isPasswordReset: false 
+          });
+        }
       } else {
         // Registration failed
         const errorMessage = result.payload as string;
-        Alert.alert('Registration Failed', errorMessage || 'Failed to create account. Please try again.');
+        
+        // Handle specific error cases
+        if (errorMessage.includes('already registered')) {
+          Alert.alert(
+            'Email Already Registered',
+            errorMessage.includes('login') 
+              ? errorMessage 
+              : 'This email is already registered. If you haven\'t verified your email, a new verification code has been sent. Otherwise, please login.',
+            [
+              { text: 'Login', onPress: () => navigation.navigate('Login') },
+              { text: 'OK', style: 'cancel' }
+            ]
+          );
+        } else {
+          Alert.alert('Registration Failed', errorMessage || 'Failed to create account. Please try again.');
+        }
       }
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to create account. Please try again.');
@@ -169,6 +203,8 @@ const GuardSignupScreen: React.FC = () => {
           <PhoneInput
             value={formData.phoneNumber}
             onChangeText={(text) => updateField('phoneNumber', text)}
+            onCountryChange={(country) => setSelectedCountry(country)}
+            selectedCountry={selectedCountry}
             error={errors.phoneNumber}
           />
 
@@ -190,6 +226,7 @@ const GuardSignupScreen: React.FC = () => {
             onChangeText={(text) => updateField('confirmPassword', text)}
             error={errors.confirmPassword}
             secureTextEntry
+            showPassword={showConfirmPassword}
             onTogglePassword={() => setShowConfirmPassword(!showConfirmPassword)}
           />
         </View>

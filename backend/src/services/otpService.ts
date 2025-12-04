@@ -220,8 +220,6 @@ export const sendOTPEmail = async (email: string, otp: string, userName?: string
     
     const info = await transporter.sendMail(mailOptions);
     logger.info(`OTP email sent successfully to ${email}`, { messageId: info.messageId });
-    
-    return info;
   } catch (error: any) {
     logger.error('Error sending OTP email:', { 
       email, 
@@ -301,11 +299,27 @@ export const verifyOTP = async (userId: string, otp: string): Promise<boolean> =
     return false;
   }
 
+  // Normalize OTP strings (trim whitespace, ensure same length)
+  const storedOTP = user.emailVerificationToken.trim();
+  const providedOTP = otp.trim();
+
+  // Check length first (timingSafeEqual requires same length)
+  if (storedOTP.length !== providedOTP.length) {
+    logger.warn(`OTP length mismatch for user: ${userId} (stored: ${storedOTP.length}, provided: ${providedOTP.length})`);
+    return false;
+  }
+
   // Verify OTP using constant-time comparison to prevent timing attacks
-  const isValidOTP = crypto.timingSafeEqual(
-    Buffer.from(user.emailVerificationToken),
-    Buffer.from(otp)
-  );
+  let isValidOTP = false;
+  try {
+    isValidOTP = crypto.timingSafeEqual(
+      Buffer.from(storedOTP),
+      Buffer.from(providedOTP)
+    );
+  } catch (error: any) {
+    logger.error(`Error during OTP comparison for user: ${userId}`, { error: error.message });
+    return false;
+  }
 
   if (!isValidOTP) {
     logger.warn(`Invalid OTP verification attempt for user: ${userId}`);

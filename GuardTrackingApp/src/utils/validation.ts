@@ -174,10 +174,9 @@ export const createRegisterValidator = () => {
       message: 'First name must be between 2 and 50 characters',
     })
     .addRule('lastName', {
-      required: true,
-      minLength: 2,
+      required: false,
       maxLength: 50,
-      message: 'Last name must be between 2 and 50 characters',
+      message: 'Last name must be less than 50 characters',
     })
     .addRule('phone', {
       required: true,

@@ -1,5 +1,5 @@
 // Main App Navigator for Guard Tracking App
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { NavigationContainer, CommonActions } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useSelector } from 'react-redux';
@@ -25,6 +25,19 @@ const AppNavigator: React.FC = () => {
   const { isAuthenticated, isLoading } = useSelector((state: RootState) => state.auth);
   const navigationRef = useRef<any>(null);
   const prevIsAuthenticated = useRef<boolean | null>(null);
+  const [splashTimeout, setSplashTimeout] = useState(false);
+
+  // Set a timeout for splash screen to prevent infinite loading
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setSplashTimeout(true);
+      if (__DEV__) {
+        console.warn('Splash screen timeout - proceeding to navigation');
+      }
+    }, 15000); // 15 second timeout for splash screen
+
+    return () => clearTimeout(timeout);
+  }, []);
 
   // Handle navigation reset when auth state changes
   useEffect(() => {
@@ -56,7 +69,8 @@ const AppNavigator: React.FC = () => {
 
   // Only show splash screen during initial auth check (when not authenticated)
   // Once authenticated, show main app even if loading (e.g., during profile updates)
-  if (isLoading && !isAuthenticated && prevIsAuthenticated.current === null) {
+  // Also show navigation if splash timeout occurred
+  if ((isLoading && !isAuthenticated && prevIsAuthenticated.current === null) && !splashTimeout) {
     return <SplashScreen />;
   }
 

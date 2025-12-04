@@ -25,12 +25,22 @@ const SplashScreen: React.FC = () => {
       try {
         const hasValidTokens = await securityManager.areTokensValid();
         if (hasValidTokens) {
-          await dispatch(getCurrentUser());
+          // Add timeout to prevent hanging
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('getCurrentUser timeout')), 10000); // 10 second timeout
+          });
+          
+          await Promise.race([
+            dispatch(getCurrentUser()),
+            timeoutPromise
+          ]);
         } else if (__DEV__) {
           console.log('Skipping /auth/me: no valid tokens in storage');
         }
-      } catch (error) {
-        console.log('No existing authentication');
+      } catch (error: any) {
+        console.log('Auth check failed or timed out:', error.message || 'No existing authentication');
+        // Ensure loading state is cleared even on error
+        // The getCurrentUser thunk should handle this, but we ensure it here too
       }
     };
 

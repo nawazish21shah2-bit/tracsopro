@@ -331,6 +331,10 @@ export type AuthStackParamList = {
   ClientSignup: { accountType: 'individual' | 'company' };
   ClientOTP: { email: string; accountType: 'individual' | 'company'; isPasswordReset?: boolean };
   ClientProfileSetup: { accountType: 'individual' | 'company' };
+  AdminAccountType: undefined;
+  AdminSignup: { accountType: 'company' };
+  AdminOTP: { email: string; accountType: 'company'; isPasswordReset?: boolean };
+  AdminProfileSetup: { accountType: 'company' };
   ForgotPassword: undefined;
   ResetPassword: { email: string; otp: string };
 };

@@ -50,6 +50,7 @@ const RegisterScreen: React.FC = () => {
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({
@@ -58,25 +59,45 @@ const RegisterScreen: React.FC = () => {
     }));
   };
 
+  const validateForm = (): boolean => {
+    const newErrors: Record<string, string> = {};
+
+    // Full Name validation
+    if (!formData.fullName.trim()) {
+      newErrors.fullName = 'Full name is required';
+    } else if (formData.fullName.trim().length < 2) {
+      newErrors.fullName = 'Full name must be at least 2 characters';
+    } else if (formData.fullName.trim().length > 100) {
+      newErrors.fullName = 'Full name must be less than 100 characters';
+    }
+
+    // Email validation
+    if (!formData.email.trim()) {
+      newErrors.email = 'Email is required';
+    } else if (!isValidEmail(formData.email.trim())) {
+      newErrors.email = 'Please enter a valid email address';
+    }
+
+    // Password validation
+    if (!formData.password) {
+      newErrors.password = 'Password is required';
+    } else if (formData.password.length < 8) {
+      newErrors.password = 'Password must be at least 8 characters';
+    }
+
+    // Confirm Password validation
+    if (!formData.confirmPassword) {
+      newErrors.confirmPassword = 'Please confirm your password';
+    } else if (formData.password !== formData.confirmPassword) {
+      newErrors.confirmPassword = 'Passwords do not match';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleRegister = async () => {
-    // Validation
-    if (!formData.email || !formData.password || !formData.fullName) {
-      Alert.alert('Error', 'Please fill in all required fields');
-      return;
-    }
-
-    if (!isValidEmail(formData.email)) {
-      Alert.alert('Error', 'Please enter a valid email address');
-      return;
-    }
-
-    if (formData.password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters long');
-      return;
-    }
-
-    if (formData.password !== formData.confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+    if (!validateForm()) {
       return;
     }
 
@@ -89,7 +110,7 @@ const RegisterScreen: React.FC = () => {
       const registerData = {
         firstName,
         lastName,
-        email: formData.email,
+        email: formData.email.toLowerCase().trim(),
         password: formData.password,
         confirmPassword: formData.confirmPassword,
         phone: '', // Will be collected in profile setup
@@ -98,9 +119,57 @@ const RegisterScreen: React.FC = () => {
       
       const result = await dispatch(registerUser(registerData));
       if (registerUser.fulfilled.match(result)) {
-        navigation.navigate('EmailVerification', { email: formData.email });
+        const payload = result.payload;
+        
+        // Check if tokens are returned (dev mode OTP bypass)
+        if (payload.token && payload.user) {
+          // OTP was bypassed - user is already authenticated
+          Alert.alert(
+            'Registration Successful',
+            payload.message || 'Your account has been created successfully.',
+            [{ text: 'OK', onPress: () => {
+              // Navigate to appropriate screen based on role
+              if (formData.role === 'GUARD') {
+                navigation.navigate('GuardProfileSetup');
+              } else {
+                navigation.navigate('ClientProfileSetup', { accountType: 'individual' });
+              }
+            }}]
+          );
+        } else {
+          // Normal flow - need OTP verification
+          // Navigate to appropriate OTP screen based on role
+          if (formData.role === 'GUARD') {
+            navigation.navigate('GuardOTP', { 
+              email: formData.email,
+              isPasswordReset: false 
+            });
+          } else {
+            navigation.navigate('ClientOTP', { 
+              email: formData.email,
+              accountType: 'individual',
+              isPasswordReset: false 
+            });
+          }
+        }
       } else {
-        Alert.alert('Registration Failed', result.payload as string);
+        const errorMessage = result.payload as string;
+        
+        // Handle specific error cases
+        if (errorMessage.includes('already registered')) {
+          Alert.alert(
+            'Email Already Registered',
+            errorMessage.includes('login') 
+              ? errorMessage 
+              : 'This email is already registered. If you haven\'t verified your email, a new verification code has been sent. Otherwise, please login.',
+            [
+              { text: 'Login', onPress: () => navigation.navigate('Login') },
+              { text: 'OK', style: 'cancel' }
+            ]
+          );
+        } else {
+          Alert.alert('Registration Failed', errorMessage || 'Failed to create account. Please try again.');
+        }
       }
     } catch (error) {
       Alert.alert('Error', 'An unexpected error occurred');
@@ -152,9 +221,13 @@ const RegisterScreen: React.FC = () => {
               icon="person-outline"
               placeholder="Full Name"
               value={formData.fullName}
-              onChangeText={(v) => handleInputChange('fullName', v)}
+              onChangeText={(v) => {
+                handleInputChange('fullName', v);
+                if (errors.fullName) setErrors(prev => ({ ...prev, fullName: '' }));
+              }}
               autoCapitalize="words"
               editable={!isLoading}
+              error={errors.fullName}
             />
           </View>
 
@@ -164,10 +237,14 @@ const RegisterScreen: React.FC = () => {
               icon="email-outline"
               placeholder="Email Address"
               value={formData.email}
-              onChangeText={(v) => handleInputChange('email', v)}
+              onChangeText={(v) => {
+                handleInputChange('email', v);
+                if (errors.email) setErrors(prev => ({ ...prev, email: '' }));
+              }}
               keyboardType="email-address"
               autoCapitalize="none"
               editable={!isLoading}
+              error={errors.email}
             />
           </View>
 
@@ -177,12 +254,16 @@ const RegisterScreen: React.FC = () => {
               icon="lock-outline"
               placeholder="Password"
               value={formData.password}
-              onChangeText={(v) => handleInputChange('password', v)}
+              onChangeText={(v) => {
+                handleInputChange('password', v);
+                if (errors.password) setErrors(prev => ({ ...prev, password: '' }));
+              }}
               secureTextEntry
               showPassword={showPassword}
               onTogglePassword={() => setShowPassword(!showPassword)}
               autoCapitalize="none"
               editable={!isLoading}
+              error={errors.password}
             />
           </View>
 
@@ -192,12 +273,16 @@ const RegisterScreen: React.FC = () => {
               icon="lock-outline"
               placeholder="Confirm Password"
               value={formData.confirmPassword}
-              onChangeText={(v) => handleInputChange('confirmPassword', v)}
+              onChangeText={(v) => {
+                handleInputChange('confirmPassword', v);
+                if (errors.confirmPassword) setErrors(prev => ({ ...prev, confirmPassword: '' }));
+              }}
               secureTextEntry
               showPassword={showConfirmPassword}
               onTogglePassword={() => setShowConfirmPassword(!showConfirmPassword)}
               autoCapitalize="none"
               editable={!isLoading}
+              error={errors.confirmPassword}
             />
           </View>
 

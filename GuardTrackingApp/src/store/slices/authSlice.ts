@@ -261,7 +261,7 @@ const authSlice = createSlice({
         state.isAuthenticated = false;
       });
 
-    // Register (now returns userId and email, not tokens)
+    // Register (returns userId and email for OTP, or tokens if OTP bypassed)
     builder
       .addCase(registerUser.pending, (state) => {
         state.isLoading = true;
@@ -269,8 +269,21 @@ const authSlice = createSlice({
       })
       .addCase(registerUser.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.tempUserId = action.payload.userId;
-        state.tempEmail = action.payload.email;
+        // Check if tokens are returned (dev mode OTP bypass)
+        if (action.payload.token && action.payload.user) {
+          // OTP was bypassed - user is already authenticated
+          state.user = action.payload.user;
+          state.token = action.payload.token;
+          state.refreshToken = action.payload.refreshToken;
+          state.isAuthenticated = true;
+          state.isEmailVerified = true;
+          state.tempUserId = null;
+          state.tempEmail = null;
+        } else {
+          // Normal flow - need OTP verification
+          state.tempUserId = action.payload.userId;
+          state.tempEmail = action.payload.email;
+        }
         state.error = null;
       })
       .addCase(registerUser.rejected, (state, action) => {

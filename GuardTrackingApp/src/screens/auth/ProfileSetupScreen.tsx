@@ -18,7 +18,7 @@ import { AuthStackParamList } from '../../types';
 import Button from '../../components/common/Button';
 import Logo from '../../assets/images/tracSOpro-logo.png';
 
-type ProfileSetupScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'ProfileSetup'>;
+type ProfileSetupScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'GuardProfileSetup'>;
 
 const ProfileSetupScreen: React.FC = () => {
   const navigation = useNavigation<ProfileSetupScreenNavigationProp>();

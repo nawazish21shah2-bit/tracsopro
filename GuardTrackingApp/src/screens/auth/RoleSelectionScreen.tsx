@@ -19,7 +19,7 @@ type RoleSelectionScreenNavigationProp = StackNavigationProp<AuthStackParamList,
 
 const RoleSelectionScreen: React.FC = () => {
   const navigation = useNavigation<RoleSelectionScreenNavigationProp>();
-  const [selectedRole, setSelectedRole] = useState<'guard' | 'client'>('guard');
+  const [selectedRole, setSelectedRole] = useState<'guard' | 'client' | 'admin'>('guard');
 
   const handleContinue = () => {
     if (selectedRole === 'guard') {
@@ -27,6 +27,9 @@ const RoleSelectionScreen: React.FC = () => {
     } else if (selectedRole === 'client') {
       // Navigate to client account type selection
       navigation.navigate('ClientAccountType');
+    } else if (selectedRole === 'admin') {
+      // Navigate to admin account type selection (for companies)
+      navigation.navigate('AdminAccountType');
     }
   };
 
@@ -86,6 +89,22 @@ const RoleSelectionScreen: React.FC = () => {
             <Text style={styles.optionTitle}>Client{"\n"}Account</Text>
             <Text style={styles.optionDescription}>
               Register as a client to hire security services
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.optionCard,
+              selectedRole === 'admin' && styles.optionCardSelected
+            ]}
+            onPress={() => setSelectedRole('admin')}
+          >
+            <View style={styles.iconContainer}>
+              <AppIcon type="material" name="admin-panel-settings" size={40} color="#1C6CA9" />
+            </View>
+            <Text style={styles.optionTitle}>Company{"\n"}Admin</Text>
+            <Text style={styles.optionDescription}>
+              Register as a company admin to manage your organization
             </Text>
           </TouchableOpacity>
         </View>
@@ -161,6 +180,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     flexDirection: 'row',
+    flexWrap: 'wrap',
   },
   optionCard: {
     height: 160,
@@ -172,6 +192,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     width: '48%',
+    minWidth: 140,
   },
   optionCardSelected: {
     borderColor: '#1C6CA9',
