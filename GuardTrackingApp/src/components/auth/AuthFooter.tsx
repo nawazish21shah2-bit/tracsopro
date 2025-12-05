@@ -18,8 +18,12 @@ const AuthFooter: React.FC<AuthFooterProps> = ({
     <View style={styles.footer}>
       <Text style={styles.footerText}>
         {text} 
-        <TouchableOpacity onPress={onLinkPress} disabled={disabled}>
-          <Text style={styles.linkText}> {linkText}</Text>
+        <TouchableOpacity 
+          onPress={onLinkPress} 
+          disabled={disabled}
+          activeOpacity={disabled ? 1 : 0.7}
+        >
+          <Text style={[styles.linkText, disabled && styles.disabledLink]}> {linkText}</Text>
         </TouchableOpacity>
       </Text>
     </View>
@@ -43,6 +47,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#1C6CA9',
     marginTop: 4,
+  },
+  disabledLink: {
+    opacity: 0.5,
   },
 });
 

@@ -89,6 +89,11 @@ const GuardSignupScreen: React.FC = () => {
   };
 
   const handleSignup = async () => {
+    // Prevent multiple submissions
+    if (isLoading) {
+      return;
+    }
+
     if (!validateForm()) return;
 
     setIsLoading(true);
@@ -148,6 +153,12 @@ const GuardSignupScreen: React.FC = () => {
               { text: 'Login', onPress: () => navigation.navigate('Login') },
               { text: 'OK', style: 'cancel' }
             ]
+          );
+        } else if (errorMessage.includes('rate limit') || errorMessage.includes('Too many')) {
+          Alert.alert(
+            'Rate Limit Exceeded',
+            'Too many registration attempts. Please wait a few minutes before trying again.',
+            [{ text: 'OK' }]
           );
         } else {
           Alert.alert('Registration Failed', errorMessage || 'Failed to create account. Please try again.');

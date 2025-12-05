@@ -96,6 +96,11 @@ const ClientSignupScreen: React.FC = () => {
   };
 
   const handleSignup = async () => {
+    // Prevent multiple submissions
+    if (isLoading) {
+      return;
+    }
+
     if (!validateForm()) return;
 
     setIsLoading(true);
@@ -158,6 +163,12 @@ const ClientSignupScreen: React.FC = () => {
               { text: 'Login', onPress: () => navigation.navigate('Login') },
               { text: 'OK', style: 'cancel' }
             ]
+          );
+        } else if (errorMessage.includes('rate limit') || errorMessage.includes('Too many')) {
+          Alert.alert(
+            'Rate Limit Exceeded',
+            'Too many registration attempts. Please wait a few minutes before trying again.',
+            [{ text: 'OK' }]
           );
         } else {
           Alert.alert('Registration Failed', errorMessage || 'Failed to create account. Please try again.');
@@ -322,8 +333,12 @@ const ClientSignupScreen: React.FC = () => {
         <View style={styles.footer}>
           <Text style={styles.footerText}>
             Already have an account? 
-            <TouchableOpacity onPress={navigateToLogin}>
-              <Text style={styles.loginText}> Login</Text>
+            <TouchableOpacity 
+              onPress={navigateToLogin}
+              disabled={isLoading}
+              activeOpacity={isLoading ? 1 : 0.7}
+            >
+              <Text style={[styles.loginText, isLoading && styles.disabledLink]}> Login</Text>
             </TouchableOpacity>
           </Text>
         </View>
@@ -423,6 +438,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
     color: '#1C6CA9',
+  },
+  disabledLink: {
+    opacity: 0.5,
   },
 });
 

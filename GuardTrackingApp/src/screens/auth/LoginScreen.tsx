@@ -74,6 +74,11 @@ const LoginScreen: React.FC = () => {
   }, [formData, validator]);
 
   const handleLogin = useCallback(async () => {
+    // Prevent multiple submissions
+    if (isLoading) {
+      return;
+    }
+
     if (!validateForm()) {
       return;
     }
@@ -230,8 +235,12 @@ const LoginScreen: React.FC = () => {
         <View style={styles.footer}>
           <Text style={styles.footerText}>
             Don't have an account? 
-            <TouchableOpacity onPress={navigateToRegister}>
-              <Text style={styles.registerText}> Register now</Text>
+            <TouchableOpacity 
+              onPress={navigateToRegister}
+              disabled={isLoading}
+              activeOpacity={isLoading ? 1 : 0.7}
+            >
+              <Text style={[styles.registerText, isLoading && styles.disabledLink]}> Register now</Text>
             </TouchableOpacity>
           </Text>
         </View>
@@ -399,6 +408,9 @@ const styles = StyleSheet.create({
     letterSpacing: -0.408,
     color: '#1C6CA9',
     marginTop: 4,
+  },
+  disabledLink: {
+    opacity: 0.5,
   },
 });
 
