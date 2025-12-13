@@ -3,6 +3,7 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, Text, StyleSheet } from 'react-native';
 import { HomeIcon, ShiftsIcon, ReportsIcon, SettingsIcon, UserIcon } from '../components/ui/AppIcons';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../styles/globalStyles';
 
 // Import Client Screens
 import ClientDashboard from '../screens/client/ClientDashboard';
@@ -53,7 +54,7 @@ const ClientNavigator: React.FC = () => {
             <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
               <IconComponent
                 size={20}
-                color={focused ? '#1C6CA9' : '#7A7A7A'}
+                color={focused ? COLORS.primary : COLORS.textSecondary}
               />
             </View>
           );
@@ -62,15 +63,15 @@ const ClientNavigator: React.FC = () => {
           <Text
             style={[
               styles.tabLabel,
-              { color: focused ? '#1C6CA9' : '#7A7A7A' },
+              { color: focused ? COLORS.primary : COLORS.textSecondary },
             ]}
           >
             {route.name}
           </Text>
         ),
         tabBarStyle: styles.tabBar,
-        tabBarActiveTintColor: '#1C6CA9',
-        tabBarInactiveTintColor: '#7A7A7A',
+        tabBarActiveTintColor: COLORS.primary,
+        tabBarInactiveTintColor: COLORS.textSecondary,
       })}
     >
       <Tab.Screen
@@ -114,27 +115,29 @@ const ClientNavigator: React.FC = () => {
 
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.backgroundPrimary,
     borderTopWidth: 1,
-    borderTopColor: '#E0F0FA',
-    paddingTop: 8,
-    paddingBottom: 8,
+    borderTopColor: COLORS.borderLight,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.sm,
     height: 70,
   },
   tabIconWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.backgroundSecondary,
   },
   tabIconWrapperActive: {
-    backgroundColor: 'rgba(28,108,169,0.2)',
+    backgroundColor: COLORS.primaryLight,
   },
   tabLabel: {
-    fontSize: 10,
-    fontWeight: '500',
-    marginTop: 4,
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    marginTop: SPACING.xs,
+    textAlign: 'center',
   },
 });
 

@@ -22,6 +22,7 @@ import PhoneInput from '../../components/auth/PhoneInput';
 import { AuthStackParamList, UserRole } from '../../types';
 import Logo from '../../assets/images/tracSOpro-logo.png';
 import { Country, defaultCountry } from '../../utils/countries';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 
 type ClientSignupScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'ClientSignup'>;
 type ClientSignupScreenRouteProp = RouteProp<AuthStackParamList, 'ClientSignup'>;
@@ -39,6 +40,7 @@ const ClientSignupScreen: React.FC = () => {
     password: '',
     confirmPassword: '',
   });
+  const [invitationCode, setInvitationCode] = useState('');
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -91,6 +93,11 @@ const ClientSignupScreen: React.FC = () => {
       newErrors.confirmPassword = 'Passwords do not match';
     }
 
+    // Invitation code validation (Required for Client)
+    if (!invitationCode.trim()) {
+      newErrors.invitationCode = 'Invitation code is required. Please contact your security company administrator.';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -124,6 +131,7 @@ const ClientSignupScreen: React.FC = () => {
         confirmPassword: formData.password, // Backend doesn't need this, but type requires it
         role: UserRole.CLIENT,
         accountType: accountType.toUpperCase(),
+        invitationCode: invitationCode.trim() || undefined,
       };
 
       // Call registration API via Redux
@@ -188,7 +196,7 @@ const ClientSignupScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.backgroundPrimary} />
       
       <ScrollView 
         contentContainerStyle={styles.scrollContainer}
@@ -210,7 +218,7 @@ const ClientSignupScreen: React.FC = () => {
           {/* Full Name */}
           <View style={styles.inputContainer}>
             <View style={[styles.inputWrapper, errors.fullName && styles.inputError]}>
-              <Icon name="person-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+              <Icon name="person-outline" size={20} color={COLORS.textTertiary} style={styles.inputIcon} />
               <TextInput
                 style={styles.textInput}
                 placeholder="Full Name"
@@ -219,7 +227,7 @@ const ClientSignupScreen: React.FC = () => {
                   setFormData(prev => ({ ...prev, fullName: text }));
                   if (errors.fullName) setErrors(prev => ({ ...prev, fullName: '' }));
                 }}
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={COLORS.textTertiary}
                 autoCapitalize="words"
               />
             </View>
@@ -229,7 +237,7 @@ const ClientSignupScreen: React.FC = () => {
           {/* Email */}
           <View style={styles.inputContainer}>
             <View style={[styles.inputWrapper, errors.email && styles.inputError]}>
-              <Icon name="person-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+              <Icon name="person-outline" size={20} color={COLORS.textTertiary} style={styles.inputIcon} />
               <TextInput
                 style={styles.textInput}
                 placeholder="Email Address"
@@ -238,12 +246,31 @@ const ClientSignupScreen: React.FC = () => {
                   setFormData(prev => ({ ...prev, email: text }));
                   if (errors.email) setErrors(prev => ({ ...prev, email: '' }));
                 }}
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={COLORS.textTertiary}
                 keyboardType="email-address"
                 autoCapitalize="none"
               />
             </View>
             {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+          </View>
+
+          {/* Invitation Code */}
+          <View style={styles.inputContainer}>
+            <View style={[styles.inputWrapper, errors.invitationCode && styles.inputError]}>
+              <Icon name="ticket-outline" size={20} color={COLORS.textTertiary} style={styles.inputIcon} />
+              <TextInput
+                style={styles.textInput}
+                placeholder="Invitation Code *"
+                value={invitationCode}
+                onChangeText={(text) => {
+                  setInvitationCode(text);
+                  if (errors.invitationCode) setErrors(prev => ({ ...prev, invitationCode: '' }));
+                }}
+                placeholderTextColor={COLORS.textTertiary}
+                autoCapitalize="characters"
+              />
+            </View>
+            {errors.invitationCode && <Text style={styles.errorText}>{errors.invitationCode}</Text>}
           </View>
 
           {/* Phone Number */}
@@ -263,7 +290,7 @@ const ClientSignupScreen: React.FC = () => {
           {/* Password */}
           <View style={styles.inputContainer}>
             <View style={[styles.inputWrapper, errors.password && styles.inputError]}>
-              <Icon name="lock-closed-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+              <Icon name="lock-closed-outline" size={20} color={COLORS.textTertiary} style={styles.inputIcon} />
               <TextInput
                 style={styles.textInput}
                 placeholder="Password"
@@ -272,7 +299,7 @@ const ClientSignupScreen: React.FC = () => {
                   setFormData(prev => ({ ...prev, password: text }));
                   if (errors.password) setErrors(prev => ({ ...prev, password: '' }));
                 }}
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={COLORS.textTertiary}
                 secureTextEntry={!showPassword}
               />
               <TouchableOpacity
@@ -282,7 +309,7 @@ const ClientSignupScreen: React.FC = () => {
                 <Icon 
                   name={showPassword ? "eye-outline" : "eye-off-outline"} 
                   size={20} 
-                  color="#9CA3AF" 
+                  color={COLORS.textTertiary} 
                 />
               </TouchableOpacity>
             </View>
@@ -292,7 +319,7 @@ const ClientSignupScreen: React.FC = () => {
           {/* Confirm Password */}
           <View style={styles.inputContainer}>
             <View style={[styles.inputWrapper, errors.confirmPassword && styles.inputError]}>
-              <Icon name="lock-closed-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+              <Icon name="lock-closed-outline" size={20} color={COLORS.textTertiary} style={styles.inputIcon} />
               <TextInput
                 style={styles.textInput}
                 placeholder="Confirm Password"
@@ -301,7 +328,7 @@ const ClientSignupScreen: React.FC = () => {
                   setFormData(prev => ({ ...prev, confirmPassword: text }));
                   if (errors.confirmPassword) setErrors(prev => ({ ...prev, confirmPassword: '' }));
                 }}
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={COLORS.textTertiary}
                 secureTextEntry={!showConfirmPassword}
               />
               <TouchableOpacity
@@ -311,7 +338,7 @@ const ClientSignupScreen: React.FC = () => {
                 <Icon 
                   name={showConfirmPassword ? "eye-outline" : "eye-off-outline"} 
                   size={20} 
-                  color="#9CA3AF" 
+                  color={COLORS.textTertiary} 
                 />
               </TouchableOpacity>
             </View>
@@ -350,17 +377,17 @@ const ClientSignupScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.backgroundPrimary,
   },
   scrollContainer: {
     flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 40,
+    paddingHorizontal: SPACING.xxl,
+    paddingVertical: SPACING.xxxxl,
   },
   logoContainer: {
     alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 40,
+    marginTop: SPACING.lg,
+    marginBottom: SPACING.xxxxl,
   },
   logoImage: {
     width: 160,
@@ -368,76 +395,76 @@ const styles = StyleSheet.create({
   },
   titleContainer: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: SPACING.xxxxl,
   },
   title: {
-    fontFamily: 'Montserrat',
-    fontWeight: '700',
-    fontSize: 24,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    fontSize: TYPOGRAPHY.fontSize.xxl,
     lineHeight: 29,
     textAlign: 'center',
     letterSpacing: 1,
-    color: '#000000',
+    color: COLORS.textPrimary,
   },
   form: {
-    marginBottom: 40,
+    marginBottom: SPACING.xxxxl,
   },
   inputContainer: {
-    marginBottom: 20,
+    marginBottom: SPACING.lg,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.backgroundPrimary,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
+    borderColor: COLORS.borderLight,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.lg,
     height: 56,
   },
   inputError: {
-    borderColor: '#EF4444',
+    borderColor: COLORS.error,
   },
   inputIcon: {
-    marginRight: 12,
+    marginRight: SPACING.md,
   },
   textInput: {
     flex: 1,
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    fontSize: 16,
-    color: '#000000',
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.regular,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textPrimary,
     paddingVertical: 0,
   },
   eyeIcon: {
-    padding: 4,
+    padding: SPACING.xs,
   },
   errorText: {
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    fontSize: 12,
-    color: '#EF4444',
-    marginTop: 4,
-    marginLeft: 4,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.regular,
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.error,
+    marginTop: SPACING.xs,
+    marginLeft: SPACING.xs,
   },
   continueButton: {
-    marginBottom: 30,
+    marginBottom: SPACING.xxl,
   },
   footer: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: SPACING.lg,
   },
   footerText: {
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    fontSize: 14,
-    color: '#6B7280',
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.regular,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
   },
   loginText: {
-    fontFamily: 'Inter',
-    fontWeight: '600',
-    fontSize: 14,
-    color: '#1C6CA9',
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.primary,
   },
   disabledLink: {
     opacity: 0.5,

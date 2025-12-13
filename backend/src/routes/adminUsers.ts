@@ -8,6 +8,9 @@ const router = Router();
 router.use(authenticate);
 router.use(requireAdmin);
 
+// Create user (admin-created, bypasses invitation codes)
+router.post('/', adminUserController.createUser.bind(adminUserController));
+
 // List users with optional filters
 router.get('/', adminUserController.getUsers.bind(adminUserController));
 

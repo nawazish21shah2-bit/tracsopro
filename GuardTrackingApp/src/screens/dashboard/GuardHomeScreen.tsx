@@ -10,9 +10,9 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { useDispatch, useSelector } from 'react-redux';
+import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { useDispatch, useSelector } from 'react-redux';
 import Geolocation from 'react-native-geolocation-service';
 import { RootState, AppDispatch } from '../../store';
 import {
@@ -41,8 +41,13 @@ import {
   BellIcon,
 } from '../../components/ui/FeatherIcons';
 import { Shift, ShiftStatus } from '../../types/shift.types';
+import { GuardStackParamList } from '../../navigation/GuardStackNavigator';
+import apiService from '../../services/api';
 
-type GuardHomeScreenNavigationProp = StackNavigationProp<any, 'GuardHome'>;
+type GuardHomeScreenNavigationProp = CompositeNavigationProp<
+  StackNavigationProp<any, 'GuardHome'>,
+  StackNavigationProp<GuardStackParamList>
+>;
 
 interface ShiftData {
   id: string;
@@ -101,6 +106,7 @@ const GuardHomeScreen: React.FC = () => {
     missedShifts: 0,
     totalSites: 0,
     incidentReports: 0,
+    totalHours: 0,
   };
 
   // Initialize data and set up timer
@@ -297,8 +303,69 @@ const GuardHomeScreen: React.FC = () => {
     }
   };
 
-  const handleEmergencyAlert = () => {
-    (navigation as any).navigate('EmergencyAlert');
+  const handleEmergencyAlert = async () => {
+    Alert.alert(
+      'Emergency Alert',
+      'Are you sure you want to send an emergency alert? This will notify all supervisors and administrators.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Send Alert', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Get current location if available
+              const location = {
+                latitude: 0,
+                longitude: 0,
+                accuracy: 10,
+                address: 'Current location'
+              };
+
+              // Try to get actual location
+              try {
+                const position = await new Promise<any>((resolve, reject) => {
+                  Geolocation.getCurrentPosition(
+                    resolve,
+                    reject,
+                    {
+                      enableHighAccuracy: true,
+                      timeout: 10000,
+                      maximumAge: 0
+                    }
+                  );
+                });
+                location.latitude = position.coords.latitude;
+                location.longitude = position.coords.longitude;
+                location.accuracy = position.coords.accuracy || 10;
+              } catch (locError) {
+                console.warn('Could not get location:', locError);
+              }
+
+              const result = await apiService.triggerEmergencyAlert({
+                type: 'PANIC',
+                severity: 'CRITICAL',
+                location: {
+                  latitude: location.latitude,
+                  longitude: location.longitude,
+                  accuracy: location.accuracy,
+                  address: location.address
+                },
+                message: 'Emergency alert triggered by guard'
+              });
+
+              if (result.success) {
+                Alert.alert('Emergency Alert Sent', 'Help is on the way! All supervisors have been notified.');
+              } else {
+                Alert.alert('Error', result.message || 'Failed to send emergency alert. Please try again.');
+              }
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'Failed to send emergency alert. Please try again.');
+            }
+          }
+        },
+      ]
+    );
   };
 
   const handleNotificationPress = () => {
@@ -345,17 +412,17 @@ const GuardHomeScreen: React.FC = () => {
           style={styles.statCard}
         />
         <StatsCard
-          label="Missed Shifts"
-          value={statistics.missedShifts}
-          icon={<AlertTriangleIcon size={18} color={COLORS.error} />}
-          variant="danger"
+          label="Total Hours"
+          value={Math.round((statistics as any).totalHours || 0)}
+          icon={<ClockIcon size={18} color={COLORS.info} />}
+          variant="info"
           style={styles.statCard}
         />
         <StatsCard
-          label="Total Sites"
+          label="Active Sites"
           value={statistics.totalSites}
-          icon={<MapPinIcon size={18} color={COLORS.info} />}
-          variant="info"
+          icon={<MapPinIcon size={18} color={COLORS.primary} />}
+                variant="info"
           style={styles.statCard}
         />
         <StatsCard
@@ -528,7 +595,15 @@ const GuardHomeScreen: React.FC = () => {
           <TouchableOpacity 
             key={shift.id} 
             style={styles.notificationItem}
-            onPress={() => (navigation as any).navigate('ShiftDetails', { shiftId: shift.id })}
+            onPress={() => {
+              // Navigate to parent stack navigator
+              const parent = navigation.getParent();
+              if (parent) {
+                parent.navigate('ShiftDetails', { shiftId: shift.id });
+              } else {
+                navigation.navigate('ShiftDetails', { shiftId: shift.id });
+              }
+            }}
           >
           <View style={styles.notificationAvatar}>
               <MapPinIcon size={24} color={COLORS.primary} />
@@ -717,7 +792,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: SPACING.xs,
   },
   logoText: {
     fontSize: TYPOGRAPHY.fontSize.sm,
@@ -803,7 +878,7 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.fontSize.md,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
     color: COLORS.textPrimary,
-    marginBottom: 2,
+    marginBottom: SPACING.xs / 2,
   },
   locationAddress: {
     fontSize: TYPOGRAPHY.fontSize.sm,
@@ -937,7 +1012,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.backgroundPrimary,
     borderRadius: BORDER_RADIUS.md,
     marginBottom: SPACING.md,
-    ...SHADOWS.small,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    // Border only, no shadow for minimal style
   },
   notificationAvatar: {
     width: 40,
@@ -958,12 +1035,12 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.fontSize.sm,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
     color: COLORS.textPrimary,
-    marginBottom: 2,
+    marginBottom: SPACING.xs / 2,
   },
   notificationAction: {
     fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.textSecondary,
-    marginBottom: 2,
+    marginBottom: SPACING.xs / 2,
   },
   notificationSite: {
     fontSize: TYPOGRAPHY.fontSize.xs,
@@ -976,7 +1053,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    marginBottom: 4,
+    marginBottom: SPACING.xs,
   },
   statusText: {
     fontSize: TYPOGRAPHY.fontSize.xs,

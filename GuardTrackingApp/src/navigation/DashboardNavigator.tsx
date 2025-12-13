@@ -6,14 +6,17 @@ import { Text, View, StyleSheet } from 'react-native';
 import GuardHomeScreen from '../screens/dashboard/GuardHomeScreen';
 import MyShiftsScreen from '../screens/dashboard/MyShiftsScreen';
 import ReportsScreen from '../screens/dashboard/ReportsScreen';
-import AvailableShiftsScreen from '../screens/guard/AvailableShiftsScreen';
+// REMOVED: AvailableShiftsScreen - Job board system removed (Option B)
 import ChatListScreen from '../screens/chat/ChatListScreen';
-import { HomeIcon, ShiftsIcon, ReportsIcon, JobsIcon } from '../components/ui/AppIcons';
+import CheckInScreen from '../screens/dashboard/CheckInScreen';
+import { HomeIcon, ShiftsIcon, ReportsIcon, CheckInIcon } from '../components/ui/AppIcons';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../styles/globalStyles';
 
 export type DashboardTabParamList = {
   Home: undefined;
   Chat: undefined;
   'My Shifts': undefined;
+  'Check In/Out': undefined;
   Reports: undefined;
   Jobs: undefined;
 };
@@ -25,20 +28,20 @@ const DashboardNavigator: React.FC = () => {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#1C6CA9',
-        tabBarInactiveTintColor: '#7A7A7A',
+        tabBarActiveTintColor: COLORS.primary,
+        tabBarInactiveTintColor: COLORS.textSecondary,
         tabBarStyle: {
-          backgroundColor: '#FFFFFF',
+          backgroundColor: COLORS.backgroundPrimary,
           borderTopWidth: 1,
-          borderTopColor: '#E0F0FA',
-          paddingBottom: 8,
-          paddingTop: 8,
+          borderTopColor: COLORS.borderLight,
+          paddingBottom: SPACING.sm,
+          paddingTop: SPACING.sm,
           height: 70,
         },
         tabBarLabelStyle: {
-          fontSize: 10,
-          fontWeight: '500',
-          marginTop: 4,
+          fontSize: TYPOGRAPHY.fontSize.xs,
+          fontWeight: TYPOGRAPHY.fontWeight.medium,
+          marginTop: SPACING.xs,
         },
         tabBarIconStyle: {
           marginBottom: 2,
@@ -51,8 +54,13 @@ const DashboardNavigator: React.FC = () => {
         options={{
           tabBarIcon: ({ focused }) => (
             <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
-              <HomeIcon size={20} color={focused ? '#1C6CA9' : '#7A7A7A'} />
+              <HomeIcon size={20} color={focused ? COLORS.primary : COLORS.textSecondary} />
             </View>
+          ),
+          tabBarLabel: ({ focused }) => (
+            <Text style={[styles.tabLabel, { color: focused ? COLORS.primary : COLORS.textSecondary }]}>
+              Home
+            </Text>
           ),
         }}
       />
@@ -62,8 +70,13 @@ const DashboardNavigator: React.FC = () => {
         options={{
           tabBarIcon: ({ focused }) => (
             <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
-              <ReportsIcon size={20} color={focused ? '#1C6CA9' : '#7A7A7A'} />
+              <ReportsIcon size={20} color={focused ? COLORS.primary : COLORS.textSecondary} />
             </View>
+          ),
+          tabBarLabel: ({ focused }) => (
+            <Text style={[styles.tabLabel, { color: focused ? COLORS.primary : COLORS.textSecondary }]}>
+              Chat
+            </Text>
           ),
         }}
       />
@@ -73,8 +86,29 @@ const DashboardNavigator: React.FC = () => {
         options={{
           tabBarIcon: ({ focused }) => (
             <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
-              <ShiftsIcon size={20} color={focused ? '#1C6CA9' : '#7A7A7A'} />
+              <ShiftsIcon size={20} color={focused ? COLORS.primary : COLORS.textSecondary} />
             </View>
+          ),
+          tabBarLabel: ({ focused }) => (
+            <Text style={[styles.tabLabel, { color: focused ? COLORS.primary : COLORS.textSecondary }]}>
+              My Shifts
+            </Text>
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Check In/Out"
+        component={CheckInScreen}
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
+              <CheckInIcon size={20} color={focused ? COLORS.primary : COLORS.textSecondary} />
+            </View>
+          ),
+          tabBarLabel: ({ focused }) => (
+            <Text style={[styles.tabLabel, { color: focused ? COLORS.primary : COLORS.textSecondary }]}>
+              Check In/Out
+            </Text>
           ),
         }}
       />
@@ -84,22 +118,18 @@ const DashboardNavigator: React.FC = () => {
         options={{
           tabBarIcon: ({ focused }) => (
             <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
-              <ReportsIcon size={20} color={focused ? '#1C6CA9' : '#7A7A7A'} />
+              <ReportsIcon size={20} color={focused ? COLORS.primary : COLORS.textSecondary} />
             </View>
+          ),
+          tabBarLabel: ({ focused }) => (
+            <Text style={[styles.tabLabel, { color: focused ? COLORS.primary : COLORS.textSecondary }]}>
+              Reports
+            </Text>
           ),
         }}
       />
-      <Tab.Screen
-        name="Jobs"
-        component={AvailableShiftsScreen}
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
-              <JobsIcon size={20} color={focused ? '#1C6CA9' : '#7A7A7A'} />
-            </View>
-          ),
-        }}
-      />
+      {/* REMOVED: Jobs tab - Job board system removed (Option B) */}
+      {/* Guards now see assigned shifts in "My Shifts" tab */}
     </Tab.Navigator>
   );
 };
@@ -108,12 +138,21 @@ export default DashboardNavigator;
 
 const styles = StyleSheet.create({
   tabIconWrapper: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.backgroundSecondary,
   },
   tabIconWrapperActive: {
-    backgroundColor: 'rgba(28,108,169,0.2)',
+    backgroundColor: COLORS.primaryLight,
+  },
+  tabLabel: {
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    marginTop: SPACING.xs,
+    textAlign: 'center',
   },
 });
 

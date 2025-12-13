@@ -541,7 +541,7 @@ const styles = StyleSheet.create({
     marginRight: SPACING.xs,
   },
   actionButtonText: {
-    fontSize: 18,
+    fontSize: TYPOGRAPHY.fontSize.lg,
   },
   sendButton: {
     backgroundColor: COLORS.primary,

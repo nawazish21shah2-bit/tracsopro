@@ -51,7 +51,7 @@ const BottomTabBar: React.FC<BottomTabBarProps> = ({ activeTab, onTabPress }) =>
   ];
 
   const renderIcon = (id: TabItem['id'], active: boolean) => {
-    const color = active ? '#1C6CA9' : '#7A7A7A';
+    const color = active ? COLORS.primary : COLORS.textSecondary;
     const size = 20;
     switch (id) {
       case 'home':
@@ -124,27 +124,28 @@ const styles = StyleSheet.create({
   },
   tabContent: {
     alignItems: 'center',
+    paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.xs,
-    borderRadius: BORDER_RADIUS.md,
+    borderRadius: BORDER_RADIUS.round,
     minHeight: 60,
     justifyContent: 'center',
+    backgroundColor: COLORS.backgroundSecondary,
   },
   activeTabContent: {
-    backgroundColor: 'rgba(28,108,169,0.2)',
+    backgroundColor: COLORS.primaryLight,
   },
   iconWrapper: {
     marginBottom: SPACING.xs,
   },
   tabLabel: {
     fontSize: TYPOGRAPHY.fontSize.xs,
-    fontWeight: '500' as const,
-    color: '#7A7A7A',
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    color: COLORS.textSecondary,
     textAlign: 'center',
   },
   activeTabLabel: {
-    color: '#1C6CA9',
-    fontWeight: '600' as const,
+    color: COLORS.primary,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
 });
 

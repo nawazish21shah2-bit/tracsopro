@@ -15,7 +15,10 @@ describe('Auth Slice', () => {
     user: null,
     token: null,
     refreshToken: null,
+    tempUserId: null,
+    tempEmail: null,
     isAuthenticated: false,
+    isEmailVerified: false,
     isLoading: false,
     error: null,
   };
@@ -173,7 +176,13 @@ describe('Auth Slice', () => {
     const action = setUser(mockUser);
     const state = authReducer(initialState, action);
     
-    expect(state.user).toEqual(mockUser);
+    // User object includes computed name field
+    expect(state.user).toMatchObject({
+      id: mockUser.id,
+      email: mockUser.email,
+      firstName: mockUser.firstName,
+      lastName: mockUser.lastName,
+    });
     expect(state.isAuthenticated).toBe(true);
   });
 

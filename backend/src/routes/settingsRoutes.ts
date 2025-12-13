@@ -18,6 +18,8 @@ router.put('/profile', settingsController.updateProfileSettings.bind(settingsCon
 
 // Support
 router.post('/support/contact', settingsController.submitSupportRequest.bind(settingsController));
+router.get('/support/tickets', settingsController.getSupportTickets.bind(settingsController));
+router.get('/support/tickets/:id', settingsController.getSupportTicketById.bind(settingsController));
 
 // Guard-specific settings
 router.get('/attendance-history', settingsController.getAttendanceHistory.bind(settingsController));
@@ -26,5 +28,8 @@ router.get('/past-jobs', settingsController.getPastJobs.bind(settingsController)
 // Client-specific settings
 router.get('/company', settingsController.getCompanyDetails.bind(settingsController));
 router.put('/company', settingsController.updateCompanyDetails.bind(settingsController));
+
+// Change Password
+router.post('/change-password', settingsController.changePassword.bind(settingsController));
 
 export default router;

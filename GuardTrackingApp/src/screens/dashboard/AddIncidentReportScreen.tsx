@@ -22,6 +22,7 @@ import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { LocationIcon, CameraIcon } from '../../components/ui/AppIcons';
 import { CalendarIcon, FileTextIcon } from '../../components/ui/FeatherIcons';
+import apiService from '../../services/api';
 
 type AddIncidentReportScreenNavigationProp = StackNavigationProp<any, 'AddIncidentReport'>;
 
@@ -141,19 +142,10 @@ const AddIncidentReportScreen: React.FC = () => {
         }))
       };
 
-      // Submit to backend
-      const response = await fetch('http://localhost:3000/api/incident-reports', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token || ''}`,
-        },
-        body: JSON.stringify(reportData),
-      });
+      // Submit to backend using API service
+      const response = await apiService.post('/incident-reports', reportData);
 
-      const result = await response.json();
-
-      if (result.success) {
+      if (response.data.success) {
         Alert.alert(
           'Success',
           'Your incident report has been submitted successfully',
@@ -162,14 +154,15 @@ const AddIncidentReportScreen: React.FC = () => {
           ]
         );
       } else {
-        Alert.alert('Error', result.message || 'Failed to submit report');
+        Alert.alert('Error', response.data.message || 'Failed to submit report');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Submit error:', error);
-      Alert.alert('Error', 'Failed to submit report. Please try again.');
+      const errorMessage = error.message || 'Failed to submit report. Please try again.';
+      Alert.alert('Error', errorMessage);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setIsSubmitting(false);
   };
 
   const removeMedia = (id: string) => {

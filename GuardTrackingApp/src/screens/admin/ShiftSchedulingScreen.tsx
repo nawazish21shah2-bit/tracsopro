@@ -25,8 +25,8 @@ import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
-import { ShiftsIcon, UserIcon, EmergencyIcon, LocationIcon, ClockIcon } from '../../components/ui/AppIcons';
-import { ArrowLeftIcon, ArrowRightIcon } from '../../components/ui/FeatherIcons';
+import { ShiftsIcon, UserIcon, EmergencyIcon, LocationIcon, ClockIcon, PlusIcon, CheckCircleIcon, InfoIcon } from '../../components/ui/AppIcons';
+import { ArrowLeftIcon, ArrowRightIcon, RefreshCwIcon, AlertTriangleIcon } from '../../components/ui/FeatherIcons';
 
 interface ScheduledShift {
   id: string;
@@ -132,12 +132,21 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
     initializeScheduling();
   }, []);
 
+  useEffect(() => {
+    // Reload shifts when date changes
+    if (selectedDate) {
+      loadShifts();
+    }
+  }, [selectedDate]);
+
   const initializeScheduling = async () => {
     try {
       setLoading(true);
-      await loadShifts();
-      await loadGuards();
-      await loadSites();
+      await Promise.all([
+        loadShifts(),
+        loadGuards(),
+        loadSites(),
+      ]);
       
       console.log('📅 Shift Scheduling initialized');
     } catch (error) {
@@ -148,42 +157,66 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
   };
 
   const loadShifts = async () => {
-    // Mock scheduled shifts
-    const mockShifts: ScheduledShift[] = [
-      {
-        id: 'shift_1',
-        guardId: 'guard_1',
-        guardName: 'John Smith',
-        siteId: 'site_1',
-        siteName: 'Central Office',
-        startTime: '09:00',
-        endTime: '17:00',
-        date: selectedDate,
-        status: 'scheduled',
-        shiftType: 'regular',
-      },
-      {
-        id: 'shift_2',
-        guardId: 'guard_2',
-        guardName: 'Sarah Johnson',
-        siteId: 'site_2',
-        siteName: 'Warehouse A',
-        startTime: '18:00',
-        endTime: '02:00',
-        date: selectedDate,
-        status: 'confirmed',
-        shiftType: 'regular',
-        conflicts: [
-          {
-            type: 'overtime_limit',
-            message: 'Guard approaching weekly overtime limit (38/40 hours)',
-            severity: 'warning',
-          },
-        ],
-      },
-    ];
+    try {
+      setLoading(true);
+      const response = await apiService.getAdminShifts(selectedDate);
+      
+      if (response.success && response.data) {
+        // Transform backend shifts to ScheduledShift format
+        const transformedShifts: ScheduledShift[] = (response.data as any[]).map((shift: any) => {
+          const guard = shift.guard;
+          const guardName = guard?.user 
+            ? `${guard.user.firstName || ''} ${guard.user.lastName || ''}`.trim() || guard.user.email
+            : 'Unknown Guard';
+          
+          const site = shift.site;
+          const siteName = site?.name || shift.locationName || 'Unknown Site';
+          const siteId = site?.id || shift.siteId || '';
 
-    setShifts(mockShifts);
+          // Extract time from scheduledStartTime and scheduledEndTime
+          const startDate = new Date(shift.scheduledStartTime);
+          const endDate = new Date(shift.scheduledEndTime);
+          const startTime = `${String(startDate.getHours()).padStart(2, '0')}:${String(startDate.getMinutes()).padStart(2, '0')}`;
+          const endTime = `${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}`;
+          
+          // Map status
+          let status: ScheduledShift['status'] = 'scheduled';
+          if (shift.status === 'IN_PROGRESS') status = 'in_progress';
+          else if (shift.status === 'COMPLETED') status = 'completed';
+          else if (shift.status === 'CANCELLED') status = 'cancelled';
+          else if (shift.status === 'CONFIRMED') status = 'confirmed';
+
+          return {
+            id: shift.id,
+            guardId: shift.guardId,
+            guardName,
+            siteId,
+            siteName,
+            startTime,
+            endTime,
+            date: selectedDate,
+            status,
+            shiftType: 'regular' as ScheduledShift['shiftType'],
+            notes: shift.notes,
+            conflicts: [], // Conflicts can be detected on the fly
+          };
+        });
+
+        setShifts(transformedShifts);
+      } else {
+        // If API fails, set empty array instead of mock data
+        setShifts([]);
+        if (__DEV__) {
+          console.warn('Failed to load shifts from backend:', response.message);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading shifts:', error);
+      setShifts([]);
+      ErrorHandler.handleError(error, 'load_shifts');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const loadGuards = async () => {
@@ -395,7 +428,9 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
         return;
       }
 
-      setShifts(prev => [...prev, shift]);
+      // Reload shifts from backend to get the actual created shift
+      await loadShifts();
+      
       setShowCreateModal(false);
       
       // Reset form
@@ -412,7 +447,7 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
       Alert.alert(
         'Shift Created',
         conflicts.length > 0 
-          ? `Shift created in system with ${conflicts.length} warning(s)`
+          ? `Shift created successfully with ${conflicts.length} warning(s)`
           : 'Shift created successfully and saved to backend'
       );
     } catch (error) {
@@ -442,18 +477,24 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
             prevDate.setDate(prevDate.getDate() - 1);
             setSelectedDate(prevDate.toISOString().split('T')[0]);
           }}
+          disabled={loading}
         >
           <ArrowLeftIcon size={20} color={COLORS.textInverse} />
         </TouchableOpacity>
         
-        <Text style={styles.selectedDate}>
-          {new Date(selectedDate).toLocaleDateString('en-US', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-          })}
-        </Text>
+        <View style={styles.dateTextContainer}>
+          {loading && (
+            <RefreshCwIcon size={16} color={COLORS.primary} style={{ marginRight: SPACING.xs }} />
+          )}
+          <Text style={styles.selectedDate}>
+            {new Date(selectedDate).toLocaleDateString('en-US', {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            })}
+          </Text>
+        </View>
         
         <TouchableOpacity
           style={styles.dateButton}
@@ -462,6 +503,7 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
             nextDate.setDate(nextDate.getDate() + 1);
             setSelectedDate(nextDate.toISOString().split('T')[0]);
           }}
+          disabled={loading}
         >
           <ArrowRightIcon size={20} color={COLORS.textInverse} />
         </TouchableOpacity>
@@ -514,9 +556,13 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.emptyState}>
+            <ShiftsIcon size={64} color={COLORS.textSecondary} style={{ marginBottom: SPACING.md }} />
             <Text style={styles.emptyStateText}>No shifts scheduled for this date</Text>
+            <Text style={styles.emptyStateSubtext}>Tap the + button below to create a new shift</Text>
           </View>
         }
+        refreshing={loading}
+        onRefresh={loadShifts}
       />
     </View>
   );
@@ -537,11 +583,14 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
         
         <ScrollView style={styles.modalContent}>
           <View style={styles.formSection}>
-            <Text style={styles.formLabel}>Guard</Text>
-            <FlatList
-              data={guards}
-              renderItem={({ item }) => (
+            <View style={styles.formLabelContainer}>
+              <UserIcon size={18} color={COLORS.primary} style={{ marginRight: SPACING.xs }} />
+              <Text style={styles.formLabel}>Select Guard</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
+              {guards.map((item) => (
                 <TouchableOpacity
+                  key={item.id}
                   style={[
                     styles.optionItem,
                     newShift.guardId === item.id && styles.optionItemSelected,
@@ -559,19 +608,19 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
                     {item.currentWeekHours}/{item.maxHoursPerWeek}h this week
                   </Text>
                 </TouchableOpacity>
-              )}
-              keyExtractor={(item) => item.id}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-            />
+              ))}
+            </ScrollView>
           </View>
 
           <View style={styles.formSection}>
-            <Text style={styles.formLabel}>Site</Text>
-            <FlatList
-              data={sites}
-              renderItem={({ item }) => (
+            <View style={styles.formLabelContainer}>
+              <LocationIcon size={18} color={COLORS.primary} style={{ marginRight: SPACING.xs }} />
+              <Text style={styles.formLabel}>Select Site</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
+              {sites.map((item) => (
                 <TouchableOpacity
+                  key={item.id}
                   style={[
                     styles.optionItem,
                     newShift.siteId === item.id && styles.optionItemSelected,
@@ -587,61 +636,92 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
                     newShift.siteId === item.id && styles.optionSubtextSelected,
                   ]}>{item.priority} priority</Text>
                 </TouchableOpacity>
-              )}
-              keyExtractor={(item) => item.id}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-            />
+              ))}
+            </ScrollView>
           </View>
 
           <View style={styles.timeSection}>
             <View style={styles.timeInput}>
-              <Text style={styles.formLabel}>Start Time</Text>
-              <TextInput
-                style={styles.timeField}
-                value={newShift.startTime}
-                onChangeText={(text) => setNewShift(prev => ({ ...prev, startTime: text }))}
-                placeholder="HH:MM"
-              />
+              <View style={styles.formLabelContainer}>
+                <ClockIcon size={18} color={COLORS.primary} style={{ marginRight: SPACING.xs }} />
+                <Text style={styles.formLabel}>Start Time</Text>
+              </View>
+              <View style={styles.timeInputContainer}>
+                <ClockIcon size={16} color={COLORS.textSecondary} style={{ marginRight: SPACING.xs }} />
+                <TextInput
+                  style={styles.timeField}
+                  value={newShift.startTime}
+                  onChangeText={(text) => setNewShift(prev => ({ ...prev, startTime: text }))}
+                  placeholder="09:00"
+                  placeholderTextColor={COLORS.textSecondary}
+                />
+              </View>
             </View>
             <View style={styles.timeInput}>
-              <Text style={styles.formLabel}>End Time</Text>
-              <TextInput
-                style={styles.timeField}
-                value={newShift.endTime}
-                onChangeText={(text) => setNewShift(prev => ({ ...prev, endTime: text }))}
-                placeholder="HH:MM"
-              />
+              <View style={styles.formLabelContainer}>
+                <ClockIcon size={18} color={COLORS.primary} style={{ marginRight: SPACING.xs }} />
+                <Text style={styles.formLabel}>End Time</Text>
+              </View>
+              <View style={styles.timeInputContainer}>
+                <ClockIcon size={16} color={COLORS.textSecondary} style={{ marginRight: SPACING.xs }} />
+                <TextInput
+                  style={styles.timeField}
+                  value={newShift.endTime}
+                  onChangeText={(text) => setNewShift(prev => ({ ...prev, endTime: text }))}
+                  placeholder="17:00"
+                  placeholderTextColor={COLORS.textSecondary}
+                />
+              </View>
             </View>
           </View>
 
           {newShift.guardId && newShift.siteId && (
             <View style={styles.conflictPreview}>
-              <Text style={styles.conflictPreviewTitle}>Conflict Check:</Text>
+              <View style={styles.formLabelContainer}>
+                <InfoIcon size={18} color={COLORS.info} style={{ marginRight: SPACING.xs }} />
+                <Text style={styles.conflictPreviewTitle}>Conflict Check</Text>
+              </View>
               {detectConflicts(newShift).map((conflict, index) => (
-                <Text
-                  key={index}
-                  style={[
-                    styles.conflictPreviewText,
-                    { color: conflict.severity === 'error' ? COLORS.error : COLORS.warning }
-                  ]}
-                >
-                  {conflict.severity === 'error' ? '❌' : '⚠️'} {conflict.message}
-                </Text>
+                <View key={index} style={styles.conflictItem}>
+                  {conflict.severity === 'error' ? (
+                    <AlertTriangleIcon size={16} color={COLORS.error} style={{ marginRight: SPACING.xs }} />
+                  ) : (
+                    <AlertTriangleIcon size={16} color={COLORS.warning} style={{ marginRight: SPACING.xs }} />
+                  )}
+                  <Text
+                    style={[
+                      styles.conflictPreviewText,
+                      { color: conflict.severity === 'error' ? COLORS.error : COLORS.warning }
+                    ]}
+                  >
+                    {conflict.message}
+                  </Text>
+                </View>
               ))}
               {detectConflicts(newShift).length === 0 && (
-                <Text style={[styles.conflictPreviewText, { color: COLORS.success }]}>
-                  ✅ No conflicts detected
-                </Text>
+                <View style={styles.conflictItem}>
+                  <CheckCircleIcon size={16} color={COLORS.success} style={{ marginRight: SPACING.xs }} />
+                  <Text style={[styles.conflictPreviewText, { color: COLORS.success }]}>
+                    No conflicts detected - Ready to create
+                  </Text>
+                </View>
               )}
             </View>
           )}
 
           <TouchableOpacity
-            style={styles.createButton}
+            style={[styles.createButton, loading && styles.createButtonDisabled]}
             onPress={handleCreateShift}
+            disabled={loading}
           >
-            <Text style={styles.createButtonText}>Create Shift</Text>
+            {loading ? (
+              <RefreshCwIcon size={20} color={COLORS.textInverse} style={{ marginRight: SPACING.xs }} />
+            ) : (
+              <PlusIcon size={20} color={COLORS.textInverse} style={{ marginRight: SPACING.xs }} />
+            )}
+            <Text style={styles.createButtonText}>
+              {loading ? 'Creating...' : 'Create Shift'}
+            </Text>
           </TouchableOpacity>
         </ScrollView>
       </View>
@@ -655,7 +735,7 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
         title="Shift Scheduling"
         onMenuPress={openDrawer}
         onNotificationPress={() => {
-          // Handle notification press
+          navigation.navigate('AdminNotifications' as never);
         }}
         profileDrawer={
           <AdminProfileDrawer
@@ -736,7 +816,8 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
         style={styles.stickyAddButton}
         onPress={() => setShowCreateModal(true)}
       >
-        <Text style={styles.stickyAddButtonText}>+ Add Shift</Text>
+        <PlusIcon size={20} color={COLORS.textInverse} style={{ marginRight: SPACING.xs }} />
+        <Text style={styles.stickyAddButtonText}>Add Shift</Text>
       </TouchableOpacity>
     </SafeAreaWrapper>
   );
@@ -762,6 +843,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderRadius: BORDER_RADIUS.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     ...SHADOWS.medium,
     zIndex: 1000,
   },
@@ -785,7 +869,7 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.lg - 1,
     minHeight: 59,
     justifyContent: 'center',
-    backgroundColor: '#ECECEC',
+    backgroundColor: COLORS.backgroundSecondary,
   },
   viewTabActive: {
     backgroundColor: COLORS.primary,
@@ -836,6 +920,12 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  dateTextContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
   },
   selectedDate: {
     fontSize: TYPOGRAPHY.fontSize.md,
@@ -911,10 +1001,20 @@ const styles = StyleSheet.create({
   emptyState: {
     padding: SPACING.xl,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 200,
   },
   emptyStateText: {
     fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.xs,
+    textAlign: 'center',
+  },
+  emptyStateSubtext: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.textSecondary,
+    textAlign: 'center',
   },
   modalContainer: {
     flex: 1,
@@ -945,11 +1045,18 @@ const styles = StyleSheet.create({
   formSection: {
     marginBottom: SPACING.lg,
   },
+  formLabelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
+  },
   formLabel: {
     fontSize: TYPOGRAPHY.fontSize.md,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
     color: COLORS.textPrimary,
-    marginBottom: SPACING.sm,
+  },
+  horizontalScroll: {
+    marginVertical: SPACING.xs,
   },
   optionItem: {
     backgroundColor: COLORS.cardBackground,
@@ -990,14 +1097,20 @@ const styles = StyleSheet.create({
   timeInput: {
     flex: 1,
   },
-  timeField: {
+  timeInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: COLORS.cardBackground,
     borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+  },
+  timeField: {
+    flex: 1,
     padding: SPACING.md,
     fontSize: TYPOGRAPHY.fontSize.md,
     color: COLORS.textPrimary,
-    borderWidth: 1,
-    borderColor: COLORS.borderCard,
   },
   conflictPreview: {
     backgroundColor: COLORS.cardBackground,
@@ -1014,16 +1127,26 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     marginBottom: SPACING.sm,
   },
+  conflictItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: SPACING.xs,
+  },
   conflictPreviewText: {
     fontSize: TYPOGRAPHY.fontSize.sm,
-    marginBottom: SPACING.xs,
+    flex: 1,
   },
   createButton: {
     backgroundColor: COLORS.primary,
     borderRadius: BORDER_RADIUS.md,
     padding: SPACING.md,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     ...SHADOWS.small,
+  },
+  createButtonDisabled: {
+    opacity: 0.6,
   },
   createButtonText: {
     color: COLORS.textInverse,

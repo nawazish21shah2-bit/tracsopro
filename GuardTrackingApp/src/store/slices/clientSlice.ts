@@ -141,6 +141,10 @@ export const fetchMyReports = createAsyncThunk(
   async (params: { page?: number; limit?: number } = {}, { rejectWithValue }) => {
     try {
       const response = await clientApi.getMyReports(params.page, params.limit);
+      // Ensure we return a valid structure even if data is null/undefined
+      if (!response.success || !response.data) {
+        return rejectWithValue(response.message || 'Failed to fetch reports');
+      }
       return response.data;
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.message || 'Failed to fetch reports');
@@ -195,11 +199,25 @@ const clientSlice = createSlice({
       })
       .addCase(fetchDashboardStats.fulfilled, (state, action) => {
         state.loading = false;
-        state.dashboardStats = action.payload;
+        state.dashboardStats = action.payload || {
+          guardsOnDuty: 0,
+          missedShifts: 0,
+          activeSites: 0,
+          newReports: 0,
+        };
       })
       .addCase(fetchDashboardStats.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload as string;
+        // Set default stats on error so UI doesn't get stuck
+        if (!state.dashboardStats) {
+          state.dashboardStats = {
+            guardsOnDuty: 0,
+            missedShifts: 0,
+            activeSites: 0,
+            newReports: 0,
+          };
+        }
       });
 
     // Guards
@@ -210,11 +228,16 @@ const clientSlice = createSlice({
       })
       .addCase(fetchMyGuards.fulfilled, (state, action) => {
         state.guardsLoading = false;
-        state.guards = action.payload.guards;
+        // Safely handle null/undefined payload
+        state.guards = action.payload?.guards || action.payload || [];
       })
       .addCase(fetchMyGuards.rejected, (state, action) => {
         state.guardsLoading = false;
         state.guardsError = action.payload as string;
+        // Ensure guards array exists even on error
+        if (!state.guards) {
+          state.guards = [];
+        }
       });
 
     // Reports
@@ -225,7 +248,8 @@ const clientSlice = createSlice({
       })
       .addCase(fetchMyReports.fulfilled, (state, action) => {
         state.reportsLoading = false;
-        state.reports = action.payload.reports;
+        // Safely handle null/undefined payload
+        state.reports = action.payload?.reports || [];
       })
       .addCase(fetchMyReports.rejected, (state, action) => {
         state.reportsLoading = false;
@@ -240,7 +264,8 @@ const clientSlice = createSlice({
       })
       .addCase(fetchMySites.fulfilled, (state, action) => {
         state.sitesLoading = false;
-        state.sites = action.payload.sites;
+        // Safely handle null/undefined payload
+        state.sites = action.payload?.sites || [];
       })
       .addCase(fetchMySites.rejected, (state, action) => {
         state.sitesLoading = false;
@@ -255,7 +280,8 @@ const clientSlice = createSlice({
       })
       .addCase(fetchMyNotifications.fulfilled, (state, action) => {
         state.notificationsLoading = false;
-        state.notifications = action.payload.notifications;
+        // Safely handle null/undefined payload
+        state.notifications = action.payload?.notifications || [];
       })
       .addCase(fetchMyNotifications.rejected, (state, action) => {
         state.notificationsLoading = false;

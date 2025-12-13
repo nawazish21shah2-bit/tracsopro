@@ -112,11 +112,33 @@ class NotificationService {
 
   private async sendTokenToServer(token: string) {
     try {
-      // In a real app, you'd send this to your backend
-      console.log('Sending FCM token to server:', token);
-      // await apiService.registerDeviceToken(token);
+      // Send FCM token to backend using API service
+      const apiService = (await import('./api')).default;
+      const deviceId = await this.getDeviceId();
+      
+      const response = await apiService.registerDeviceToken(token, Platform.OS, deviceId);
+      
+      if (response.success) {
+        console.log('Device token registered successfully');
+      } else {
+        console.error('Failed to register device token:', response.message);
+      }
     } catch (error) {
       console.error('Error sending token to server:', error);
+    }
+  }
+
+  private async getDeviceId(): Promise<string> {
+    try {
+      const deviceId = await AsyncStorage.getItem('deviceId');
+      if (deviceId) return deviceId;
+      
+      // Generate device ID if not exists
+      const newDeviceId = `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      await AsyncStorage.setItem('deviceId', newDeviceId);
+      return newDeviceId;
+    } catch (error) {
+      return 'unknown';
     }
   }
 

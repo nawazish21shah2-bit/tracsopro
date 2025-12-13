@@ -80,7 +80,7 @@ android {
     namespace "com.guardtrackingapp"
     defaultConfig {
         applicationId "com.guardtrackingapp"
-        minSdkVersion rootProject.ext.minSdkVersion
+        minSdkVersion 24  // Explicitly set to 24 to fix library compatibility
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
@@ -101,6 +101,7 @@ android {
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
+            buildConfigField "boolean", "usesCleartextTraffic", "true"
         }
         release {
             // Caution! In production, you need to generate your own keystore file.
@@ -108,9 +109,25 @@ android {
             signingConfig signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+            // Enable cleartext traffic for HTTP backend (required for release builds)
+            // TODO: Set up HTTPS/SSL on backend and remove this for better security
+            buildConfigField "boolean", "usesCleartextTraffic", "true"
+        }
+    }
+
+    // Use custom CMakeLists.txt to fix AppSpec.h redefinition issue
+    externalNativeBuild {
+        cmake {
+            path "src/main/jni/CMakeLists.txt"
+            version "3.22.1"  // Downgraded to fix minSdkVersion CMake bug
         }
     }
 }
+
+// Workaround for CMake clean issue: Skip externalNativeBuildClean if codegen directories don't exist
+// This is needed because CMake tries to reference codegen directories that may not exist during clean
+// Solution: Build the project first to generate codegen, then clean will work properly
+// Alternative: Use `./gradlew clean --continue` to continue even if some tasks fail
 
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin

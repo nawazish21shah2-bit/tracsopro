@@ -338,6 +338,86 @@ export class SettingsService {
     }
   }
 
+  async getSupportTickets(userId: string, page: number = 1, limit: number = 20): Promise<{
+    tickets: any[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      pages: number;
+    };
+  }> {
+    try {
+      const skip = (page - 1) * limit;
+
+      const [tickets, total] = await Promise.all([
+        prisma.supportTicket.findMany({
+          where: { userId },
+          skip,
+          take: limit,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true
+              }
+            }
+          }
+        }),
+        prisma.supportTicket.count({ where: { userId } })
+      ]);
+
+      return {
+        tickets,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit)
+        }
+      };
+    } catch (error) {
+      console.error('Error getting support tickets:', error);
+      throw new Error('Failed to get support tickets');
+    }
+  }
+
+  async getSupportTicketById(ticketId: string, userId: string): Promise<any> {
+    try {
+      const ticket = await prisma.supportTicket.findFirst({
+        where: {
+          id: ticketId,
+          userId
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true
+            }
+          }
+        }
+      });
+
+      if (!ticket) {
+        throw new Error('Support ticket not found');
+      }
+
+      return ticket;
+    } catch (error) {
+      console.error('Error getting support ticket:', error);
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('Failed to get support ticket');
+    }
+  }
+
   async getAttendanceHistory(userId: string, page: number = 1, limit: number = 20): Promise<any> {
     try {
       const skip = (page - 1) * limit;

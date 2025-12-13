@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import trackingService from '../services/trackingService.js';
 import { AuthRequest } from '../middleware/auth.js';
+import prisma from '../config/database.js';
 
 export class TrackingController {
   async recordLocation(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
@@ -24,14 +25,35 @@ export class TrackingController {
     }
   }
 
-  async getGuardTrackingHistory(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getGuardTrackingHistory(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { guardId } = req.params;
       const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
       const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
       const limit = parseInt(req.query.limit as string) || 100;
+      const securityCompanyId = req.securityCompanyId; // Multi-tenant filter
 
-      const records = await trackingService.getGuardTrackingHistory(guardId, startDate, endDate, limit);
+      // Multi-tenant: Validate guard belongs to admin's company (unless SUPER_ADMIN)
+      if (req.user?.role !== 'SUPER_ADMIN' && securityCompanyId) {
+        const guard = await prisma.guard.findUnique({
+          where: { id: guardId },
+          include: {
+            companyGuards: {
+              where: { securityCompanyId, isActive: true },
+              take: 1,
+            },
+          },
+        });
+
+        if (!guard || guard.companyGuards.length === 0) {
+          return res.status(403).json({
+            success: false,
+            error: 'Guard not found or does not belong to your company',
+          });
+        }
+      }
+
+      const records = await trackingService.getGuardTrackingHistory(guardId, startDate, endDate, limit, securityCompanyId);
 
       res.json({
         success: true,
@@ -42,9 +64,31 @@ export class TrackingController {
     }
   }
 
-  async getLatestLocation(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getLatestLocation(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { guardId } = req.params;
+      const securityCompanyId = req.securityCompanyId; // Multi-tenant filter
+
+      // Multi-tenant: Validate guard belongs to admin's company (unless SUPER_ADMIN)
+      if (req.user?.role !== 'SUPER_ADMIN' && securityCompanyId) {
+        const guard = await prisma.guard.findUnique({
+          where: { id: guardId },
+          include: {
+            companyGuards: {
+              where: { securityCompanyId, isActive: true },
+              take: 1,
+            },
+          },
+        });
+
+        if (!guard || guard.companyGuards.length === 0) {
+          return res.status(403).json({
+            success: false,
+            error: 'Guard not found or does not belong to your company',
+          });
+        }
+      }
+
       const location = await trackingService.getLatestLocation(guardId);
 
       res.json({
@@ -56,9 +100,10 @@ export class TrackingController {
     }
   }
 
-  async getActiveGuardsLocations(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getActiveGuardsLocations(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const locations = await trackingService.getActiveGuardsLocations();
+      const securityCompanyId = req.securityCompanyId; // Multi-tenant filter
+      const locations = await trackingService.getActiveGuardsLocations(securityCompanyId);
 
       res.json({
         success: true,
@@ -90,11 +135,32 @@ export class TrackingController {
     }
   }
 
-  async getGeofenceEvents(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getGeofenceEvents(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { guardId } = req.params;
       const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
       const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
+      const securityCompanyId = req.securityCompanyId; // Multi-tenant filter
+
+      // Multi-tenant: Validate guard belongs to admin's company (unless SUPER_ADMIN)
+      if (req.user?.role !== 'SUPER_ADMIN' && securityCompanyId) {
+        const guard = await prisma.guard.findUnique({
+          where: { id: guardId },
+          include: {
+            companyGuards: {
+              where: { securityCompanyId, isActive: true },
+              take: 1,
+            },
+          },
+        });
+
+        if (!guard || guard.companyGuards.length === 0) {
+          return res.status(403).json({
+            success: false,
+            error: 'Guard not found or does not belong to your company',
+          });
+        }
+      }
 
       const events = await trackingService.getGeofenceEvents(guardId, startDate, endDate);
 

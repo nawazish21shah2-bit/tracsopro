@@ -120,6 +120,13 @@ const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
     }
   }, [guardData]);
 
+  // Update site boundaries when sites change
+  useEffect(() => {
+    if (sites && sites.length > 0) {
+      loadSiteBoundaries();
+    }
+  }, [sites]);
+
   const initializeMap = async () => {
     try {
       // Load initial guard locations
@@ -217,52 +224,47 @@ const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
 
   const loadSiteBoundaries = async () => {
     try {
-      // Simulate loading site boundaries
-      const mockSiteBoundaries: SiteBoundary[] = [
-        {
-          siteId: 'site_1',
-          siteName: 'Central Office Building',
-          center: { latitude: 40.7589, longitude: -73.9851 },
-          radius: 100,
-          coordinates: [
-            { latitude: 40.7594, longitude: -73.9856 },
-            { latitude: 40.7594, longitude: -73.9846 },
-            { latitude: 40.7584, longitude: -73.9846 },
-            { latitude: 40.7584, longitude: -73.9856 },
-          ],
-          isActive: true,
-        },
-        {
-          siteId: 'site_2',
-          siteName: 'Warehouse Distribution Center',
-          center: { latitude: 40.7505, longitude: -73.9934 },
-          radius: 150,
-          coordinates: [
-            { latitude: 40.7512, longitude: -73.9942 },
-            { latitude: 40.7512, longitude: -73.9926 },
-            { latitude: 40.7498, longitude: -73.9926 },
-            { latitude: 40.7498, longitude: -73.9942 },
-          ],
-          isActive: true,
-        },
-        {
-          siteId: 'site_3',
-          siteName: 'Retail Shopping Plaza',
-          center: { latitude: 40.7614, longitude: -73.9776 },
-          radius: 120,
-          coordinates: [
-            { latitude: 40.7620, longitude: -73.9782 },
-            { latitude: 40.7620, longitude: -73.9770 },
-            { latitude: 40.7608, longitude: -73.9770 },
-            { latitude: 40.7608, longitude: -73.9782 },
-          ],
-          isActive: true,
-        },
-      ];
+      // Use real site data from Redux state
+      if (!sites || sites.length === 0) {
+        setSiteBoundaries([]);
+        return;
+      }
 
-      setSiteBoundaries(mockSiteBoundaries);
+      // Convert sites to site boundaries format
+      const siteBoundaries: SiteBoundary[] = sites
+        .filter((site: any) => site.latitude && site.longitude && site.isActive)
+        .map((site: any) => {
+          const center = {
+            latitude: site.latitude,
+            longitude: site.longitude,
+          };
+          
+          // Create a simple square boundary around the site (can be enhanced with actual geofence data)
+          const radius = 100; // Default radius in meters
+          const latDelta = radius / 111000; // Approximate conversion: 1 degree ≈ 111km
+          const lngDelta = radius / (111000 * Math.cos(center.latitude * Math.PI / 180));
+          
+          const coordinates = [
+            { latitude: center.latitude + latDelta, longitude: center.longitude + lngDelta },
+            { latitude: center.latitude + latDelta, longitude: center.longitude - lngDelta },
+            { latitude: center.latitude - latDelta, longitude: center.longitude - lngDelta },
+            { latitude: center.latitude - latDelta, longitude: center.longitude + lngDelta },
+          ];
+
+          return {
+            siteId: site.id,
+            siteName: site.name,
+            center,
+            radius,
+            coordinates,
+            isActive: site.isActive,
+          };
+        });
+
+      setSiteBoundaries(siteBoundaries);
     } catch (error) {
       ErrorHandler.handleError(error, 'load_site_boundaries', false);
+      setSiteBoundaries([]);
     }
   };
 

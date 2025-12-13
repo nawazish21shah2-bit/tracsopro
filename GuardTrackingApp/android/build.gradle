@@ -4,7 +4,7 @@ buildscript {
         minSdkVersion = 24
         compileSdkVersion = 36
         targetSdkVersion = 36
-        ndkVersion = "27.1.12297006"
+        ndkVersion = "27.1.12297006"  // Updated to NDK 27+ for better C++20 support with React Native 0.82.1
         kotlinVersion = "2.1.20"
     }
     repositories {

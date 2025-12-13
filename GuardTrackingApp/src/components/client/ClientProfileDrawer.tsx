@@ -224,14 +224,8 @@ export const ClientProfileDrawer: React.FC<ClientProfileDrawerProps> = ({
 
   const menuItems: MenuItem[] = [
     {
-      id: 'profile',
-      label: 'My Profile',
-      icon: <UserIcon size={20} color={COLORS.textPrimary} />,
-      onPress: handleMyProfile,
-    },
-    {
       id: 'sites',
-      label: 'Manage Sites',
+      label: 'Assigned Sites',
       icon: <LocationIcon size={20} color={COLORS.textPrimary} />,
       onPress: handleManageSites,
     },
@@ -258,6 +252,18 @@ export const ClientProfileDrawer: React.FC<ClientProfileDrawerProps> = ({
       label: 'Notification Settings',
       icon: <NotificationIcon size={20} color={COLORS.textPrimary} />,
       onPress: handleNotificationSettings,
+    },
+    {
+      id: 'support',
+      label: 'Contact Support',
+      icon: <FeatherIcon name="messageCircle" size={20} color={COLORS.textPrimary} />,
+      onPress: handleContactSupport,
+    },
+    {
+      id: 'logout',
+      label: 'Logout',
+      icon: <LogoutIcon size={20} color={COLORS.error} />,
+      onPress: handleLogout,
     },
   ];
 
@@ -303,9 +309,10 @@ export const ClientProfileDrawer: React.FC<ClientProfileDrawerProps> = ({
             {isVerified && (
               <View style={styles.verifiedContainer}>
                 <Text style={styles.verifiedText}>Verified</Text>
-                <CheckCircleIcon size={14} color={COLORS.textSecondary} />
+                <CheckCircleIcon size={14} color={COLORS.textPrimary} />
               </View>
             )}
+            <View style={styles.separator} />
           </View>
 
           {/* Menu Items */}
@@ -316,46 +323,20 @@ export const ClientProfileDrawer: React.FC<ClientProfileDrawerProps> = ({
                 style={styles.menuItem}
                 onPress={item.onPress}
                 activeOpacity={0.7}
+                disabled={item.id === 'logout' && isLoggingOut}
               >
                 <View style={styles.menuItemContent}>
                   <View style={styles.menuIcon}>{item.icon}</View>
-                  <Text style={styles.menuLabel}>{item.label}</Text>
+                  <Text style={[
+                    styles.menuLabel,
+                    item.id === 'logout' && styles.logoutLabel,
+                  ]}>
+                    {item.id === 'logout' && isLoggingOut ? 'Logging out...' : item.label}
+                  </Text>
                 </View>
               </TouchableOpacity>
             ))}
           </ScrollView>
-
-          {/* Footer Actions */}
-          <View style={styles.footer}>
-            <TouchableOpacity
-              style={styles.supportButton}
-              onPress={handleContactSupport}
-              activeOpacity={0.7}
-            >
-              <View style={styles.menuItemContent}>
-                <View style={styles.menuIcon}>
-                  <FeatherIcon name="messageCircle" size={20} color={COLORS.textSecondary} />
-                </View>
-                <Text style={styles.supportText}>Contact Support</Text>
-              </View>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[styles.logoutButton, isLoggingOut && styles.logoutButtonDisabled]}
-              onPress={handleLogout}
-              activeOpacity={0.7}
-              disabled={isLoggingOut}
-            >
-              <View style={styles.menuItemContent}>
-                <View style={styles.menuIcon}>
-                  <LogoutIcon size={20} color={COLORS.error} />
-                </View>
-                <Text style={styles.logoutText}>
-                  {isLoggingOut ? 'Logging out...' : 'Logout'}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          </View>
         </Animated.View>
       </TouchableOpacity>
     </Modal>
@@ -372,28 +353,29 @@ const styles = StyleSheet.create({
     width: '70%',
     maxWidth: 320,
     backgroundColor: COLORS.backgroundPrimary,
-    paddingTop: 60,
-    paddingHorizontal: 24,
-    paddingBottom: 24,
+    paddingTop: SPACING.xl * 2,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.lg,
     height: '100%',
     position: 'absolute',
     left: 0,
     top: 0,
-    shadowColor: '#000',
+    shadowColor: COLORS.cardShadow,
     shadowOffset: {
       width: 2,
       height: 0,
     },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
     elevation: 5,
   },
   profileSection: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: SPACING.lg,
+    paddingBottom: SPACING.lg,
   },
   avatarContainer: {
-    marginBottom: 16,
+    marginBottom: SPACING.md,
   },
   avatarPlaceholder: {
     width: 80,
@@ -404,34 +386,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   avatarText: {
-    fontSize: 28,
+    fontSize: TYPOGRAPHY.fontSize.xxxl,
     fontWeight: TYPOGRAPHY.fontWeight.bold,
     color: COLORS.primary,
   },
   userName: {
-    fontSize: 18,
+    fontSize: TYPOGRAPHY.fontSize.lg,
     fontWeight: TYPOGRAPHY.fontWeight.bold,
     color: COLORS.textPrimary,
-    marginBottom: 8,
+    marginBottom: SPACING.sm,
     fontFamily: TYPOGRAPHY.fontPrimary,
   },
   verifiedContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: SPACING.xs,
   },
   verifiedText: {
-    fontSize: 14,
+    fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.textSecondary,
     fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.regular,
+  },
+  separator: {
+    width: '100%',
+    height: 1,
+    backgroundColor: COLORS.borderLight,
+    marginTop: SPACING.lg,
   },
   menuContainer: {
     flex: 1,
   },
   menuItem: {
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.xs,
   },
   menuItemContent: {
     flexDirection: 'row',
@@ -442,42 +430,17 @@ const styles = StyleSheet.create({
     height: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: SPACING.md,
   },
   menuLabel: {
-    fontSize: 14,
+    fontSize: TYPOGRAPHY.fontSize.md,
     color: COLORS.textPrimary,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    fontWeight: TYPOGRAPHY.fontWeight.regular,
     fontFamily: TYPOGRAPHY.fontPrimary,
     flex: 1,
   },
-  footer: {
-    marginTop: 24,
-    paddingTop: 24,
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
-    gap: 12,
-  },
-  supportButton: {
-    paddingVertical: 12,
-  },
-  supportText: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
-    fontFamily: TYPOGRAPHY.fontPrimary,
-  },
-  logoutButton: {
-    paddingVertical: 12,
-  },
-  logoutButtonDisabled: {
-    opacity: 0.5,
-  },
-  logoutText: {
-    fontSize: 14,
+  logoutLabel: {
     color: COLORS.error,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
-    fontFamily: TYPOGRAPHY.fontPrimary,
   },
 });
 

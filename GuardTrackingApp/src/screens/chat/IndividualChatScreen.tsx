@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,10 +10,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../store';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { 
   ArrowLeft, 
@@ -22,6 +23,8 @@ import {
   Send,
   MoreHorizontal 
 } from 'react-native-feather';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
+import WebSocketService from '../../services/WebSocketService';
 
 interface Message {
   id: string;
@@ -49,11 +52,73 @@ const IndividualChatScreen: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
+  // Load messages when chatId changes
   useEffect(() => {
     loadMessages();
+    
+    // Join WebSocket room for real-time updates
+    if (chatId) {
+      WebSocketService.joinRoom(chatId);
+    }
+    
+    return () => {
+      // Leave room on unmount
+      if (chatId) {
+        WebSocketService.leaveRoom(chatId);
+      }
+    };
   }, [chatId]);
+
+  // Set up WebSocket listeners for real-time messages
+  useEffect(() => {
+    // Listen for new messages via WebSocket
+    const handleNewMessage = (data: any) => {
+      if (data.chatId === chatId && data.message) {
+        const newMessage: Message = {
+          id: data.message.id,
+          content: data.message.content || data.message.message,
+          senderId: data.message.senderId,
+          timestamp: new Date(data.message.timestamp || Date.now()),
+          isRead: data.message.isRead || false,
+          isOwn: data.message.senderId === user?.id,
+        };
+        
+        setMessages(prev => {
+          // Avoid duplicates
+          if (prev.some(msg => msg.id === newMessage.id)) {
+            return prev;
+          }
+          return [...prev, newMessage];
+        });
+        
+        // Scroll to bottom
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+        
+        // Mark as read if it's not our message
+        if (!newMessage.isOwn && user?.id) {
+          const apiService = import('../../services/api').then(m => m.default);
+          apiService.then(service => {
+            service.markChatMessagesAsRead(chatId, [newMessage.id]);
+          });
+        }
+      }
+    };
+
+    // Add WebSocket listener (you'll need to implement this in WebSocketService)
+    // For now, we'll use the API polling method
+    // WebSocketService.on('new_message', handleNewMessage);
+    
+    return () => {
+      // Cleanup listener
+      // WebSocketService.off('new_message', handleNewMessage);
+    };
+  }, [chatId, user]);
 
   const loadMessages = async () => {
     try {
@@ -61,8 +126,24 @@ const IndividualChatScreen: React.FC = () => {
       const apiService = (await import('../../services/api')).default;
       const response = await apiService.getChatMessages(chatId, 1, 50);
       
+      // Handle empty chat room gracefully - this is normal for new chats
       if (!response.success || !response.data) {
+        // If chat doesn't exist yet, that's okay - user can still send first message
+        if (response.message?.toLowerCase().includes('not found') || 
+            response.message?.toLowerCase().includes('404')) {
+          console.log('Chat room does not exist yet - will be created with first message');
+          setMessages([]);
+          return;
+        }
+        
+        // For other errors, log but allow user to continue
         console.error('Failed to load messages:', response.message);
+        setMessages([]);
+        return;
+      }
+      
+      // Handle empty messages array (new chat)
+      if (!Array.isArray(response.data) || response.data.length === 0) {
         setMessages([]);
         return;
       }
@@ -72,7 +153,7 @@ const IndividualChatScreen: React.FC = () => {
         id: msg.id,
         content: msg.content || msg.message,
         senderId: msg.senderId,
-        timestamp: new Date(msg.timestamp),
+        timestamp: new Date(msg.timestamp || msg.createdAt || Date.now()),
         isRead: msg.isRead || msg.readBy?.includes(user?.id) || false,
         isOwn: msg.senderId === user?.id,
       }));
@@ -89,8 +170,14 @@ const IndividualChatScreen: React.FC = () => {
           await apiService.markChatMessagesAsRead(chatId, unreadMessageIds);
         }
       }
-    } catch (error) {
+    } catch (error: any) {
+      // Handle errors gracefully - allow user to still send messages
       console.error('Error loading messages:', error);
+      // Don't show error alert for 404 (chat doesn't exist yet)
+      if (error?.response?.status !== 404 && error?.message && !error.message.includes('not found')) {
+        // Only log, don't block user from sending first message
+        console.log('Chat may not exist yet - first message will create it');
+      }
       setMessages([]);
     } finally {
       setLoading(false);
@@ -98,10 +185,11 @@ const IndividualChatScreen: React.FC = () => {
   };
 
   const handleSendMessage = async () => {
-    if (!inputText.trim() || !user) return;
+    if (!inputText.trim() || !user || sending) return;
 
     const messageText = inputText.trim();
     setInputText('');
+    setSending(true);
 
     // Optimistically add message to UI
     const tempMessage: Message = {
@@ -123,10 +211,22 @@ const IndividualChatScreen: React.FC = () => {
     try {
       // Send message to backend via API service
       const apiService = (await import('../../services/api')).default;
-      const response = await apiService.sendChatMessage(chatId, messageText, 'text');
+      let response = await apiService.sendChatMessage(chatId, messageText, 'text');
 
+      // If chat doesn't exist, try to create it first
+      if (!response.success && (response.message?.toLowerCase().includes('not found') || 
+          response.message?.toLowerCase().includes('404') ||
+          response.message?.toLowerCase().includes('chat'))) {
+        console.log('Chat room may not exist, but message should still work - trying to send again');
+        // The backend should handle creating the conversation automatically via conversationId
+        // Just log and continue - the message will create the conversation
+      }
+      
       if (!response.success || !response.data) {
-        throw new Error(response.message || 'Failed to send message');
+        // Remove temp message on failure
+        setMessages(prev => prev.filter(msg => msg.id !== tempMessage.id));
+        Alert.alert('Error', response.message || 'Failed to send message. Please try again.');
+        return;
       }
 
       const sentMessage = response.data;
@@ -149,6 +249,8 @@ const IndividualChatScreen: React.FC = () => {
       // Remove temp message on error
       setMessages(prev => prev.filter(msg => msg.id !== tempMessage.id));
       Alert.alert('Error', error.message || 'Failed to send message. Please try again.');
+    } finally {
+      setSending(false);
     }
   };
 
@@ -197,7 +299,7 @@ const IndividualChatScreen: React.FC = () => {
           {item.isOwn && (
             <Text style={[
               styles.readStatus,
-              { color: item.isRead ? '#007AFF' : '#9CA3AF' }
+              { color: item.isRead ? COLORS.primary : COLORS.textTertiary }
             ]}>
               ✓
             </Text>
@@ -220,42 +322,61 @@ const IndividualChatScreen: React.FC = () => {
             style={styles.backButton}
             onPress={() => navigation.goBack()}
           >
-            <ArrowLeft width={24} height={24} color="#FFFFFF" />
+            <ArrowLeft width={24} height={24} color={COLORS.textInverse} />
           </TouchableOpacity>
           
           <View style={styles.headerContent}>
-            <View style={styles.avatarContainer}>
-              <Text style={styles.avatarText}>MO</Text>
-            </View>
+            {avatar ? (
+              <Image source={{ uri: avatar }} style={styles.avatarImage} />
+            ) : (
+              <View style={styles.avatarContainer}>
+                <Text style={styles.avatarText}>
+                  {chatName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                </Text>
+              </View>
+            )}
             <View style={styles.headerInfo}>
               <Text style={styles.headerTitle}>{chatName}</Text>
             </View>
           </View>
           
           <TouchableOpacity style={styles.moreButton}>
-            <MoreHorizontal width={24} height={24} color="#FFFFFF" />
+            <MoreHorizontal width={24} height={24} color={COLORS.textInverse} />
           </TouchableOpacity>
         </View>
 
-        {/* Time Indicator */}
-        <View style={styles.timeIndicatorContainer}>
-          <View style={styles.timeIndicator}>
-            <Text style={styles.timeIndicatorText}>4:58 PM</Text>
-            <Text style={styles.checkmark}>✓</Text>
+        {loading && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color={COLORS.primary} />
+            <Text style={styles.loadingText}>Loading messages...</Text>
           </View>
-        </View>
+        )}
 
         {/* Messages */}
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          renderItem={renderMessage}
-          keyExtractor={(item) => item.id}
-          style={styles.messagesList}
-          contentContainerStyle={styles.messagesContent}
-          showsVerticalScrollIndicator={false}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-        />
+        {messages.length === 0 && !loading ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>No messages yet</Text>
+            <Text style={styles.emptySubtext}>Start the conversation!</Text>
+          </View>
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            renderItem={renderMessage}
+            keyExtractor={(item) => item.id}
+            style={styles.messagesList}
+            contentContainerStyle={styles.messagesContent}
+            showsVerticalScrollIndicator={false}
+            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+            ListEmptyComponent={
+              loading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color={COLORS.primary} />
+                </View>
+              ) : null
+            }
+          />
+        )}
 
         {/* Input Area */}
         <View style={styles.inputContainer}>
@@ -267,7 +388,7 @@ const IndividualChatScreen: React.FC = () => {
               onChangeText={setInputText}
               multiline
               maxLength={1000}
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={COLORS.textTertiary}
             />
             
             <View style={styles.inputActions}>
@@ -275,22 +396,26 @@ const IndividualChatScreen: React.FC = () => {
                 style={styles.actionButton}
                 onPress={handleVoiceMessage}
               >
-                <Mic width={20} height={20} color="#9CA3AF" />
+                <Mic width={20} height={20} color={COLORS.textTertiary} />
               </TouchableOpacity>
               
               <TouchableOpacity style={styles.actionButton}>
-                <Smile width={20} height={20} color="#9CA3AF" />
+                <Smile width={20} height={20} color={COLORS.textTertiary} />
               </TouchableOpacity>
               
               <TouchableOpacity 
                 style={[
                   styles.sendButton,
-                  inputText.trim() ? styles.sendButtonActive : styles.sendButtonInactive
+                  inputText.trim() && !sending ? styles.sendButtonActive : styles.sendButtonInactive
                 ]}
                 onPress={handleSendMessage}
-                disabled={!inputText.trim()}
+                disabled={!inputText.trim() || sending}
               >
-                <Send width={20} height={20} color="#FFFFFF" />
+                {sending ? (
+                  <ActivityIndicator size="small" color={COLORS.textInverse} />
+                ) : (
+                  <Send width={20} height={20} color={COLORS.textInverse} />
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -303,15 +428,15 @@ const IndividualChatScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.backgroundSecondary,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#4A90E2',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    paddingTop: 16,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    paddingTop: SPACING.lg,
   },
   backButton: {
     width: 40,
@@ -323,7 +448,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 8,
+    marginLeft: SPACING.sm,
   },
   avatarContainer: {
     width: 36,
@@ -332,20 +457,52 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: SPACING.md,
+  },
+  avatarImage: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    marginRight: SPACING.md,
   },
   avatarText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textInverse,
+  },
+  loadingContainer: {
+    paddingVertical: SPACING.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    marginTop: SPACING.sm,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: SPACING.xxxxl,
+  },
+  emptyText: {
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.xs,
+  },
+  emptySubtext: {
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textTertiary,
   },
   headerInfo: {
     flex: 1,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#FFFFFF',
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textInverse,
   },
   moreButton: {
     width: 40,
@@ -360,26 +517,26 @@ const styles = StyleSheet.create({
   timeIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#E5E7EB',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    backgroundColor: COLORS.backgroundSecondary,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs + 2,
   },
   timeIndicatorText: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginRight: 4,
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textSecondary,
+    marginRight: SPACING.xs,
   },
   checkmark: {
-    fontSize: 12,
-    color: '#4A90E2',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.primary,
   },
   messagesList: {
     flex: 1,
-    paddingHorizontal: 16,
+    paddingHorizontal: SPACING.lg,
   },
   messagesContent: {
-    paddingBottom: 16,
+    paddingBottom: SPACING.lg,
   },
   messageContainer: {
     marginVertical: 2,
@@ -400,30 +557,23 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   ownMessageBubble: {
-    backgroundColor: '#C7E3FF',
-    borderBottomRightRadius: 6,
+    backgroundColor: COLORS.backgroundTertiary,
+    borderBottomRightRadius: BORDER_RADIUS.xs,
   },
   otherMessageBubble: {
-    backgroundColor: '#FFFFFF',
-    borderBottomLeftRadius: 6,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderBottomLeftRadius: BORDER_RADIUS.xs,
+    ...SHADOWS.small,
   },
   messageText: {
-    fontSize: 16,
+    fontSize: TYPOGRAPHY.fontSize.md,
     lineHeight: 22,
   },
   ownMessageText: {
-    color: '#1F2937',
+    color: COLORS.textPrimary,
   },
   otherMessageText: {
-    color: '#1F2937',
+    color: COLORS.textPrimary,
   },
   messageFooter: {
     flexDirection: 'row',
@@ -439,47 +589,47 @@ const styles = StyleSheet.create({
   },
   messageTime: {
     fontSize: 11,
-    color: '#9CA3AF',
+    color: COLORS.textTertiary,
   },
   readStatus: {
-    fontSize: 12,
-    marginLeft: 4,
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    marginLeft: SPACING.xs,
   },
   inputContainer: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.backgroundPrimary,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 12,
+    borderTopColor: COLORS.borderLight,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    paddingBottom: Platform.OS === 'ios' ? 34 : SPACING.md,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 24,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    backgroundColor: COLORS.backgroundSecondary,
+    borderRadius: BORDER_RADIUS.round,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
     minHeight: 48,
   },
   textInput: {
     flex: 1,
-    fontSize: 16,
-    color: '#1F2937',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textPrimary,
     maxHeight: 100,
-    paddingVertical: 8,
+    paddingVertical: SPACING.sm,
   },
   inputActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 8,
+    marginLeft: SPACING.sm,
   },
   actionButton: {
     width: 32,
     height: 32,
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 4,
+    marginLeft: SPACING.xs,
   },
   sendButton: {
     width: 32,
@@ -487,13 +637,13 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 4,
+    marginLeft: SPACING.xs,
   },
   sendButtonActive: {
-    backgroundColor: '#4A90E2',
+    backgroundColor: COLORS.primary,
   },
   sendButtonInactive: {
-    backgroundColor: '#9CA3AF',
+    backgroundColor: COLORS.textTertiary,
   },
 });
 

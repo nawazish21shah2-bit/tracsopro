@@ -89,7 +89,7 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
       <View style={styles.errorActions}>
         {onRetry && (
           <TouchableOpacity style={styles.retryButton} onPress={onRetry}>
-            <RefreshCwIcon size={16} color={COLORS.primary} style={styles.buttonIcon} />
+            <RefreshCwIcon size={16} color={COLORS.textInverse} style={styles.buttonIcon} />
             <Text style={styles.retryButtonText}>Try Again</Text>
           </TouchableOpacity>
         )}
@@ -121,8 +121,8 @@ export const NetworkError: React.FC<NetworkErrorProps> = ({
       </Text>
       {onRetry && (
         <TouchableOpacity style={styles.retryButton} onPress={onRetry}>
-          <RefreshCwIcon size={16} color={COLORS.primary} style={styles.buttonIcon} />
-          <Text style={styles.retryButtonText}>Retry</Text>
+          <RefreshCwIcon size={16} color={COLORS.textInverse} style={styles.buttonIcon} />
+          <Text style={styles.retryButtonText}>Try Again</Text>
         </TouchableOpacity>
       )}
     </View>
@@ -259,10 +259,12 @@ const styles = StyleSheet.create({
   retryButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: COLORS.primary,
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
+    paddingVertical: SPACING.md,
     borderRadius: 8,
+    minHeight: 44,
   },
   retryButtonText: {
     color: COLORS.textInverse,

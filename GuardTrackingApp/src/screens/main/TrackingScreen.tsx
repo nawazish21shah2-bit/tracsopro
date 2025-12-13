@@ -15,6 +15,7 @@ import { RootState, AppDispatch } from '../../store';
 import { setTracking, addTrackingData, fetchTrackingHistory } from '../../store/slices/locationSlice';
 import Geolocation from 'react-native-geolocation-service';
 import { PermissionsAndroid, Platform } from 'react-native';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 
 const { width, height } = Dimensions.get('window');
 
@@ -159,13 +160,13 @@ const TrackingScreen: React.FC = () => {
     if (isTracking) {
       return {
         status: 'Active',
-        color: '#00C851',
+        color: COLORS.success,
         icon: '🟢',
       };
     } else {
       return {
         status: 'Inactive',
-        color: '#FF4444',
+        color: COLORS.error,
         icon: '🔴',
       };
     }
@@ -335,7 +336,7 @@ const TrackingScreen: React.FC = () => {
                 </Text>
               </View>
               <View style={styles.pointStatus}>
-                <Text style={[styles.pointAccuracy, { color: point.accuracy < 10 ? '#00C851' : '#FF8800' }]}>
+                <Text style={[styles.pointAccuracy, { color: point.accuracy < 10 ? COLORS.success : COLORS.warning }]}>
                   ±{Math.round(point.accuracy)}m
                 </Text>
                 <Text style={[styles.pointBattery, { color: getBatteryStatus() }]}>
@@ -358,20 +359,20 @@ const TrackingScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: COLORS.backgroundSecondary,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    backgroundColor: '#007AFF',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.lg,
+    backgroundColor: COLORS.primary,
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#ffffff',
+    fontSize: TYPOGRAPHY.fontSize.xxl,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    color: COLORS.textInverse,
   },
   statusContainer: {
     flexDirection: 'row',
@@ -379,31 +380,29 @@ const styles = StyleSheet.create({
   },
   statusIcon: {
     fontSize: 16,
-    marginRight: 8,
+    marginRight: SPACING.sm,
   },
   statusText: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
   locationCard: {
-    backgroundColor: '#ffffff',
-    margin: 20,
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    backgroundColor: COLORS.backgroundPrimary,
+    margin: SPACING.lg,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    ...SHADOWS.small,
   },
   cardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 16,
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.lg,
   },
   locationInfo: {
-    gap: 8,
+    gap: SPACING.sm,
   },
   coordinateRow: {
     flexDirection: 'row',
@@ -411,67 +410,64 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   coordinateLabel: {
-    fontSize: 14,
-    color: '#666',
-    fontWeight: '500',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
   coordinateValue: {
-    fontSize: 14,
-    color: '#333',
-    fontWeight: '600',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
     fontFamily: 'monospace',
   },
   controlsCard: {
-    backgroundColor: '#ffffff',
-    marginHorizontal: 20,
-    marginBottom: 20,
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    backgroundColor: COLORS.backgroundPrimary,
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.lg,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    ...SHADOWS.small,
   },
   controlRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: SPACING.lg,
   },
   controlLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    color: COLORS.textPrimary,
   },
   trackingButton: {
-    backgroundColor: '#E3F2FD',
-    borderRadius: 8,
-    paddingVertical: 16,
+    backgroundColor: COLORS.backgroundTertiary,
+    borderRadius: BORDER_RADIUS.sm,
+    paddingVertical: SPACING.lg,
     alignItems: 'center',
+    ...SHADOWS.small,
   },
   trackingButtonActive: {
-    backgroundColor: '#FF4444',
+    backgroundColor: COLORS.error,
   },
   trackingButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#007AFF',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.primary,
   },
   trackingButtonTextActive: {
-    color: '#ffffff',
+    color: COLORS.textInverse,
   },
   statsCard: {
-    backgroundColor: '#ffffff',
-    marginHorizontal: 20,
-    marginBottom: 20,
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    backgroundColor: COLORS.backgroundPrimary,
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.lg,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    ...SHADOWS.small,
   },
   statsGrid: {
     flexDirection: 'row',
@@ -481,30 +477,28 @@ const styles = StyleSheet.create({
   statItem: {
     width: '48%',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: SPACING.lg,
   },
   statNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#007AFF',
-    marginBottom: 4,
+    fontSize: TYPOGRAPHY.fontSize.xxl,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    color: COLORS.primary,
+    marginBottom: SPACING.xs,
   },
   statLabel: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textSecondary,
     textAlign: 'center',
   },
   historyCard: {
-    backgroundColor: '#ffffff',
-    marginHorizontal: 20,
-    marginBottom: 20,
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    backgroundColor: COLORS.backgroundPrimary,
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.lg,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    ...SHADOWS.small,
   },
   trackingPoint: {
     flexDirection: 'row',
@@ -512,46 +506,46 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: COLORS.borderLight,
   },
   pointInfo: {
     flex: 1,
   },
   pointTime: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#333',
-    marginBottom: 4,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.xs,
   },
   pointCoordinates: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textSecondary,
     fontFamily: 'monospace',
   },
   pointStatus: {
     alignItems: 'flex-end',
   },
   pointAccuracy: {
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
     marginBottom: 2,
   },
   pointBattery: {
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 32,
+    paddingVertical: SPACING.xxl,
   },
   emptyStateText: {
-    fontSize: 16,
-    color: '#999',
-    marginBottom: 8,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textTertiary,
+    marginBottom: SPACING.sm,
   },
   emptyStateSubtext: {
-    fontSize: 14,
-    color: '#CCC',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textTertiary,
   },
 });
 

@@ -202,21 +202,46 @@ export class PaymentService {
       // Finalize and send the invoice
       const finalizedInvoice = await stripe.invoices.finalizeInvoice(stripeInvoice.id);
 
-      // TODO: Store invoice in your database
+      // Get security company ID from client
+      const companyClient = await prisma.companyClient.findFirst({
+        where: { clientId: data.clientId, isActive: true },
+        select: { securityCompanyId: true },
+      });
+
+      if (!companyClient) {
+        throw new Error('Client not associated with a security company');
+      }
+
+      // Store invoice in database as BillingRecord
+      const invoiceNumber = `INV-${Date.now()}-${data.clientId.slice(0, 8).toUpperCase()}`;
+      const billingRecord = await prisma.billingRecord.create({
+        data: {
+          securityCompanyId: companyClient.securityCompanyId,
+          type: 'SUBSCRIPTION',
+          description: data.description || `Invoice for ${client.user.email}`,
+          amount: totalAmount,
+          currency: data.currency || 'USD',
+          status: 'PENDING',
+          dueDate: data.dueDate,
+          invoiceNumber,
+          stripeInvoiceId: finalizedInvoice.id,
+        },
+      });
+
       const invoice: Invoice = {
-        id: `inv_${Date.now()}`,
+        id: billingRecord.id,
         clientId: data.clientId,
         amount: totalAmount,
         currency: data.currency || 'usd',
         description: data.description,
         status: 'open',
         dueDate: data.dueDate,
-        createdAt: new Date(),
+        createdAt: billingRecord.createdAt,
         stripeInvoiceId: finalizedInvoice.id,
         items,
       };
 
-      console.log(`📧 Invoice ${invoice.id} created and sent to ${client.user.email}`);
+      console.log(`📧 Invoice ${invoiceNumber} created and sent to ${client.user.email}`);
 
       return invoice;
     } catch (error) {

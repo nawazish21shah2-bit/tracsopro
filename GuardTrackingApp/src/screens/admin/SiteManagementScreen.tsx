@@ -7,6 +7,8 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { LocationIcon, SettingsIcon } from '../../components/ui/AppIcons';
+import AddressPicker from '../../components/common/AddressPicker';
+import ClientSelector from '../../components/common/ClientSelector';
 import apiService from '../../services/api';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
@@ -28,7 +30,6 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingSiteId, setEditingSiteId] = useState<string | null>(null);
-  const [clients, setClients] = useState<any[]>([]);
   const [newSite, setNewSite] = useState({
     name: '',
     address: '',
@@ -43,7 +44,6 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
 
   useEffect(() => {
     loadSites();
-    loadClients();
   }, []);
 
   const loadSites = async () => {
@@ -68,25 +68,12 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
 
       setSites(mapped);
     } catch (error: any) {
-      console.error('Failed to load sites:', error);
+      if (__DEV__) {
+        console.error('Failed to load sites:', error);
+      }
       Alert.alert('Error', error.message || 'Failed to load sites');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadClients = async () => {
-    try {
-      const response = await apiService.getAdminClients();
-      if (!response.success || !response.data) {
-        console.warn('Failed to load clients:', response.message);
-        return;
-      }
-
-      const backendClients = response.data.clients as any[];
-      setClients(backendClients);
-    } catch (error: any) {
-      console.error('Failed to load clients:', error);
     }
   };
 
@@ -124,7 +111,9 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
       setNewSite({ name: '', address: '', clientId: '' });
       Alert.alert('Success', 'Site created successfully');
     } catch (error: any) {
-      console.error('Create site error:', error);
+      if (__DEV__) {
+        console.error('Create site error:', error);
+      }
       Alert.alert('Error', error.message || 'Failed to create site');
     }
   };
@@ -183,7 +172,9 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
       setEditingSiteId(null);
       Alert.alert('Success', 'Site updated successfully');
     } catch (error: any) {
-      console.error('Update site error:', error);
+      if (__DEV__) {
+        console.error('Update site error:', error);
+      }
       Alert.alert('Error', error.message || 'Failed to update site');
     }
   };
@@ -209,7 +200,9 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
               }
               setSites(prev => prev.filter(s => s.id !== siteId));
             } catch (error: any) {
-              console.error('Delete site error:', error);
+              if (__DEV__) {
+                console.error('Delete site error:', error);
+              }
               Alert.alert('Error', error.message || 'Failed to delete site');
             }
           },
@@ -316,34 +309,24 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
             </View>
 
             <View style={styles.formField}>
-              <Text style={styles.fieldLabel}>Address</Text>
-              <TextInput
-                style={styles.fieldInput}
+              <AddressPicker
                 value={newSite.address}
-                onChangeText={(text) => setNewSite(prev => ({ ...prev, address: text }))}
-                placeholder="Enter site address"
+                onChange={(address) => setNewSite(prev => ({ ...prev, address }))}
+                label="Address"
+                placeholder="Enter or select address on map"
+                required
               />
             </View>
 
             <View style={styles.formField}>
-              <Text style={styles.fieldLabel}>Client</Text>
-              <View style={styles.dropdownContainer}>
-                {clients.map((c) => {
-                  const label = `${c.user.firstName || ''} ${c.user.lastName || ''}`.trim() || c.user.email;
-                  const selected = newSite.clientId === c.id;
-                  return (
-                    <TouchableOpacity
-                      key={c.id}
-                      style={[styles.dropdownItem, selected && styles.dropdownItemSelected]}
-                      onPress={() => setNewSite(prev => ({ ...prev, clientId: c.id }))}
-                    >
-                      <Text style={[styles.dropdownText, selected && styles.dropdownTextSelected]}>
-                        {label} ({c.id})
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+              <ClientSelector
+                value={newSite.clientId || null}
+                onChange={(clientId) => setNewSite(prev => ({ ...prev, clientId: clientId || '' }))}
+                label="Client"
+                placeholder="Select client"
+                required
+                variant="modal"
+              />
             </View>
 
             <TouchableOpacity
@@ -386,34 +369,23 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
             </View>
 
             <View style={styles.formField}>
-              <Text style={styles.fieldLabel}>Address</Text>
-              <TextInput
-                style={styles.fieldInput}
+              <AddressPicker
                 value={editSite.address}
-                onChangeText={(text) => setEditSite(prev => ({ ...prev, address: text }))}
-                placeholder="Enter site address"
+                onChange={(address) => setEditSite(prev => ({ ...prev, address }))}
+                label="Address"
+                placeholder="Enter or select address on map"
+                required
               />
             </View>
 
             <View style={styles.formField}>
-              <Text style={styles.fieldLabel}>Client (optional override)</Text>
-              <View style={styles.dropdownContainer}>
-                {clients.map((c) => {
-                  const label = `${c.user.firstName || ''} ${c.user.lastName || ''}`.trim() || c.user.email;
-                  const selected = editSite.clientId === c.id;
-                  return (
-                    <TouchableOpacity
-                      key={c.id}
-                      style={[styles.dropdownItem, selected && styles.dropdownItemSelected]}
-                      onPress={() => setEditSite(prev => ({ ...prev, clientId: c.id }))}
-                    >
-                      <Text style={[styles.dropdownText, selected && styles.dropdownTextSelected]}>
-                        {label} ({c.id})
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+              <ClientSelector
+                value={editSite.clientId || null}
+                onChange={(clientId) => setEditSite(prev => ({ ...prev, clientId: clientId || '' }))}
+                label="Client (optional override)"
+                placeholder="Select client"
+                variant="modal"
+              />
             </View>
 
             <View style={styles.formField}>

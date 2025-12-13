@@ -52,7 +52,7 @@ const GuardSiteDetailsScreen: React.FC = () => {
   
   const [loading, setLoading] = useState(true);
   const [site, setSite] = useState<SiteDetails | null>(null);
-  const [shiftPostings, setShiftPostings] = useState<ShiftPosting[]>([]);
+  const [shifts, setShifts] = useState<Shift[]>([]);
 
   useEffect(() => {
     if (siteId) {
@@ -80,26 +80,9 @@ const GuardSiteDetailsScreen: React.FC = () => {
         status: 'Active'
       });
 
-      setShiftPostings([
-        {
-          id: '1',
-          title: 'Morning Security Shift',
-          startTime: new Date().toISOString(),
-          endTime: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString(),
-          hourlyRate: 20.00,
-          status: 'OPEN',
-          applicationsCount: 3
-        },
-        {
-          id: '2',
-          title: 'Afternoon Security Shift',
-          startTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-          endTime: new Date(Date.now() + 32 * 60 * 60 * 1000).toISOString(),
-          hourlyRate: 22.00,
-          status: 'OPEN',
-          applicationsCount: 5
-        }
-      ]);
+      // TODO: Replace with actual API call to get shifts for this site
+      // For now, using empty array - shifts are assigned directly by admin/client
+      setShifts([]);
     } catch (error) {
       Alert.alert('Error', 'Failed to load site details');
     } finally {
@@ -108,15 +91,16 @@ const GuardSiteDetailsScreen: React.FC = () => {
   };
 
   const handleShiftPress = (shiftId: string) => {
-    // Navigate to apply for shift screen
-    (navigation as any).navigate('ApplyForShift', { shiftId });
+    // Navigate to shift details screen (Option B - no applications)
+    (navigation as any).navigate('ShiftDetails', { shiftId });
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'OPEN': return COLORS.success;
-      case 'FILLED': return COLORS.primary;
+      case 'SCHEDULED': return COLORS.primary;
+      case 'IN_PROGRESS': return COLORS.success;
       case 'COMPLETED': return COLORS.textSecondary;
+      case 'CANCELLED': return COLORS.error;
       default: return COLORS.textSecondary;
     }
   };
@@ -241,8 +225,8 @@ const GuardSiteDetailsScreen: React.FC = () => {
             <Text style={styles.shiftCount}>{shiftPostings.length} shifts</Text>
           </View>
 
-          {shiftPostings.length > 0 ? (
-            shiftPostings.map((shift) => (
+          {shifts.length > 0 ? (
+            shifts.map((shift) => (
               <TouchableOpacity 
                 key={shift.id}
                 style={styles.shiftCard}
@@ -250,7 +234,9 @@ const GuardSiteDetailsScreen: React.FC = () => {
                 activeOpacity={0.7}
               >
                 <View style={styles.shiftHeader}>
-                  <Text style={styles.shiftTitle}>{shift.title}</Text>
+                  <Text style={styles.shiftTitle}>
+                    {shift.guard ? `${shift.guard.user.firstName} ${shift.guard.user.lastName}` : 'Unassigned Shift'}
+                  </Text>
                   <View style={[
                     styles.shiftStatusBadge,
                     { backgroundColor: getStatusColor(shift.status) + '20' }
@@ -268,37 +254,24 @@ const GuardSiteDetailsScreen: React.FC = () => {
                   <View style={styles.shiftDetailRow}>
                     <CalendarIcon size={16} color={COLORS.textSecondary} />
                     <Text style={styles.shiftDetailText}>
-                      {formatDateTime(shift.startTime)} - {formatTime(shift.endTime)}
+                      {formatDateTime(shift.scheduledStartTime)} - {formatDateTime(shift.scheduledEndTime)}
                     </Text>
                   </View>
                   
                   <View style={styles.shiftDetailRow}>
                     <ClockIcon size={16} color={COLORS.textSecondary} />
                     <Text style={styles.shiftDetailText}>
-                      {Math.round((new Date(shift.endTime).getTime() - new Date(shift.startTime).getTime()) / (1000 * 60 * 60))} hours
+                      {Math.round((new Date(shift.scheduledEndTime).getTime() - new Date(shift.scheduledStartTime).getTime()) / (1000 * 60 * 60))} hours
                     </Text>
                   </View>
-                  
-                  <View style={styles.shiftDetailRow}>
-                    <Text style={styles.hourlyRateLabel}>Hourly Rate:</Text>
-                    <Text style={styles.hourlyRate}>${shift.hourlyRate.toFixed(2)}/hr</Text>
-                  </View>
-                  
-                  {shift.applicationsCount !== undefined && (
-                    <View style={styles.applicationsRow}>
-                      <Text style={styles.applicationsText}>
-                        {shift.applicationsCount} {shift.applicationsCount === 1 ? 'application' : 'applications'}
-                      </Text>
-                    </View>
-                  )}
                 </View>
               </TouchableOpacity>
             ))
           ) : (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No shifts available</Text>
+              <Text style={styles.emptyStateText}>No shifts scheduled</Text>
               <Text style={styles.emptyStateSubtext}>
-                Check back later for new shift postings at this site.
+                Shifts are assigned directly by admin. Check back later for new assignments.
               </Text>
             </View>
           )}

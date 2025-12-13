@@ -94,7 +94,7 @@ class IncidentReportService {
     return this.formatIncidentReport(report);
   }
 
-  async getIncidentReports(filters: IncidentReportFilters, page: number = 1, limit: number = 10) {
+  async getIncidentReports(filters: IncidentReportFilters, page: number = 1, limit: number = 10, securityCompanyId?: string) {
     const skip = (page - 1) * limit;
     const where: any = {};
 
@@ -104,6 +104,34 @@ class IncidentReportService {
       });
       if (guard) {
         where.guardId = guard.id;
+      }
+    }
+
+    // Multi-tenant: Filter by company if provided
+    if (securityCompanyId) {
+      // Get all guard IDs in the company
+      const [companyGuards] = await Promise.all([
+        prisma.companyGuard.findMany({
+          where: { securityCompanyId, isActive: true },
+          select: { guardId: true },
+        }),
+      ]);
+
+      const companyGuardIds = companyGuards.map(cg => cg.guardId);
+
+      // Filter to only include reports from guards in the company
+      if (where.guardId) {
+        // If specific guardId is provided, validate it belongs to company
+        if (!companyGuardIds.includes(where.guardId)) {
+          // Return empty result if guard doesn't belong to company
+          return {
+            reports: [],
+            pagination: { page, limit, total: 0, pages: 0 },
+          };
+        }
+      } else {
+        // Filter by company guards
+        where.guardId = { in: companyGuardIds };
       }
     }
 
@@ -266,7 +294,7 @@ class IncidentReportService {
     return true;
   }
 
-  async getAllIncidentReports(filters: IncidentReportFilters, page: number = 1, limit: number = 10) {
+  async getAllIncidentReports(filters: IncidentReportFilters, page: number = 1, limit: number = 10, securityCompanyId?: string) {
     const skip = (page - 1) * limit;
     const where: any = {};
 
@@ -276,6 +304,32 @@ class IncidentReportService {
       });
       if (guard) {
         where.guardId = guard.id;
+      }
+    }
+
+    // Multi-tenant: Filter by company if provided
+    if (securityCompanyId) {
+      // Get all guard IDs in the company
+      const companyGuards = await prisma.companyGuard.findMany({
+        where: { securityCompanyId, isActive: true },
+        select: { guardId: true },
+      });
+
+      const companyGuardIds = companyGuards.map(cg => cg.guardId);
+
+      // Filter to only include reports from guards in the company
+      if (where.guardId) {
+        // If specific guardId is provided, validate it belongs to company
+        if (!companyGuardIds.includes(where.guardId)) {
+          // Return empty result if guard doesn't belong to company
+          return {
+            reports: [],
+            pagination: { page, limit, total: 0, pages: 0 },
+          };
+        }
+      } else {
+        // Filter by company guards
+        where.guardId = { in: companyGuardIds };
       }
     }
 
@@ -329,7 +383,7 @@ class IncidentReportService {
     };
   }
 
-  async getIncidentReportStats(filters: StatsFilters) {
+  async getIncidentReportStats(filters: StatsFilters, securityCompanyId?: string) {
     const where: any = {};
 
     if (filters.guardId) {
@@ -338,6 +392,44 @@ class IncidentReportService {
       });
       if (guard) {
         where.guardId = guard.id;
+      }
+    }
+
+    // Multi-tenant: Filter by company if provided
+    if (securityCompanyId) {
+      // Get all guard IDs in the company
+      const companyGuards = await prisma.companyGuard.findMany({
+        where: { securityCompanyId, isActive: true },
+        select: { guardId: true },
+      });
+
+      const companyGuardIds = companyGuards.map(cg => cg.guardId).filter(Boolean);
+
+      // If no guards in company, return empty stats
+      if (companyGuardIds.length === 0) {
+        return {
+          totalReports: 0,
+          reportsByType: {},
+          reportsByStatus: {},
+          recentReports: [],
+        };
+      }
+
+      // Filter to only include reports from guards in the company
+      if (where.guardId) {
+        // If specific guardId is provided, validate it belongs to company
+        if (!companyGuardIds.includes(where.guardId)) {
+          // Return empty stats if guard doesn't belong to company
+          return {
+            totalReports: 0,
+            reportsByType: {},
+            reportsByStatus: {},
+            recentReports: [],
+          };
+        }
+      } else {
+        // Filter by company guards
+        where.guardId = { in: companyGuardIds };
       }
     }
 

@@ -100,6 +100,7 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
           ADMIN: 'admin',
           GUARD: 'guard',
           CLIENT: 'client',
+          SUPER_ADMIN: 'super_admin', // Added for completeness
         };
 
         return {
@@ -138,12 +139,9 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
   };
 
   const handleCreateUser = async () => {
-    // Prevent multiple submissions
-    if (creatingUser) {
-      return;
-    }
+    if (creatingUser) return;
 
-    if (!newUser.name || !newUser.email) {
+    if (!newUser.name?.trim() || !newUser.email?.trim()) {
       Alert.alert('Error', 'Please fill in all required fields');
       return;
     }
@@ -156,119 +154,80 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
     };
 
     const [firstName, ...rest] = newUser.name.trim().split(' ');
-    const lastName = rest.join(' ');
+    const lastName = rest.join(' ') || firstName;
 
-    // Generate a simple temporary password for the new user
+    // Generate temporary password
     const tempPassword = `Temp${Math.floor(100000 + Math.random() * 900000)}!`;
 
     setCreatingUser(true);
     try {
-      const response = await apiService.register({
+      const response = await apiService.createAdminUser({
         email: newUser.email.trim().toLowerCase(),
         password: tempPassword,
         firstName,
-        lastName: lastName || firstName,
+        lastName,
         role: roleMap[newUser.role],
-      } as any);
+        department: newUser.department || undefined,
+      });
 
       if (!response.success) {
-        // Show detailed error message from backend
-        const errorMessage = response.message || response.errors?.join(', ') || 'Failed to create user';
-        
-        // Handle rate limit errors
-        if (errorMessage.includes('rate limit') || errorMessage.includes('Too many')) {
-          Alert.alert(
-            'Rate Limit Exceeded',
-            'Too many user creation attempts. Please wait a few minutes before trying again.',
-            [{ text: 'OK' }]
-          );
-        } else {
-          Alert.alert('Error', errorMessage);
-        }
+        Alert.alert('Error', response.message || 'Failed to create user');
         return;
       }
 
-      // Handle both response formats (with userId or with user object)
-      const userId = response.data?.userId || response.data?.user?.id || response.data?.id;
-      
-      if (!userId) {
-        Alert.alert('Error', 'User created but could not get user ID');
-        return;
-      }
-
-      const createdAt = new Date().toISOString();
-
-      const user: User = {
-        id: userId,
-        name: newUser.name,
-        email: newUser.email.trim().toLowerCase(),
+      // Add user to list
+      const userData = response.data;
+      const createdUser: User = {
+        id: userData.id,
+        name: `${userData.firstName} ${userData.lastName}`.trim(),
+        email: userData.email,
         role: newUser.role,
         status: 'active',
         department: newUser.department || undefined,
-        createdAt,
+        createdAt: userData.createdAt,
       };
 
-      setUsers(prev => [...prev, user]);
+      setUsers(prev => [createdUser, ...prev]);
       setShowCreateModal(false);
       setNewUser({ name: '', email: '', role: 'guard', department: '' });
 
       Alert.alert(
-        'User created',
-        `User has been created successfully.\n\nEmail: ${newUser.email}\nTemporary password: ${tempPassword}\n\nPlease share this password with the user.`
+        'User Created',
+        `User has been created successfully.\n\nEmail: ${newUser.email}\nTemporary Password: ${tempPassword}\n\nPlease share this password with the user.`
       );
     } catch (error: any) {
-      console.error('Admin create user error:', error);
+      console.error('Create user error:', error);
       
-      // Provide detailed error messages
       let errorMessage = 'Failed to create user. ';
       
       if (!error.response) {
-        // No response from server - network or server down
         if (error.message?.includes('Network Error') || error.message?.includes('ECONNREFUSED')) {
-          errorMessage += 'Cannot connect to backend server. Please ensure:\n\n' +
-                         '1. Backend server is running\n' +
-                         '2. Backend is listening on port 3000\n' +
-                         '3. IP address is correct (192.168.1.7:3000)';
+          errorMessage = 'Cannot connect to backend server. Please check:\n\n' +
+                         '• Backend server is running\n' +
+                         '• Network connection is active\n' +
+                         '• Server address is correct';
         } else if (error.message?.includes('timeout')) {
-          errorMessage += 'Request timed out. The server may be slow or unresponsive.';
+          errorMessage = 'Request timed out. Please try again.';
         } else {
-          errorMessage += 'No response from server. Please check backend logs.';
+          errorMessage = 'No response from server. Please check backend logs.';
         }
       } else {
-      // Server responded with error
-      const statusCode = error.response?.status;
-      const errorData = error.response?.data;
-      
-      if (statusCode === 409) {
-        // Email already registered
-        errorMessage = `User with email ${newUser.email} already exists. Please use a different email address.`;
-      } else if (errorData?.message) {
-        errorMessage = errorData.message;
-      } else {
-        errorMessage = error.message || 'Failed to create user. Please check the console for details.';
-      }
+        const statusCode = error.response?.status;
+        if (statusCode === 409) {
+          errorMessage = `User with email ${newUser.email} already exists.`;
+        } else {
+          errorMessage = error.response?.data?.message || error.message || 'Failed to create user';
+        }
       }
       
-      // Handle rate limit errors from server
-      if (errorMessage.includes('rate limit') || errorMessage.includes('Too many')) {
-        Alert.alert(
-          'Rate Limit Exceeded',
-          'Too many user creation attempts. Please wait a few minutes before trying again.',
-          [{ text: 'OK' }]
-        );
-      } else {
-        Alert.alert('Error', errorMessage);
-      }
+      Alert.alert('Error', errorMessage);
     } finally {
       setCreatingUser(false);
     }
   };
 
   const handleUserAction = async (userId: string, action: 'edit' | 'suspend' | 'activate' | 'delete') => {
-    // Prevent multiple actions on the same user
-    if (actionLoading === userId) {
-      return;
-    }
+    if (actionLoading === userId) return;
 
     const user = users.find(u => u.id === userId);
     if (!user) return;
@@ -283,45 +242,13 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
             { 
               text: 'Suspend', 
               style: 'destructive',
-              onPress: async () => {
-                setActionLoading(userId);
-                try {
-                  const response = await apiService.updateAdminUserStatus(userId, false);
-                  if (!response.success) {
-                    Alert.alert('Error', response.message || 'Failed to suspend user');
-                    return;
-                  }
-                  setUsers(prev => prev.map(u => 
-                    u.id === userId ? { ...u, status: 'suspended' } : u
-                  ));
-                } catch (error: any) {
-                  console.error('Suspend user error:', error);
-                  Alert.alert('Error', error.message || 'Failed to suspend user');
-                } finally {
-                  setActionLoading(null);
-                }
-              }
+              onPress: () => updateUserStatus(userId, false),
             },
           ]
         );
         break;
       case 'activate':
-        setActionLoading(userId);
-        try {
-          const response = await apiService.updateAdminUserStatus(userId, true);
-          if (!response.success) {
-            Alert.alert('Error', response.message || 'Failed to activate user');
-            return;
-          }
-          setUsers(prev => prev.map(u => 
-            u.id === userId ? { ...u, status: 'active' } : u
-          ));
-        } catch (error: any) {
-          console.error('Activate user error:', error);
-          Alert.alert('Error', error.message || 'Failed to activate user');
-        } finally {
-          setActionLoading(null);
-        }
+        updateUserStatus(userId, true);
         break;
       case 'delete':
         Alert.alert(
@@ -332,22 +259,7 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
             { 
               text: 'Delete', 
               style: 'destructive',
-              onPress: async () => {
-                setActionLoading(userId);
-                try {
-                  const response = await apiService.deleteAdminUser(userId);
-                  if (!response.success) {
-                    Alert.alert('Error', response.message || 'Failed to delete user');
-                    return;
-                  }
-                  setUsers(prev => prev.filter(u => u.id !== userId));
-                } catch (error: any) {
-                  console.error('Delete user error:', error);
-                  Alert.alert('Error', error.message || 'Failed to delete user');
-                } finally {
-                  setActionLoading(null);
-                }
-              }
+              onPress: () => deleteUser(userId),
             },
           ]
         );
@@ -364,13 +276,46 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
     }
   };
 
-  const handleSaveEditUser = async () => {
-    // Prevent multiple submissions
-    if (updatingUser || !editingUserId) {
-      return;
+  const updateUserStatus = async (userId: string, isActive: boolean) => {
+    setActionLoading(userId);
+    try {
+      const response = await apiService.updateAdminUserStatus(userId, isActive);
+      if (!response.success) {
+        Alert.alert('Error', response.message || `Failed to ${isActive ? 'activate' : 'suspend'} user`);
+        return;
+      }
+      setUsers(prev => prev.map(u => 
+        u.id === userId ? { ...u, status: isActive ? 'active' : 'suspended' } : u
+      ));
+    } catch (error: any) {
+      console.error('Update status error:', error);
+      Alert.alert('Error', error.message || `Failed to ${isActive ? 'activate' : 'suspend'} user`);
+    } finally {
+      setActionLoading(null);
     }
+  };
 
-    if (!editUser.name || !editUser.email) {
+  const deleteUser = async (userId: string) => {
+    setActionLoading(userId);
+    try {
+      const response = await apiService.deleteAdminUser(userId);
+      if (!response.success) {
+        Alert.alert('Error', response.message || 'Failed to delete user');
+        return;
+      }
+      setUsers(prev => prev.filter(u => u.id !== userId));
+    } catch (error: any) {
+      console.error('Delete user error:', error);
+      Alert.alert('Error', error.message || 'Failed to delete user');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleSaveEditUser = async () => {
+    if (updatingUser || !editingUserId) return;
+
+    if (!editUser.name?.trim() || !editUser.email?.trim()) {
       Alert.alert('Error', 'Please fill in all required fields');
       return;
     }
@@ -382,13 +327,13 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
     };
 
     const [firstName, ...rest] = editUser.name.trim().split(' ');
-    const lastName = rest.join(' ');
+    const lastName = rest.join(' ') || firstName;
 
     setUpdatingUser(true);
     try {
       const response = await apiService.updateAdminUser(editingUserId, {
         firstName,
-        lastName: lastName || firstName,
+        lastName,
         email: editUser.email.trim().toLowerCase(),
         role: roleMap[editUser.role],
       });
@@ -398,7 +343,7 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
         return;
       }
 
-      const updatedRoleMap: Record<string, User['role']> = {
+      const roleMapBack: Record<string, User['role']> = {
         ADMIN: 'admin',
         GUARD: 'guard',
         CLIENT: 'client',
@@ -410,14 +355,13 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
               ...u,
               name: editUser.name,
               email: editUser.email.trim().toLowerCase(),
-              role: updatedRoleMap[response.data.role] || editUser.role,
+              role: roleMapBack[response.data.role] || editUser.role,
             }
           : u
       ));
 
       setShowEditModal(false);
       setEditingUserId(null);
-
       Alert.alert('Success', 'User updated successfully');
     } catch (error: any) {
       console.error('Edit user error:', error);
@@ -869,14 +813,16 @@ const styles = StyleSheet.create({
   },
   stickyAddButton: {
     position: 'absolute',
-    bottom: SPACING.lg,
+    bottom: 90, // Position above bottom navigator (70px height + 20px padding)
     left: SPACING.lg,
+    right: SPACING.lg,
     backgroundColor: COLORS.primary,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
-    borderRadius: BORDER_RADIUS.round,
-    ...SHADOWS.medium,
+    borderRadius: BORDER_RADIUS.md,
+    ...SHADOWS.small,
     zIndex: 1000,
+    alignItems: 'center',
   },
   stickyAddButtonText: {
     color: COLORS.textInverse,
@@ -885,8 +831,8 @@ const styles = StyleSheet.create({
   },
   filterContainer: {
     flexDirection: 'row',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
     backgroundColor: COLORS.backgroundPrimary,
     gap: SPACING.sm,
   },
@@ -919,7 +865,7 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     padding: SPACING.lg,
-    paddingBottom: SPACING.xl * 3,
+    paddingBottom: 120, // Space for floating button + bottom nav
   },
   errorContainer: {
     flex: 1,
@@ -939,12 +885,12 @@ const styles = StyleSheet.create({
   },
   userCard: {
     backgroundColor: COLORS.backgroundPrimary,
-    borderRadius: BORDER_RADIUS.lg,
+    borderRadius: BORDER_RADIUS.md,
     padding: SPACING.lg,
     marginBottom: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.borderCard,
-    ...SHADOWS.small,
+    // No shadow - border only for minimal style
   },
   userHeader: {
     flexDirection: 'row',
@@ -1066,10 +1012,10 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     flex: 1,
-    padding: SPACING.lg,
+    padding: SPACING.formPadding || SPACING.lg,
   },
   formField: {
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.fieldGap || SPACING.lg,
   },
   fieldLabel: {
     fontSize: TYPOGRAPHY.fontSize.md,
@@ -1120,7 +1066,7 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.md,
     padding: SPACING.lg,
     alignItems: 'center',
-    marginTop: SPACING.xl,
+    marginTop: SPACING.sectionGap || SPACING.xl,
     ...SHADOWS.small,
   },
   createButtonText: {

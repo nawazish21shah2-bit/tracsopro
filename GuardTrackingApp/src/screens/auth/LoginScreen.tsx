@@ -27,6 +27,7 @@ import { createLoginValidator, ValidationResult } from '../../utils/validation';
 import { useTheme } from '../../utils/theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Logo from '../../assets/images/tracSOpro-logo.png';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 
 type LoginScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'Login'>;
 
@@ -96,9 +97,18 @@ const LoginScreen: React.FC = () => {
 
       const result = await dispatch(loginUser(formData));
       if (loginUser.fulfilled.match(result)) {
+        // Log success for debugging
+        if (__DEV__) {
+          console.log('✅ Login successful, user:', result.payload.user?.email, 'role:', result.payload.user?.role);
+        }
         // Navigation will be handled by AppNavigator based on auth state
+        // The AppNavigator will detect isAuthenticated change and navigate to Main
       } else {
-        Alert.alert('Login Failed', result.payload as string);
+        const errorMessage = result.payload as string;
+        if (__DEV__) {
+          console.error('❌ Login failed:', errorMessage);
+        }
+        Alert.alert('Login Failed', errorMessage);
       }
     } catch (error) {
       Alert.alert('Error', 'An unexpected error occurred');
@@ -162,7 +172,7 @@ const LoginScreen: React.FC = () => {
             <AuthInput
               ref={emailInputRef as any}
               // label="Email"
-              icon="email-outline"
+              icon="mail-outline"
               placeholder="Email Address"
               value={formData.email}
               onChangeText={(v) => handleInputChange('email', v)}
@@ -252,74 +262,74 @@ const LoginScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.backgroundPrimary,
   },
   logoContainer: {
     alignItems: 'center',
-    marginTop: 80,
-    marginBottom: 40,
+    marginTop: SPACING.xxxxl * 2,
+    marginBottom: SPACING.xxxxl,
   },
   logoImage: {
     width: 160,
     height: 140,
   },
   title: {
-    fontFamily: 'Montserrat',
-    fontWeight: '600',
-    fontSize: 24,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    fontSize: TYPOGRAPHY.fontSize.xxl,
     lineHeight: 29,
     textAlign: 'center',
     letterSpacing: -0.408,
-    color: '#000000',
+    color: COLORS.textPrimary,
     textTransform: 'uppercase',
-    marginBottom: 60,
+    marginBottom: SPACING.xxxxl + SPACING.lg,
   },
   form: {
-    paddingHorizontal: 20,
+    paddingHorizontal: SPACING.lg,
     flex: 1,
   },
   inputContainer: {
-    marginBottom: 16,
+    marginBottom: SPACING.fieldGap || SPACING.lg,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     height: 56,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.backgroundSecondary,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
+    borderColor: COLORS.borderLight,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.lg,
   },
   iconContainer: {
     width: 20,
     height: 20,
-    marginRight: 12,
+    marginRight: SPACING.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
   inputIcon: {
-    fontSize: 16,
-    color: '#6B7280',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textSecondary,
   },
   eyeButton: {
-    padding: 4,
-    marginLeft: 8,
+    padding: SPACING.xs,
+    marginLeft: SPACING.sm,
   },
   textInput: {
     flex: 1,
-    fontFamily: 'Inter',
-    fontWeight: '500',
-    fontSize: 14,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    fontSize: TYPOGRAPHY.fontSize.sm,
     lineHeight: 17,
     letterSpacing: -0.408,
-    color: '#000000',
+    color: COLORS.textPrimary,
   },
   optionsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: SPACING.fieldGap || SPACING.lg,
   },
   rememberContainer: {
     flexDirection: 'row',
@@ -329,85 +339,86 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderWidth: 1.5,
-    borderColor: '#1C6CA9',
-    borderRadius: 4,
-    marginRight: 8,
+    borderColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.xs,
+    marginRight: SPACING.sm,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'transparent',
   },
   checkboxChecked: {
-    backgroundColor: '#1C6CA9',
-    borderColor: '#1C6CA9',
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   rememberText: {
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    fontSize: 14,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.regular,
+    fontSize: TYPOGRAPHY.fontSize.sm,
     lineHeight: 17,
     letterSpacing: 0.01,
-    color: '#151515',
+    color: COLORS.textPrimary,
   },
   forgotText: {
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    fontSize: 14,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.regular,
+    fontSize: TYPOGRAPHY.fontSize.sm,
     lineHeight: 17,
     letterSpacing: 0.01,
-    color: '#1C6CA9',
+    color: COLORS.primary,
   },
   loginButton: {
     height: 56,
-    backgroundColor: '#1C6CA9',
-    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.md,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
-    marginTop: 40,
+    marginTop: SPACING.xxxxl,
+    ...SHADOWS.small,
   },
   loginButtonDisabled: {
-    backgroundColor: '#ACD3F1',
+    backgroundColor: COLORS.primaryLight,
   },
   loginButtonText: {
-    fontFamily: 'Inter',
-    fontWeight: '500',
-    fontSize: 16,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    fontSize: TYPOGRAPHY.fontSize.md,
     lineHeight: 22,
     textAlign: 'center',
     letterSpacing: -0.408,
-    color: '#FFFFFF',
+    color: COLORS.textInverse,
   },
   arrowIcon: {
     position: 'absolute',
-    right: 20,
-    fontSize: 18,
-    color: '#FFFFFF',
-    fontWeight: 'bold',
+    right: SPACING.lg,
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    color: COLORS.textInverse,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
   },
   footer: {
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 'auto',
-    marginBottom: 40,
+    marginBottom: SPACING.xxxxl,
   },
   footerText: {
-    fontFamily: 'Inter',
-    fontWeight: '500',
-    fontSize: 14,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    fontSize: TYPOGRAPHY.fontSize.sm,
     lineHeight: 17,
     textAlign: 'center',
     letterSpacing: -0.408,
-    color: '#828282',
+    color: COLORS.textSecondary,
   },
   registerText: {
-    fontFamily: 'Inter',
-    fontWeight: '500',
-    fontSize: 14,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    fontSize: TYPOGRAPHY.fontSize.sm,
     lineHeight: 17,
     letterSpacing: -0.408,
-    color: '#1C6CA9',
-    marginTop: 4,
+    color: COLORS.primary,
+    marginTop: SPACING.xs,
   },
   disabledLink: {
     opacity: 0.5,

@@ -19,7 +19,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { logoutUser } from '../../store/slices/authSlice';
 import { useNavigation } from '@react-navigation/native';
-import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { HomeIcon, UserIcon, ReportsIcon, ShiftsIcon } from '../../components/ui/AppIcons';
 import SuperAdminService, { PlatformOverview } from '../../services/superAdminService';
 import { Dimensions } from 'react-native';
@@ -99,10 +99,10 @@ const SuperAdminDashboard: React.FC = () => {
         <Text style={styles.metricValue}>{formatValue(current)}</Text>
         <View style={styles.metricGrowth}>
           <View style={styles.growthContainer}>
-            <Text style={[styles.growthArrow, { color: isPositive ? '#10B981' : '#EF4444' }]}>
+            <Text style={[styles.growthArrow, { color: isPositive ? COLORS.success : COLORS.error }]}>
               {isPositive ? '↗' : '↘'}
             </Text>
-            <Text style={[styles.growthText, { color: isPositive ? '#10B981' : '#EF4444' }]}>
+            <Text style={[styles.growthText, { color: isPositive ? COLORS.success : COLORS.error }]}>
               {Math.abs(growth).toFixed(1)}%
             </Text>
           </View>
@@ -182,7 +182,9 @@ const SuperAdminDashboard: React.FC = () => {
           variant="superAdmin"
           showLogo={true}
           onMenuPress={openDrawer}
-          onNotificationPress={() => {}}
+          onNotificationPress={() => {
+            navigation.navigate('SuperAdminNotifications' as never);
+          }}
           notificationCount={0}
           profileDrawer={
             <SuperAdminProfileDrawer
@@ -208,7 +210,9 @@ const SuperAdminDashboard: React.FC = () => {
           variant="superAdmin"
           showLogo={true}
           onMenuPress={openDrawer}
-          onNotificationPress={() => {}}
+          onNotificationPress={() => {
+            navigation.navigate('SuperAdminNotifications' as never);
+          }}
           notificationCount={0}
           profileDrawer={
             <SuperAdminProfileDrawer
@@ -243,7 +247,7 @@ const SuperAdminDashboard: React.FC = () => {
         showLogo={true}
         onMenuPress={openDrawer}
         onNotificationPress={() => {
-          // Handle notification press
+          navigation.navigate('SuperAdminNotifications' as never);
         }}
         notificationCount={0}
         profileDrawer={
@@ -427,16 +431,16 @@ const styles = StyleSheet.create({
   periodSelector: {
     flexDirection: 'row',
     padding: SPACING.md,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.backgroundPrimary,
     marginBottom: SPACING.sm,
     gap: SPACING.xs,
   },
   periodButton: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: SPACING.sm + 2,
     paddingHorizontal: SPACING.md,
-    borderRadius: 8,
-    backgroundColor: '#F3F4F6',
+    borderRadius: BORDER_RADIUS.sm,
+    backgroundColor: COLORS.backgroundSecondary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -444,12 +448,12 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
   },
   periodButtonText: {
-    fontSize: 14,
-    color: '#666666',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
     fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
   periodButtonTextActive: {
-    color: '#FFFFFF',
+    color: COLORS.textInverse,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
   metricsContainer: {
@@ -460,26 +464,24 @@ const styles = StyleSheet.create({
   },
   metricCard: {
     width: (width - SPACING.md * 3) / 2,
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: COLORS.backgroundPrimary,
+    padding: SPACING.lg,
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    // Border only, no shadow for minimal style
   },
   metricTitle: {
-    fontSize: 14,
-    color: '#666666',
-    marginBottom: 8,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.sm,
     fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
   metricValue: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#333333',
-    marginBottom: 12,
+    fontSize: TYPOGRAPHY.fontSize.xxl,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.md,
     letterSpacing: -0.5,
   },
   metricGrowth: {
@@ -490,29 +492,27 @@ const styles = StyleSheet.create({
   growthContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: SPACING.xs,
   },
   growthArrow: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
   },
   growthText: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
   growthPeriod: {
-    fontSize: 12,
-    color: '#666666',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textSecondary,
   },
   summaryCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.md,
     padding: SPACING.lg,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    // Border only, no shadow for minimal style
   },
   summaryRow: {
     flexDirection: 'row',
@@ -532,33 +532,31 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
   },
   activityCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.md,
     padding: SPACING.lg,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    // Border only, no shadow for minimal style
   },
   activityItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: SPACING.sm,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: COLORS.borderLight,
   },
   activityIcon: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#F5F7FA',
+    backgroundColor: COLORS.backgroundSecondary,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: SPACING.md,
   },
   activityIconText: {
-    fontSize: 16,
+    fontSize: TYPOGRAPHY.fontSize.md,
   },
   activityContent: {
     flex: 1,
@@ -586,17 +584,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   quickActionCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.md,
     padding: SPACING.lg,
     width: '48%',
     alignItems: 'center',
     marginBottom: SPACING.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    // Border only, no shadow for minimal style
   },
   quickActionIcon: {
     width: 48,

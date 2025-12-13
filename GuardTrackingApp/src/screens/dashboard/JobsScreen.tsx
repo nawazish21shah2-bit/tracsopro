@@ -89,6 +89,8 @@ const JobsScreen: React.FC = () => {
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
 
   const handleNotificationPress = () => {
+    (navigation as any).navigate('Notifications');
+  };
     console.log('Notification pressed');
   };
 

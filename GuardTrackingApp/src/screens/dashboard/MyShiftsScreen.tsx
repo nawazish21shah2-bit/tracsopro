@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   StatusBar,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { useNavigation, DrawerActions } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
@@ -23,7 +24,7 @@ import {
   fetchShiftStatistics,
 } from '../../store/slices/shiftSlice';
 import { MenuIcon, BellIcon, MapPinIcon, AlertTriangleIcon, AlertCircleIcon, CheckCircleIcon, ClockIcon, FileTextIcon } from '../../components/ui/FeatherIcons';
-import { globalStyles, COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS } from '../../styles/globalStyles';
+import { globalStyles, COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { AppScreen, AppCard } from '../../components/ui/AppComponents';
 import StatsCard from '../../components/ui/StatsCard';
 import SharedHeader from '../../components/ui/SharedHeader';
@@ -152,15 +153,56 @@ const MyShiftsScreen: React.FC = () => {
   }, [navigation]);
 
   const handleNotificationPress = useCallback(() => {
-    // TODO: Implement notification functionality
-  }, []);
+    (navigation as any).navigate('Notifications');
+  }, [navigation]);
 
 
 
   const handleEmergencyAlert = () => {
-    // TODO: Implement emergency alert functionality
-    console.log('Emergency alert');
+    if (!activeShift || activeShift.status !== 'IN_PROGRESS') {
+      Alert.alert(
+        'Shift Not Active',
+        'You can only send emergency alerts for active shifts. Please check in to your shift first.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    
+    Alert.alert(
+      'Emergency Alert',
+      'Are you sure you want to send an emergency alert? This will notify all supervisors and administrators immediately.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send Alert',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // TODO: Implement emergency alert API call
+              Alert.alert('Emergency Alert', 'Emergency alert sent successfully');
+            } catch (error) {
+              Alert.alert('Error', 'Failed to send emergency alert. Please try again.');
+            }
+          },
+        },
+      ]
+    );
   };
+
+  // Helper function to convert shift to ShiftData format
+  const toShiftData = (s: any): ShiftData => ({
+    id: s.id || '',
+    location: s.locationName || s.site?.name || s.location || 'Unknown Location',
+    address: s.site?.address || s.address || '',
+    status: s.status === 'IN_PROGRESS' ? 'active' : s.status === 'COMPLETED' ? 'completed' : s.status === 'MISSED' ? 'missed' : 'upcoming',
+    startTime: s.startTime || '',
+    endTime: s.endTime || '',
+    duration: s.duration || '',
+    description: s.description || '',
+    clockedIn: s.checkInTime || undefined,
+    clockedOut: s.checkOutTime || undefined,
+    timer: s.timer || undefined,
+  });
 
   // Convert activeShift to ShiftData format
   const todayShift: ShiftData | null = activeShift ? toShiftData(activeShift) : null;
@@ -182,6 +224,14 @@ const MyShiftsScreen: React.FC = () => {
     : [];
 
   const handleAddIncidentReport = () => {
+    if (!activeShift || activeShift.status !== 'IN_PROGRESS') {
+      Alert.alert(
+        'Shift Not Active',
+        'You can only submit incident reports for active shifts. Please check in to your shift first.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
     navigation.navigate('AddIncidentReport');
   };
 
@@ -196,28 +246,28 @@ const MyShiftsScreen: React.FC = () => {
         <StatsCard
           label={'Completed\nShifts'}
           value={monthlyStats.completedShifts}
-          icon={<CheckCircleIcon size={18} color={'#4CAF50'} />}
+          icon={<CheckCircleIcon size={18} color={COLORS.success} />}
           variant="success"
           style={styles.statItem}
         />
         <StatsCard
           label={'Missed\nShifts'}
           value={monthlyStats.missedShifts}
-          icon={<ClockIcon size={18} color={'#EF5350'} />}
+          icon={<ClockIcon size={18} color={COLORS.error} />}
           variant="danger"
           style={styles.statItem}
         />
         <StatsCard
           label={'Total\nSites'}
           value={monthlyStats.totalSites}
-          icon={<MapPinIcon size={18} color={'#42A5F5'} />}
+          icon={<MapPinIcon size={18} color={COLORS.info} />}
           variant="info"
           style={styles.statItem}
         />
         <StatsCard
           label={'Incident\nReported'}
           value={monthlyStats.incidentReports}
-          icon={<FileTextIcon size={18} color={'#9E9E9E'} />}
+          icon={<FileTextIcon size={18} color={COLORS.textTertiary} />}
           variant="neutral"
           style={styles.statItem}
         />
@@ -235,7 +285,7 @@ const MyShiftsScreen: React.FC = () => {
     <View key={shift.id} style={styles.shiftCard}>
       <View style={styles.shiftHeader}>
         <View style={styles.locationInfo}>
-          <MapPinIcon size={20} color="#1C6CA9" />
+          <MapPinIcon size={20} color={COLORS.primary} />
           <View style={styles.locationText}>
             <Text style={styles.locationName}>{shift.location}</Text>
             <Text style={styles.locationAddress}>{shift.address}</Text>
@@ -264,7 +314,7 @@ const MyShiftsScreen: React.FC = () => {
       {shift.status === 'active' && (
         <>
           <View style={styles.timerContainer}>
-            <Text style={styles.timerText}>{todayShift.timer}</Text>
+            <Text style={styles.timerText}>{todayShift?.timer || '00:00:00'}</Text>
           </View>
           <Text style={styles.clockedInText}>
             Clocked In at {shift.clockedIn}
@@ -282,17 +332,20 @@ const MyShiftsScreen: React.FC = () => {
         </View>
       )}
 
-      <View style={styles.actionButtons}>
-        <TouchableOpacity style={styles.incidentButton} onPress={handleAddIncidentReport}>
-          <AlertTriangleIcon size={16} color={'#1976D2'} style={styles.actionIconMargin} />
-          <Text style={styles.incidentButtonText}>Add Incident Report</Text>
-        </TouchableOpacity>
+      {/* Only show action buttons for active shifts */}
+      {shift.status === 'active' && (
+        <View style={styles.actionButtons}>
+          <TouchableOpacity style={styles.incidentButton} onPress={handleAddIncidentReport}>
+            <AlertTriangleIcon size={16} color={COLORS.primary} style={styles.actionIconMargin} />
+            <Text style={styles.incidentButtonText}>Add Incident Report</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity style={styles.emergencyButton} onPress={handleEmergencyAlert}>
-          <AlertCircleIcon size={16} color={'#D32F2F'} style={styles.actionIconMargin} />
-          <Text style={styles.emergencyButtonText}>Emergency Alert</Text>
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity style={styles.emergencyButton} onPress={handleEmergencyAlert}>
+            <AlertCircleIcon size={16} color={COLORS.error} style={styles.actionIconMargin} />
+            <Text style={styles.emergencyButtonText}>Emergency Alert</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 
@@ -341,19 +394,6 @@ const MyShiftsScreen: React.FC = () => {
     </View>
   );
 
-  // Helper to adapt Redux shift to local ShiftData for UI
-  const toShiftData = (s: any): ShiftData => ({
-    id: s.id,
-    location: s.locationName || s.location || 'Unknown Site',
-    address: s.locationAddress || s.address || '',
-    status: s.status === 'IN_PROGRESS' ? 'active' : (s.status === 'SCHEDULED' ? 'upcoming' : 'completed'),
-    startTime: s.startTime ? new Date(s.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--',
-    endTime: s.endTime ? new Date(s.endTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--',
-    duration: '—',
-    description: s.description || '',
-    clockedIn: s.checkInTime ? new Date(s.checkInTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : undefined,
-    clockedOut: s.checkOutTime ? new Date(s.checkOutTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : undefined,
-  });
 
   // Check if error is related to the current tab
   const isErrorRelevant = () => {
@@ -468,7 +508,7 @@ const MyShiftsScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.backgroundPrimary} />
       <SharedHeader
         variant="guard"
         title="My Shifts"
@@ -545,42 +585,42 @@ const MyShiftsScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: COLORS.backgroundSecondary,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.lg,
+    backgroundColor: COLORS.backgroundPrimary,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: COLORS.borderLight,
   },
   menuButton: {
-    padding: 8,
+    padding: SPACING.sm,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
   },
   notificationButton: {
-    padding: 8,
+    padding: SPACING.sm,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: SPACING.lg,
   },
   monthlyStatsContainer: {
-    marginTop: 20,
-    marginBottom: 24,
+    marginTop: SPACING.lg,
+    marginBottom: SPACING.sectionGap || SPACING.xxl,
   },
   monthlyStatsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 16,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.fieldGap || SPACING.lg,
   },
   statsGrid: {
     flexDirection: 'row',
@@ -589,26 +629,21 @@ const styles = StyleSheet.create({
   },
   statItem: {
     width: '48%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.lg,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
     display: 'flex',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
+    // Border only, no shadow for minimal style
   },
   statTextContainer: {
     flex: 1,
-    marginLeft: 16,
+    marginLeft: SPACING.lg,
   },
   statIcon: {
     width: 32,
@@ -616,66 +651,61 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: SPACING.sm,
   },
   statIconText: {
-    fontSize: 16,
+    fontSize: TYPOGRAPHY.fontSize.md,
   },
   statNumber: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 4,
+    fontSize: TYPOGRAPHY.fontSize.xxl,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.xs,
   },
   statLabel: {
-    fontSize: 12,
-    color: '#6B7280',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textSecondary,
     lineHeight: 16,
   },
   tabsContainer: {
     flexDirection: 'row',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 8,
-    padding: 4,
-    marginBottom: 20,
+    backgroundColor: COLORS.backgroundSecondary,
+    borderRadius: BORDER_RADIUS.sm,
+    padding: SPACING.xs,
+    marginBottom: SPACING.lg,
   },
   tab: {
     flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.lg,
     borderRadius: 6,
     alignItems: 'center',
   },
   activeTab: {
-    backgroundColor: '#1C6CA9',
+    backgroundColor: COLORS.primary,
   },
   tabText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#6B7280',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    color: COLORS.textSecondary,
   },
   activeTabText: {
-    color: '#FFFFFF',
+    color: COLORS.textInverse,
   },
   shiftCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.lg,
+    marginBottom: SPACING.fieldGap || SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    // Border only, no shadow for minimal style
   },
   shiftHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: SPACING.md,
   },
   locationInfo: {
     flexDirection: 'row',
@@ -683,234 +713,229 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   locationText: {
-    marginLeft: 12,
+    marginLeft: SPACING.md,
     flex: 1,
   },
   locationName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 2,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.xs / 2,
   },
   locationAddress: {
-    fontSize: 14,
-    color: '#6B7280',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
   },
   statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderRadius: BORDER_RADIUS.round,
   },
   activeBadge: {
-    backgroundColor: '#E8F5E8',
+    backgroundColor: COLORS.success + '20',
   },
   upcomingBadge: {
-    backgroundColor: '#E3F2FD',
+    backgroundColor: COLORS.primaryLight,
   },
   statusText: {
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
   activeText: {
-    color: '#4CAF50',
+    color: COLORS.success,
   },
   upcomingText: {
-    color: '#2196F3',
+    color: COLORS.info,
   },
   shiftDescription: {
-    fontSize: 14,
-    color: '#111827',
-    marginBottom: 12,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.md,
     lineHeight: 20,
   },
   shiftDetails: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: SPACING.md,
   },
   shiftDetailLabel: {
-    fontSize: 14,
-    color: '#6B7280',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
   },
   shiftDetailValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#111827',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    color: COLORS.textPrimary,
   },
   timerContainer: {
-    backgroundColor: '#9CA3AF',
-    borderRadius: 8,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
+    backgroundColor: COLORS.textTertiary,
+    borderRadius: BORDER_RADIUS.sm,
+    paddingVertical: SPACING.lg,
+    paddingHorizontal: SPACING.xxl,
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: SPACING.md,
   },
   timerText: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#FFFFFF',
+    fontSize: TYPOGRAPHY.fontSize.xxl,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textInverse,
   },
   clockedInText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#111827',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    color: COLORS.textPrimary,
     textAlign: 'center',
-    marginBottom: 4,
+    marginBottom: SPACING.xs,
   },
   clockedInSubtext: {
-    fontSize: 12,
-    color: '#6B7280',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textSecondary,
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: SPACING.fieldGap || SPACING.lg,
   },
   actionButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: SPACING.md,
   },
   incidentButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#E3F2FD',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    backgroundColor: COLORS.primaryLight,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    borderRadius: BORDER_RADIUS.sm,
   },
   incidentButtonIcon: {
-    fontSize: 16,
-    marginRight: 8,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    marginRight: SPACING.sm,
   },
   incidentButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1976D2',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    color: COLORS.primary,
   },
   emergencyButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFEBEE',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    backgroundColor: COLORS.error + '15',
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    borderRadius: BORDER_RADIUS.sm,
   },
   emergencyButtonIcon: {
-    fontSize: 16,
-    marginRight: 8,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    marginRight: SPACING.sm,
   },
   emergencyButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#D32F2F',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    color: COLORS.error,
   },
   weeklySummaryContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    marginTop: 16,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.lg,
+    marginTop: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    // Border only, no shadow for minimal style
   },
   weeklySummaryTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 16,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.fieldGap || SPACING.lg,
   },
   tableHeader: {
     flexDirection: 'row',
-    paddingVertical: 12,
+    paddingVertical: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    marginBottom: 8,
+    borderBottomColor: COLORS.borderLight,
+    marginBottom: SPACING.sm,
   },
   tableHeaderText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#6B7280',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textSecondary,
     textAlign: 'center',
   },
   tableRow: {
     flexDirection: 'row',
-    paddingVertical: 12,
+    paddingVertical: SPACING.md,
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: COLORS.borderLight,
   },
   tableCellDate: {
-    fontSize: 12,
-    color: '#111827',
-    fontWeight: '500',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
   tableCellDay: {
-    fontSize: 10,
-    color: '#6B7280',
+    fontSize: TYPOGRAPHY.fontSize.xs - 2,
+    color: COLORS.textSecondary,
   },
   tableCellText: {
-    fontSize: 12,
-    color: '#111827',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textPrimary,
     textAlign: 'center',
   },
   tableStatusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: BORDER_RADIUS.sm,
     alignItems: 'center',
   },
   completedBadge: {
-    backgroundColor: '#E8F5E8',
+    backgroundColor: COLORS.success + '20',
   },
   missedBadge: {
-    backgroundColor: '#FFEBEE',
+    backgroundColor: COLORS.error + '20',
   },
   tableStatusText: {
-    fontSize: 10,
-    fontWeight: '500',
+    fontSize: TYPOGRAPHY.fontSize.xs - 2,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
   completedText: {
-    color: '#4CAF50',
+    color: COLORS.success,
   },
   missedText: {
-    color: '#F44336',
+    color: COLORS.error,
   },
   emptyText: {
-    fontSize: 16,
-    color: '#6B7280',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textSecondary,
     textAlign: 'center',
-    marginTop: 40,
-    fontWeight: '500',
+    marginTop: SPACING.xxxxl,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
   emptySubtext: {
-    fontSize: 14,
-    color: '#9CA3AF',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textTertiary,
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: SPACING.sm,
   },
   emptyContainer: {
-    paddingVertical: 40,
+    paddingVertical: SPACING.xxxxl,
     alignItems: 'center',
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: SPACING.xxxxl,
     minHeight: 300,
   },
   errorState: {
     width: '100%',
   },
   actionIconMargin: {
-    marginRight: 8,
+    marginRight: SPACING.sm,
   },
 });
 

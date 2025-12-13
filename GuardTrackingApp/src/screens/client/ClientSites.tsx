@@ -10,6 +10,7 @@ import {
   Platform,
   RefreshControl,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigation, useFocusEffect, DrawerActions } from '@react-navigation/native';
@@ -23,6 +24,7 @@ import ClientProfileDrawer from '../../components/client/ClientProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 import { fetchMySites } from '../../store/slices/clientSlice';
 import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 
 interface SiteData {
   id: string;
@@ -48,6 +50,8 @@ const ClientSites: React.FC = () => {
     sitesLoading, 
     sitesError 
   } = useSelector((state: RootState) => state.client);
+  
+  const { user } = useSelector((state: RootState) => state.auth);
 
   const loadSites = useCallback(async () => {
     try {
@@ -91,14 +95,27 @@ const ClientSites: React.FC = () => {
     console.log('More options for site:', siteId);
   };
 
-  const handleChatWithGuard = (guardId: string, guardName: string) => {
-    // Navigate to chat screen with guard
-    (navigation as any).navigate('IndividualChatScreen', {
-      chatId: `client_guard_${guardId}`,
-      chatName: guardName,
-      avatar: undefined,
-      context: 'site'
-    });
+  const handleChatWithGuard = async (guardId: string, guardName: string) => {
+    try {
+      if (!user) {
+        Alert.alert('Error', 'User not logged in');
+        return;
+      }
+
+      // Use centralized chat helper to find or create chat
+      const { findOrCreateClientGuardChat } = await import('../../utils/chatHelper');
+      const chatParams = await findOrCreateClientGuardChat(
+        user.id,
+        guardId,
+        guardName,
+        'site'
+      );
+
+      navigation.navigate('IndividualChatScreen', chatParams);
+    } catch (error) {
+      console.error('Error navigating to chat:', error);
+      Alert.alert('Error', 'Failed to open chat. Please try again.');
+    }
   };
 
   // Check for network errors
@@ -152,6 +169,7 @@ const ClientSites: React.FC = () => {
 
       <ScrollView 
         style={styles.content} 
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
@@ -166,19 +184,19 @@ const ClientSites: React.FC = () => {
 
         {sites && sites.length > 0 ? (
           sites.map((site: any) => {
-            // Get active guard assignment from site data
-            const activeAssignment = site.shiftAssignments?.[0];
-            const guard = activeAssignment?.guard;
+            // Get active shift from site data (Option B)
+            const activeShift = site.shifts?.[0];
+            const guard = activeShift?.guard;
             const guardName = guard?.user 
               ? `${guard.user.firstName} ${guard.user.lastName}`
               : 'No guard assigned';
             
-            // Determine status based on assignment
+            // Determine status based on shift
             let status: 'Active' | 'Upcoming' | 'Missed' = 'Upcoming';
-            if (activeAssignment) {
-              if (activeAssignment.status === 'IN_PROGRESS') {
+            if (activeShift) {
+              if (activeShift.status === 'IN_PROGRESS') {
                 status = 'Active';
-              } else if (activeAssignment.status === 'ASSIGNED') {
+              } else if (activeShift.status === 'SCHEDULED') {
                 status = 'Upcoming';
               }
             }
@@ -206,11 +224,11 @@ const ClientSites: React.FC = () => {
               guardName: guardName,
               status: status,
               guardId: guard?.id || undefined,
-              shiftTime: activeAssignment 
-                ? `${formatTime(activeAssignment.startTime)} - ${formatTime(activeAssignment.endTime)}`
+              shiftTime: activeShift 
+                ? `${formatTime(activeShift.scheduledStartTime)} - ${formatTime(activeShift.scheduledEndTime)}`
                 : 'No shift scheduled',
-              checkInTime: activeAssignment?.checkInTime 
-                ? formatTime(activeAssignment.checkInTime)
+              checkInTime: activeShift?.checkInTime 
+                ? formatTime(activeShift.checkInTime)
                 : undefined,
             };
             
@@ -237,75 +255,107 @@ const ClientSites: React.FC = () => {
           </View>
         ) : null}
       </ScrollView>
+
+      {/* Sticky Add New Site Button - Always Visible */}
+      <TouchableOpacity 
+        style={styles.stickyAddButton}
+        onPress={() => navigation.navigate('AddSite')}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.stickyAddButtonText}>+ Add New Site</Text>
+      </TouchableOpacity>
     </SafeAreaWrapper>
   );
 };
 
 const styles = StyleSheet.create({
   addButton: {
-    backgroundColor: '#1C6CA9',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
   },
   addButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
+    color: COLORS.textInverse,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
   content: {
     flex: 1,
-    padding: 20,
+    padding: SPACING.lg,
+  },
+  scrollContent: {
+    paddingBottom: 80, // Add padding to prevent content from being hidden behind sticky button
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: SPACING.xxxxl,
   },
   loadingText: {
-    fontSize: 16,
-    color: '#666666',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textSecondary,
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: SPACING.xxxxl,
   },
   emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333333',
-    marginBottom: 8,
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.sm,
   },
   emptySubtext: {
-    fontSize: 14,
-    color: '#666666',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: SPACING.fieldGap || SPACING.lg,
   },
   addSiteButton: {
-    backgroundColor: '#1C6CA9',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginTop: 8,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.xxl,
+    paddingVertical: SPACING.md,
+    borderRadius: BORDER_RADIUS.sm,
+    marginTop: SPACING.sm,
+    ...SHADOWS.small,
   },
   addSiteButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+    color: COLORS.textInverse,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
   errorContainer: {
     flex: 1,
-    padding: 20,
+    padding: SPACING.lg,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 200,
   },
   errorState: {
     flex: 1,
+  },
+  stickyAddButton: {
+    position: 'absolute',
+    bottom: SPACING.lg,
+    left: SPACING.lg,
+    right: SPACING.lg,
+    backgroundColor: COLORS.primary,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    borderRadius: BORDER_RADIUS.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.medium,
+    zIndex: 1000,
+  },
+  stickyAddButtonText: {
+    color: COLORS.textInverse,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
 });
 

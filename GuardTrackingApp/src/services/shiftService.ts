@@ -32,8 +32,15 @@ class ShiftService {
    */
   async getMonthlyStats(): Promise<ShiftStats> {
     const api = await createAuthAxios();
-    const response = await api.get<ShiftStats>('/shifts/stats');
-    return response.data;
+    const response = await api.get<{ success?: boolean; data?: ShiftStats } | ShiftStats>('/shifts/stats');
+    
+    // Handle wrapped response format
+    if ((response.data as any).success && (response.data as any).data) {
+      return (response.data as any).data;
+    }
+    
+    // Direct response format
+    return response.data as ShiftStats;
   }
 
   /**
@@ -41,8 +48,19 @@ class ShiftService {
    */
   async getTodayShifts(): Promise<Shift[]> {
     const api = await createAuthAxios();
-    const response = await api.get<Shift[]>('/shifts/today');
-    return response.data;
+    const response = await api.get<{ success: boolean; data: Shift[] }>('/shifts/today');
+    
+    // Handle wrapped response format
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+    
+    // Fallback for direct array response
+    if (Array.isArray(response.data)) {
+      return response.data as unknown as Shift[];
+    }
+    
+    return [];
   }
 
   /**
@@ -65,10 +83,21 @@ class ShiftService {
    */
   async getPastShifts(limit: number = 20): Promise<Shift[]> {
     const api = await createAuthAxios();
-    const response = await api.get<Shift[]>('/shifts/past', {
+    const response = await api.get<{ success: boolean; data: Shift[] }>('/shifts/past', {
       params: { limit },
     });
-    return response.data;
+    
+    // Handle wrapped response format
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+    
+    // Fallback for direct array response
+    if (Array.isArray(response.data)) {
+      return response.data as unknown as Shift[];
+    }
+    
+    return [];
   }
 
   /**
@@ -76,8 +105,19 @@ class ShiftService {
    */
   async getWeeklyShiftSummary(): Promise<Shift[]> {
     const api = await createAuthAxios();
-    const response = await api.get<Shift[]>('/shifts/weekly-summary');
-    return response.data;
+    const response = await api.get<{ success: boolean; data: Shift[] }>('/shifts/weekly-summary');
+    
+    // Handle wrapped response format
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+    
+    // Fallback for direct array response
+    if (Array.isArray(response.data)) {
+      return response.data as unknown as Shift[];
+    }
+    
+    return [];
   }
 
   /**

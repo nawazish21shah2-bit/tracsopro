@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
-import { TYPOGRAPHY } from '../../styles/globalStyles';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 
 interface RecentActivityCardProps {
   text: string;
@@ -43,31 +43,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     minHeight: 66,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    // Drop shadow: X 0, Y 2, Blur 4, Spread 2, Color #000000 at 6% opacity
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
-    marginBottom: 8,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    // Border only, no shadow for minimal style
+    marginBottom: SPACING.sm,
   },
   iconContainer: {
     width: 36,
     height: 36,
-    borderRadius: 8,
+    borderRadius: BORDER_RADIUS.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
-    backgroundColor: '#F5F5F7', // Static background color for all icons
-    // Different shadow for each activity type
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    marginRight: SPACING.md,
+    backgroundColor: COLORS.backgroundSecondary,
+    // No shadow for minimal style
   },
   textContainer: {
     flex: 1,
@@ -75,19 +68,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   activityText: {
-    fontSize: 14,
+    fontSize: TYPOGRAPHY.fontSize.sm,
     fontFamily: TYPOGRAPHY.fontPrimary,
     fontWeight: TYPOGRAPHY.fontWeight.medium,
-    color: '#000000',
+    color: COLORS.textPrimary,
     lineHeight: 17,
     letterSpacing: -0.41,
-    marginBottom: 4,
+    marginBottom: SPACING.xs,
   },
   activityTime: {
-    fontSize: 12,
+    fontSize: TYPOGRAPHY.fontSize.xs,
     fontFamily: TYPOGRAPHY.fontPrimary,
     fontWeight: TYPOGRAPHY.fontWeight.regular,
-    color: '#7A7A7A',
+    color: COLORS.textSecondary,
     lineHeight: 15,
     letterSpacing: -0.41,
   },

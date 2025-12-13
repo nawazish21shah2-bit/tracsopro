@@ -17,6 +17,7 @@ import { RouteProp } from '@react-navigation/native';
 import { RootState, AppDispatch } from '../../store';
 import { updateIncident, updateIncidentStatus } from '../../store/slices/incidentSlice';
 import { Incident, IncidentStatus, SeverityLevel } from '../../types';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 
 type IncidentDetailScreenNavigationProp = StackNavigationProp<any, 'IncidentDetail'>;
 type IncidentDetailScreenRouteProp = RouteProp<any, 'IncidentDetail'>;
@@ -82,21 +83,21 @@ const IncidentDetailScreen: React.FC = () => {
 
   const getSeverityColor = (severity: SeverityLevel) => {
     switch (severity) {
-      case 'critical': return '#FF4444';
-      case 'high': return '#FF8800';
-      case 'medium': return '#FFBB33';
-      case 'low': return '#00C851';
-      default: return '#6C757D';
+      case 'critical': return COLORS.error;
+      case 'high': return COLORS.warning;
+      case 'medium': return COLORS.warning;
+      case 'low': return COLORS.success;
+      default: return COLORS.textSecondary;
     }
   };
 
   const getStatusColor = (status: IncidentStatus) => {
     switch (status) {
-      case 'reported': return '#FF8800';
-      case 'investigating': return '#007AFF';
-      case 'resolved': return '#00C851';
-      case 'closed': return '#6C757D';
-      default: return '#6C757D';
+      case 'reported': return COLORS.warning;
+      case 'investigating': return COLORS.primary;
+      case 'resolved': return COLORS.success;
+      case 'closed': return COLORS.textSecondary;
+      default: return COLORS.textSecondary;
     }
   };
 
@@ -298,69 +299,69 @@ const IncidentDetailScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: COLORS.backgroundSecondary,
   },
   header: {
-    backgroundColor: '#ffffff',
-    padding: 20,
+    backgroundColor: COLORS.backgroundPrimary,
+    padding: SPACING.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: COLORS.borderLight,
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: SPACING.lg,
   },
   incidentIcon: {
     fontSize: 32,
-    marginRight: 16,
+    marginRight: SPACING.lg,
   },
   headerText: {
     flex: 1,
   },
   incidentType: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 4,
+    fontSize: TYPOGRAPHY.fontSize.xl,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.xs,
   },
   incidentId: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
   },
   badgeContainer: {
     flexDirection: 'row',
-    gap: 12,
+    gap: SPACING.md,
   },
   severityBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs + 2,
+    borderRadius: BORDER_RADIUS.lg,
   },
   statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs + 2,
+    borderRadius: BORDER_RADIUS.lg,
   },
   badgeText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#ffffff',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    color: COLORS.textInverse,
   },
   section: {
-    backgroundColor: '#ffffff',
+    backgroundColor: COLORS.backgroundPrimary,
     marginTop: 1,
-    padding: 20,
+    padding: SPACING.lg,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 12,
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.md,
   },
   description: {
-    fontSize: 16,
-    color: '#333',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textPrimary,
     lineHeight: 24,
   },
   locationContainer: {
@@ -369,116 +370,117 @@ const styles = StyleSheet.create({
   },
   locationIcon: {
     fontSize: 20,
-    marginRight: 12,
+    marginRight: SPACING.md,
     marginTop: 2,
   },
   locationInfo: {
     flex: 1,
   },
   locationName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.xs,
   },
   locationAddress: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.xs,
   },
   locationCoordinates: {
-    fontSize: 12,
-    color: '#999',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textTertiary,
     fontFamily: 'monospace',
   },
   timelineItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 16,
+    marginBottom: SPACING.lg,
   },
   timelineDot: {
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: '#007AFF',
-    marginRight: 16,
+    backgroundColor: COLORS.primary,
+    marginRight: SPACING.lg,
     marginTop: 6,
   },
   timelineContent: {
     flex: 1,
   },
   timelineTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.xs,
   },
   timelineTime: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
   },
   evidenceContainer: {
     flexDirection: 'row',
-    gap: 12,
+    gap: SPACING.md,
   },
   evidenceItem: {
     width: 80,
     alignItems: 'center',
-    padding: 12,
-    backgroundColor: '#F8F9FA',
-    borderRadius: 8,
+    padding: SPACING.md,
+    backgroundColor: COLORS.backgroundSecondary,
+    borderRadius: BORDER_RADIUS.sm,
   },
   evidenceIcon: {
-    fontSize: 24,
-    marginBottom: 8,
+    fontSize: TYPOGRAPHY.fontSize.xxl,
+    marginBottom: SPACING.sm,
   },
   evidenceName: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textSecondary,
     textAlign: 'center',
   },
   notes: {
-    fontSize: 16,
-    color: '#333',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textPrimary,
     lineHeight: 24,
     fontStyle: 'italic',
   },
   actionsSection: {
-    backgroundColor: '#ffffff',
+    backgroundColor: COLORS.backgroundPrimary,
     marginTop: 1,
-    padding: 20,
-    marginBottom: 20,
+    padding: SPACING.lg,
+    marginBottom: SPACING.lg,
   },
   statusActions: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 16,
+    gap: SPACING.md,
+    marginBottom: SPACING.lg,
   },
   generalActions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: SPACING.md,
   },
   actionButton: {
     flex: 1,
-    backgroundColor: '#007AFF',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    backgroundColor: COLORS.primary,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    borderRadius: BORDER_RADIUS.sm,
     alignItems: 'center',
+    ...SHADOWS.small,
   },
   statusActionButton: {
-    backgroundColor: '#00C851',
+    backgroundColor: COLORS.success,
   },
   actionButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
+    color: COLORS.textInverse,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
   errorText: {
-    fontSize: 16,
-    color: '#FF4444',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.error,
     textAlign: 'center',
-    marginTop: 40,
+    marginTop: SPACING.xxxxl,
   },
 });
 

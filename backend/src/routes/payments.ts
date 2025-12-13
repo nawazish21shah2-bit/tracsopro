@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import paymentController from '../controllers/paymentController.js';
+import adminPaymentController from '../controllers/adminPaymentController.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 
 const router = Router();
@@ -204,10 +205,11 @@ router.post('/setup-intent', authorize('CLIENT'), paymentController.createSetupI
  */
 router.post('/auto-pay', authorize('CLIENT'), paymentController.setupAutomaticPayments);
 
-// Subscription plans & checkout (Admins only)
-router.get('/plans', authorize('ADMIN', 'SUPER_ADMIN'), paymentController.getPlans);
-router.post('/subscriptions/checkout', authorize('ADMIN', 'SUPER_ADMIN'), paymentController.createSubscriptionCheckout);
-router.get('/portal', authorize('ADMIN', 'SUPER_ADMIN'), paymentController.getBillingPortal);
+// Admin Subscription Payments (Admin to Super Admin) - Streamlined
+// These endpoints are specifically for admin subscription management
+router.get('/plans', authorize('ADMIN', 'SUPER_ADMIN'), adminPaymentController.getPlans);
+router.post('/subscriptions/checkout', authorize('ADMIN', 'SUPER_ADMIN'), adminPaymentController.createSubscriptionCheckout);
+router.get('/portal', authorize('ADMIN', 'SUPER_ADMIN'), adminPaymentController.getBillingPortal);
 
 /**
  * @swagger

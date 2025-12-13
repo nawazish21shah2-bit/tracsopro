@@ -1,11 +1,11 @@
 // Simplified Shift Service for Phase 2 Testing
 import prisma from '../config/database.js';
-import { NotFoundError, BadRequestError } from '../utils/errors.js';
+import { NotFoundError, BadRequestError, ValidationError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
-import { ShiftAssignmentStatus } from '@prisma/client';
+import { ShiftStatus } from '@prisma/client';
 
 export interface CreateShiftData {
-  guardId: string;
+  guardId?: string; // Optional: Admin assigns directly, client can leave empty for admin to assign later
   locationName: string;
   locationAddress: string;
   scheduledStartTime: Date;
@@ -13,6 +13,7 @@ export interface CreateShiftData {
   description?: string;
   notes?: string;
   siteId?: string; // Optional: if provided, link shift to site and client
+  clientId?: string; // Optional: if provided, link shift to client directly
 }
 
 export interface CheckInData {
@@ -53,14 +54,32 @@ class ShiftServiceSimple {
   /**
    * Create a new shift
    */
-  async createShift(data: CreateShiftData) {
-    // Validate guard exists
-    const guard = await prisma.guard.findUnique({
-      where: { id: data.guardId },
-    });
+  async createShift(data: CreateShiftData, securityCompanyId?: string) {
+    // Validate guard exists if guardId is provided
+    if (data.guardId) {
+      const guard = await prisma.guard.findUnique({
+        where: { id: data.guardId },
+        include: {
+          companyGuards: {
+            where: { isActive: true },
+            select: { securityCompanyId: true },
+          },
+        },
+      });
 
-    if (!guard) {
-      throw new NotFoundError('Guard not found');
+      if (!guard) {
+        throw new NotFoundError('Guard not found');
+      }
+
+      // Multi-tenant: Verify guard belongs to company if securityCompanyId provided
+      if (securityCompanyId) {
+        const guardCompany = guard.companyGuards.find(
+          cg => cg.securityCompanyId === securityCompanyId
+        );
+        if (!guardCompany) {
+          throw new ValidationError('Guard does not belong to your company');
+        }
+      }
     }
 
     // If siteId is provided, validate and get clientId from site
@@ -71,12 +90,32 @@ class ShiftServiceSimple {
       const site = await prisma.site.findUnique({
         where: { id: data.siteId },
         include: {
-          client: true,
+          client: {
+            include: {
+              companyClients: {
+                where: { isActive: true },
+                select: { securityCompanyId: true },
+              },
+            },
+          },
+          companySites: {
+            select: { securityCompanyId: true },
+          },
         },
       });
 
       if (!site) {
         throw new NotFoundError('Site not found');
+      }
+
+      // Multi-tenant: Verify site belongs to company if securityCompanyId provided
+      if (securityCompanyId) {
+        const siteCompany = site.companySites.find(
+          cs => cs.securityCompanyId === securityCompanyId
+        );
+        if (!siteCompany) {
+          throw new ValidationError('Site does not belong to your company');
+        }
       }
 
       siteId = site.id;
@@ -125,7 +164,42 @@ class ShiftServiceSimple {
       },
     });
 
-    logger.info(`Shift created for guard ${data.guardId}${siteId ? ` at site ${siteId}` : ''}: ${shift.id}`);
+    logger.info(`Shift created for guard ${data.guardId}${siteId ? ` at site ${siteId}` : ''}: ${shift.id}`, {
+      shiftId: shift.id,
+      guardId: shift.guardId,
+      scheduledStartTime: shift.scheduledStartTime,
+      scheduledEndTime: shift.scheduledEndTime,
+      status: shift.status,
+    });
+
+    // Send notification to guard if shift is assigned
+    if (shift.guardId) {
+      const guard = await prisma.guard.findUnique({
+        where: { id: shift.guardId },
+        select: { userId: true },
+      });
+
+      if (guard?.userId) {
+        try {
+          const notificationService = (await import('./notificationService.js')).default;
+          await notificationService.notifyShiftAssigned(
+            guard.userId,
+            {
+              id: shift.id,
+              scheduledStartTime: shift.scheduledStartTime,
+              scheduledEndTime: shift.scheduledEndTime,
+              locationName: shift.locationName,
+              locationAddress: shift.locationAddress,
+            },
+            securityCompanyId
+          );
+        } catch (error) {
+          logger.error('Failed to send shift assignment notification:', error);
+          // Don't throw - notification failure shouldn't break shift creation
+        }
+      }
+    }
+
     return shift;
   }
 
@@ -167,6 +241,57 @@ class ShiftServiceSimple {
     });
 
     logger.info(`Guard ${data.guardId} checked in to shift ${data.shiftId}`);
+
+    // Send notification to admins about check-in
+    try {
+      // Get shift with guard info
+      const shiftWithDetails = await prisma.shift.findUnique({
+        where: { id: data.shiftId },
+        include: {
+          guard: {
+            select: { userId: true },
+          },
+        },
+      });
+
+      if (shiftWithDetails) {
+        // Get admins from the same company
+        const guardCompany = await prisma.companyGuard.findFirst({
+          where: { guardId: data.guardId, isActive: true },
+          select: { securityCompanyId: true },
+        });
+
+        if (guardCompany) {
+          const companyAdmins = await prisma.companyUser.findMany({
+            where: {
+              securityCompanyId: guardCompany.securityCompanyId,
+              isActive: true,
+            },
+            select: { userId: true },
+          });
+
+          const adminUserIds = companyAdmins.map(cu => cu.userId).filter(Boolean);
+
+          if (adminUserIds.length > 0 && shiftWithDetails.guard?.userId) {
+            const notificationService = (await import('./notificationService.js')).default;
+            await notificationService.notifyCheckIn(
+              shiftWithDetails.guard.userId,
+              {
+                id: shiftWithDetails.id,
+                guardId: shiftWithDetails.guardId!,
+                locationName: shiftWithDetails.locationName,
+              },
+              adminUserIds,
+              guardCompany.securityCompanyId
+            );
+          }
+        }
+      }
+    } catch (error) {
+      logger.error('Failed to send check-in notification:', error);
+      // Don't throw - notification failure shouldn't break check-in
+    }
+
     return updatedShift;
   }
 
@@ -209,69 +334,115 @@ class ShiftServiceSimple {
     });
 
     logger.info(`Guard ${data.guardId} checked out from shift ${data.shiftId}`);
+
+    // Send notification to admins about check-out
+    try {
+      // Get shift with guard info
+      const shiftWithDetails = await prisma.shift.findUnique({
+        where: { id: data.shiftId },
+        include: {
+          guard: {
+            select: { userId: true },
+          },
+        },
+      });
+
+      if (shiftWithDetails) {
+        // Get admins from the same company
+        const guardCompany = await prisma.companyGuard.findFirst({
+          where: { guardId: data.guardId, isActive: true },
+          select: { securityCompanyId: true },
+        });
+
+        if (guardCompany) {
+          const companyAdmins = await prisma.companyUser.findMany({
+            where: {
+              securityCompanyId: guardCompany.securityCompanyId,
+              isActive: true,
+            },
+            select: { userId: true },
+          });
+
+          const adminUserIds = companyAdmins.map(cu => cu.userId).filter(Boolean);
+
+          if (adminUserIds.length > 0 && shiftWithDetails.guard?.userId) {
+            const notificationService = (await import('./notificationService.js')).default;
+            await notificationService.notifyCheckOut(
+              shiftWithDetails.guard.userId,
+              {
+                id: shiftWithDetails.id,
+                guardId: shiftWithDetails.guardId!,
+                locationName: shiftWithDetails.locationName,
+              },
+              adminUserIds,
+              guardCompany.securityCompanyId
+            );
+          }
+        }
+      }
+    } catch (error) {
+      logger.error('Failed to send check-out notification:', error);
+      // Don't throw - notification failure shouldn't break check-out
+    }
+
     return updatedShift;
   }
 
   /**
-   * Get shift statistics for a guard (using ShiftAssignment)
+   * Get shift statistics for a guard (Option B - using Shift model only)
    */
   async getGuardShiftStats(guardId: string, startDate?: Date, endDate?: Date): Promise<ShiftStats> {
     const whereClause: any = { guardId };
 
     if (startDate || endDate) {
-      whereClause.startTime = {};
-      if (startDate) whereClause.startTime.gte = startDate;
-      if (endDate) whereClause.startTime.lte = endDate;
+      whereClause.scheduledStartTime = {};
+      if (startDate) whereClause.scheduledStartTime.gte = startDate;
+      if (endDate) whereClause.scheduledStartTime.lte = endDate;
     }
 
-    const assignments = await prisma.shiftAssignment.findMany({
+    const shifts = await prisma.shift.findMany({
       where: whereClause,
       include: {
         site: true,
+        shiftIncidents: true,
       },
     });
 
-    const completedShifts = assignments.filter(a => a.status === ShiftAssignmentStatus.COMPLETED).length;
-    const missedShifts = assignments.filter(a => 
-      a.status === ShiftAssignmentStatus.CANCELLED || a.status === ShiftAssignmentStatus.MISSED
+    const completedShifts = shifts.filter(s => s.status === ShiftStatus.COMPLETED).length;
+    const missedShifts = shifts.filter(s => 
+      s.status === ShiftStatus.CANCELLED || s.status === ShiftStatus.NO_SHOW
     ).length;
     
-    // Get unique sites from assignments
+    // Get unique sites from shifts
     const uniqueSiteIds = new Set(
-      assignments
-        .map(a => a.siteId)
+      shifts
+        .map(s => s.siteId)
         .filter(id => id !== null)
     );
     const totalSites = uniqueSiteIds.size;
 
-    // Count incident reports from AssignmentReports
-    const assignmentIds = assignments.map(a => a.id);
-    const incidentReports = await prisma.assignmentReport.count({
-      where: {
-        shiftAssignmentId: { in: assignmentIds },
-        type: 'INCIDENT',
-      },
-    });
+    // Count incident reports from ShiftIncident
+    const incidentReports = shifts.reduce((total, shift) => total + shift.incidentCount, 0);
 
     // Calculate total hours
-    const completedAssignments = assignments.filter(a => 
-      a.status === ShiftAssignmentStatus.COMPLETED && 
-      a.checkInTime && 
-      a.checkOutTime
+    const completedShiftsWithTimes = shifts.filter(s => 
+      s.status === ShiftStatus.COMPLETED && 
+      s.actualStartTime && 
+      s.actualEndTime
     );
 
-    const totalMinutes = completedAssignments.reduce((total, assignment) => {
-      if (assignment.checkInTime && assignment.checkOutTime) {
-        const start = new Date(assignment.checkInTime).getTime();
-        const end = new Date(assignment.checkOutTime).getTime();
+    const totalMinutes = completedShiftsWithTimes.reduce((total, shift) => {
+      if (shift.actualStartTime && shift.actualEndTime) {
+        const start = new Date(shift.actualStartTime).getTime();
+        const end = new Date(shift.actualEndTime).getTime();
         return total + Math.abs(end - start) / (1000 * 60);
       }
       return total;
     }, 0);
 
     const totalHours = Math.round((totalMinutes / 60) * 100) / 100;
-    const averageShiftDuration = completedAssignments.length > 0 
-      ? Math.round((totalMinutes / completedAssignments.length) / 60 * 100) / 100 
+    const averageShiftDuration = completedShiftsWithTimes.length > 0 
+      ? Math.round((totalMinutes / completedShiftsWithTimes.length) / 60 * 100) / 100 
       : 0;
 
     return {
@@ -285,41 +456,50 @@ class ShiftServiceSimple {
   }
 
   /**
-   * Get active shift for a guard (using ShiftAssignment and Shift)
+   * Get shift by ID (Option B - using Shift model only)
    */
-  async getActiveShift(guardId: string) {
-    // Check ShiftAssignment table first
-    const assignment = await prisma.shiftAssignment.findFirst({
-      where: {
-        guardId,
-        status: ShiftAssignmentStatus.IN_PROGRESS,
-      },
+  async getShiftById(shiftId: string, guardId?: string) {
+    const shift = await prisma.shift.findUnique({
+      where: { id: shiftId },
       include: {
-        shiftPosting: {
+        guard: {
           include: {
-            site: true,
-            client: {
-              include: {
-                user: {
-                  select: { firstName: true, lastName: true }
-                }
-              }
+            user: {
+              select: { firstName: true, lastName: true, email: true }
             }
           }
         },
         site: true,
-      },
+        client: {
+          include: {
+            user: {
+              select: { firstName: true, lastName: true }
+            }
+          }
+        }
+      }
     });
 
-    if (assignment) {
-      return this.transformAssignmentToShift(assignment);
+    if (!shift) {
+      throw new NotFoundError('Shift not found');
     }
 
-    // Check Shift table for admin-created shifts
+    // Verify guard ownership if guardId is provided
+    if (guardId && shift.guardId !== guardId) {
+      throw new NotFoundError('Shift not found');
+    }
+
+    return this.transformShiftToShift(shift);
+  }
+
+  /**
+   * Get active shift for a guard (Option B - using Shift model only)
+   */
+  async getActiveShift(guardId: string) {
     const shift = await prisma.shift.findFirst({
       where: {
         guardId,
-        status: 'IN_PROGRESS',
+        status: ShiftStatus.IN_PROGRESS,
       },
       include: {
         site: true,
@@ -327,6 +507,13 @@ class ShiftServiceSimple {
           include: {
             user: {
               select: { firstName: true, lastName: true }
+            }
+          }
+        },
+        guard: {
+          include: {
+            user: {
+              select: { firstName: true, lastName: true, email: true }
             }
           }
         },
@@ -341,50 +528,67 @@ class ShiftServiceSimple {
   }
 
   /**
-   * Get upcoming shifts for a guard (using ShiftAssignment and Shift)
+   * Get upcoming shifts for a guard (Option B - using Shift model only)
    */
   async getUpcomingShifts(guardId: string, limit: number = 10) {
     const now = new Date();
     
-    // Get shifts from ShiftAssignment table
-    const assignments = await prisma.shiftAssignment.findMany({
-      where: {
-        guardId,
-        status: ShiftAssignmentStatus.ASSIGNED,
-        startTime: {
-          gte: now,
-        },
+    logger.info(`Fetching upcoming shifts for guard: ${guardId}`, {
+      guardId,
+      now: now.toISOString(),
+      nowTimestamp: now.getTime(),
+    });
+
+    // First, let's verify the guard exists and check all their shifts for debugging
+    const allShiftsForGuard = await prisma.shift.findMany({
+      where: { guardId },
+      select: {
+        id: true,
+        status: true,
+        scheduledStartTime: true,
+        scheduledEndTime: true,
+        locationName: true,
       },
-      include: {
-        shiftPosting: {
-          include: {
-            site: true,
-            client: {
-              include: {
-                user: {
-                  select: { firstName: true, lastName: true }
-                }
-              }
-            }
-          }
-        },
-        site: true,
-      },
-      orderBy: {
-        startTime: 'asc',
-      },
+      take: 20,
+    });
+    
+    logger.info(`Total shifts found for guard ${guardId}: ${allShiftsForGuard.length}`, {
+      shifts: allShiftsForGuard.map(s => ({
+        id: s.id,
+        status: s.status,
+        start: s.scheduledStartTime.toISOString(),
+        end: s.scheduledEndTime.toISOString(),
+        location: s.locationName,
+      })),
     });
 
     // Get shifts from Shift table (admin-created shifts)
+    // Include all scheduled shifts, not just SCHEDULED status
+    // Show shifts that haven't ended yet OR are scheduled for today (even if start time has passed)
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(now);
+    todayEnd.setHours(23, 59, 59, 999);
+    
+    // More inclusive query: any shift that hasn't ended yet and is not completed/cancelled
     const shifts = await prisma.shift.findMany({
       where: {
         guardId,
-        status: { in: ['SCHEDULED'] },
-        scheduledStartTime: {
-          gte: now,
+        status: { 
+          in: ['SCHEDULED', 'IN_PROGRESS'] // Include scheduled and in-progress shifts
+        },
+        scheduledEndTime: {
+          gte: now, // Shifts that haven't ended yet
         },
       },
       include: {
+        guard: {
+          include: {
+            user: {
+              select: { firstName: true, lastName: true, email: true }
+            }
+          }
+        },
         site: true,
         client: {
           include: {
@@ -397,68 +601,72 @@ class ShiftServiceSimple {
       orderBy: {
         scheduledStartTime: 'asc',
       },
+      take: limit,
     });
 
-    // Transform and merge both sources
-    const assignmentShifts = assignments.map(a => this.transformAssignmentToShift(a));
-    const directShifts = shifts.map(s => this.transformShiftToShift(s));
+    logger.info(`Found ${shifts.length} upcoming shifts for guard ${guardId}`, {
+      shifts: shifts.map(s => ({
+        id: s.id,
+        status: s.status,
+        start: s.scheduledStartTime.toISOString(),
+        end: s.scheduledEndTime.toISOString(),
+        location: s.locationName,
+      })),
+    });
     
-    // Combine and sort by start time, then limit
-    const allShifts = [...assignmentShifts, ...directShifts]
-      .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
-      .slice(0, limit);
+    // Transform shifts to frontend format
+    const transformedShifts = shifts.map(s => this.transformShiftToShift(s));
 
-    return allShifts;
+    return transformedShifts;
   }
 
   /**
-   * Get today's shifts for a guard (using ShiftAssignment and Shift)
+   * Get today's shifts for a guard (Option B - using Shift model only)
    */
   async getTodayShifts(guardId: string) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-
-    // Get shifts from ShiftAssignment table
-    const assignments = await prisma.shiftAssignment.findMany({
-      where: {
-        guardId,
-        startTime: {
-          gte: today,
-          lt: tomorrow,
-        },
-      },
-      include: {
-        shiftPosting: {
-          include: {
-            site: true,
-            client: {
-              include: {
-                user: {
-                  select: { firstName: true, lastName: true }
-                }
-              }
-            }
-          }
-        },
-        site: true,
-      },
-      orderBy: {
-        startTime: 'asc',
-      },
+    
+    logger.info(`Fetching today's shifts for guard: ${guardId}`, {
+      guardId,
+      today: today.toISOString(),
+      tomorrow: tomorrow.toISOString(),
+      currentTime: new Date().toISOString(),
     });
 
-    // Get shifts from Shift table (admin-created shifts)
+    // Get shifts from Shift table (Option B - Direct Assignment)
+    // Include shifts that start OR end today
     const shifts = await prisma.shift.findMany({
       where: {
         guardId,
-        scheduledStartTime: {
-          gte: today,
-          lt: tomorrow,
-        },
+        OR: [
+          {
+            // Shifts that start today
+            scheduledStartTime: {
+              gte: today,
+              lt: tomorrow,
+            },
+          },
+          {
+            // Shifts that end today (started yesterday or earlier)
+            scheduledEndTime: {
+              gte: today,
+              lt: tomorrow,
+            },
+          },
+        ],
+        // Include all shifts for today regardless of status
       },
       include: {
+        guard: {
+          include: {
+            user: {
+              select: { firstName: true, lastName: true, email: true }
+            }
+          }
+        },
         site: true,
         client: {
           include: {
@@ -473,62 +681,45 @@ class ShiftServiceSimple {
       },
     });
 
-    // Transform and merge both sources
-    const assignmentShifts = assignments.map(a => this.transformAssignmentToShift(a));
-    const directShifts = shifts.map(s => this.transformShiftToShift(s));
+    logger.info(`Found ${shifts.length} shifts for guard ${guardId} today`, {
+      shifts: shifts.map(s => ({
+        id: s.id,
+        status: s.status,
+        start: s.scheduledStartTime.toISOString(),
+        end: s.scheduledEndTime.toISOString(),
+        location: s.locationName,
+      })),
+    });
     
-    // Combine and sort by start time
-    const allShifts = [...assignmentShifts, ...directShifts]
-      .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+    // Transform shifts to frontend format
+    const transformedShifts = shifts.map(s => this.transformShiftToShift(s));
 
-    return allShifts;
+    return transformedShifts;
   }
 
   /**
-   * Get past shifts for a guard (using ShiftAssignment and Shift)
+   * Get past shifts for a guard (Option B - using Shift model only)
    */
   async getPastShifts(guardId: string, limit: number = 20) {
     const now = new Date();
 
-    // Get shifts from ShiftAssignment table
-    const assignments = await prisma.shiftAssignment.findMany({
-      where: {
-        guardId,
-        status: { in: [ShiftAssignmentStatus.COMPLETED, ShiftAssignmentStatus.CANCELLED] },
-        endTime: {
-          lt: now,
-        },
-      },
-      include: {
-        shiftPosting: {
-          include: {
-            site: true,
-            client: {
-              include: {
-                user: {
-                  select: { firstName: true, lastName: true }
-                }
-              }
-            }
-          }
-        },
-        site: true,
-      },
-      orderBy: {
-        endTime: 'desc',
-      },
-    });
-
-    // Get shifts from Shift table (admin-created shifts)
+    // Get shifts from Shift table (Option B - Direct Assignment)
     const shifts = await prisma.shift.findMany({
       where: {
         guardId,
-        status: { in: ['COMPLETED', 'CANCELLED', 'NO_SHOW'] },
+        status: { in: [ShiftStatus.COMPLETED, ShiftStatus.CANCELLED, ShiftStatus.NO_SHOW] },
         scheduledEndTime: {
           lt: now,
         },
       },
       include: {
+        guard: {
+          include: {
+            user: {
+              select: { firstName: true, lastName: true, email: true }
+            }
+          }
+        },
         site: true,
         client: {
           include: {
@@ -541,22 +732,19 @@ class ShiftServiceSimple {
       orderBy: {
         scheduledEndTime: 'desc',
       },
+      take: limit,
     });
 
-    // Transform and merge both sources
-    const assignmentShifts = assignments.map(a => this.transformAssignmentToShift(a));
-    const directShifts = shifts.map(s => this.transformShiftToShift(s));
+    logger.info(`Found ${shifts.length} past shifts for guard ${guardId}`);
     
-    // Combine and sort by end time (descending), then limit
-    const allShifts = [...assignmentShifts, ...directShifts]
-      .sort((a, b) => new Date(b.endTime).getTime() - new Date(a.endTime).getTime())
-      .slice(0, limit);
+    // Transform shifts to frontend format
+    const transformedShifts = shifts.map(s => this.transformShiftToShift(s));
 
-    return allShifts;
+    return transformedShifts;
   }
 
   /**
-   * Get weekly shift summary for a guard (using ShiftAssignment and Shift)
+   * Get weekly shift summary for a guard (Option B - using Shift model only)
    */
   async getWeeklyShiftSummary(guardId: string) {
     const today = new Date();
@@ -566,36 +754,7 @@ class ShiftServiceSimple {
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 7);
 
-    // Get shifts from ShiftAssignment table
-    const assignments = await prisma.shiftAssignment.findMany({
-      where: {
-        guardId,
-        startTime: {
-          gte: startOfWeek,
-          lt: endOfWeek,
-        },
-      },
-      include: {
-        shiftPosting: {
-          include: {
-            site: true,
-            client: {
-              include: {
-                user: {
-                  select: { firstName: true, lastName: true }
-                }
-              }
-            }
-          }
-        },
-        site: true,
-      },
-      orderBy: {
-        startTime: 'asc',
-      },
-    });
-
-    // Get shifts from Shift table (admin-created shifts)
+    // Get shifts from Shift table (Option B - Direct Assignment)
     const shifts = await prisma.shift.findMany({
       where: {
         guardId,
@@ -619,49 +778,15 @@ class ShiftServiceSimple {
       },
     });
 
-    // Transform and merge both sources
-    const assignmentShifts = assignments.map(a => this.transformAssignmentToShift(a));
-    const directShifts = shifts.map(s => this.transformShiftToShift(s));
+    logger.info(`Found ${shifts.length} shifts for guard ${guardId} this week`);
     
-    // Combine and sort by start time
-    const allShifts = [...assignmentShifts, ...directShifts]
-      .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+    // Transform shifts to frontend format
+    const transformedShifts = shifts.map(s => this.transformShiftToShift(s));
 
-    return allShifts;
+    return transformedShifts;
   }
 
-  /**
-   * Transform ShiftAssignment to Shift format for frontend compatibility
-   */
-  private transformAssignmentToShift(assignment: any) {
-    const site = assignment.site || assignment.shiftPosting?.site;
-    const client = assignment.shiftPosting?.client;
-    
-    return {
-      id: assignment.id,
-      guardId: assignment.guardId,
-      locationName: site?.name || 'Unknown Site',
-      locationAddress: site?.address || '',
-      scheduledStartTime: assignment.startTime,
-      scheduledEndTime: assignment.endTime,
-      startTime: assignment.startTime,
-      endTime: assignment.endTime,
-      checkInTime: assignment.checkInTime,
-      checkOutTime: assignment.checkOutTime,
-      status: this.mapAssignmentStatusToShiftStatus(assignment.status),
-      description: assignment.shiftPosting?.description || '',
-      notes: assignment.notes || '',
-      site: site ? {
-        id: site.id,
-        name: site.name,
-        address: site.address,
-      } : null,
-      client: client ? {
-        id: client.id,
-        name: client.user ? `${client.user.firstName} ${client.user.lastName}` : 'Unknown Client',
-      } : null,
-    };
-  }
+  // REMOVED: transformAssignmentToShift() - No longer needed (Option B - no assignments)
 
   /**
    * Transform Shift to Shift format for frontend compatibility
@@ -708,19 +833,7 @@ class ShiftServiceSimple {
     };
   }
 
-  /**
-   * Map ShiftAssignmentStatus to ShiftStatus
-   */
-  private mapAssignmentStatusToShiftStatus(status: ShiftAssignmentStatus): string {
-    const statusMap: Record<ShiftAssignmentStatus, string> = {
-      ASSIGNED: 'SCHEDULED',
-      IN_PROGRESS: 'IN_PROGRESS',
-      COMPLETED: 'COMPLETED',
-      CANCELLED: 'CANCELLED',
-      MISSED: 'NO_SHOW',
-    };
-    return statusMap[status] || 'SCHEDULED';
-  }
+  // REMOVED: mapAssignmentStatusToShiftStatus() - No longer needed (Option B - no assignments)
 
   /**
    * Map Shift status to ShiftStatus format
@@ -797,6 +910,76 @@ class ShiftServiceSimple {
 
     logger.info(`Break ended for shift ${data.shiftId}: ${data.breakId}`);
     return breakRecord;
+  }
+
+  /**
+   * Get shifts by date for admin scheduling (using Shift table)
+   */
+  async getShiftsByDate(date: Date, guardId?: string) {
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const whereClause: any = {
+      scheduledStartTime: {
+        gte: startOfDay,
+        lte: endOfDay,
+      },
+    };
+
+    if (guardId) {
+      whereClause.guardId = guardId;
+    }
+
+    const shifts = await prisma.shift.findMany({
+      where: whereClause,
+      include: {
+        guard: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
+            },
+          },
+        },
+        site: {
+          include: {
+            client: {
+              include: {
+                user: {
+                  select: {
+                    firstName: true,
+                    lastName: true,
+                    email: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        client: {
+          include: {
+            user: {
+              select: {
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        scheduledStartTime: 'asc',
+      },
+    });
+
+    return shifts;
   }
 
   /**

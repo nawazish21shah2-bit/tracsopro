@@ -170,6 +170,24 @@ class SettingsService {
     return response.data;
   }
 
+  async getSupportTickets(page: number = 1, limit: number = 20): Promise<{
+    tickets: any[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      pages: number;
+    };
+  }> {
+    const response = await this.makeRequest(`/support/tickets?page=${page}&limit=${limit}`);
+    return response.data;
+  }
+
+  async getSupportTicketById(ticketId: string): Promise<any> {
+    const response = await this.makeRequest(`/support/tickets/${ticketId}`);
+    return response.data;
+  }
+
   // Guard-specific settings
   async getAttendanceHistory(page: number = 1, limit: number = 20): Promise<{
     shifts: AttendanceRecord[];
@@ -217,6 +235,18 @@ class SettingsService {
     const response = await this.makeRequest('/company', {
       method: 'PUT',
       body: JSON.stringify(companyData),
+    });
+    return response.data;
+  }
+
+  // Change Password
+  async changePassword(passwordData: {
+    currentPassword: string;
+    newPassword: string;
+  }): Promise<any> {
+    const response = await this.makeRequest('/change-password', {
+      method: 'POST',
+      body: JSON.stringify(passwordData),
     });
     return response.data;
   }

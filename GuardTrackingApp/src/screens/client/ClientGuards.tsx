@@ -8,6 +8,8 @@ import {
   SafeAreaView,
   RefreshControl,
   ActivityIndicator,
+  Alert,
+  Linking,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
@@ -21,6 +23,8 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { ClientStackParamList } from '../../navigation/ClientStackNavigator';
 import { fetchMyGuards } from '../../store/slices/clientSlice';
 import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
+import apiService from '../../services/api';
 
 interface GuardData {
   id: string;
@@ -47,6 +51,8 @@ const ClientGuards: React.FC = () => {
     guardsLoading, 
     guardsError 
   } = useSelector((state: RootState) => state.client);
+  
+  const { user } = useSelector((state: RootState) => state.auth);
 
   const loadGuards = useCallback(async () => {
     try {
@@ -84,16 +90,92 @@ const ClientGuards: React.FC = () => {
                          guardsError?.toLowerCase().includes('econnrefused') ||
                          guardsError?.toLowerCase().includes('enotfound');
 
-  const handlePostNewShift = () => {
-    navigation.navigate('CreateShift');
+  const handlePostNewShift = async () => {
+    try {
+      // Fetch client's sites first
+      const result = await apiService.getClientSites(1, 100);
+      if (result.success && result.data?.sites && result.data.sites.length > 0) {
+        // Use the first site, or could show a selection modal
+        const firstSite = result.data.sites[0];
+        navigation.navigate('CreateShift', { siteId: firstSite.id });
+      } else {
+        Alert.alert(
+          'No Sites Available',
+          'Please create a site first before creating a shift.',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      Alert.alert(
+        'Error',
+        'Failed to load sites. Please try again.',
+        [{ text: 'OK' }]
+      );
+    }
   };
 
-  const handleGuardPress = (guardId: string) => {
-    console.log('Guard pressed:', guardId);
+  const handleViewProfile = (guardId: string) => {
+    // Navigate to guard profile/details screen
+    // For now, show alert - can be replaced with actual navigation when guard profile screen is ready
+    Alert.alert('Guard Profile', `View profile for guard: ${guardId}`);
+    // TODO: Navigate to guard profile screen when implemented
+    // navigation.navigate('GuardProfile', { guardId });
   };
 
-  const handleHireGuard = (guardId: string) => {
-    console.log('Hire guard:', guardId);
+  const handleChatWithGuard = async (guardId: string, guardName: string) => {
+    try {
+      if (!user) {
+        Alert.alert('Error', 'User not logged in');
+        return;
+      }
+
+      // Use centralized chat helper to find or create chat
+      const { findOrCreateClientGuardChat } = await import('../../utils/chatHelper');
+      const chatParams = await findOrCreateClientGuardChat(
+        user.id,
+        guardId,
+        guardName,
+        'general'
+      );
+
+      navigation.navigate('IndividualChatScreen', chatParams);
+    } catch (error) {
+      console.error('Error navigating to chat:', error);
+      Alert.alert('Error', 'Failed to open chat. Please try again.');
+    }
+  };
+
+  const handleCallGuard = (phone: string) => {
+    if (!phone) {
+      Alert.alert('Error', 'Phone number not available');
+      return;
+    }
+
+    Alert.alert(
+      'Call Guard',
+      `Do you want to call ${phone}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Call',
+          onPress: () => {
+            const phoneUrl = `tel:${phone.replace(/[^0-9]/g, '')}`;
+            Linking.canOpenURL(phoneUrl)
+              .then((supported) => {
+                if (supported) {
+                  return Linking.openURL(phoneUrl);
+                } else {
+                  Alert.alert('Error', 'Phone calls are not supported on this device');
+                }
+              })
+              .catch((error) => {
+                console.error('Error opening phone:', error);
+                Alert.alert('Error', 'Failed to initiate call');
+              });
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -158,9 +240,11 @@ const ClientGuards: React.FC = () => {
             <GuardCard
               key={guard.id}
               guard={guard}
-              onPress={() => handleGuardPress(guard.id)}
-              onHire={() => handleHireGuard(guard.id)}
-              showHireButton={true}
+              onPress={() => handleViewProfile(guard.id)}
+              onChat={handleChatWithGuard}
+              onViewProfile={handleViewProfile}
+              onCall={handleCallGuard}
+              showActionButtons={true}
             />
           ))
         ) : !guardsLoading && !guardsError ? (
@@ -177,26 +261,26 @@ const ClientGuards: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: COLORS.backgroundSecondary,
   },
   postButton: {
-    backgroundColor: '#1C6CA9',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
   },
   postButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
+    color: COLORS.textInverse,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
   content: {
     flex: 1,
-    padding: 20,
+    padding: SPACING.lg,
   },
   errorContainer: {
     flex: 1,
-    padding: 20,
+    padding: SPACING.lg,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 200,
@@ -205,29 +289,29 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   loadingContainer: {
-    padding: 20,
+    padding: SPACING.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   loadingText: {
-    marginTop: 8,
-    fontSize: 14,
-    color: '#666666',
+    marginTop: SPACING.sm,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
   },
   emptyContainer: {
-    padding: 40,
+    padding: SPACING.xxxxl,
     alignItems: 'center',
     justifyContent: 'center',
   },
   emptyText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333333',
-    marginBottom: 8,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.sm,
   },
   emptySubtext: {
-    fontSize: 14,
-    color: '#666666',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
     textAlign: 'center',
   },
 });

@@ -3,7 +3,39 @@ import shiftService from '../services/shiftServiceSimple.js';
 import { ShiftStatus, BreakType, IncidentType, IncidentSeverity } from '@prisma/client';
 import { logger } from '../utils/logger.js';
 import { BadRequestError, NotFoundError } from '../utils/errors.js';
+import prisma from '../config/database.js';
 
+/**
+ * Helper function to get guard ID from authenticated user
+ * The user object may have guard info attached, or we need to look it up
+ */
+const getGuardIdFromUser = async (req: Request): Promise<string | null> => {
+  // First try to get it from the request if it's already attached
+  const user = (req as any).user;
+  
+  if (!user?.id) {
+    return null;
+  }
+
+  // If guard info is already attached to user object
+  if (user.guard?.id) {
+    return user.guard.id;
+  }
+
+  // Otherwise, look up the guard by userId
+  try {
+    const guard = await prisma.guard.findFirst({
+      where: { userId: user.id },
+      select: { id: true },
+    });
+    
+    return guard?.id || null;
+  } catch (error) {
+    logger.error('Error looking up guard ID:', error);
+    return null;
+  }
+};
+  
 /**
  * @swagger
  * /api/shifts/stats:
@@ -20,10 +52,10 @@ import { BadRequestError, NotFoundError } from '../utils/errors.js';
  */
 export const getGuardStats = async (req: Request, res: Response) => {
   try {
-    const guardId = req.user?.id;
+    const guardId = await getGuardIdFromUser(req);
 
     if (!guardId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return res.status(401).json({ error: 'Guard profile not found' });
     }
 
     const stats = await shiftService.getGuardMonthlyStats(guardId);
@@ -51,10 +83,10 @@ export const getGuardStats = async (req: Request, res: Response) => {
  */
 export const getTodayShifts = async (req: Request, res: Response) => {
   try {
-    const guardId = req.user?.id;
+    const guardId = await getGuardIdFromUser(req);
 
     if (!guardId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return res.status(401).json({ error: 'Guard profile not found' });
     }
 
     const shifts = await shiftService.getGuardTodayShifts(guardId);
@@ -80,12 +112,12 @@ export const getTodayShifts = async (req: Request, res: Response) => {
  *       401:
  *         description: Unauthorized
  */
-export const getUpcomingShifts = async (req: Request, res: Response) => {
+export const getUpcomingShiftsSimple = async (req: Request, res: Response) => {
   try {
-    const guardId = req.user?.id;
+    const guardId = await getGuardIdFromUser(req);
 
     if (!guardId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return res.status(401).json({ error: 'Guard profile not found' });
     }
 
     const shifts = await shiftService.getGuardUpcomingShifts(guardId);
@@ -113,10 +145,10 @@ export const getUpcomingShifts = async (req: Request, res: Response) => {
  */
 export const getPastShifts = async (req: Request, res: Response) => {
   try {
-    const guardId = req.user?.id;
+    const guardId = await getGuardIdFromUser(req);
 
     if (!guardId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return res.status(401).json({ error: 'Guard profile not found' });
     }
 
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 20;
@@ -145,10 +177,10 @@ export const getPastShifts = async (req: Request, res: Response) => {
  */
 export const getWeeklyShiftSummary = async (req: Request, res: Response) => {
   try {
-    const guardId = req.user?.id;
+    const guardId = await getGuardIdFromUser(req);
 
     if (!guardId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return res.status(401).json({ error: 'Guard profile not found' });
     }
 
     const shifts = await shiftService.getGuardWeeklyShiftSummary(guardId);
@@ -174,12 +206,12 @@ export const getWeeklyShiftSummary = async (req: Request, res: Response) => {
  *       401:
  *         description: Unauthorized
  */
-export const getActiveShift = async (req: Request, res: Response) => {
+export const getActiveShiftSimple = async (req: Request, res: Response) => {
   try {
-    const guardId = req.user?.id;
+    const guardId = await getGuardIdFromUser(req);
 
     if (!guardId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return res.status(401).json({ error: 'Guard profile not found' });
     }
 
     const shift = await shiftService.getActiveShift(guardId);
@@ -207,10 +239,10 @@ export const getActiveShift = async (req: Request, res: Response) => {
  */
 export const getNextUpcomingShift = async (req: Request, res: Response) => {
   try {
-    const guardId = req.user?.id;
+    const guardId = await getGuardIdFromUser(req);
 
     if (!guardId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return res.status(401).json({ error: 'Guard profile not found' });
     }
 
     const shift = await shiftService.getNextUpcomingShift(guardId);
@@ -247,10 +279,10 @@ export const getNextUpcomingShift = async (req: Request, res: Response) => {
 export const getShiftById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const guardId = req.user?.id;
+    const guardId = await getGuardIdFromUser(req);
 
     if (!guardId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return res.status(401).json({ error: 'Guard profile not found' });
     }
 
     const shift = await shiftService.getShiftById(id);
@@ -272,130 +304,10 @@ export const getShiftById = async (req: Request, res: Response) => {
 };
 
 /**
- * @swagger
- * /api/shifts/check-in:
- *   post:
- *     summary: Check in to a shift
- *     tags: [Shifts]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - shiftId
- *             properties:
- *               shiftId:
- *                 type: string
- *               latitude:
- *                 type: number
- *               longitude:
- *                 type: number
- *     responses:
- *       200:
- *         description: Successfully checked in
- *       400:
- *         description: Bad request
- *       401:
- *         description: Unauthorized
+ * @deprecated This implementation is no longer used.
+ * Use checkInToShift and checkOutFromShift from shiftControllerSimple.ts instead.
+ * These old implementations are kept for reference but should be removed.
  */
-export const checkIn = async (req: Request, res: Response) => {
-  try {
-    const guardId = req.user?.id;
-
-    if (!guardId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    const { shiftId, latitude, longitude } = req.body;
-
-    if (!shiftId) {
-      return res.status(400).json({ error: 'Shift ID is required' });
-    }
-
-    const shift = await shiftService.checkIn({
-      shiftId,
-      guardId,
-      checkInTime: new Date(),
-      latitude,
-      longitude,
-    });
-
-    res.json({
-      message: 'Successfully checked in',
-      shift,
-    });
-  } catch (error: any) {
-    console.error('Error checking in:', error);
-    res.status(400).json({ error: error.message || 'Failed to check in' });
-  }
-};
-
-/**
- * @swagger
- * /api/shifts/check-out:
- *   post:
- *     summary: Check out from a shift
- *     tags: [Shifts]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - shiftId
- *             properties:
- *               shiftId:
- *                 type: string
- *               latitude:
- *                 type: number
- *               longitude:
- *                 type: number
- *     responses:
- *       200:
- *         description: Successfully checked out
- *       400:
- *         description: Bad request
- *       401:
- *         description: Unauthorized
- */
-export const checkOut = async (req: Request, res: Response) => {
-  try {
-    const guardId = req.user?.id;
-
-    if (!guardId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    const { shiftId, latitude, longitude } = req.body;
-
-    if (!shiftId) {
-      return res.status(400).json({ error: 'Shift ID is required' });
-    }
-
-    const shift = await shiftService.checkOut({
-      shiftId,
-      guardId,
-      checkOutTime: new Date(),
-      latitude,
-      longitude,
-    });
-
-    res.json({
-      message: 'Successfully checked out',
-      shift,
-    });
-  } catch (error: any) {
-    console.error('Error checking out:', error);
-    res.status(400).json({ error: error.message || 'Failed to check out' });
-  }
-};
 
 /**
  * @swagger

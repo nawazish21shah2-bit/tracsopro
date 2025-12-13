@@ -19,6 +19,8 @@ import adminClientRoutes from './adminClients.js';
 import adminShiftRoutes from './adminShifts.js';
 import adminRoutes from './admin.js';
 import operationsRoutes from './operations.js';
+import invitationRoutes from './invitations.js';
+import notificationRoutes from './notifications.js';
 
 const router = Router();
 
@@ -48,12 +50,16 @@ router.use('/sites', siteRoutes);
 router.use('/emergency', emergencyRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/chat', chatRoutes);
+// Register specific admin routes BEFORE the generic /admin route
+// This ensures Express matches specific paths first
 router.use('/admin/users', adminUserRoutes);
 router.use('/admin/sites', adminSiteRoutes);
 router.use('/admin/clients', adminClientRoutes);
 router.use('/admin/shifts', adminShiftRoutes);
-router.use('/admin', adminRoutes);
 router.use('/admin/operations', operationsRoutes);
+router.use('/admin/invitations', invitationRoutes);
+// Register generic /admin route LAST to avoid catching specific routes
+router.use('/admin', adminRoutes);
 // Test route for Super Admin
 router.get('/super-admin-test', (req, res) => {
   res.json({ success: true, message: 'Super Admin routes are working!' });
@@ -79,12 +85,7 @@ router.post('/messages', (req, res) => {
   res.json({ success: true, data: { id: 'msg-1', ...req.body } });
 });
 
-router.get('/notifications', (req, res) => {
-  res.json({ success: true, data: [] });
-});
-
-router.put('/notifications/:id/read', (req, res) => {
-  res.json({ success: true, data: null });
-});
+// Notification routes are now handled by notificationRoutes
+// Legacy routes removed - use /api/notifications instead
 
 export default router;

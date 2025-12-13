@@ -60,53 +60,59 @@ const RoleSelectionScreen: React.FC = () => {
 
         {/* Role Options */}
         <View style={styles.optionsContainer}>
-          <TouchableOpacity
-            style={[
-              styles.optionCard,
-              selectedRole === 'guard' && styles.optionCardSelected
-            ]}
-            onPress={() => setSelectedRole('guard')}
-          >
-            <View style={styles.iconContainer}>
-              <AppIcon type="material" name="security" size={40} color="#1C6CA9" />
-            </View>
-            <Text style={styles.optionTitle}>Security{"\n"}Guard</Text>
-            <Text style={styles.optionDescription}>
-              Register as a security guard to manage shifts and incidents
-            </Text>
-          </TouchableOpacity>
+          {/* First Row - 2 Cards */}
+          <View style={styles.firstRow}>
+            <TouchableOpacity
+              style={[
+                styles.optionCard,
+                selectedRole === 'guard' && styles.optionCardSelected
+              ]}
+              onPress={() => setSelectedRole('guard')}
+            >
+              <View style={styles.iconContainer}>
+                <AppIcon type="material" name="security" size={40} color="#1C6CA9" />
+              </View>
+              <Text style={styles.optionTitle}>Security{"\n"}Guard</Text>
+              <Text style={styles.optionDescription}>
+                Register as a security guard to manage shifts and incidents
+              </Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[
-              styles.optionCard,
-              selectedRole === 'client' && styles.optionCardSelected
-            ]}
-            onPress={() => setSelectedRole('client')}
-          >
-            <View style={styles.iconContainer}>
-              <AppIcon type="material" name="business" size={40} color="#1C6CA9" />
-            </View>
-            <Text style={styles.optionTitle}>Client{"\n"}Account</Text>
-            <Text style={styles.optionDescription}>
-              Register as a client to hire security services
-            </Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.optionCard,
+                selectedRole === 'client' && styles.optionCardSelected
+              ]}
+              onPress={() => setSelectedRole('client')}
+            >
+              <View style={styles.iconContainer}>
+                <AppIcon type="material" name="business" size={40} color="#1C6CA9" />
+              </View>
+              <Text style={styles.optionTitle}>Client{"\n"}Account</Text>
+              <Text style={styles.optionDescription}>
+                Register as a client to hire security services
+              </Text>
+            </TouchableOpacity>
+          </View>
 
-          <TouchableOpacity
-            style={[
-              styles.optionCard,
-              selectedRole === 'admin' && styles.optionCardSelected
-            ]}
-            onPress={() => setSelectedRole('admin')}
-          >
-            <View style={styles.iconContainer}>
-              <AppIcon type="material" name="admin-panel-settings" size={40} color="#1C6CA9" />
-            </View>
-            <Text style={styles.optionTitle}>Company{"\n"}Admin</Text>
-            <Text style={styles.optionDescription}>
-              Register as a company admin to manage your organization
-            </Text>
-          </TouchableOpacity>
+          {/* Second Row - 1 Card Centered */}
+          <View style={styles.secondRow}>
+            <TouchableOpacity
+              style={[
+                styles.optionCard,
+                selectedRole === 'admin' && styles.optionCardSelected
+              ]}
+              onPress={() => setSelectedRole('admin')}
+            >
+              <View style={styles.iconContainer}>
+                <AppIcon type="material" name="admin-panel-settings" size={40} color="#1C6CA9" />
+              </View>
+              <Text style={styles.optionTitle}>Company{"\n"}Admin</Text>
+              <Text style={styles.optionDescription}>
+                Register as a company admin to manage your organization
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Continue Button */}
@@ -176,11 +182,19 @@ const styles = StyleSheet.create({
   },
   optionsContainer: {
     marginBottom: 40,
-    gap: 16,
     flex: 1,
     justifyContent: 'center',
+  },
+  firstRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    gap: 16,
+  },
+  secondRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   optionCard: {
     height: 160,

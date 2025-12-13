@@ -1,74 +1,75 @@
 import { StyleSheet } from 'react-native';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from './globalStyles';
 
 export const authStyles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.backgroundPrimary,
   },
   scrollContainer: {
     flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 40,
+    paddingHorizontal: SPACING.xxl,
+    paddingVertical: SPACING.xxxxl,
   },
   form: {
-    marginBottom: 40,
+    marginBottom: SPACING.xxxxl,
   },
   sectionContainer: {
-    marginTop: 20,
+    marginTop: SPACING.lg,
   },
   sectionTitle: {
-    fontFamily: 'Inter',
-    fontWeight: '600',
-    fontSize: 18,
-    color: '#000000',
-    marginBottom: 20,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.lg,
   },
   rowContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: SPACING.md,
   },
   halfWidth: {
     flex: 1,
   },
   submitButton: {
-    marginBottom: 20,
+    marginBottom: SPACING.lg,
   },
   // Selection Cards
   optionsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 80,
-    gap: 16,
+    marginBottom: SPACING.xxxxl * 2,
+    gap: SPACING.lg,
   },
   optionCard: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.backgroundSecondary,
     borderWidth: 2,
-    borderColor: '#E5E7EB',
-    borderRadius: 16,
-    paddingVertical: 32,
-    paddingHorizontal: 16,
+    borderColor: COLORS.borderLight,
+    borderRadius: BORDER_RADIUS.lg,
+    paddingVertical: SPACING.xxl,
+    paddingHorizontal: SPACING.lg,
     alignItems: 'center',
     minHeight: 140,
   },
   optionCardSelected: {
-    borderColor: '#1C6CA9',
-    backgroundColor: '#EBF4FF',
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primaryLight,
   },
   optionTitle: {
-    fontFamily: 'Inter',
-    fontWeight: '600',
-    fontSize: 16,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    fontSize: TYPOGRAPHY.fontSize.md,
     lineHeight: 20,
     textAlign: 'center',
-    color: '#374151',
+    color: COLORS.textPrimary,
   },
   optionTitleSelected: {
-    color: '#1C6CA9',
+    color: COLORS.primary,
   },
   iconContainer: {
-    marginBottom: 16,
+    marginBottom: SPACING.lg,
   },
 });
 

@@ -74,10 +74,43 @@ export const authenticate = async (
     if (user.guard) {
       req.guardId = user.guard.id;
     }
-    // Set security company ID for admins
-    if (user.role === 'ADMIN' && user.companyUsers.length > 0) {
+    
+    // Set security company ID for all roles (except SUPER_ADMIN - platform-level access)
+    if (user.role === 'SUPER_ADMIN') {
+      // SUPER_ADMIN has platform-level access - no company restriction
+      // securityCompanyId remains undefined to allow access to all companies
+    } else if (user.role === 'ADMIN' && user.companyUsers.length > 0) {
       req.securityCompanyId = user.companyUsers[0].securityCompanyId;
+    } else if (user.role === 'GUARD' && user.guard) {
+      // Get company from CompanyGuard
+      const companyGuard = await prisma.companyGuard.findFirst({
+        where: {
+          guardId: user.guard.id,
+          isActive: true,
+        },
+        select: {
+          securityCompanyId: true,
+        },
+      });
+      if (companyGuard) {
+        req.securityCompanyId = companyGuard.securityCompanyId;
+      }
+    } else if (user.role === 'CLIENT' && user.client) {
+      // Get company from CompanyClient
+      const companyClient = await prisma.companyClient.findFirst({
+        where: {
+          clientId: user.client.id,
+          isActive: true,
+        },
+        select: {
+          securityCompanyId: true,
+        },
+      });
+      if (companyClient) {
+        req.securityCompanyId = companyClient.securityCompanyId;
+      }
     }
+    
     next();
   } catch (error) {
     next(error);

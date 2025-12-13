@@ -40,6 +40,12 @@ const AdminSignupScreen: React.FC = () => {
     confirmPassword: '',
   });
 
+  const [companyData, setCompanyData] = useState({
+    companyName: '',
+    companyEmail: '',
+    companyPhone: '',
+  });
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -91,6 +97,20 @@ const AdminSignupScreen: React.FC = () => {
       newErrors.confirmPassword = 'Passwords do not match';
     }
 
+    // Company Name validation (Required for Admin)
+    if (!companyData.companyName.trim()) {
+      newErrors.companyName = 'Company name is required';
+    } else if (companyData.companyName.trim().length < 2) {
+      newErrors.companyName = 'Company name must be at least 2 characters';
+    }
+
+    // Company Email validation (Required for Admin)
+    if (!companyData.companyEmail.trim()) {
+      newErrors.companyEmail = 'Company email is required';
+    } else if (!emailRegex.test(companyData.companyEmail.trim())) {
+      newErrors.companyEmail = 'Please enter a valid company email address';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -109,6 +129,12 @@ const AdminSignupScreen: React.FC = () => {
       const firstName = nameParts[0];
       const lastName = nameParts.slice(1).join(' ') || '';
 
+      // Format company phone if provided
+      const companyPhoneDigits = companyData.companyPhone.replace(/\D/g, '');
+      const fullCompanyPhone = companyPhoneDigits 
+        ? `${selectedCountry.dialCode}${companyPhoneDigits}`
+        : fullPhoneNumber; // Fallback to admin phone if not provided
+
       // Prepare registration data
       const registrationData = {
         firstName,
@@ -119,6 +145,9 @@ const AdminSignupScreen: React.FC = () => {
         confirmPassword: formData.password, // Backend doesn't need this, but type requires it
         role: UserRole.ADMIN,
         accountType: accountType.toUpperCase(),
+        companyName: companyData.companyName.trim(),
+        companyEmail: companyData.companyEmail.toLowerCase().trim(),
+        companyPhone: fullCompanyPhone,
       };
 
       // Call registration API via Redux
@@ -307,6 +336,67 @@ const AdminSignupScreen: React.FC = () => {
             </View>
             {errors.confirmPassword && <Text style={styles.errorText}>{errors.confirmPassword}</Text>}
           </View>
+
+          {/* Company Details Section */}
+          <View style={styles.sectionDivider}>
+            <Text style={styles.sectionTitle}>Company Information</Text>
+          </View>
+
+          {/* Company Name */}
+          <View style={styles.inputContainer}>
+            <View style={[styles.inputWrapper, errors.companyName && styles.inputError]}>
+              <Icon name="business-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+              <TextInput
+                style={styles.textInput}
+                placeholder="Company Name *"
+                value={companyData.companyName}
+                onChangeText={(text) => {
+                  setCompanyData(prev => ({ ...prev, companyName: text }));
+                  if (errors.companyName) setErrors(prev => ({ ...prev, companyName: '' }));
+                }}
+                placeholderTextColor="#9CA3AF"
+                autoCapitalize="words"
+              />
+            </View>
+            {errors.companyName && <Text style={styles.errorText}>{errors.companyName}</Text>}
+          </View>
+
+          {/* Company Email */}
+          <View style={styles.inputContainer}>
+            <View style={[styles.inputWrapper, errors.companyEmail && styles.inputError]}>
+              <Icon name="mail-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+              <TextInput
+                style={styles.textInput}
+                placeholder="Company Email *"
+                value={companyData.companyEmail}
+                onChangeText={(text) => {
+                  setCompanyData(prev => ({ ...prev, companyEmail: text }));
+                  if (errors.companyEmail) setErrors(prev => ({ ...prev, companyEmail: '' }));
+                }}
+                placeholderTextColor="#9CA3AF"
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+            {errors.companyEmail && <Text style={styles.errorText}>{errors.companyEmail}</Text>}
+          </View>
+
+          {/* Company Phone (Optional) */}
+          <View style={styles.inputContainer}>
+            <View style={styles.inputWrapper}>
+              <Icon name="call-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+              <TextInput
+                style={styles.textInput}
+                placeholder="Company Phone (Optional)"
+                value={companyData.companyPhone}
+                onChangeText={(text) => {
+                  setCompanyData(prev => ({ ...prev, companyPhone: text }));
+                }}
+                placeholderTextColor="#9CA3AF"
+                keyboardType="phone-pad"
+              />
+            </View>
+          </View>
         </View>
 
         {/* Continue Button */}
@@ -433,6 +523,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
     color: '#1C6CA9',
+  },
+  sectionDivider: {
+    marginTop: 20,
+    marginBottom: 16,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  sectionTitle: {
+    fontFamily: 'Inter',
+    fontWeight: '600',
+    fontSize: 16,
+    color: '#374151',
+    marginBottom: 8,
   },
 });
 

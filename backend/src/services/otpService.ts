@@ -115,93 +115,232 @@ export const sendOTPEmail = async (email: string, otp: string, userName?: string
   // DEV ONLY: Log OTP to console for testing
   console.log(`🔐 DEV OTP for ${email}: ${otp}`);
   
+  // Logo URL - Update this to your hosted logo URL or use base64 encoded image
+  const logoUrl = process.env.EMAIL_LOGO_URL || 'https://via.placeholder.com/180x60/1C6CA9/FFFFFF?text=tracSOpro';
+  
   const mailOptions = {
     from: process.env.SMTP_FROM || 'noreply@tracsopro.com',
     to: email,
     subject: 'Email Verification - tracSOpro',
     html: `
       <!DOCTYPE html>
-      <html>
+      <html lang="en">
       <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
         <style>
-          body {
-            font-family: 'Inter', Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
           }
-          .container {
+          body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #000000;
+            background-color: #F8F9FA;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+          }
+          .email-wrapper {
+            background-color: #F8F9FA;
+            padding: 40px 20px;
+          }
+          .email-container {
             max-width: 600px;
             margin: 0 auto;
-            padding: 20px;
+            background-color: #FFFFFF;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07), 0 1px 3px rgba(0, 0, 0, 0.06);
           }
           .header {
+            background: linear-gradient(135deg, #1C6CA9 0%, #0F4A73 100%);
+            padding: 40px 30px;
             text-align: center;
-            padding: 20px 0;
-            border-bottom: 2px solid #1C6CA9;
+          }
+          .logo-container {
+            display: inline-block;
+            background-color: #FFFFFF;
+            padding: 12px 24px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
           }
           .logo {
-            font-size: 24px;
-            font-weight: bold;
-            color: #1C6CA9;
+            max-width: 180px;
+            height: auto;
+            display: block;
+          }
+          .logo-text {
+            font-size: 28px;
+            font-weight: 700;
+            color: #FFFFFF;
+            letter-spacing: -0.5px;
+            margin-top: 12px;
           }
           .content {
-            padding: 30px 0;
+            padding: 48px 40px;
           }
-          .otp-box {
-            background-color: #F9FAFB;
-            border: 2px solid #1C6CA9;
-            border-radius: 12px;
-            padding: 20px;
+          .greeting {
+            font-size: 24px;
+            font-weight: 600;
+            color: #000000;
+            margin-bottom: 16px;
+            line-height: 1.3;
+          }
+          .message {
+            font-size: 16px;
+            color: #828282;
+            margin-bottom: 32px;
+            line-height: 1.7;
+          }
+          .otp-container {
+            background: linear-gradient(135deg, #E8F4FD 0%, #ACD3F1 100%);
+            border-radius: 16px;
+            padding: 32px 24px;
+            margin: 32px 0;
             text-align: center;
-            margin: 20px 0;
+            border: 2px solid #1C6CA9;
+            box-shadow: 0 4px 12px rgba(28, 108, 169, 0.15);
+          }
+          .otp-label {
+            font-size: 14px;
+            font-weight: 500;
+            color: #0F4A73;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 12px;
           }
           .otp-code {
-            font-size: 32px;
-            font-weight: bold;
+            font-size: 42px;
+            font-weight: 700;
             color: #1C6CA9;
-            letter-spacing: 8px;
+            letter-spacing: 12px;
+            font-family: 'Courier New', monospace;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+          }
+          .expiry-notice {
+            background-color: #F8F9FA;
+            border-left: 4px solid #1C6CA9;
+            padding: 16px 20px;
+            margin: 24px 0;
+            border-radius: 8px;
+          }
+          .expiry-notice strong {
+            color: #1C6CA9;
+            font-size: 14px;
+          }
+          .expiry-notice p {
+            color: #828282;
+            font-size: 14px;
+            margin: 4px 0 0 0;
+          }
+          .security-note {
+            background-color: #FFF9E6;
+            border: 1px solid #FFE082;
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin: 24px 0;
+          }
+          .security-note p {
+            color: #F57C00;
+            font-size: 14px;
+            margin: 0;
+          }
+          .signature {
+            margin-top: 32px;
+            padding-top: 24px;
+            border-top: 1px solid #E5E7EB;
+          }
+          .signature p {
+            color: #828282;
+            font-size: 15px;
+            margin: 8px 0;
+          }
+          .signature strong {
+            color: #000000;
           }
           .footer {
+            background-color: #F8F9FA;
+            padding: 32px 40px;
             text-align: center;
-            padding: 20px 0;
             border-top: 1px solid #E5E7EB;
-            color: #6B7280;
-            font-size: 12px;
           }
-          .button {
-            display: inline-block;
-            padding: 12px 24px;
-            background-color: #1C6CA9;
-            color: white;
+          .footer-text {
+            font-size: 12px;
+            color: #828282;
+            line-height: 1.6;
+            margin: 8px 0;
+          }
+          .footer-text a {
+            color: #1C6CA9;
             text-decoration: none;
-            border-radius: 8px;
-            margin: 20px 0;
+          }
+          .footer-text a:hover {
+            text-decoration: underline;
+          }
+          @media only screen and (max-width: 600px) {
+            .email-wrapper {
+              padding: 20px 10px;
+            }
+            .header {
+              padding: 30px 20px;
+            }
+            .content {
+              padding: 32px 24px;
+            }
+            .footer {
+              padding: 24px 20px;
+            }
+            .otp-code {
+              font-size: 36px;
+              letter-spacing: 8px;
+            }
+            .greeting {
+              font-size: 20px;
+            }
           }
         </style>
       </head>
       <body>
-        <div class="container">
-          <div class="header">
-            <div class="logo">tracSOpro</div>
-          </div>
-          <div class="content">
-            <h2>Email Verification</h2>
-            <p>Hello${userName ? ` ${userName}` : ''},</p>
-            <p>Thank you for registering with tracSOpro. Please use the following OTP code to verify your email address:</p>
-            
-            <div class="otp-box">
-              <div class="otp-code">${otp}</div>
+        <div class="email-wrapper">
+          <div class="email-container">
+            <div class="header">
+              <div class="logo-container">
+                <img src="${logoUrl}" alt="tracSOpro Logo" class="logo" />
+              </div>
+              <div class="logo-text">tracSOpro</div>
             </div>
-            
-            <p><strong>This code will expire in ${process.env.OTP_EXPIRY_MINUTES || '10'} minutes.</strong></p>
-            
-            <p>If you didn't request this code, please ignore this email.</p>
-            
-            <p>Best regards,<br>The tracSOpro Team</p>
-          </div>
-          <div class="footer">
-            <p>This is an automated email. Please do not reply to this message.</p>
-            <p>&copy; ${new Date().getFullYear()} tracSOpro. All rights reserved.</p>
+            <div class="content">
+              <h1 class="greeting">Email Verification</h1>
+              <p class="message">Hello${userName ? ` ${userName}` : ''},</p>
+              <p class="message">Thank you for registering with tracSOpro. Please use the verification code below to complete your email verification:</p>
+              
+              <div class="otp-container">
+                <div class="otp-label">Your Verification Code</div>
+                <div class="otp-code">${otp}</div>
+              </div>
+              
+              <div class="expiry-notice">
+                <strong>⏱️ Expires in ${process.env.OTP_EXPIRY_MINUTES || '10'} minutes</strong>
+                <p>For security reasons, this code will expire shortly. Please verify your email as soon as possible.</p>
+              </div>
+              
+              <div class="security-note">
+                <p>🔒 <strong>Security Tip:</strong> If you didn't request this verification code, please ignore this email. Your account remains secure.</p>
+              </div>
+              
+              <div class="signature">
+                <p><strong>Best regards,</strong></p>
+                <p>The tracSOpro Team</p>
+              </div>
+            </div>
+            <div class="footer">
+              <p class="footer-text">This is an automated email. Please do not reply to this message.</p>
+              <p class="footer-text">&copy; ${new Date().getFullYear()} tracSOpro. All rights reserved.</p>
+              <p class="footer-text">Need help? Contact us at <a href="mailto:support@tracsopro.com">support@tracsopro.com</a></p>
+            </div>
           </div>
         </div>
       </body>
@@ -421,51 +560,258 @@ export const sendPasswordResetOTP = async (email: string): Promise<void> => {
  * Send password reset OTP email with custom template
  */
 export const sendPasswordResetOTP_Email = async (email: string, otp: string, userName?: string): Promise<void> => {
+  // Logo URL - Update this to your hosted logo URL or use base64 encoded image
+  const logoUrl = process.env.EMAIL_LOGO_URL || 'https://via.placeholder.com/180x60/1C6CA9/FFFFFF?text=tracSOpro';
+  
   const mailOptions = {
     from: process.env.SMTP_FROM || 'noreply@tracsopro.com',
     to: email,
     subject: 'Password Reset - tracSOpro',
     html: `
       <!DOCTYPE html>
-      <html>
+      <html lang="en">
       <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
         <style>
-          body { font-family: 'Inter', Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { text-align: center; padding: 20px 0; border-bottom: 2px solid #1C6CA9; }
-          .logo { font-size: 24px; font-weight: bold; color: #1C6CA9; }
-          .content { padding: 30px 0; }
-          .otp-box { background-color: #F9FAFB; border: 2px solid #DC2626; border-radius: 12px; padding: 20px; text-align: center; margin: 20px 0; }
-          .otp-code { font-size: 32px; font-weight: bold; color: #DC2626; letter-spacing: 8px; }
-          .footer { text-align: center; padding: 20px 0; border-top: 1px solid #E5E7EB; color: #6B7280; font-size: 12px; }
-          .warning { background-color: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px; padding: 16px; margin: 20px 0; color: #991B1B; }
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
+          body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #000000;
+            background-color: #F8F9FA;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+          }
+          .email-wrapper {
+            background-color: #F8F9FA;
+            padding: 40px 20px;
+          }
+          .email-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #FFFFFF;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07), 0 1px 3px rgba(0, 0, 0, 0.06);
+          }
+          .header {
+            background: linear-gradient(135deg, #F44336 0%, #D32F2F 100%);
+            padding: 40px 30px;
+            text-align: center;
+          }
+          .logo-container {
+            display: inline-block;
+            background-color: #FFFFFF;
+            padding: 12px 24px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+          }
+          .logo {
+            max-width: 180px;
+            height: auto;
+            display: block;
+          }
+          .logo-text {
+            font-size: 28px;
+            font-weight: 700;
+            color: #FFFFFF;
+            letter-spacing: -0.5px;
+            margin-top: 12px;
+          }
+          .content {
+            padding: 48px 40px;
+          }
+          .greeting {
+            font-size: 24px;
+            font-weight: 600;
+            color: #000000;
+            margin-bottom: 16px;
+            line-height: 1.3;
+          }
+          .message {
+            font-size: 16px;
+            color: #828282;
+            margin-bottom: 32px;
+            line-height: 1.7;
+          }
+          .otp-container {
+            background: linear-gradient(135deg, #FFEBEE 0%, #FFCDD2 100%);
+            border-radius: 16px;
+            padding: 32px 24px;
+            margin: 32px 0;
+            text-align: center;
+            border: 2px solid #F44336;
+            box-shadow: 0 4px 12px rgba(244, 67, 54, 0.15);
+          }
+          .otp-label {
+            font-size: 14px;
+            font-weight: 500;
+            color: #C62828;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 12px;
+          }
+          .otp-code {
+            font-size: 42px;
+            font-weight: 700;
+            color: #D32F2F;
+            letter-spacing: 12px;
+            font-family: 'Courier New', monospace;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+          }
+          .expiry-notice {
+            background-color: #F8F9FA;
+            border-left: 4px solid #F44336;
+            padding: 16px 20px;
+            margin: 24px 0;
+            border-radius: 8px;
+          }
+          .expiry-notice strong {
+            color: #D32F2F;
+            font-size: 14px;
+          }
+          .expiry-notice p {
+            color: #828282;
+            font-size: 14px;
+            margin: 4px 0 0 0;
+          }
+          .warning-box {
+            background: linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%);
+            border: 2px solid #FF9800;
+            border-radius: 12px;
+            padding: 20px 24px;
+            margin: 24px 0;
+            box-shadow: 0 2px 8px rgba(255, 152, 0, 0.1);
+          }
+          .warning-box strong {
+            color: #E65100;
+            font-size: 15px;
+            display: block;
+            margin-bottom: 8px;
+          }
+          .warning-box p {
+            color: #E65100;
+            font-size: 14px;
+            margin: 0;
+            line-height: 1.6;
+          }
+          .security-note {
+            background-color: #F3E5F5;
+            border-left: 4px solid #9C27B0;
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin: 24px 0;
+          }
+          .security-note p {
+            color: #7B1FA2;
+            font-size: 14px;
+            margin: 0;
+            line-height: 1.6;
+          }
+          .signature {
+            margin-top: 32px;
+            padding-top: 24px;
+            border-top: 1px solid #E5E7EB;
+          }
+          .signature p {
+            color: #828282;
+            font-size: 15px;
+            margin: 8px 0;
+          }
+          .signature strong {
+            color: #000000;
+          }
+          .footer {
+            background-color: #F8F9FA;
+            padding: 32px 40px;
+            text-align: center;
+            border-top: 1px solid #E5E7EB;
+          }
+          .footer-text {
+            font-size: 12px;
+            color: #828282;
+            line-height: 1.6;
+            margin: 8px 0;
+          }
+          .footer-text a {
+            color: #1C6CA9;
+            text-decoration: none;
+          }
+          .footer-text a:hover {
+            text-decoration: underline;
+          }
+          @media only screen and (max-width: 600px) {
+            .email-wrapper {
+              padding: 20px 10px;
+            }
+            .header {
+              padding: 30px 20px;
+            }
+            .content {
+              padding: 32px 24px;
+            }
+            .footer {
+              padding: 24px 20px;
+            }
+            .otp-code {
+              font-size: 36px;
+              letter-spacing: 8px;
+            }
+            .greeting {
+              font-size: 20px;
+            }
+          }
         </style>
       </head>
       <body>
-        <div class="container">
-          <div class="header">
-            <div class="logo">tracSOpro</div>
-          </div>
-          <div class="content">
-            <h2>Password Reset Request</h2>
-            <p>Hello${userName ? ` ${userName}` : ''},</p>
-            <p>We received a request to reset your password. Please use the following code to reset your password:</p>
-            
-            <div class="otp-box">
-              <div class="otp-code">${otp}</div>
+        <div class="email-wrapper">
+          <div class="email-container">
+            <div class="header">
+              <div class="logo-container">
+                <img src="${logoUrl}" alt="tracSOpro Logo" class="logo" />
+              </div>
+              <div class="logo-text">tracSOpro</div>
             </div>
-            
-            <div class="warning">
-              <strong>Security Notice:</strong> This code will expire in ${process.env.OTP_EXPIRY_MINUTES || '10'} minutes. If you didn't request this password reset, please ignore this email and consider changing your password.
+            <div class="content">
+              <h1 class="greeting">Password Reset Request</h1>
+              <p class="message">Hello${userName ? ` ${userName}` : ''},</p>
+              <p class="message">We received a request to reset your password for your tracSOpro account. Use the verification code below to proceed with resetting your password:</p>
+              
+              <div class="otp-container">
+                <div class="otp-label">Your Reset Code</div>
+                <div class="otp-code">${otp}</div>
+              </div>
+              
+              <div class="expiry-notice">
+                <strong>⏱️ Expires in ${process.env.OTP_EXPIRY_MINUTES || '10'} minutes</strong>
+                <p>For security reasons, this code will expire shortly. Please reset your password as soon as possible.</p>
+              </div>
+              
+              <div class="warning-box">
+                <strong>⚠️ Important Security Notice</strong>
+                <p>If you didn't request this password reset, please ignore this email immediately. Your account remains secure, but we recommend changing your password as a precaution.</p>
+              </div>
+              
+              <div class="security-note">
+                <p>🔒 <strong>Security Tip:</strong> Never share this code with anyone. tracSOpro staff will never ask for your verification code.</p>
+              </div>
+              
+              <div class="signature">
+                <p><strong>Best regards,</strong></p>
+                <p>The tracSOpro Security Team</p>
+              </div>
             </div>
-            
-            <p>For security reasons, never share this code with anyone.</p>
-            
-            <p>Best regards,<br>The tracSOpro Team</p>
-          </div>
-          <div class="footer">
-            <p>This is an automated email. Please do not reply to this message.</p>
-            <p>&copy; ${new Date().getFullYear()} tracSOpro. All rights reserved.</p>
+            <div class="footer">
+              <p class="footer-text">This is an automated email. Please do not reply to this message.</p>
+              <p class="footer-text">&copy; ${new Date().getFullYear()} tracSOpro. All rights reserved.</p>
+              <p class="footer-text">Need help? Contact us at <a href="mailto:support@tracsopro.com">support@tracsopro.com</a></p>
+            </div>
           </div>
         </div>
       </body>

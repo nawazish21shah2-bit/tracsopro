@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { PersonIcon, LocationIcon } from '../ui/AppIcons';
 import StatusBadge from './StatusBadge';
-import { globalStyles } from '../../styles/globalStyles';
+import { globalStyles, COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../styles/globalStyles';
 
 interface SiteCardProps {
   site: {
@@ -23,7 +23,7 @@ interface SiteCardProps {
 
 const SiteCard: React.FC<SiteCardProps> = ({ site, onPress, onMoreOptions, onChatWithGuard }) => {
   return (
-    <TouchableOpacity style={[globalStyles.card, styles.card]} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.header}>
         <View style={styles.siteInfo}>
           <View style={styles.locationIcon}>
@@ -77,13 +77,19 @@ const SiteCard: React.FC<SiteCardProps> = ({ site, onPress, onMoreOptions, onCha
 
 const styles = StyleSheet.create({
   card: {
-    marginBottom: 12,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.lg,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    // Border only, no shadow for minimal style
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 16,
+    marginBottom: SPACING.fieldGap || SPACING.lg,
   },
   siteInfo: {
     flexDirection: 'row',
@@ -94,23 +100,23 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 12,
-    backgroundColor: '#E3F2FD',
+    backgroundColor: COLORS.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: SPACING.md,
   },
   siteDetails: {
     flex: 1,
   },
   siteName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000000',
-    marginBottom: 4,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.xs,
   },
   siteAddress: {
-    fontSize: 12,
-    color: '#666666',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textSecondary,
   },
   moreButton: {
     width: 32,
@@ -120,7 +126,7 @@ const styles = StyleSheet.create({
   },
   moreButtonText: {
     fontSize: 18,
-    color: '#666666',
+    color: COLORS.textSecondary,
     fontWeight: 'bold',
   },
   guardSection: {
@@ -130,8 +136,8 @@ const styles = StyleSheet.create({
   },
   guardOnDutyLabel: {
     fontSize: 12,
-    color: '#666666',
-    marginBottom: 8,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.sm,
   },
   guardInfo: {
     flexDirection: 'row',
@@ -141,7 +147,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: COLORS.backgroundSecondary,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 8,
@@ -157,16 +163,16 @@ const styles = StyleSheet.create({
   guardName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#333333',
+    color: COLORS.textPrimary,
     marginBottom: 2,
   },
   shiftTime: {
     fontSize: 12,
-    color: '#666666',
+    color: COLORS.textSecondary,
   },
   checkInTime: {
     fontSize: 12,
-    color: '#2E7D32',
+    color: COLORS.success,
     fontWeight: '500',
   },
   rightSection: {
@@ -177,7 +183,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#1976D2',
+    backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 8,

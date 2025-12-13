@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,16 +6,19 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { useDispatch } from 'react-redux';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useDispatch, useSelector } from 'react-redux';
 import { StackNavigationProp } from '@react-navigation/stack';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import GuardAppHeader from '../../components/ui/GuardAppHeader';
 import EmergencyButton from '../../components/emergency/EmergencyButton';
 import { GuardStackParamList } from '../../navigation/GuardStackNavigator';
-import { AppDispatch } from '../../store';
+import { AppDispatch, RootState } from '../../store';
 import { logoutUser } from '../../store/slices/authSlice';
+import { fetchShiftStatistics, fetchActiveShift, fetchUpcomingShifts } from '../../store/slices/shiftSlice';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import {
   ClockIcon,
   LocationIcon,
@@ -25,12 +28,72 @@ import {
   UsersIcon,
   LogoutIcon,
 } from '../../components/ui/AppIcons';
+import apiService from '../../services/api';
 
 type GuardHomeScreenNavigationProp = StackNavigationProp<GuardStackParamList>;
 
 const GuardHomeScreen: React.FC = () => {
   const navigation = useNavigation<GuardHomeScreenNavigationProp>();
   const dispatch = useDispatch<AppDispatch>();
+  const { user } = useSelector((state: RootState) => state.auth);
+  const { stats, activeShift, upcomingShifts, loading: shiftsLoading } = useSelector((state: RootState) => state.shifts);
+  
+  const [teamMembersCount, setTeamMembersCount] = useState<number>(0);
+  const [activeSitesCount, setActiveSitesCount] = useState<number>(0);
+  const [loadingStats, setLoadingStats] = useState<boolean>(true);
+  
+  // Fetch dashboard data when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      loadDashboardData();
+      return () => {};
+    }, [])
+  );
+
+  useEffect(() => {
+    loadDashboardData();
+  }, []);
+
+  const loadDashboardData = async () => {
+    try {
+      setLoadingStats(true);
+      await Promise.all([
+        dispatch(fetchShiftStatistics({})),
+        dispatch(fetchActiveShift()),
+        dispatch(fetchUpcomingShifts()),
+        loadAdditionalStats(),
+      ]);
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+    } finally {
+      setLoadingStats(false);
+    }
+  };
+
+  const loadAdditionalStats = async () => {
+    try {
+      // Fetch active sites count (sites with active shifts)
+      if (activeShift) {
+        setActiveSitesCount(1);
+      } else {
+        // Count unique sites from upcoming shifts
+        const sitesSet = new Set(upcomingShifts?.map(s => s.locationId || s.locationName).filter(Boolean) || []);
+        setActiveSitesCount(sitesSet.size || 0);
+      }
+
+      // For team members, we could fetch from backend or use a placeholder
+      // For now, use stats.totalSites as a proxy or fetch from API if available
+      setTeamMembersCount(0); // Placeholder - can be enhanced with API call if available
+    } catch (error) {
+      console.error('Error loading additional stats:', error);
+    }
+  };
+
+  // Calculate total hours from stats
+  const totalHours = (stats as any)?.totalHours || 0;
+  const completedShifts = stats?.completedShifts || 0;
+  const activeSites = activeSitesCount || stats?.totalSites || 0;
+  const teamMembers = teamMembersCount || 0;
 
   const handleNotificationPress = () => {
     Alert.alert('Notifications', 'View your notifications');
@@ -114,23 +177,23 @@ const GuardHomeScreen: React.FC = () => {
       <Text style={styles.sectionTitle}>Quick Actions</Text>
       <View style={styles.quickActionsGrid}>
         <TouchableOpacity style={styles.quickActionCard}>
-          <ClockIcon size={24} color="#1C6CA9" />
+          <ClockIcon size={24} color={COLORS.primary} />
           <Text style={styles.quickActionText}>Check In</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.quickActionCard}>
-          <LocationIcon size={24} color="#10B981" />
+          <LocationIcon size={24} color={COLORS.success} />
           <Text style={styles.quickActionText}>View Sites</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.quickActionCard}>
-          <ShiftsIcon size={24} color="#F59E0B" />
+          <ShiftsIcon size={24} color={COLORS.warning} />
           <Text style={styles.quickActionText}>My Shifts</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.quickActionCard}>
-          <EmergencyIcon size={24} color="#EF4444" />
+          <EmergencyIcon size={24} color={COLORS.error} />
           <Text style={styles.quickActionText}>Report</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.quickActionCard} onPress={handleLogout}>
-          <LogoutIcon size={24} color="#6B7280" />
+          <LogoutIcon size={24} color={COLORS.textSecondary} />
           <Text style={styles.quickActionText}>Logout</Text>
         </TouchableOpacity>
       </View>
@@ -153,29 +216,41 @@ const GuardHomeScreen: React.FC = () => {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Stats Grid */}
         <View style={styles.statsGrid}>
-          {renderStatsCard(
-            'Completed Shifts',
-            '24',
-            <CheckCircleIcon size={20} color="#10B981" />,
-            '#10B981'
-          )}
-          {renderStatsCard(
-            'Total Hours',
-            '156',
-            <ClockIcon size={20} color="#1C6CA9" />,
-            '#1C6CA9'
-          )}
-          {renderStatsCard(
-            'Active Sites',
-            '8',
-            <LocationIcon size={20} color="#6366F1" />,
-            '#6366F1'
-          )}
-          {renderStatsCard(
-            'Team Members',
-            '12',
-            <UsersIcon size={20} color="#F59E0B" />,
-            '#F59E0B'
+          {loadingStats ? (
+            <>
+              {[1, 2, 3, 4].map((i) => (
+                <View key={i} style={[styles.statsCard, styles.statsCardLoading]}>
+                  <ActivityIndicator size="small" color={COLORS.primary} />
+                </View>
+              ))}
+            </>
+          ) : (
+            <>
+              {renderStatsCard(
+                'Completed Shifts',
+                String(completedShifts || 0),
+                <CheckCircleIcon size={20} color={COLORS.success} />,
+                COLORS.success
+              )}
+              {renderStatsCard(
+                'Total Hours',
+                String(Math.round(totalHours || 0)),
+                <ClockIcon size={20} color={COLORS.primary} />,
+                COLORS.primary
+              )}
+              {renderStatsCard(
+                'Active Sites',
+                String(activeSites || 0),
+                <LocationIcon size={20} color={COLORS.info} />,
+                COLORS.info
+              )}
+              {renderStatsCard(
+                'Team Members',
+                String(teamMembers || 0),
+                <UsersIcon size={20} color={COLORS.warning} />,
+                COLORS.warning
+              )}
+            </>
           )}
         </View>
 
@@ -236,7 +311,7 @@ const GuardHomeScreen: React.FC = () => {
             </View>
             <View style={styles.activityItem}>
               <View style={styles.activityIcon}>
-                <EmergencyIcon size={16} color="#F59E0B" />
+                <EmergencyIcon size={16} color={COLORS.warning} />
               </View>
               <View style={styles.activityContent}>
                 <Text style={styles.activityTitle}>Incident Reported</Text>
@@ -254,22 +329,24 @@ const GuardHomeScreen: React.FC = () => {
 const styles = StyleSheet.create({
   content: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: COLORS.backgroundSecondary,
   },
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    gap: 12,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.lg,
+    gap: SPACING.md,
   },
   statsCard: {
     flex: 1,
     minWidth: '47%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.lg,
     borderLeftWidth: 4,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
   },
   statsHeader: {
     flexDirection: 'row',
@@ -285,29 +362,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statsValue: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#333333',
+    fontSize: TYPOGRAPHY.fontSize.xxl,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    color: COLORS.textPrimary,
   },
   statsTitle: {
-    fontSize: 14,
-    color: '#666666',
-    fontWeight: '500',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
   currentShiftSection: {
-    paddingHorizontal: 16,
-    paddingTop: 24,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.xxl,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333333',
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
     marginBottom: 12,
   },
   currentShiftCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
   },
   shiftHeader: {
     flexDirection: 'row',
@@ -316,9 +395,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   shiftTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333333',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
     flex: 1,
   },
   shiftStatus: {
@@ -329,18 +408,18 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#10B981',
+    backgroundColor: COLORS.success,
     marginRight: 6,
   },
   statusText: {
-    fontSize: 12,
-    color: '#10B981',
-    fontWeight: '500',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.success,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
   shiftAddress: {
-    fontSize: 14,
-    color: '#666666',
-    marginBottom: 12,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.md,
   },
   shiftTiming: {
     flexDirection: 'row',
@@ -348,111 +427,121 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   shiftTime: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#333333',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    color: COLORS.textPrimary,
   },
   shiftDuration: {
-    fontSize: 14,
-    color: '#666666',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
   },
   checkOutButton: {
-    backgroundColor: '#EF4444',
-    paddingVertical: 12,
-    borderRadius: 8,
+    backgroundColor: COLORS.error,
+    paddingVertical: SPACING.md,
+    borderRadius: BORDER_RADIUS.sm,
     alignItems: 'center',
+    ...SHADOWS.small,
   },
   checkOutButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+    color: COLORS.textInverse,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
   quickActionsSection: {
-    paddingHorizontal: 16,
-    paddingTop: 24,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.xxl,
   },
   quickActionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: SPACING.md,
   },
   quickActionCard: {
     flex: 1,
     minWidth: '22%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.lg,
     alignItems: 'center',
     minHeight: 80,
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
   },
   quickActionText: {
-    fontSize: 12,
-    color: '#333333',
-    fontWeight: '500',
-    marginTop: 8,
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    marginTop: SPACING.sm,
     textAlign: 'center',
   },
   recentActivitySection: {
-    paddingHorizontal: 16,
-    paddingTop: 24,
-    paddingBottom: 32,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.xxl,
+    paddingBottom: SPACING.xxl,
   },
   activityList: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    paddingVertical: 8,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
   },
   activityItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
   },
   activityIcon: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: COLORS.backgroundSecondary,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: SPACING.md,
   },
   activityContent: {
     flex: 1,
   },
   activityTitle: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#333333',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    color: COLORS.textPrimary,
     marginBottom: 2,
   },
   activitySubtitle: {
-    fontSize: 12,
-    color: '#666666',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textSecondary,
     marginBottom: 2,
   },
   activityTime: {
     fontSize: 11,
-    color: '#999999',
+    color: COLORS.textTertiary,
   },
   emergencySection: {
-    paddingHorizontal: 16,
-    paddingTop: 24,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.xxl,
     alignItems: 'center',
   },
   emergencyText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#DC2626',
-    marginTop: 12,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.error,
+    marginTop: SPACING.md,
     textAlign: 'center',
   },
   emergencySubtext: {
-    fontSize: 12,
-    color: '#666666',
-    marginTop: 4,
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.xs,
     textAlign: 'center',
+  },
+  statsCardLoading: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: 100,
   },
 });
 

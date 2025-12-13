@@ -1,0 +1,19 @@
+diff --git a/node_modules/react-native-chart-kit/dist/index.js b/node_modules/react-native-chart-kit/dist/index.js
+index 07b1fbb..868e093 100644
+--- a/node_modules/react-native-chart-kit/dist/index.js
++++ b/node_modules/react-native-chart-kit/dist/index.js
+@@ -2,7 +2,13 @@ import AbstractChart from "./AbstractChart";
+ import BarChart from "./BarChart";
+ import PieChart from "./PieChart";
+ import ProgressChart from "./ProgressChart";
+-import StackedBarChart from "./StackedBarChart";
++let StackedBarChart;
++try {
++  StackedBarChart = require("./StackedBarChart").default || require("./StackedBarChart");
++} catch (e) {
++  // StackedBarChart is optional
++  StackedBarChart = null;
++}
+ import ContributionGraph from "./contribution-graph";
+ import LineChart from "./line-chart";
+ export { AbstractChart, BarChart, LineChart, PieChart, ProgressChart, ContributionGraph, StackedBarChart };

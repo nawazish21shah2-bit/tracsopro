@@ -16,7 +16,7 @@ import ReportsScreen from '../screens/dashboard/ReportsScreen';
 import CheckInScreen from '../screens/CheckInScreen';
 
 // Test wrapper component
-const TestWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+const TestWrapper = ({ children }: { children: React.ReactNode }) => (
   <Provider store={store}>
     <NavigationContainer>
       {children}

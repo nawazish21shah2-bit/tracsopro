@@ -13,6 +13,7 @@ import AuthFooter from '../../components/auth/AuthFooter';
 import { AuthStackParamList, UserRole } from '../../types';
 import { authStyles } from '../../styles/authStyles';
 import { Country, defaultCountry } from '../../utils/countries';
+import { COLORS } from '../../styles/globalStyles';
 
 type GuardSignupScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'GuardSignup'>;
 
@@ -43,6 +44,7 @@ const GuardSignupScreen: React.FC = () => {
     password: '',
     confirmPassword: '',
   });
+  const [invitationCode, setInvitationCode] = useState('');
   const [errors, setErrors] = useState<FormErrors>({});
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -84,6 +86,11 @@ const GuardSignupScreen: React.FC = () => {
       newErrors.confirmPassword = 'Passwords do not match';
     }
 
+    // Invitation code validation (Required for Guard)
+    if (!invitationCode.trim()) {
+      newErrors.invitationCode = 'Invitation code is required. Please contact your security company administrator.';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -116,6 +123,7 @@ const GuardSignupScreen: React.FC = () => {
         password: formData.password,
         confirmPassword: formData.password, // Backend doesn't need this, but type requires it
         role: UserRole.GUARD,
+        invitationCode: invitationCode.trim() || undefined,
       };
 
       const result = await dispatch(registerUser(registrationData));
@@ -182,7 +190,7 @@ const GuardSignupScreen: React.FC = () => {
 
   return (
     <View style={authStyles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.backgroundPrimary} />
       
       <ScrollView 
         contentContainerStyle={authStyles.scrollContainer}
@@ -209,6 +217,19 @@ const GuardSignupScreen: React.FC = () => {
             keyboardType="email-address"
             autoCapitalize="none"
             error={errors.email}
+          />
+
+          <AuthInput
+            icon="ticket-outline"
+            placeholder="Invitation Code *"
+            value={invitationCode}
+            onChangeText={(text) => {
+              setInvitationCode(text);
+              if (errors.invitationCode) setErrors(prev => ({ ...prev, invitationCode: '' }));
+            }}
+            autoCapitalize="characters"
+            error={errors.invitationCode}
+            style={{ marginBottom: 16 }} // This will be handled by AuthInput component spacing
           />
 
           <PhoneInput

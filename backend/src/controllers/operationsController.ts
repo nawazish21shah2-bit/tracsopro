@@ -8,7 +8,7 @@ import { AuthRequest } from '../middleware/auth.js';
 import { logger } from '../utils/logger.js';
 import prisma from '../config/database.js';
 import { EmergencyService } from '../services/emergencyService.js';
-import { GuardStatus, ShiftAssignmentStatus } from '@prisma/client';
+import { GuardStatus, ShiftStatus } from '@prisma/client';
 
 const emergencyService = EmergencyService.getInstance();
 
@@ -143,13 +143,12 @@ export const getGuardStatuses = async (req: AuthRequest, res: Response) => {
             where: { guardId: guard.id },
             orderBy: { timestamp: 'desc' },
           }),
-          prisma.shiftAssignment.findFirst({
+          prisma.shift.findFirst({
             where: {
               guardId: guard.id,
-              status: ShiftAssignmentStatus.IN_PROGRESS,
+              status: ShiftStatus.IN_PROGRESS,
             },
             include: {
-              shiftPosting: { include: { site: true } },
               site: true,
             },
           }),
@@ -188,7 +187,7 @@ export const getGuardStatuses = async (req: AuthRequest, res: Response) => {
           guardName: `${guard.user.firstName} ${guard.user.lastName}`,
           status,
           location,
-          currentSite: currentShift?.site?.name || currentShift?.shiftPosting?.site?.name || 'No Site',
+          currentSite: currentShift?.site?.name || 'No Site',
           siteId: currentShift?.siteId,
           shiftStart: currentShift?.startTime?.getTime() || Date.now(),
           lastUpdate: latestLocation?.timestamp.getTime() || Date.now(),

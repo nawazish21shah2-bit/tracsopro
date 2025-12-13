@@ -2,28 +2,106 @@
 import { Request, Response } from 'express';
 import shiftService from '../services/shiftServiceSimple.js';
 import { logger } from '../utils/logger.js';
+import { NotFoundError } from '../utils/errors.js';
+import prisma from '../config/database.js';
 
-// Helper to get guard ID from request
-function getGuardId(req: any): string | null {
+// Helper to get guard ID from request - async version with database fallback
+async function getGuardIdAsync(req: any): Promise<string | null> {
   // Use guardId from auth middleware if available (set when user has guard role)
   if (req.guardId) {
+    logger.debug(`Guard ID from req.guardId: ${req.guardId}`);
     return req.guardId;
   }
   // Fallback to user.guard.id if guardId not set
   if (req.user?.guard?.id) {
+    logger.debug(`Guard ID from req.user.guard.id: ${req.user.guard.id}`);
     return req.user.guard.id;
   }
+  
+  // Final fallback: look up guard by userId in database
+  if (req.user?.id) {
+    try {
+      const guard = await prisma.guard.findFirst({
+        where: { userId: req.user.id },
+        select: { id: true },
+      });
+      
+      if (guard?.id) {
+        logger.debug(`Guard ID from database lookup: ${guard.id}`);
+        // Cache it in the request for subsequent use
+        req.guardId = guard.id;
+        return guard.id;
+      }
+    } catch (error) {
+      logger.error('Error looking up guard by userId:', error);
+    }
+  }
+  
   // If user is a guard role, guardId should be set by auth middleware
-  // If not set, return null (shouldn't happen in normal flow)
+  // If not set, log detailed info for debugging
+  logger.warn('Guard ID not found in request', {
+    hasGuardId: !!req.guardId,
+    hasUser: !!req.user,
+    hasGuard: !!req.user?.guard,
+    userId: req.user?.id,
+    userRole: req.user?.role,
+  });
   return null;
 }
+
+// Sync version that relies on auth middleware having set guardId (for backward compatibility)
+function getGuardId(req: any): string | null {
+  if (req.guardId) {
+    return req.guardId;
+  }
+  if (req.user?.guard?.id) {
+    return req.user.guard.id;
+  }
+  return null;
+}
+
+/**
+ * Get shift by ID
+ */
+export const getShiftById = async (req: Request, res: Response) => {
+  try {
+    const { id: shiftId } = req.params;
+    const guardId = await getGuardIdAsync(req as any);
+
+    if (!guardId) {
+      return res.status(401).json({ 
+        success: false,
+        error: 'Guard not found' 
+      });
+    }
+
+    const shift = await shiftService.getShiftById(shiftId, guardId);
+
+    res.json({
+      success: true,
+      data: shift,
+    });
+  } catch (error: any) {
+    if (error instanceof NotFoundError) {
+      return res.status(404).json({
+        success: false,
+        error: error.message || 'Shift not found',
+      });
+    }
+    logger.error('Error getting shift by ID:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message || 'Failed to get shift' 
+    });
+  }
+};
 
 /**
  * Get shift statistics
  */
 export const getShiftStatistics = async (req: Request, res: Response) => {
   try {
-    const guardId = getGuardId(req as any);
+    const guardId = await getGuardIdAsync(req as any);
     const { startDate, endDate } = req.query;
 
     if (!guardId) {
@@ -57,7 +135,7 @@ export const getShiftStatistics = async (req: Request, res: Response) => {
  */
 export const getActiveShift = async (req: Request, res: Response) => {
   try {
-    const guardId = getGuardId(req as any);
+    const guardId = await getGuardIdAsync(req as any);
 
     if (!guardId) {
       return res.status(401).json({ 
@@ -93,10 +171,22 @@ export const getActiveShift = async (req: Request, res: Response) => {
  */
 export const getUpcomingShifts = async (req: Request, res: Response) => {
   try {
-    const guardId = getGuardId(req as any);
+    const guardId = await getGuardIdAsync(req as any);
     const limit = parseInt(req.query.limit as string) || 10;
 
+    logger.info('Getting upcoming shifts', {
+      guardId,
+      userId: (req as any).user?.id,
+      userRole: (req as any).user?.role,
+      hasGuardId: !!(req as any).guardId,
+      hasUserGuard: !!(req as any).user?.guard,
+    });
+
     if (!guardId) {
+      logger.warn('Guard ID not found for upcoming shifts request', {
+        userId: (req as any).user?.id,
+        userRole: (req as any).user?.role,
+      });
       return res.status(401).json({ 
         success: false,
         error: 'Guard not found' 
@@ -104,6 +194,8 @@ export const getUpcomingShifts = async (req: Request, res: Response) => {
     }
 
     const upcomingShifts = await shiftService.getUpcomingShifts(guardId, limit);
+
+    logger.info(`Returning ${upcomingShifts.length} upcoming shifts for guard ${guardId}`);
 
     res.json({
       success: true,
@@ -123,9 +215,21 @@ export const getUpcomingShifts = async (req: Request, res: Response) => {
  */
 export const getTodayShifts = async (req: Request, res: Response) => {
   try {
-    const guardId = getGuardId(req as any);
+    const guardId = await getGuardIdAsync(req as any);
+
+    logger.info('Getting today shifts', {
+      guardId,
+      userId: (req as any).user?.id,
+      userRole: (req as any).user?.role,
+      hasGuardId: !!(req as any).guardId,
+      hasUserGuard: !!(req as any).user?.guard,
+    });
 
     if (!guardId) {
+      logger.warn('Guard ID not found for today shifts request', {
+        userId: (req as any).user?.id,
+        userRole: (req as any).user?.role,
+      });
       return res.status(401).json({ 
         success: false,
         error: 'Guard not found' 
@@ -133,6 +237,8 @@ export const getTodayShifts = async (req: Request, res: Response) => {
     }
 
     const todayShifts = await shiftService.getTodayShifts(guardId);
+
+    logger.info(`Returning ${todayShifts.length} today shifts for guard ${guardId}`);
 
     res.json({
       success: true,
@@ -152,7 +258,7 @@ export const getTodayShifts = async (req: Request, res: Response) => {
  */
 export const getPastShifts = async (req: Request, res: Response) => {
   try {
-    const guardId = getGuardId(req as any);
+    const guardId = await getGuardIdAsync(req as any);
     const limit = parseInt(req.query.limit as string) || 20;
 
     if (!guardId) {
@@ -182,7 +288,7 @@ export const getPastShifts = async (req: Request, res: Response) => {
  */
 export const getWeeklyShiftSummary = async (req: Request, res: Response) => {
   try {
-    const guardId = getGuardId(req as any);
+    const guardId = await getGuardIdAsync(req as any);
 
     if (!guardId) {
       return res.status(401).json({ 
@@ -211,7 +317,7 @@ export const getWeeklyShiftSummary = async (req: Request, res: Response) => {
  */
 export const createShift = async (req: Request, res: Response) => {
   try {
-    const guardId = getGuardId(req as any);
+    const guardId = await getGuardIdAsync(req as any);
     const { locationName, locationAddress, scheduledStartTime, scheduledEndTime, description, notes } = req.body;
 
     if (!guardId) {
@@ -251,7 +357,7 @@ export const createShift = async (req: Request, res: Response) => {
 export const checkInToShift = async (req: Request, res: Response) => {
   try {
     const { id: shiftId } = req.params;
-    const guardId = getGuardId(req as any);
+    const guardId = await getGuardIdAsync(req as any);
     const { location } = req.body;
 
     if (!guardId) {
@@ -295,7 +401,7 @@ export const checkInToShift = async (req: Request, res: Response) => {
 export const checkOutFromShift = async (req: Request, res: Response) => {
   try {
     const { id: shiftId } = req.params;
-    const guardId = getGuardId(req as any);
+    const guardId = await getGuardIdAsync(req as any);
     const { location, notes } = req.body;
 
     if (!guardId) {
@@ -339,7 +445,7 @@ export const checkOutFromShift = async (req: Request, res: Response) => {
  */
 export const startBreak = async (req: Request, res: Response) => {
   try {
-    const guardId = getGuardId(req as any);
+    const guardId = await getGuardIdAsync(req as any);
     const { id: shiftId } = req.params;
     const { breakType, location, notes } = req.body;
 
@@ -377,7 +483,7 @@ export const startBreak = async (req: Request, res: Response) => {
  */
 export const endBreak = async (req: Request, res: Response) => {
   try {
-    const guardId = getGuardId(req as any);
+    const guardId = await getGuardIdAsync(req as any);
     const { shiftId, breakId } = req.params;
     const { location, notes } = req.body;
 
@@ -415,7 +521,7 @@ export const endBreak = async (req: Request, res: Response) => {
  */
 export const reportIncident = async (req: Request, res: Response) => {
   try {
-    const guardId = getGuardId(req as any);
+    const guardId = await getGuardIdAsync(req as any);
     const { id: shiftId } = req.params;
     const { incidentType, severity, title, description, location, attachments } = req.body;
 

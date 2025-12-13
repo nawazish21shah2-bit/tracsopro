@@ -194,6 +194,164 @@ async function main() {
 
   console.log('✅ Qualifications created');
 
+  // Create Security Company and link admin
+  const securityCompany = await prisma.securityCompany.upsert({
+    where: { email: 'admin@example.com' },
+    update: {},
+    create: {
+      name: 'Test Security Company',
+      email: 'admin@example.com',
+      phone: '+1234567893',
+      subscriptionPlan: 'BASIC',
+      subscriptionStatus: 'ACTIVE',
+      subscriptionStartDate: new Date(),
+      maxGuards: 10,
+      maxClients: 5,
+      maxSites: 10,
+    },
+  });
+
+  console.log('✅ Security company created');
+
+  // Link admin to security company
+  await prisma.companyUser.upsert({
+    where: {
+      securityCompanyId_userId: {
+        securityCompanyId: securityCompany.id,
+        userId: admin1.id,
+      },
+    },
+    update: {},
+    create: {
+      securityCompanyId: securityCompany.id,
+      userId: admin1.id,
+      role: 'OWNER',
+      isActive: true,
+    },
+  });
+
+  console.log('✅ Admin linked to security company');
+
+  // Link guards to security company
+  await prisma.companyGuard.upsert({
+    where: {
+      securityCompanyId_guardId: {
+        securityCompanyId: securityCompany.id,
+        guardId: guardProfile1.id,
+      },
+    },
+    update: {},
+    create: {
+      securityCompanyId: securityCompany.id,
+      guardId: guardProfile1.id,
+      isActive: true,
+    },
+  });
+
+  await prisma.companyGuard.upsert({
+    where: {
+      securityCompanyId_guardId: {
+        securityCompanyId: securityCompany.id,
+        guardId: guardProfile2.id,
+      },
+    },
+    update: {},
+    create: {
+      securityCompanyId: securityCompany.id,
+      guardId: guardProfile2.id,
+      isActive: true,
+    },
+  });
+
+  console.log('✅ Guards linked to security company');
+
+  // Create client user and profile for testing
+  const clientUser = await prisma.user.upsert({
+    where: { email: 'client@test.com' },
+    update: {},
+    create: {
+      email: 'client@test.com',
+      password: await bcrypt.hash('password', 10),
+      firstName: 'Client',
+      lastName: 'User',
+      phone: '+1234567895',
+      role: 'CLIENT',
+      accountType: 'INDIVIDUAL',
+    },
+  });
+
+  const clientProfile = await prisma.client.upsert({
+    where: { userId: clientUser.id },
+    update: {},
+    create: {
+      userId: clientUser.id,
+      accountType: 'INDIVIDUAL',
+    },
+  });
+
+  // Link client to security company
+  await prisma.companyClient.upsert({
+    where: {
+      securityCompanyId_clientId: {
+        securityCompanyId: securityCompany.id,
+        clientId: clientProfile.id,
+      },
+    },
+    update: {},
+    create: {
+      securityCompanyId: securityCompany.id,
+      clientId: clientProfile.id,
+      isActive: true,
+    },
+  });
+
+  console.log('✅ Client user and profile created and linked');
+
+  // Create guard user for testing (guard@test.com)
+  const guardTestUser = await prisma.user.upsert({
+    where: { email: 'guard@test.com' },
+    update: {},
+    create: {
+      email: 'guard@test.com',
+      password: await bcrypt.hash('password', 10),
+      firstName: 'Test',
+      lastName: 'Guard',
+      phone: '+1234567896',
+      role: 'GUARD',
+    },
+  });
+
+  const guardTestProfile = await prisma.guard.upsert({
+    where: { userId: guardTestUser.id },
+    update: {
+      employeeId: `EMP-TEST-${Date.now()}`,
+    },
+    create: {
+      userId: guardTestUser.id,
+      employeeId: `EMP-TEST-${Date.now()}`,
+      department: 'Security',
+      status: 'ACTIVE',
+    },
+  });
+
+  // Link test guard to security company
+  await prisma.companyGuard.upsert({
+    where: {
+      securityCompanyId_guardId: {
+        securityCompanyId: securityCompany.id,
+        guardId: guardTestProfile.id,
+      },
+    },
+    update: {},
+    create: {
+      securityCompanyId: securityCompany.id,
+      guardId: guardTestProfile.id,
+      isActive: true,
+    },
+  });
+
+  console.log('✅ Test guard user and profile created and linked');
+
   console.log('🎉 Database seed completed successfully!');
 }
 

@@ -1,8 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import adminUserService from '../services/adminUserService.js';
+import { AuthRequest } from '../middleware/auth.js';
 
 export class AdminUserController {
-  async getUsers(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getUsers(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 50;
@@ -21,6 +22,7 @@ export class AdminUserController {
         role,
         search,
         isActive,
+        securityCompanyId: req.securityCompanyId, // Multi-tenant filter
       });
 
       res.json({ success: true, data: result });
@@ -66,6 +68,39 @@ export class AdminUserController {
       res.json({ success: true, data: result });
     } catch (error) {
       next(error);
+    }
+  }
+
+  async createUser(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { email, password, firstName, lastName, role, phone, department } = req.body;
+
+      if (!email || !password || !firstName || !lastName || !role) {
+        res.status(400).json({
+          success: false,
+          message: 'Email, password, firstName, lastName, and role are required',
+        });
+        return;
+      }
+
+      const user = await adminUserService.createUser({
+        email,
+        password,
+        firstName,
+        lastName,
+        role,
+        phone,
+        securityCompanyId: req.securityCompanyId,
+        department,
+      });
+
+      res.status(201).json({ success: true, data: user });
+    } catch (error: any) {
+      if (error.message?.includes('already exists')) {
+        res.status(409).json({ success: false, message: error.message });
+      } else {
+        next(error);
+      }
     }
   }
 }

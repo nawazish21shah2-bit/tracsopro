@@ -1,10 +1,12 @@
 import { Request, Response } from 'express';
 import { EmergencyService } from '../services/emergencyService.js';
 import { logger } from '../utils/logger.js';
+import { AuthRequest } from '../middleware/auth.js';
+import prisma from '../config/database.js';
 
 const emergencyService = EmergencyService.getInstance();
 
-interface AuthenticatedRequest extends Request {
+interface AuthenticatedRequest extends AuthRequest {
   user?: {
     id: string;
     role: string;
@@ -17,7 +19,7 @@ interface AuthenticatedRequest extends Request {
  */
 export const triggerEmergencyAlert = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { type, severity, location, message } = req.body;
+    const { type, severity, location, message, shiftId } = req.body;
     const guardId = req.user?.guardId;
 
     if (!guardId) {
@@ -49,6 +51,7 @@ export const triggerEmergencyAlert = async (req: AuthenticatedRequest, res: Resp
       severity,
       location,
       message,
+      shiftId, // Pass shiftId if provided to get site/client info
     });
 
     logger.info(`Emergency alert triggered by guard ${guardId}: ${type} - ${severity}`);
@@ -75,12 +78,42 @@ export const acknowledgeEmergencyAlert = async (req: AuthenticatedRequest, res: 
   try {
     const { alertId } = req.params;
     const acknowledgedBy = req.user?.id;
+    const securityCompanyId = req.securityCompanyId; // Multi-tenant filter
 
     if (!acknowledgedBy) {
       return res.status(401).json({
         success: false,
         message: 'User not authenticated',
       });
+    }
+
+    // Multi-tenant: Validate alert belongs to admin's company (if not SUPER_ADMIN)
+    if (req.user?.role !== 'SUPER_ADMIN' && securityCompanyId) {
+      // Get the alert to check guard's company
+      const alert = await prisma.incident.findUnique({
+        where: { id: alertId },
+        include: {
+          reporter: {
+            include: {
+              guard: {
+                include: {
+                  companyGuards: {
+                    where: { securityCompanyId, isActive: true },
+                    take: 1,
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!alert || !alert.reporter.guard || alert.reporter.guard.companyGuards.length === 0) {
+        return res.status(403).json({
+          success: false,
+          message: 'Emergency alert not found or does not belong to your company',
+        });
+      }
     }
 
     await emergencyService.acknowledgeEmergencyAlert(alertId, acknowledgedBy);
@@ -109,6 +142,7 @@ export const resolveEmergencyAlert = async (req: AuthenticatedRequest, res: Resp
     const { alertId } = req.params;
     const { resolution, status = 'RESOLVED' } = req.body;
     const resolvedBy = req.user?.id;
+    const securityCompanyId = req.securityCompanyId; // Multi-tenant filter
 
     if (!resolvedBy) {
       return res.status(401).json({
@@ -122,6 +156,35 @@ export const resolveEmergencyAlert = async (req: AuthenticatedRequest, res: Resp
         success: false,
         message: 'Resolution description is required',
       });
+    }
+
+    // Multi-tenant: Validate alert belongs to admin's company (if not SUPER_ADMIN)
+    if (req.user?.role !== 'SUPER_ADMIN' && securityCompanyId) {
+      // Get the alert to check guard's company
+      const alert = await prisma.incident.findUnique({
+        where: { id: alertId },
+        include: {
+          reporter: {
+            include: {
+              guard: {
+                include: {
+                  companyGuards: {
+                    where: { securityCompanyId, isActive: true },
+                    take: 1,
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!alert || !alert.reporter.guard || alert.reporter.guard.companyGuards.length === 0) {
+        return res.status(403).json({
+          success: false,
+          message: 'Emergency alert not found or does not belong to your company',
+        });
+      }
     }
 
     await emergencyService.resolveEmergencyAlert(alertId, resolvedBy, resolution, status);
@@ -147,19 +210,30 @@ export const resolveEmergencyAlert = async (req: AuthenticatedRequest, res: Resp
  */
 export const getActiveEmergencyAlerts = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const alerts = await emergencyService.getActiveEmergencyAlerts();
+    const securityCompanyId = req.securityCompanyId;
+    const alerts = await emergencyService.getActiveEmergencyAlerts(securityCompanyId);
 
     res.json({
       success: true,
       data: alerts,
       count: alerts.length,
     });
-  } catch (error) {
+  } catch (error: any) {
     logger.error('Error getting active emergency alerts:', error);
+    
+    // Check if it's a Prisma error (might be misreported as unauthorized)
+    if (error.message?.includes('Unauthorized') || error.code === 'P2002' || error.code?.startsWith('P')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized access',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      });
+    }
+    
     res.status(500).json({
       success: false,
       message: 'Failed to get active emergency alerts',
-      error: process.env.NODE_ENV === 'development' ? error : undefined,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -171,6 +245,7 @@ export const getGuardEmergencyHistory = async (req: AuthenticatedRequest, res: R
   try {
     const { guardId } = req.params;
     const { limit = '50' } = req.query;
+    const securityCompanyId = req.securityCompanyId; // Multi-tenant filter
 
     // Guards can only see their own history
     if (req.user?.role === 'GUARD' && req.user?.guardId !== guardId) {
@@ -180,9 +255,28 @@ export const getGuardEmergencyHistory = async (req: AuthenticatedRequest, res: R
       });
     }
 
+    // Multi-tenant: Admin accessing guard history - validate guard belongs to company
+    if (req.user?.role !== 'SUPER_ADMIN' && req.user?.role !== 'GUARD' && securityCompanyId) {
+      const companyGuard = await prisma.companyGuard.findFirst({
+        where: {
+          guardId,
+          securityCompanyId,
+          isActive: true,
+        },
+      });
+
+      if (!companyGuard) {
+        return res.status(403).json({
+          success: false,
+          message: 'Guard not found or does not belong to your company',
+        });
+      }
+    }
+
     const alerts = await emergencyService.getGuardEmergencyHistory(
       guardId,
-      parseInt(limit as string)
+      parseInt(limit as string),
+      securityCompanyId
     );
 
     res.json({
@@ -206,10 +300,19 @@ export const getGuardEmergencyHistory = async (req: AuthenticatedRequest, res: R
 export const getEmergencyStatistics = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { startDate, endDate } = req.query;
+    const securityCompanyId = req.securityCompanyId; // Multi-tenant filter
+
+    // SUPER_ADMIN can see all, others must have company
+    if (req.user?.role !== 'SUPER_ADMIN' && !securityCompanyId) {
+      return res.status(403).json({
+        success: false,
+        error: 'Security company ID not found. Admin must be linked to a company.',
+      });
+    }
 
     // This would be implemented with proper date filtering
     // For now, return basic stats
-    const activeAlerts = await emergencyService.getActiveEmergencyAlerts();
+    const activeAlerts = await emergencyService.getActiveEmergencyAlerts(securityCompanyId);
     
     const stats = {
       activeAlerts: activeAlerts.length,

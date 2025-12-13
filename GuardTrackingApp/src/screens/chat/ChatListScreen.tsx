@@ -14,6 +14,7 @@ import { RootState } from '../../store';
 import { useNavigation } from '@react-navigation/native';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { Search, Bell, Menu } from 'react-native-feather';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 
 interface ChatItem {
   id: string;
@@ -50,7 +51,7 @@ const ChatListScreen: React.FC = () => {
       }
 
       // Transform backend chat data to ChatItem format
-      const transformedChats: ChatItem[] = response.data.map((chat: any) => {
+      const transformedChats: ChatItem[] = (response.data || []).map((chat: any) => {
         // Get other participant's info for direct chats
         let chatName = chat.name || 'Chat';
         let avatar: string | undefined;
@@ -179,27 +180,36 @@ const ChatListScreen: React.FC = () => {
     <SafeAreaWrapper>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.menuButton}>
-          <Menu width={24} height={24} color="#000000" />
+        <TouchableOpacity 
+          style={styles.menuButton}
+          onPress={() => (navigation as any).goBack()}
+        >
+          <Menu width={24} height={24} color={COLORS.textPrimary} />
         </TouchableOpacity>
         
         <Text style={styles.headerTitle}>Chats</Text>
         
-        <TouchableOpacity style={styles.notificationButton}>
-          <Bell width={24} height={24} color="#000000" />
+        <TouchableOpacity 
+          style={styles.notificationButton}
+          onPress={() => {
+            // Navigate to create new chat or show options
+            // For now, just show placeholder
+          }}
+        >
+          <Text style={styles.newChatButton}>+</Text>
         </TouchableOpacity>
       </View>
 
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <View style={styles.searchInputContainer}>
-          <Search width={20} height={20} color="#9CA3AF" style={styles.searchIcon} />
+          <Search width={20} height={20} color={COLORS.textTertiary} style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
             placeholder="search"
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={COLORS.textTertiary}
           />
         </View>
       </View>
@@ -226,9 +236,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.lg,
+    backgroundColor: COLORS.backgroundPrimary,
   },
   menuButton: {
     width: 24,
@@ -237,9 +247,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#000000',
+    fontSize: TYPOGRAPHY.fontSize.xl,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
     textAlign: 'center',
   },
   notificationButton: {
@@ -249,50 +259,50 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   searchContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.lg,
+    backgroundColor: COLORS.backgroundPrimary,
   },
   searchInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 12,
-    paddingHorizontal: 16,
+    backgroundColor: COLORS.backgroundSecondary,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.lg,
     height: 48,
   },
   searchIcon: {
-    marginRight: 12,
+    marginRight: SPACING.md,
   },
   searchInput: {
     flex: 1,
-    fontSize: 16,
-    color: '#000000',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textPrimary,
     height: '100%',
   },
   chatList: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.backgroundPrimary,
   },
   chatListContent: {
-    paddingBottom: 100, // Space for bottom tab bar
+    paddingBottom: SPACING.xxxxl * 2.5, // Space for bottom tab bar
   },
   chatItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.lg,
+    backgroundColor: COLORS.backgroundPrimary,
   },
   avatarContainer: {
     position: 'relative',
-    marginRight: 16,
+    marginRight: SPACING.lg,
   },
   avatar: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.backgroundSecondary,
   },
   onlineIndicator: {
     position: 'absolute',
@@ -301,9 +311,9 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: '#10B981',
+    backgroundColor: COLORS.success,
     borderWidth: 2,
-    borderColor: '#FFFFFF',
+    borderColor: COLORS.backgroundPrimary,
   },
   chatContent: {
     flex: 1,
@@ -312,43 +322,48 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: SPACING.xs,
   },
   chatName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000000',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
     flex: 1,
   },
   timestamp: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginLeft: 8,
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textTertiary,
+    marginLeft: SPACING.sm,
   },
   lastMessage: {
-    fontSize: 14,
-    color: '#6B7280',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
     lineHeight: 20,
   },
   unreadBadge: {
-    backgroundColor: '#EF4444',
+    backgroundColor: COLORS.error,
     borderRadius: 10,
     minWidth: 20,
     height: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 6,
-    marginLeft: 12,
+    paddingHorizontal: SPACING.xs + 2,
+    marginLeft: SPACING.md,
   },
   unreadCount: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#FFFFFF',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textInverse,
   },
   separator: {
     height: 1,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.backgroundSecondary,
     marginLeft: 84, // Align with chat content
+  },
+  newChatButton: {
+    fontSize: 24,
+    color: COLORS.primary,
+    fontWeight: 'bold',
   },
 });
 

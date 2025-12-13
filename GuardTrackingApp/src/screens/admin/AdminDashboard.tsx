@@ -8,7 +8,7 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
   Dimensions,
   Alert,
@@ -98,6 +98,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
       iconBgColor: '#DCFCE7',
       iconColor: '#16A34A',
       screen: 'UserManagement',
+    },
+    {
+      id: 'invitations',
+      title: 'Invitations',
+      subtitle: 'Create & manage invitations',
+      icon: 'ticket',
+      iconBgColor: '#FEF3C7',
+      iconColor: '#F59E0B',
+      screen: 'InvitationManagement',
     },
     {
       id: 'incidents',
@@ -249,7 +258,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
             label="Active Guards"
             value={`${dashboardMetrics.activeGuards}/${dashboardMetrics.totalGuards}`}
             subLabel={guardsOnLeave > 0 ? `${guardsOnLeave} On Leave` : 'All Active'}
-            icon={<UserIcon size={20} color="#16A34A" />}
+            icon={<UserIcon size={20} color={COLORS.success} />}
             iconBgColor="#DCFCE7"
             iconColor="#16A34A"
             style={styles.statCard}
@@ -259,7 +268,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
             label="Active Sites"
             value={`${dashboardMetrics.activeSites}/${dashboardMetrics.totalSites}`}
             subLabel="All Operational"
-            icon={<LocationIcon size={20} color="#1976D2" />}
+            icon={<LocationIcon size={20} color={COLORS.info} />}
             iconBgColor="#DBEAFE"
             iconColor="#1976D2"
             style={styles.statCard}
@@ -269,7 +278,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
             label="Today's Report"
             value={dashboardMetrics.todayIncidents}
             subLabel={dashboardMetrics.pendingIncidents > 0 ? `${dashboardMetrics.pendingIncidents} Pending` : 'All Reviewed'}
-            icon={<ReportsIcon size={20} color="#6B7280" />}
+            icon={<ReportsIcon size={20} color={COLORS.textSecondary} />}
             iconBgColor="#F3F4F6"
             iconColor="#6B7280"
             style={styles.statCard}
@@ -279,7 +288,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
             label="Scheduled Shifts"
             value={dashboardMetrics.scheduledShifts}
             subLabel="This Week"
-            icon={<ShiftsIcon size={20} color="#EC4899" />}
+            icon={<ShiftsIcon size={20} color={COLORS.accent} />}
             iconBgColor="#FCE7F3"
             iconColor="#EC4899"
             style={styles.statCard}
@@ -316,6 +325,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
             case 'location':
               // Site Management: Location pin icon
               iconComponent = <LocationIcon size={20} color={action.iconColor} />;
+              break;
+            case 'ticket':
+              // Invitation Management: Ticket icon
+              iconComponent = <AppIcon type="material" name="confirmation-number" size={20} color={action.iconColor} />;
               break;
             default:
               iconComponent = <SettingsIcon size={20} color={action.iconColor} />;
@@ -413,12 +426,35 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
     );
   }
 
+  // Prepare sections for FlatList
+  const sections = [
+    { type: 'metrics', key: 'metrics' },
+    { type: 'quickActions', key: 'quickActions' },
+    { type: 'recentActivity', key: 'recentActivity' },
+  ];
+
+  const renderSectionItem = ({ item }: { item: { type: string; key: string } }) => {
+    switch (item.type) {
+      case 'metrics':
+        return renderMetricsOverview();
+      case 'quickActions':
+        return renderQuickActions();
+      case 'recentActivity':
+        return renderRecentActivity();
+      default:
+        return null;
+    }
+  };
+
   return (
     <SafeAreaWrapper>
       {renderHeader()}
       
-      <ScrollView 
-        style={styles.content} 
+      <FlatList
+        style={styles.content}
+        data={sections}
+        renderItem={renderSectionItem}
+        keyExtractor={(item) => item.key}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -428,11 +464,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
             tintColor={COLORS.primary}
           />
         }
-      >
-        {renderMetricsOverview()}
-        {renderQuickActions()}
-        {renderRecentActivity()}
-      </ScrollView>
+        ListFooterComponent={<View style={{ height: 20 }} />}
+      />
       
       {dashboardLoading && <LoadingOverlay visible={true} message="Refreshing..." />}
     </SafeAreaWrapper>
@@ -535,7 +568,7 @@ const styles = StyleSheet.create({
   metricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: SPACING.sm,
     justifyContent: 'space-between',
   },
   statCard: {

@@ -18,12 +18,22 @@ interface ClientProfileUpdateData {
 }
 
 export class ClientService {
-  async getAllClients(page: number = 1, limit: number = 50, accountType?: string) {
+  async getAllClients(page: number = 1, limit: number = 50, accountType?: string, securityCompanyId?: string) {
     const skip = (page - 1) * limit;
     
     const where: any = {};
     if (accountType) {
       where.accountType = accountType;
+    }
+
+    // Multi-tenant: Filter by company
+    if (securityCompanyId) {
+      where.companyClients = {
+        some: {
+          securityCompanyId,
+          isActive: true,
+        },
+      };
     }
 
     const [clients, total] = await Promise.all([
@@ -284,13 +294,13 @@ export class ClientService {
         },
       });
 
-      // Get active sites (sites with active assignments)
+      // Get active sites (sites with active shifts - Option B)
       const activeSites = await prisma.site.count({
         where: {
           clientId,
-          shiftAssignments: {
+          shifts: {
             some: {
-              status: { in: ['ASSIGNED', 'IN_PROGRESS'] }
+              status: { in: ['SCHEDULED', 'IN_PROGRESS'] }
             }
           }
         },
@@ -300,23 +310,18 @@ export class ClientService {
       const yesterday = new Date(today);
       yesterday.setDate(yesterday.getDate() - 1);
       
-      const clientSites = await prisma.site.findMany({
-        where: { clientId },
-        select: { id: true }
-      });
-      const siteIds = clientSites.map(site => site.id);
-      
-      const assignments = await prisma.shiftAssignment.findMany({
+      // Get shifts for client (Option B)
+      const clientShifts = await prisma.shift.findMany({
         where: {
-          siteId: { in: siteIds }
+          clientId,
         },
         select: { id: true }
       });
-      const assignmentIds = assignments.map(a => a.id);
+      const shiftIds = clientShifts.map(shift => shift.id);
 
       const newReports = await prisma.shiftReport.count({
         where: {
-          shiftId: { in: assignmentIds },
+          shiftId: { in: shiftIds },
           submittedAt: {
             gte: yesterday,
           },
@@ -341,22 +346,54 @@ export class ClientService {
   async getClientGuards(clientId: string, page: number = 1, limit: number = 50) {
     try {
       const skip = (page - 1) * limit;
+      const now = new Date();
       
-      // Get today's date range
-      const today = new Date();
+      // Get shifts for this client that are:
+      // 1. Active (IN_PROGRESS) - regardless of date
+      // 2. Upcoming (SCHEDULED with scheduledEndTime >= now)
+      // 3. Today's shifts (scheduledStartTime is today)
+      // 4. Recent past shifts (completed within last 7 days)
+      const sevenDaysAgo = new Date(now);
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      
+      const today = new Date(now);
       today.setHours(0, 0, 0, 0);
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
 
-      // Fetch today's shifts for this client
-      const [shifts, total] = await Promise.all([
+      // Fetch all relevant shifts for this client
+      const [allShifts, totalShifts] = await Promise.all([
         prisma.shift.findMany({
           where: {
             clientId,
-            scheduledStartTime: {
-              gte: today,
-              lt: tomorrow,
-            },
+            guardId: { not: null }, // Only shifts with assigned guards
+            OR: [
+              {
+                // Active shifts
+                status: 'IN_PROGRESS',
+              },
+              {
+                // Upcoming shifts (not yet ended)
+                status: 'SCHEDULED',
+                scheduledEndTime: {
+                  gte: now,
+                },
+              },
+              {
+                // Today's shifts
+                scheduledStartTime: {
+                  gte: today,
+                  lt: tomorrow,
+                },
+              },
+              {
+                // Recent completed shifts (last 7 days)
+                status: 'COMPLETED',
+                scheduledEndTime: {
+                  gte: sevenDaysAgo,
+                },
+              },
+            ],
           },
           include: {
             guard: {
@@ -393,22 +430,79 @@ export class ClientService {
               },
             },
           },
-          orderBy: {
-            scheduledStartTime: 'asc',
-          },
-          skip,
-          take: limit,
+          orderBy: [
+            {
+              status: 'asc', // IN_PROGRESS first
+            },
+            {
+              scheduledStartTime: 'asc', // Then by start time
+            },
+          ],
         }),
         prisma.shift.count({
           where: {
             clientId,
-            scheduledStartTime: {
-              gte: today,
-              lt: tomorrow,
-            },
+            guardId: { not: null },
+            OR: [
+              {
+                status: 'IN_PROGRESS',
+              },
+              {
+                status: 'SCHEDULED',
+                scheduledEndTime: {
+                  gte: now,
+                },
+              },
+              {
+                scheduledStartTime: {
+                  gte: today,
+                  lt: tomorrow,
+                },
+              },
+              {
+                status: 'COMPLETED',
+                scheduledEndTime: {
+                  gte: sevenDaysAgo,
+                },
+              },
+            ],
           },
         }),
       ]);
+
+      // Group shifts by guard ID and get the most relevant shift for each guard
+      // Priority: Active > Upcoming (soonest) > Today > Recent past
+      const guardShiftMap = new Map<string, typeof allShifts[0]>();
+      
+      for (const shift of allShifts) {
+        if (!shift.guardId || !shift.guard) continue;
+        
+        const existingShift = guardShiftMap.get(shift.guardId);
+        
+        if (!existingShift) {
+          guardShiftMap.set(shift.guardId, shift);
+        } else {
+          // Prioritize: IN_PROGRESS > SCHEDULED (soonest) > others
+          const existingPriority = existingShift.status === 'IN_PROGRESS' ? 1 : 
+                                   existingShift.status === 'SCHEDULED' ? 2 : 3;
+          const currentPriority = shift.status === 'IN_PROGRESS' ? 1 : 
+                                  shift.status === 'SCHEDULED' ? 2 : 3;
+          
+          if (currentPriority < existingPriority) {
+            guardShiftMap.set(shift.guardId, shift);
+          } else if (currentPriority === existingPriority && 
+                     shift.scheduledStartTime < existingShift.scheduledStartTime) {
+            // If same priority, pick the one starting sooner
+            guardShiftMap.set(shift.guardId, shift);
+          }
+        }
+      }
+      
+      // Convert map to array and apply pagination
+      const shifts = Array.from(guardShiftMap.values())
+        .slice(skip, skip + limit);
+      
+      const total = guardShiftMap.size;
 
       // Transform shifts to guard data format
       const guards = shifts.map((shift) => {
@@ -468,7 +562,7 @@ export class ClientService {
         };
       });
 
-      logger.info(`Guards list requested for client: ${clientId}, found ${guards.length} shifts`);
+      logger.info(`Guards list requested for client: ${clientId}, found ${guards.length} guards (${total} total guards with shifts)`);
       return {
         guards,
         pagination: {
@@ -488,23 +582,31 @@ export class ClientService {
     try {
       const skip = (page - 1) * limit;
 
-      // Get assignment reports for client's sites using AssignmentReport model
-      const [reports, total] = await Promise.all([
-        prisma.assignmentReport.findMany({
+      // Get client's guard IDs from shifts (to fetch their incident reports)
+      const clientShifts = await prisma.shift.findMany({
+        where: { clientId },
+        select: { guardId: true }
+      });
+      const guardIds = [...new Set(clientShifts.map(s => s.guardId).filter(Boolean))];
+
+      // Get shift reports for client's shifts (Option B - Direct Assignment)
+      const [shiftReports, incidentReports, shiftReportsTotal, incidentReportsTotal] = await Promise.all([
+        prisma.shiftReport.findMany({
           where: {
-            shiftAssignment: {
-              shiftPosting: {
-                clientId: clientId
-              }
+            shift: {
+              clientId: clientId
             }
           },
           include: {
-            shiftAssignment: {
+            shift: {
               include: {
-                shiftPosting: {
+                site: {
+                  select: { name: true, address: true }
+                },
+                guard: {
                   include: {
-                    site: {
-                      select: { name: true, address: true }
+                    user: {
+                      select: { firstName: true, lastName: true, email: true }
                     }
                   }
                 }
@@ -522,53 +624,121 @@ export class ClientService {
           skip,
           take: limit
         }),
-        prisma.assignmentReport.count({
+        // Get incident reports from guards assigned to client's shifts
+        guardIds.length > 0 ? prisma.incidentReport.findMany({
           where: {
-            shiftAssignment: {
-              shiftPosting: {
-                clientId: clientId
+            guardId: { in: guardIds }
+          },
+          include: {
+            guard: {
+              include: {
+                user: {
+                  select: { 
+                    id: true,
+                    firstName: true, 
+                    lastName: true, 
+                    email: true 
+                  }
+                }
               }
             }
+          },
+          orderBy: { submittedAt: 'desc' },
+          skip,
+          take: limit
+        }) : Promise.resolve([]),
+        prisma.shiftReport.count({
+          where: {
+            shift: {
+              clientId: clientId
+            }
           }
-        })
+        }),
+        guardIds.length > 0 ? prisma.incidentReport.count({
+          where: {
+            guardId: { in: guardIds }
+          }
+        }) : Promise.resolve(0)
       ]);
 
-      // Transform reports to match frontend format
-      const transformedReports = reports.map((report) => {
+      // Transform shift reports to match frontend format
+      const transformedShiftReports = shiftReports.map((report) => {
+        const guardUser = report.guard?.user || report.shift?.guard?.user;
+        const guardName = guardUser 
+          ? `${guardUser.firstName} ${guardUser.lastName}`
+          : 'Unknown Guard';
+        
+        // Map report type from ReportTypeEnum
+        let type: 'Medical Emergency' | 'Incident' | 'Violation' | 'Maintenance' = 'Incident';
+        switch (report.reportType) {
+          case 'EMERGENCY':
+            type = 'Medical Emergency';
+            break;
+          case 'INCIDENT':
+            type = 'Incident';
+            break;
+          case 'SHIFT':
+          default:
+            type = 'Incident';
+        }
+
+        // ShiftReport doesn't have status field, default to 'New'
+        let status: 'Respond' | 'New' | 'Reviewed' = 'New';
+
+        const siteName = report.shift?.site?.name || 'Unknown Site';
+        const checkInTime = report.shift?.checkInTime;
+
+        return {
+          id: report.id,
+          type,
+          guardName,
+          site: siteName,
+          time: new Date(report.submittedAt).toLocaleTimeString('en-US', { 
+            hour: '2-digit', 
+            minute: '2-digit',
+            hour12: true 
+          }),
+          description: report.content,
+          status,
+          checkInTime: checkInTime
+            ? new Date(checkInTime).toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: true 
+              })
+            : undefined,
+          guardId: report.guard?.id || report.shift?.guard?.id,
+        };
+      });
+
+      // Transform incident reports to match frontend format
+      const transformedIncidentReports = incidentReports.map((report) => {
         const guardUser = report.guard?.user;
         const guardName = guardUser 
           ? `${guardUser.firstName} ${guardUser.lastName}`
           : 'Unknown Guard';
         
-        // Map report type from AssignmentReportType
+        // Map report type from reportType string
         let type: 'Medical Emergency' | 'Incident' | 'Violation' | 'Maintenance' = 'Incident';
-        switch (report.type) {
-          case 'MEDICAL_EMERGENCY':
-            type = 'Medical Emergency';
-            break;
-          case 'INCIDENT':
-          case 'SECURITY_BREACH':
-            type = 'Incident';
-            break;
-          case 'MAINTENANCE':
-            type = 'Maintenance';
-            break;
-          default:
-            type = 'Incident';
+        const reportTypeUpper = (report.reportType || '').toUpperCase();
+        if (reportTypeUpper.includes('EMERGENCY') || reportTypeUpper.includes('MEDICAL')) {
+          type = 'Medical Emergency';
+        } else if (reportTypeUpper.includes('VIOLATION')) {
+          type = 'Violation';
+        } else if (reportTypeUpper.includes('MAINTENANCE')) {
+          type = 'Maintenance';
         }
 
-        // Map status based on report status field
+        // Map status from IncidentReport status
         let status: 'Respond' | 'New' | 'Reviewed' = 'New';
-        if (report.status === 'SUBMITTED' || report.status === 'NEW') {
-          status = 'New';
-        } else if (report.status === 'REVIEWED' || report.status === 'ACKNOWLEDGED') {
+        const statusUpper = (report.status || '').toUpperCase();
+        if (statusUpper === 'REVIEWED' || statusUpper === 'RESOLVED') {
           status = 'Reviewed';
-        } else if (report.status === 'PENDING_RESPONSE' || report.status === 'REQUIRES_ACTION') {
-          status = 'Respond';
+        } else if (statusUpper === 'PENDING' || statusUpper === 'SUBMITTED') {
+          status = 'New';
         }
 
-        const siteName = report.shiftAssignment?.shiftPosting?.site?.name || 'Unknown Site';
-        const checkInTime = report.shiftAssignment?.checkInTime;
+        const siteName = report.locationName || 'Unknown Site';
 
         return {
           id: report.id,
@@ -582,20 +752,26 @@ export class ClientService {
           }),
           description: report.description,
           status,
-          checkInTime: checkInTime
-            ? new Date(checkInTime).toLocaleTimeString('en-US', { 
-                hour: '2-digit', 
-                minute: '2-digit',
-                hour12: true 
-              })
-            : undefined,
+          checkInTime: undefined,
           guardId: report.guard?.id,
         };
       });
 
-      logger.info(`Reports list requested for client: ${clientId}, found ${transformedReports.length} reports`);
+      // Combine and sort by time (most recent first)
+      const allReports = [...transformedShiftReports, ...transformedIncidentReports]
+        .sort((a, b) => {
+          // Parse time strings back to Date for comparison
+          // For simplicity, we'll sort by ID (UUIDs are time-ordered)
+          return b.id.localeCompare(a.id);
+        })
+        .slice(0, limit); // Ensure we don't exceed limit
+
+      const total = shiftReportsTotal + incidentReportsTotal;
+
+      logger.info(`Reports list requested for client: ${clientId}, found ${allReports.length} reports (${shiftReports.length} shift reports, ${incidentReports.length} incident reports)`);
+      
       return {
-        reports: transformedReports,
+        reports: allReports,
         pagination: {
           page,
           limit,
@@ -610,18 +786,22 @@ export class ClientService {
   }
 
   /**
-   * Update assignment report status (client response)
+   * Update shift report status (client response) - Option B
+   * Note: ShiftReport doesn't have status field, so we'll add a note or use IncidentReport for status tracking
    */
   async respondToReport(reportId: string, clientId: string, status: string, responseNotes?: string) {
     try {
-      // Verify report belongs to client's sites
-      const report = await prisma.assignmentReport.findUnique({
+      // Verify report belongs to client's shifts
+      const report = await prisma.shiftReport.findUnique({
         where: { id: reportId },
         include: {
-          shiftAssignment: {
+          shift: {
+            select: { clientId: true, site: { select: { name: true } } }
+          },
+          guard: {
             include: {
-              shiftPosting: {
-                select: { clientId: true }
+              user: {
+                select: { firstName: true, lastName: true, email: true }
               }
             }
           }
@@ -632,22 +812,32 @@ export class ClientService {
         throw new NotFoundError('Report not found');
       }
 
-      if (report.shiftAssignment.shiftPosting.clientId !== clientId) {
-        throw new UnauthorizedError('Access denied: This report does not belong to your sites');
+      if (report.shift?.clientId !== clientId) {
+        throw new UnauthorizedError('Access denied: This report does not belong to your shifts');
       }
 
-      // Update report status
-      const updatedReport = await prisma.assignmentReport.update({
+      // ShiftReport doesn't have status field, so we'll update the content with response
+      // In future, consider adding a status field or using IncidentReport for status tracking
+      const updatedContent = responseNotes 
+        ? `${report.content}\n\n[Client Response - ${status}]: ${responseNotes}`
+        : `${report.content}\n\n[Client Response - ${status}]`;
+
+      const updatedReport = await prisma.shiftReport.update({
         where: { id: reportId },
         data: {
-          status: status,
+          content: updatedContent,
           updatedAt: new Date(),
         },
         include: {
-          shiftAssignment: {
+          shift: {
             include: {
-              shiftPosting: {
-                include: { site: true }
+              site: { select: { name: true, address: true } },
+              guard: {
+                include: {
+                  user: {
+                    select: { firstName: true, lastName: true, email: true }
+                  }
+                }
               }
             }
           },
@@ -661,7 +851,7 @@ export class ClientService {
         }
       });
 
-      logger.info(`Report ${reportId} status updated to ${status} by client ${clientId}`);
+      logger.info(`Report ${reportId} responded to by client ${clientId} with status: ${status}`);
       return updatedReport;
     } catch (error) {
       logger.error('Error responding to report:', error);
@@ -677,13 +867,9 @@ export class ClientService {
         prisma.site.findMany({
           where: { clientId },
           include: {
-            shiftPostings: {
-              where: { status: 'OPEN' },
-              select: { id: true, title: true, startTime: true, endTime: true }
-            },
-            shiftAssignments: {
+            shifts: {
               where: { 
-                status: { in: ['ASSIGNED', 'IN_PROGRESS'] }
+                status: { in: ['SCHEDULED', 'IN_PROGRESS'] }
               },
               include: {
                 guard: {
@@ -694,7 +880,7 @@ export class ClientService {
                   }
                 }
               },
-              orderBy: { startTime: 'desc' },
+              orderBy: { scheduledStartTime: 'desc' },
               take: 1, // Get only the most recent active assignment
             }
           },

@@ -5,8 +5,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
-import { SettingsIcon, UserIcon, NotificationIcon, DollarIcon } from '../../components/ui/AppIcons';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { ChevronRight, User, Bell, HelpCircle, LogOut, Lock, CreditCard, Settings } from 'react-native-feather';
 import { useDispatch } from 'react-redux';
 import type { AppDispatch } from '../../store';
 import { logoutUser } from '../../store/slices/authSlice';
@@ -14,18 +14,47 @@ import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import { AdminStackParamList } from '../../navigation/AdminNavigator';
+
+interface SettingItem {
+  id: string;
+  title: string;
+  icon: React.ReactNode;
+  onPress: () => void;
+}
+
+// Icon color constant for use in JSX
+const ICON_COLOR = '#828282';
+const ERROR_COLOR = '#F44336';
 
 const AdminSettingsScreen: React.FC<{ navigation?: any }> = ({ navigation: propNavigation }) => {
   const dispatch = useDispatch<AppDispatch>();
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
-  const navigation = useNavigation() || propNavigation;
+  const navigation = useNavigation<StackNavigationProp<AdminStackParamList>>() || propNavigation;
 
-  const settingsOptions = [
-    { id: 'profile', title: 'Admin Profile', subtitle: 'Manage admin account', icon: UserIcon },
-    { id: 'subscription', title: 'Subscription & Billing', subtitle: 'Manage platform subscription', icon: DollarIcon },
-    { id: 'notifications', title: 'Notifications', subtitle: 'Configure alerts', icon: NotificationIcon },
-    { id: 'system', title: 'System Settings', subtitle: 'App configuration', icon: SettingsIcon },
-  ];
+  const handleProfile = () => {
+    navigation.navigate('AdminProfileEdit');
+  };
+
+  const handleSubscription = () => {
+    navigation.navigate('AdminSubscription');
+  };
+
+  const handleNotifications = () => {
+    navigation.navigate('AdminNotificationSettings');
+  };
+
+  const handleSystemSettings = () => {
+    navigation.navigate('AdminSystemSettings');
+  };
+
+  const handleChangePassword = () => {
+    navigation.navigate('AdminChangePassword');
+  };
+
+  const handleSupport = () => {
+    navigation.navigate('AdminSupportContact');
+  };
 
   const handleLogout = async () => {
     Alert.alert(
@@ -52,6 +81,15 @@ const AdminSettingsScreen: React.FC<{ navigation?: any }> = ({ navigation: propN
     );
   };
 
+  const items: SettingItem[] = [
+    { id: '1', title: 'Admin Profile', icon: <User width={20} height={20} color={ICON_COLOR} />, onPress: handleProfile },
+    { id: '2', title: 'Subscription & Billing', icon: <CreditCard width={20} height={20} color={ICON_COLOR} />, onPress: handleSubscription },
+    { id: '3', title: 'Notifications', icon: <Bell width={20} height={20} color={ICON_COLOR} />, onPress: handleNotifications },
+    { id: '4', title: 'System Settings', icon: <Settings width={20} height={20} color={ICON_COLOR} />, onPress: handleSystemSettings },
+    { id: '5', title: 'Change Password', icon: <Lock width={20} height={20} color={ICON_COLOR} />, onPress: handleChangePassword },
+    { id: '6', title: 'Contact Support', icon: <HelpCircle width={20} height={20} color={ICON_COLOR} />, onPress: handleSupport },
+  ];
+
   return (
     <SafeAreaWrapper>
       <SharedHeader
@@ -72,58 +110,87 @@ const AdminSettingsScreen: React.FC<{ navigation?: any }> = ({ navigation: propN
         }
       />
 
-      <ScrollView style={styles.content}>
-        {settingsOptions.map((option) => (
-          <TouchableOpacity 
-            key={option.id} 
-            style={styles.settingItem}
-            onPress={() => {
-              if (option.id === 'profile') {
-                navigation.navigate('AdminProfileEdit' as never);
-              } else if (option.id === 'subscription') {
-                navigation.navigate('AdminSubscription' as never);
-              } else if (option.id === 'notifications') {
-                navigation.navigate('AdminNotificationSettings' as never);
-              } else if (option.id === 'system') {
-                // TODO: Navigate to system settings when implemented
-                Alert.alert('System Settings', 'System settings screen coming soon');
-              }
-            }}
-          >
-            <option.icon size={24} color={COLORS.primary} />
-            <View style={styles.settingContent}>
-              <Text style={styles.settingTitle}>{option.title}</Text>
-              <Text style={styles.settingSubtitle}>{option.subtitle}</Text>
-            </View>
-            <Text style={styles.arrow}>→</Text>
-          </TouchableOpacity>
-        ))}
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.card}>
+          {items.map((item, idx) => (
+            <TouchableOpacity
+              key={item.id}
+              style={[styles.row, idx === items.length - 1 && styles.lastRow]}
+              onPress={item.onPress}
+            >
+              <View style={styles.left}>
+                <View style={styles.iconWrap}>{item.icon}</View>
+                <Text style={styles.title}>{item.title}</Text>
+              </View>
+              <ChevronRight width={18} height={18} color={ICON_COLOR} />
+            </TouchableOpacity>
+          ))}
+        </View>
 
-        <TouchableOpacity style={[styles.settingItem, styles.logoutItem]} onPress={handleLogout}>
-          <View style={styles.settingContent}>
-            <Text style={[styles.settingTitle, styles.logoutText]}>Logout</Text>
-            <Text style={[styles.settingSubtitle, styles.logoutText]}>Sign out of your admin account</Text>
-          </View>
-          <Text style={[styles.arrow, styles.logoutText]}>→</Text>
+        <TouchableOpacity style={styles.logout} onPress={handleLogout}>
+          <LogOut width={18} height={18} color={ERROR_COLOR} />
+          <Text style={styles.logoutText}> Logout</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaWrapper>
   );
 };
 
+// Use hardcoded values in StyleSheet.create since it's evaluated at module load time
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.backgroundPrimary },
-  header: { flexDirection: 'row', alignItems: 'center', padding: SPACING.md, backgroundColor: COLORS.primary },
-  backButton: { color: COLORS.textInverse, fontSize: TYPOGRAPHY.fontSize.md, marginRight: SPACING.md },
-  headerTitle: { color: COLORS.textInverse, fontSize: TYPOGRAPHY.fontSize.lg, fontWeight: TYPOGRAPHY.fontWeight.bold },
-  content: { flex: 1, padding: SPACING.md },
-  settingItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.backgroundSecondary, borderRadius: 12, padding: SPACING.md, marginBottom: SPACING.sm },
-  settingContent: { flex: 1, marginLeft: SPACING.md },
-  settingTitle: { fontSize: TYPOGRAPHY.fontSize.md, fontWeight: TYPOGRAPHY.fontWeight.semibold, color: COLORS.textPrimary },
-  settingSubtitle: { fontSize: TYPOGRAPHY.fontSize.sm, color: COLORS.textSecondary },
-  arrow: { fontSize: TYPOGRAPHY.fontSize.lg, color: COLORS.textSecondary },
-  logoutItem: { backgroundColor: '#FEE2E2' },
-  logoutText: { color: COLORS.error },
+  content: {
+    flex: 1,
+    backgroundColor: '#F8F9FA',
+    padding: 16,
+  },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#DCDCDC',
+  },
+  row: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ACD3F1',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  lastRow: {
+    borderBottomWidth: 0,
+  },
+  left: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  iconWrap: {
+    width: 32,
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 16,
+    color: '#000000',
+    fontWeight: '500',
+    marginLeft: 12,
+  },
+  logout: {
+    marginTop: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFEBEE',
+    borderRadius: 12,
+    paddingVertical: 12,
+  },
+  logoutText: {
+    color: '#F44336',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
 });
 
 export default AdminSettingsScreen;

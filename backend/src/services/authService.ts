@@ -17,6 +17,11 @@ interface RegisterData {
   phone?: string;
   role?: 'GUARD' | 'ADMIN' | 'CLIENT';
   accountType?: 'INDIVIDUAL' | 'COMPANY';
+  invitationCode?: string;
+  // Admin registration fields
+  companyName?: string;
+  companyEmail?: string;
+  companyPhone?: string;
 }
 
 interface LoginData {
@@ -26,7 +31,26 @@ interface LoginData {
 
 export class AuthService {
   async register(data: RegisterData) {
-    const { email, password, firstName, lastName, phone, role, accountType } = data;
+    const { email, password, firstName, lastName, phone, role, accountType, invitationCode, companyName, companyEmail, companyPhone } = data;
+
+    // Validate registration requirements
+    const userRole = role || 'GUARD';
+    
+    // Guard and Client MUST have invitation code
+    if ((userRole === 'GUARD' || userRole === 'CLIENT') && !invitationCode) {
+      throw new ValidationError(
+        'Invitation code is required for Guard and Client registration. Please contact your security company administrator.'
+      );
+    }
+
+    // Admin registration requires company details
+    if (userRole === 'ADMIN') {
+      if (!companyName || !companyEmail) {
+        throw new ValidationError(
+          'Company name and email are required for Admin registration.'
+        );
+      }
+    }
 
     // Check if user exists
     const existingUser = await prisma.user.findUnique({
@@ -110,8 +134,13 @@ export class AuthService {
       });
 
       // Create profiles based on role
+      let guard = null;
+      let client = null;
+      let securityCompany = null;
+      let companyUser = null;
+
       if (user.role === 'GUARD') {
-        await tx.guard.create({
+        guard = await tx.guard.create({
           data: {
             userId: user.id,
             employeeId: `EMP${Date.now()}`,
@@ -119,12 +148,98 @@ export class AuthService {
           },
         });
       } else if (user.role === 'CLIENT') {
-        await tx.client.create({
+        client = await tx.client.create({
           data: {
             userId: user.id,
             accountType: user.accountType || 'INDIVIDUAL',
           },
         });
+      } else if (user.role === 'ADMIN') {
+        // Admin registration: Create SecurityCompany with free tier
+        securityCompany = await tx.securityCompany.create({
+          data: {
+            name: companyName!,
+            email: companyEmail!,
+            phone: companyPhone || phone || null,
+            subscriptionPlan: 'BASIC', // Free tier
+            subscriptionStatus: 'ACTIVE',
+            subscriptionStartDate: new Date(),
+            maxGuards: 2, // Free tier: 2 guards
+            maxClients: 1, // Free tier: 1 client
+            maxSites: 1, // Free tier: 1 site
+          },
+        });
+
+        // Link admin to company as OWNER
+        companyUser = await tx.companyUser.create({
+          data: {
+            securityCompanyId: securityCompany.id,
+            userId: user.id,
+            role: 'OWNER',
+            isActive: true,
+          },
+        });
+
+        logger.info(`Admin ${user.email} created SecurityCompany ${securityCompany.id} with free tier`);
+      }
+
+      // Handle invitation code if provided
+      if (data.invitationCode) {
+        const invitationService = (await import('./invitationService.js')).default;
+        
+        const validation = await invitationService.validateInvitation(
+          data.invitationCode,
+          user.email
+        );
+
+        if (!validation.valid) {
+          throw new ValidationError(validation.error || 'Invalid invitation code');
+        }
+
+        const invitation = validation.invitation!;
+
+        // Verify role matches invitation
+        if (invitation.role !== user.role) {
+          throw new ValidationError(
+            `This invitation is for ${invitation.role} role, not ${user.role}`
+          );
+        }
+
+        // Link to company
+        if (user.role === 'GUARD' && guard) {
+          await tx.companyGuard.create({
+            data: {
+              securityCompanyId: invitation.securityCompanyId,
+              guardId: guard.id,
+            },
+          });
+        } else if (user.role === 'CLIENT' && client) {
+          await tx.companyClient.create({
+            data: {
+              securityCompanyId: invitation.securityCompanyId,
+              clientId: client.id,
+            },
+          });
+        }
+
+        // Mark invitation as used
+        await tx.invitation.update({
+          where: { id: invitation.id },
+          data: {
+            usedAt: invitation.usedAt || new Date(),
+            usedBy: user.id,
+            currentUses: { increment: 1 },
+          },
+        });
+      }
+
+      // Return user with company info if admin
+      if (user.role === 'ADMIN' && securityCompany) {
+        return {
+          ...user,
+          securityCompanyId: securityCompany.id,
+          companyName: securityCompany.name,
+        };
       }
 
       return user;

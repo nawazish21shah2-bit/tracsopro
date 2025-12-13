@@ -25,7 +25,7 @@ import { useTheme } from '../../utils/theme';
 import Input from '../../components/common/Input';
 import AuthInput from '../../components/auth/AuthInput';
 import Button from '../../components/common/Button';
-import { globalStyles, COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
+import { globalStyles, COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import Logo from '../../assets/images/tracSOpro-logo.png';
 
 type RegisterScreenNavigationProp = StackNavigationProp<any, any>;
@@ -329,74 +329,74 @@ const RegisterScreen: React.FC = () => {
 const styles = StyleSheet.create({
   scrollContainer: {
     flexGrow: 1,
-    paddingBottom: 40,
+    paddingBottom: SPACING.xxxxl,
   },
   logoContainer: {
     alignItems: 'center',
-    marginTop: 60,
-    marginBottom: 30,
+    marginTop: SPACING.xxxxl + SPACING.lg,
+    marginBottom: SPACING.xxl,
   },
   logoImage: {
     width: 160,
     height: 140,
   },
   title: {
-    fontFamily: 'Montserrat',
-    fontWeight: '600',
-    fontSize: 24,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    fontSize: TYPOGRAPHY.fontSize.xxl,
     lineHeight: 29,
     textAlign: 'center',
     letterSpacing: -0.408,
-    color: '#000000',
+    color: COLORS.textPrimary,
     textTransform: 'uppercase',
-    marginBottom: 40,
+    marginBottom: SPACING.xxxxl,
   },
   form: {
-    paddingHorizontal: 20,
+    paddingHorizontal: SPACING.lg,
     flex: 1,
   },
   inputContainer: {
-    marginBottom: 16,
+    marginBottom: SPACING.fieldGap || SPACING.lg,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     height: 56,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.backgroundSecondary,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
+    borderColor: COLORS.borderLight,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.lg,
   },
   iconContainer: {
     width: 20,
     height: 20,
-    marginRight: 12,
+    marginRight: SPACING.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
   inputIcon: {
-    fontSize: 16,
-    color: '#6B7280',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textSecondary,
   },
   eyeButton: {
-    padding: 4,
-    marginLeft: 8,
+    padding: SPACING.xs,
+    marginLeft: SPACING.sm,
   },
   textInput: {
     flex: 1,
-    fontFamily: 'Inter',
-    fontWeight: '500',
-    fontSize: 14,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    fontSize: TYPOGRAPHY.fontSize.sm,
     lineHeight: 17,
     letterSpacing: -0.408,
-    color: '#000000',
+    color: COLORS.textPrimary,
   },
   footer: {
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 'auto',
-    marginBottom: 40,
+    marginBottom: SPACING.xxxxl,
   },
   footerText: {
     fontFamily: 'Inter',

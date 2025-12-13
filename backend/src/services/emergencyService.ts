@@ -46,6 +46,7 @@ export class EmergencyService {
     severity: EmergencyAlert['severity'];
     location: EmergencyAlert['location'];
     message?: string;
+    shiftId?: string; // Optional: if provided, use this shift's site/client
   }): Promise<EmergencyAlert> {
     try {
       // Get guard information
@@ -66,6 +67,73 @@ export class EmergencyService {
 
       if (!guard) {
         throw new Error('Guard not found');
+      }
+
+      // Get active shift and site information for site-specific notifications
+      let activeShift = null;
+      let siteId: string | null = null;
+      let clientId: string | null = null;
+      let siteName: string | null = null;
+
+      if (data.shiftId) {
+        // If shiftId is provided, get that shift
+        activeShift = await prisma.shift.findUnique({
+          where: { id: data.shiftId },
+          include: {
+            site: {
+              include: {
+                client: {
+                  include: {
+                    user: {
+                      select: { id: true, email: true, firstName: true, lastName: true },
+                    },
+                  },
+                },
+              },
+            },
+            client: {
+              include: {
+                user: {
+                  select: { id: true, email: true, firstName: true, lastName: true },
+                },
+              },
+            },
+          },
+        });
+      } else {
+        // Otherwise, find the guard's active shift
+        activeShift = await prisma.shift.findFirst({
+          where: {
+            guardId: data.guardId,
+            status: 'IN_PROGRESS',
+          },
+          include: {
+            site: {
+              include: {
+                client: {
+                  include: {
+                    user: {
+                      select: { id: true, email: true, firstName: true, lastName: true },
+                    },
+                  },
+                },
+              },
+            },
+            client: {
+              include: {
+                user: {
+                  select: { id: true, email: true, firstName: true, lastName: true },
+                },
+              },
+            },
+          },
+        });
+      }
+
+      if (activeShift) {
+        siteId = activeShift.siteId || null;
+        clientId = activeShift.clientId || activeShift.site?.clientId || null;
+        siteName = activeShift.site?.name || activeShift.locationName || null;
       }
 
       // Create or find a location for this emergency
@@ -116,12 +184,16 @@ export class EmergencyService {
         createdAt: alert.createdAt,
       };
 
-      // Notify all admins and relevant clients immediately
-      await this.notifyEmergencyContacts(emergencyAlert, guard);
+      // Notify only site-specific client and admins
+      await this.notifyEmergencyContacts(emergencyAlert, guard, {
+        siteId,
+        clientId,
+        siteName,
+      });
 
-      // Broadcast to all connected admin/client sockets
+      // Broadcast to site-specific admin/client sockets
       // Note: WebSocket broadcasting will be implemented when websocketService is properly configured
-      console.log('Broadcasting emergency alert to admins and clients');
+      console.log(`Broadcasting emergency alert for site: ${siteName || 'Unknown'} (Site ID: ${siteId || 'N/A'})`);
 
       // Log emergency event
       console.log(`🚨 EMERGENCY ALERT: ${data.type} - Guard: ${guard.user.firstName} ${guard.user.lastName} (${guard.employeeId})`);
@@ -189,17 +261,46 @@ export class EmergencyService {
   /**
    * Get active emergency alerts
    */
-  async getActiveEmergencyAlerts(): Promise<EmergencyAlert[]> {
+  async getActiveEmergencyAlerts(securityCompanyId?: string): Promise<EmergencyAlert[]> {
     try {
-      const incidents = await prisma.incident.findMany({
-        where: {
-          status: {
-            in: ['REPORTED', 'INVESTIGATING'],
-          },
-          type: {
-            in: ['SECURITY_BREACH', 'MEDICAL_EMERGENCY', 'FIRE', 'OTHER'],
-          },
+      // Multi-tenant: Filter by company if provided
+      let guardIds: string[] | undefined;
+      if (securityCompanyId) {
+        const companyGuards = await prisma.companyGuard.findMany({
+          where: { securityCompanyId, isActive: true },
+          select: { guardId: true },
+        });
+        guardIds = companyGuards.map(cg => cg.guardId);
+      }
+
+      const whereClause: any = {
+        status: {
+          in: ['REPORTED', 'INVESTIGATING'],
         },
+        type: {
+          in: ['SECURITY_BREACH', 'MEDICAL_EMERGENCY', 'FIRE', 'OTHER'],
+        },
+      };
+
+      // Multi-tenant: Filter by company guards if provided
+      if (guardIds && guardIds.length > 0) {
+        // Get user IDs for these guards
+        const guards = await prisma.guard.findMany({
+          where: { id: { in: guardIds } },
+          select: { userId: true },
+        });
+        const userIds = guards.map(g => g.userId).filter(Boolean);
+        
+        if (userIds.length > 0) {
+          whereClause.reportedBy = { in: userIds };
+        } else {
+          // No guards found, return empty array
+          return [];
+        }
+      }
+
+      const incidents = await prisma.incident.findMany({
+        where: whereClause,
         include: {
           reporter: {
             include: {
@@ -236,7 +337,7 @@ export class EmergencyService {
   /**
    * Get emergency alert history for a guard
    */
-  async getGuardEmergencyHistory(guardId: string, limit: number = 50): Promise<EmergencyAlert[]> {
+  async getGuardEmergencyHistory(guardId: string, limit: number = 50, securityCompanyId?: string): Promise<EmergencyAlert[]> {
     try {
       const guard = await prisma.guard.findUnique({
         where: { id: guardId },
@@ -245,6 +346,21 @@ export class EmergencyService {
 
       if (!guard) {
         throw new Error('Guard not found');
+      }
+
+      // Multi-tenant: Validate guard belongs to company if provided
+      if (securityCompanyId) {
+        const companyGuard = await prisma.companyGuard.findFirst({
+          where: {
+            guardId,
+            securityCompanyId,
+            isActive: true,
+          },
+        });
+
+        if (!companyGuard) {
+          throw new Error('Guard not found or does not belong to your company');
+        }
       }
 
       const incidents = await prisma.incident.findMany({
@@ -281,46 +397,139 @@ export class EmergencyService {
   }
 
   /**
-   * Send emergency notifications to relevant contacts
+   * Send emergency notifications to relevant contacts (site-specific)
+   * Only notifies the client who owns the site and admins related to that site
    */
-  private async notifyEmergencyContacts(alert: EmergencyAlert, guard: any): Promise<void> {
+  private async notifyEmergencyContacts(
+    alert: EmergencyAlert,
+    guard: any,
+    siteInfo: {
+      siteId: string | null;
+      clientId: string | null;
+      siteName: string | null;
+    }
+  ): Promise<void> {
     try {
-      // Get all admins
-      const admins = await prisma.user.findMany({
-        where: { role: 'ADMIN', isActive: true },
-        select: { id: true, email: true, firstName: true, lastName: true },
+      const { siteId, clientId, siteName } = siteInfo;
+
+      // Notify the client who owns the site
+      if (clientId) {
+        const client = await prisma.client.findUnique({
+          where: { id: clientId },
+          include: {
+            user: {
+              select: { id: true, email: true, firstName: true, lastName: true },
+            },
+          },
+        });
+
+        if (client) {
+          // Use centralized notification service
+          const NotificationService = (await import('./notificationService.js')).default;
+          await NotificationService.createNotification({
+            userId: client.userId,
+            type: 'EMERGENCY',
+            title: `🚨 EMERGENCY ALERT: ${alert.type}`,
+            message: `Emergency alert at ${siteName || 'your site'}: ${guard.user.firstName} ${guard.user.lastName} has triggered a ${alert.severity.toLowerCase()} ${alert.type.toLowerCase()} alert.`,
+            data: {
+              alertId: alert.id,
+              guardId: alert.guardId,
+              type: alert.type,
+              severity: alert.severity,
+              location: alert.location,
+              siteId: siteId,
+              siteName: siteName,
+            },
+            priority: alert.severity === 'CRITICAL' ? 'urgent' : 'high',
+            sendPush: true,
+          });
+
+          console.log(`📱 Emergency notification sent to client: ${client.user.email}`);
+        }
+      } else {
+        console.warn(`⚠️  No client found for site (Site ID: ${siteId}) - client notification skipped`);
+      }
+
+      // Get admins related to this specific site
+      // TODO: Implement admin-site assignment mechanism to only notify admins assigned to this site
+      // For now, we notify all admins with site context
+      // Once admin-site assignment is implemented, filter admins by site assignment here
+      
+      // Example future implementation:
+      // const siteAdmins = await prisma.adminSiteAssignment.findMany({
+      //   where: { siteId: siteId },
+      //   include: { admin: { include: { user: true } } }
+      // });
+      
+      // Get admins from the same company as the guard
+      // Multi-tenant: Get company from guard
+      const guardCompany = await prisma.companyGuard.findFirst({
+        where: { guardId: guard.id, isActive: true },
+        select: { securityCompanyId: true },
       });
 
-      // Get emergency contacts for the guard
+      if (guardCompany) {
+        // Get admins from the same company
+        const companyAdmins = await prisma.companyUser.findMany({
+          where: {
+            securityCompanyId: guardCompany.securityCompanyId,
+            isActive: true,
+          },
+          include: {
+            user: {
+              select: { id: true, email: true, firstName: true, lastName: true },
+            },
+          },
+        });
+
+        const adminUserIds = companyAdmins.map(cu => cu.userId).filter(Boolean);
+
+        if (adminUserIds.length > 0) {
+          // Use centralized notification service for bulk notifications
+          const NotificationService = (await import('./notificationService.js')).default;
+          await NotificationService.createBulkNotifications(
+            adminUserIds,
+            {
+              type: 'EMERGENCY',
+              title: `🚨 EMERGENCY ALERT: ${alert.type}${siteName ? ` at ${siteName}` : ''}`,
+              message: `${guard.user.firstName} ${guard.user.lastName} has triggered a ${alert.severity.toLowerCase()} ${alert.type.toLowerCase()} alert${siteName ? ` at site: ${siteName}` : ''}. Location: ${alert.location.address || 'GPS coordinates provided'}`,
+              data: {
+                alertId: alert.id,
+                guardId: alert.guardId,
+                type: alert.type,
+                severity: alert.severity,
+                location: alert.location,
+                siteId: siteId,
+                siteName: siteName,
+                clientId: clientId,
+              },
+              priority: alert.severity === 'CRITICAL' ? 'urgent' : 'high',
+              sendPush: true,
+            },
+            guardCompany.securityCompanyId
+          );
+
+          console.log(`📱 Emergency notifications sent to ${adminUserIds.length} admin(s) for site: ${siteName || 'Unknown'}`);
+        }
+      } else {
+        console.warn(`⚠️  Guard ${guard.id} not linked to a company - admin notifications skipped`);
+      }
+
+      // Get emergency contacts for the guard (always notify these)
       const emergencyContacts = await prisma.emergencyContact.findMany({
         where: { guardId: guard.id },
       });
 
-      // Create notifications for admins
-      const adminNotifications = admins.map(admin => ({
-        userId: admin.id,
-        type: 'EMERGENCY' as const,
-        title: `🚨 EMERGENCY ALERT: ${alert.type}`,
-        message: `${guard.user.firstName} ${guard.user.lastName} has triggered a ${alert.severity.toLowerCase()} ${alert.type.toLowerCase()} alert. Location: ${alert.location.address || 'GPS coordinates provided'}`,
-        data: JSON.stringify({
-          alertId: alert.id,
-          guardId: alert.guardId,
-          type: alert.type,
-          severity: alert.severity,
-          location: alert.location,
-        }),
-      }));
-
-      await prisma.notification.createMany({
-        data: adminNotifications,
-      });
+      if (emergencyContacts.length > 0) {
+        console.log(`📞 Guard has ${emergencyContacts.length} emergency contact(s) configured`);
+        // TODO: Send SMS/email notifications to emergency contacts if configured
+      }
 
       // Send push notifications (if configured)
       // await NotificationService.sendPushNotifications(adminNotifications);
-
-      console.log(`📱 Emergency notifications sent to ${admins.length} admins`);
     } catch (error) {
       console.error('Error sending emergency notifications:', error);
+      throw error;
     }
   }
 

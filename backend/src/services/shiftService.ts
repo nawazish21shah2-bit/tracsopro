@@ -1,10 +1,38 @@
 import { PrismaClient, ShiftStatus, Shift, BreakType, IncidentType, IncidentSeverity } from '@prisma/client';
-import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, differenceInMinutes } from 'date-fns';
-import { NotFoundError, BadRequestError } from '../utils/errors.js';
+import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, differenceInMinutes, addDays } from 'date-fns';
+import { NotFoundError, BadRequestError, ValidationError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 import websocketService from './websocketService.js';
 
 const prisma = new PrismaClient();
+
+/**
+ * Transform shift data to match frontend expectations
+ * Maps scheduledStartTime/scheduledEndTime to startTime/endTime
+ */
+function transformShiftForFrontend(shift: any): any {
+  if (!shift) return shift;
+  
+  // If it's an array, transform each item
+  if (Array.isArray(shift)) {
+    return shift.map(transformShiftForFrontend);
+  }
+  
+  // Transform single shift object
+  const transformed = {
+    ...shift,
+    startTime: shift.scheduledStartTime || shift.startTime,
+    endTime: shift.scheduledEndTime || shift.endTime,
+    checkInTime: shift.actualStartTime || shift.checkInTime,
+    checkOutTime: shift.actualEndTime || shift.checkOutTime,
+  };
+  
+  // Remove the scheduled* fields if they exist (keep them for now in case frontend needs them)
+  // delete transformed.scheduledStartTime;
+  // delete transformed.scheduledEndTime;
+  
+  return transformed;
+}
 
 export interface CreateShiftData {
   guardId: string;
@@ -97,35 +125,90 @@ class ShiftService {
   /**
    * Create a new shift
    */
-  async createShift(data: CreateShiftData): Promise<any> {
+  async createShift(data: CreateShiftData, securityCompanyId?: string): Promise<any> {
     // Validate guard exists
     const guard = await prisma.guard.findUnique({
       where: { id: data.guardId },
+      include: {
+        companyGuards: {
+          where: { isActive: true },
+          select: { securityCompanyId: true },
+        },
+      },
     });
 
     if (!guard) {
       throw new NotFoundError('Guard not found');
     }
 
-    // Validate site exists if provided
+    // Multi-tenant: Verify guard belongs to company if securityCompanyId provided
+    if (securityCompanyId) {
+      const guardCompany = guard.companyGuards.find(
+        cg => cg.securityCompanyId === securityCompanyId
+      );
+      if (!guardCompany) {
+        throw new ValidationError('Guard does not belong to your company');
+      }
+    }
+
+    // If siteId is provided, validate and get clientId from site
+    let siteId: string | null = null;
+    let clientId: string | null = data.clientId || null;
+    
     if (data.siteId) {
       const site = await prisma.site.findUnique({
         where: { id: data.siteId },
+        include: {
+          client: {
+            include: {
+              companyClients: {
+                where: { isActive: true },
+                select: { securityCompanyId: true },
+              },
+            },
+          },
+          companySites: {
+            select: { securityCompanyId: true },
+          },
+        },
       });
 
       if (!site) {
         throw new NotFoundError('Site not found');
+      }
+
+      // Multi-tenant: Verify site belongs to company if securityCompanyId provided
+      if (securityCompanyId) {
+        const siteCompany = site.companySites.find(
+          cs => cs.securityCompanyId === securityCompanyId
+        );
+        if (!siteCompany) {
+          throw new ValidationError('Site does not belong to your company');
+        }
+      }
+
+      siteId = site.id;
+      clientId = site.clientId;
+      
+      // Use site's name and address if not provided
+      if (!data.locationName) {
+        data.locationName = site.name;
+      }
+      if (!data.locationAddress) {
+        data.locationAddress = site.address;
       }
     }
 
     const shift = await prisma.shift.create({
       data: {
         guardId: data.guardId,
+        siteId: siteId,
+        clientId: clientId,
         locationId: data.locationId,
         locationName: data.locationName,
         locationAddress: data.locationAddress,
-        startTime: data.scheduledStartTime,
-        endTime: data.scheduledEndTime,
+        scheduledStartTime: data.scheduledStartTime,
+        scheduledEndTime: data.scheduledEndTime,
         description: data.description,
         notes: data.notes,
       },
@@ -140,14 +223,39 @@ class ShiftService {
                 email: true,
               },
             },
-            firstName: true,
-            lastName: true,
-            email: true,
           },
+        },
+        site: {
+          include: {
+            client: {
+              include: {
+                user: {
+                  select: { firstName: true, lastName: true, email: true }
+                }
+              }
+            }
+          }
+        },
+        client: {
+          include: {
+            user: {
+              select: { firstName: true, lastName: true, email: true }
+            }
+          }
         },
         location: true,
       },
     });
+
+    logger.info(`Shift created for guard ${data.guardId}${siteId ? ` at site ${siteId}` : ''}: ${shift.id}`, {
+      shiftId: shift.id,
+      guardId: shift.guardId,
+      scheduledStartTime: shift.scheduledStartTime,
+      scheduledEndTime: shift.scheduledEndTime,
+      status: shift.status,
+    });
+
+    return shift;
   }
 
   /**
@@ -158,11 +266,15 @@ class ShiftService {
       where: { id: shiftId },
       include: {
         guard: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
+          include: {
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
+            },
           },
         },
         location: true,
@@ -185,7 +297,7 @@ class ShiftService {
         shiftReports: true,
       },
       orderBy: {
-        startTime: 'asc',
+        scheduledStartTime: 'asc',
       },
     });
   }
@@ -198,10 +310,10 @@ class ShiftService {
     const startOfToday = startOfDay(today);
     const endOfToday = endOfDay(today);
 
-    return await prisma.shift.findMany({
+    const shifts = await prisma.shift.findMany({
       where: {
         guardId,
-        startTime: {
+        scheduledStartTime: {
           gte: startOfToday,
           lte: endOfToday,
         },
@@ -211,9 +323,11 @@ class ShiftService {
         shiftReports: true,
       },
       orderBy: {
-        startTime: 'asc',
+        scheduledStartTime: 'asc',
       },
     });
+    
+    return transformShiftForFrontend(shifts);
   }
 
   /**
@@ -222,10 +336,10 @@ class ShiftService {
   async getGuardUpcomingShifts(guardId: string) {
     const now = new Date();
 
-    return await prisma.shift.findMany({
+    const shifts = await prisma.shift.findMany({
       where: {
         guardId,
-        startTime: {
+        scheduledStartTime: {
           gt: now,
         },
         status: ShiftStatus.SCHEDULED,
@@ -234,10 +348,12 @@ class ShiftService {
         location: true,
       },
       orderBy: {
-        startTime: 'asc',
+        scheduledStartTime: 'asc',
       },
       take: 10,
     });
+    
+    return transformShiftForFrontend(shifts);
   }
 
   /**
@@ -246,14 +362,14 @@ class ShiftService {
   async getGuardPastShifts(guardId: string, limit: number = 20) {
     const now = new Date();
 
-    return await prisma.shift.findMany({
+    const shifts = await prisma.shift.findMany({
       where: {
         guardId,
-        endTime: {
+        scheduledEndTime: {
           lt: now,
         },
         status: {
-          in: [ShiftStatus.COMPLETED, ShiftStatus.MISSED],
+          in: [ShiftStatus.COMPLETED, ShiftStatus.NO_SHOW],
         },
       },
       include: {
@@ -261,10 +377,12 @@ class ShiftService {
         shiftReports: true,
       },
       orderBy: {
-        startTime: 'desc',
+        scheduledStartTime: 'desc',
       },
       take: limit,
     });
+    
+    return transformShiftForFrontend(shifts);
   }
 
   /**
@@ -275,10 +393,10 @@ class ShiftService {
     const weekStart = startOfWeek(today, { weekStartsOn: 1 }); // Monday
     const weekEnd = endOfWeek(today, { weekStartsOn: 1 });
 
-    return await prisma.shift.findMany({
+    const shifts = await prisma.shift.findMany({
       where: {
         guardId,
-        startTime: {
+        scheduledStartTime: {
           gte: weekStart,
           lte: weekEnd,
         },
@@ -287,9 +405,11 @@ class ShiftService {
         location: true,
       },
       orderBy: {
-        startTime: 'asc',
+        scheduledStartTime: 'asc',
       },
     });
+    
+    return transformShiftForFrontend(shifts);
   }
 
   /**
@@ -300,13 +420,13 @@ class ShiftService {
     const monthStart = startOfMonth(today);
     const monthEnd = endOfMonth(today);
 
-    const [completedShifts, missedShifts, totalSites, incidentReports] = await Promise.all([
+    const [completedShifts, missedShifts, totalSites, incidentReports, shifts] = await Promise.all([
       // Completed shifts this month
       prisma.shift.count({
         where: {
           guardId,
           status: ShiftStatus.COMPLETED,
-          startTime: {
+          scheduledStartTime: {
             gte: monthStart,
             lte: monthEnd,
           },
@@ -316,8 +436,8 @@ class ShiftService {
       prisma.shift.count({
         where: {
           guardId,
-          status: ShiftStatus.MISSED,
-          startTime: {
+          status: ShiftStatus.NO_SHOW,
+          scheduledStartTime: {
             gte: monthStart,
             lte: monthEnd,
           },
@@ -327,7 +447,7 @@ class ShiftService {
       prisma.shift.findMany({
         where: {
           guardId,
-          startTime: {
+          scheduledStartTime: {
             gte: monthStart,
             lte: monthEnd,
           },
@@ -347,13 +467,47 @@ class ShiftService {
           },
         },
       }),
+      // Get all shifts for this month to calculate hours
+      prisma.shift.findMany({
+        where: {
+          guardId,
+          scheduledStartTime: {
+            gte: monthStart,
+            lte: monthEnd,
+          },
+        },
+        select: {
+          status: true,
+          actualStartTime: true,
+          actualEndTime: true,
+        },
+      }),
     ]);
+
+    // Calculate total hours and average duration
+    const completedShiftsWithTimes = shifts.filter(s => 
+      s.status === 'COMPLETED' && s.actualStartTime && s.actualEndTime
+    );
+
+    const totalMinutes = completedShiftsWithTimes.reduce((total, shift) => {
+      if (shift.actualStartTime && shift.actualEndTime) {
+        return total + differenceInMinutes(shift.actualEndTime, shift.actualStartTime);
+      }
+      return total;
+    }, 0);
+
+    const totalHours = Math.round((totalMinutes / 60) * 100) / 100;
+    const averageShiftDuration = completedShiftsWithTimes.length > 0 
+      ? Math.round((totalMinutes / completedShiftsWithTimes.length) / 60 * 100) / 100 
+      : 0;
 
     return {
       completedShifts,
       missedShifts,
       totalSites: totalSites.length,
       incidentReports,
+      totalHours,
+      averageShiftDuration,
     };
   }
 
@@ -386,34 +540,44 @@ class ShiftService {
       where: { id: data.shiftId },
       data: {
         status: ShiftStatus.IN_PROGRESS,
-        checkInTime: data.checkInTime,
+        actualStartTime: data.timestamp,
+        checkInLocation: data.location ? {
+          latitude: data.location.latitude,
+          longitude: data.location.longitude,
+          accuracy: data.location.accuracy,
+          address: data.location.address,
+        } : undefined,
       },
       include: {
         location: true,
         guard: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
+          include: {
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
+            },
           },
         },
       },
     });
 
     // Create tracking record if location provided
-    if (data.latitude && data.longitude) {
+    if (data.location && data.location.latitude && data.location.longitude) {
       const guard = await prisma.guard.findUnique({
-        where: { userId: data.guardId },
+        where: { id: data.guardId },
       });
 
       if (guard) {
         await prisma.trackingRecord.create({
           data: {
             guardId: guard.id,
-            latitude: data.latitude,
-            longitude: data.longitude,
-            timestamp: data.checkInTime,
+            latitude: data.location.latitude,
+            longitude: data.location.longitude,
+            timestamp: data.timestamp,
           },
         });
       }
@@ -442,35 +606,39 @@ class ShiftService {
       throw new Error('Cannot check out: Shift is not in progress');
     }
 
-    // Calculate actual duration in minutes
-    const checkInTime = shift.checkInTime || shift.startTime;
-    const actualDuration = Math.floor(
-      (data.checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60)
-    );
-
     // Update shift status and check-out time
+    // Note: actualDuration is calculated, not stored in the database
     const updatedShift = await prisma.shift.update({
       where: { id: data.shiftId },
       data: {
         status: ShiftStatus.COMPLETED,
-        checkOutTime: data.checkOutTime,
-        actualDuration,
+        actualEndTime: data.timestamp,
+        checkOutLocation: data.location ? {
+          latitude: data.location.latitude,
+          longitude: data.location.longitude,
+          accuracy: data.location.accuracy,
+          address: data.location.address,
+        } : undefined,
       },
       include: {
         location: true,
         guard: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
+          include: {
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
+            },
           },
         },
       },
     });
 
     // Create tracking record if location provided
-    if (data.latitude && data.longitude) {
+    if (data.location) {
       const guard = await prisma.guard.findUnique({
         where: { userId: data.guardId },
       });
@@ -479,9 +647,9 @@ class ShiftService {
         await prisma.trackingRecord.create({
           data: {
             guardId: guard.id,
-            latitude: data.latitude,
-            longitude: data.longitude,
-            timestamp: data.checkOutTime,
+            latitude: data.location.latitude,
+            longitude: data.location.longitude,
+            timestamp: data.timestamp,
           },
         });
       }
@@ -497,23 +665,7 @@ class ShiftService {
     return await prisma.shift.update({
       where: { id: shiftId },
       data: {
-        status: ShiftStatus.MISSED,
-      },
-    });
-  }
-
-  /**
-   * Get active shift for guard
-   */
-  async getActiveShift(guardId: string) {
-    return await prisma.shift.findFirst({
-      where: {
-        guardId,
-        status: ShiftStatus.IN_PROGRESS,
-      },
-      include: {
-        location: true,
-        shiftReports: true,
+        status: ShiftStatus.NO_SHOW,
       },
     });
   }
@@ -524,10 +676,10 @@ class ShiftService {
   async getNextUpcomingShift(guardId: string) {
     const now = new Date();
 
-    return await prisma.shift.findFirst({
+    const shift = await prisma.shift.findFirst({
       where: {
         guardId,
-        startTime: {
+        scheduledStartTime: {
           gt: now,
         },
         status: ShiftStatus.SCHEDULED,
@@ -539,6 +691,8 @@ class ShiftService {
         scheduledStartTime: 'asc',
       },
     });
+    
+    return transformShiftForFrontend(shift);
   }
 
   /**
@@ -603,8 +757,6 @@ class ShiftService {
       shiftId: data.shiftId,
       guardId: data.guardId,
       status: 'IN_PROGRESS',
-      shift: updatedShift,
-      location: data.location,
     });
 
     return updatedShift;
@@ -683,8 +835,6 @@ class ShiftService {
       shiftId: data.shiftId,
       guardId: data.guardId,
       status: 'COMPLETED',
-      shift: updatedShift,
-      location: data.location,
     });
 
     return updatedShift;
@@ -747,7 +897,6 @@ class ShiftService {
       shiftId: data.shiftId,
       guardId: data.guardId,
       status: 'ON_BREAK',
-      breakId: shiftBreak.id,
     });
 
     return shiftBreak;
@@ -800,7 +949,6 @@ class ShiftService {
       shiftId: data.shiftId,
       guardId: data.guardId,
       status: 'IN_PROGRESS',
-      breakId: data.breakId,
     });
 
     return updatedBreak;
@@ -857,10 +1005,7 @@ class ShiftService {
       incidentId: incident.id,
       shiftId: data.shiftId,
       guardId: data.guardId,
-      incidentType: data.incidentType,
-      severity: data.severity,
-      title: data.title,
-      location: data.location,
+      message: `${data.incidentType}: ${data.title}`,
     });
 
     return incident;
@@ -921,7 +1066,7 @@ class ShiftService {
    * Get active shift for a guard
    */
   async getActiveShift(guardId: string) {
-    return await prisma.shift.findFirst({
+    const shift = await prisma.shift.findFirst({
       where: {
         guardId,
         status: {
@@ -943,6 +1088,8 @@ class ShiftService {
         },
       },
     });
+    
+    return transformShiftForFrontend(shift);
   }
 
   /**
@@ -964,6 +1111,216 @@ class ShiftService {
         scheduledStartTime: 'asc',
       },
       take: limit,
+    });
+  }
+
+  /**
+   * Get shifts by date range (for 30-day schedule view)
+   */
+  async getShiftsByDateRange(
+    startDate: Date,
+    endDate: Date,
+    options?: {
+      guardId?: string;
+      clientId?: string;
+      siteId?: string;
+      securityCompanyId?: string;
+    }
+  ) {
+    const whereClause: any = {
+      scheduledStartTime: {
+        gte: startDate,
+        lte: endDate,
+      },
+    };
+
+    if (options?.guardId) {
+      whereClause.guardId = options.guardId;
+    }
+
+    if (options?.clientId) {
+      whereClause.clientId = options.clientId;
+    }
+
+    if (options?.siteId) {
+      whereClause.siteId = options.siteId;
+    }
+
+    // Multi-tenant filtering by security company
+    if (options?.securityCompanyId) {
+      whereClause.OR = [
+        // Guard belongs to company
+        {
+          guard: {
+            companyGuards: {
+              some: {
+                securityCompanyId: options.securityCompanyId,
+                isActive: true,
+              },
+            },
+          },
+        },
+        // Client belongs to company
+        {
+          client: {
+            companyClients: {
+              some: {
+                securityCompanyId: options.securityCompanyId,
+                isActive: true,
+              },
+            },
+          },
+        },
+        // Site belongs to company
+        {
+          site: {
+            companySites: {
+              some: {
+                securityCompanyId: options.securityCompanyId,
+                isActive: true,
+              },
+            },
+          },
+        },
+      ];
+    }
+
+    const shifts = await prisma.shift.findMany({
+      where: whereClause,
+      include: {
+        guard: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
+            },
+          },
+        },
+        site: {
+          include: {
+            client: {
+              include: {
+                user: {
+                  select: { firstName: true, lastName: true, email: true }
+                }
+              }
+            }
+          }
+        },
+        client: {
+          include: {
+            user: {
+              select: { firstName: true, lastName: true, email: true }
+            }
+          }
+        },
+        location: true,
+      },
+      orderBy: {
+        scheduledStartTime: 'asc',
+      },
+    });
+
+    return transformShiftForFrontend(shifts);
+  }
+
+  /**
+   * Get client's shifts (for client dashboard)
+   */
+  async getClientShifts(
+    clientId: string,
+    options?: {
+      startDate?: Date;
+      endDate?: Date;
+      status?: ShiftStatus;
+      siteId?: string;
+      page?: number;
+      limit?: number;
+    }
+  ) {
+    const page = options?.page || 1;
+    const limit = options?.limit || 50;
+    const skip = (page - 1) * limit;
+
+    const whereClause: any = {
+      clientId,
+    };
+
+    if (options?.startDate || options?.endDate) {
+      whereClause.scheduledStartTime = {};
+      if (options.startDate) {
+        whereClause.scheduledStartTime.gte = options.startDate;
+      }
+      if (options.endDate) {
+        whereClause.scheduledStartTime.lte = options.endDate;
+      }
+    }
+
+    if (options?.status) {
+      whereClause.status = options.status;
+    }
+
+    if (options?.siteId) {
+      whereClause.siteId = options.siteId;
+    }
+
+    const [shifts, total] = await Promise.all([
+      prisma.shift.findMany({
+        where: whereClause,
+        include: {
+          guard: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  email: true,
+                },
+              },
+            },
+          },
+          site: true,
+          location: true,
+        },
+        orderBy: {
+          scheduledStartTime: 'desc',
+        },
+        skip,
+        take: limit,
+      }),
+      prisma.shift.count({ where: whereClause }),
+    ]);
+
+    return {
+      shifts: transformShiftForFrontend(shifts),
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /**
+   * Get 30-day schedule for guard or admin
+   */
+  async get30DaySchedule(
+    guardId?: string,
+    securityCompanyId?: string,
+    startDate?: Date
+  ) {
+    const start = startDate || new Date();
+    const end = addDays(start, 30);
+
+    return this.getShiftsByDateRange(start, end, {
+      guardId,
+      securityCompanyId,
     });
   }
 }

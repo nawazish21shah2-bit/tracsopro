@@ -287,6 +287,7 @@ export interface LoginForm {
 }
 
 export interface RegisterForm {
+  invitationCode?: string; // Required for GUARD and CLIENT
   email: string;
   password: string;
   confirmPassword: string;
@@ -294,6 +295,11 @@ export interface RegisterForm {
   lastName: string;
   phone: string;
   role: UserRole;
+  accountType?: string; // For CLIENT
+  // Company details - Required for ADMIN
+  companyName?: string;
+  companyEmail?: string;
+  companyPhone?: string;
 }
 
 export interface GuardForm {

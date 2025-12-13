@@ -426,6 +426,19 @@ class SuperAdminService {
       }
     };
   }
+
+  /**
+   * Export platform data
+   */
+  async exportPlatformData(): Promise<any> {
+    try {
+      const response = await apiService.post('/super-admin/export-data');
+      return response.data;
+    } catch (error) {
+      console.error('Error exporting platform data:', error);
+      throw error;
+    }
+  }
 }
 
 export default SuperAdminService;

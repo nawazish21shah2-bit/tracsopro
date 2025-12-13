@@ -3,13 +3,13 @@ import guardService from '../services/guardService.js';
 import { AuthRequest } from '../middleware/auth.js';
 
 export class GuardController {
-  async getAllGuards(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getAllGuards(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 50;
       const status = req.query.status as string;
 
-      const result = await guardService.getAllGuards(page, limit, status);
+      const result = await guardService.getAllGuards(page, limit, status, req.securityCompanyId);
       res.json({
         success: true,
         data: result,

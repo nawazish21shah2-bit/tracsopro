@@ -429,7 +429,7 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
         title="Operations Center"
         onMenuPress={openDrawer}
         onNotificationPress={() => {
-          // Handle notification press
+          navigation.navigate('AdminNotifications' as never);
         }}
         profileDrawer={
           <AdminProfileDrawer
@@ -597,12 +597,12 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: '45%',
     backgroundColor: COLORS.cardBackground,
-    borderRadius: BORDER_RADIUS.lg,
+    borderRadius: BORDER_RADIUS.md,
     padding: SPACING.lg,
     position: 'relative',
     borderWidth: 1,
     borderColor: COLORS.borderCard,
-    ...SHADOWS.medium,
+    // Border only, no shadow for minimal style
   },
   metricValue: {
     fontSize: TYPOGRAPHY.fontSize.xl,
@@ -638,13 +638,13 @@ const styles = StyleSheet.create({
   },
   emergencyAlert: {
     flexDirection: 'row',
-    backgroundColor: '#FEEBEB',
+    backgroundColor: COLORS.error + '10',
     borderWidth: 2,
     borderColor: COLORS.error,
-    borderRadius: BORDER_RADIUS.lg,
+    borderRadius: BORDER_RADIUS.md,
     padding: SPACING.lg,
     marginBottom: SPACING.sm,
-    ...SHADOWS.small,
+    // Border only, no shadow for minimal style
   },
   emergencyContent: {
     flex: 1,
@@ -689,22 +689,22 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
   },
   mapContainer: {
-    borderRadius: BORDER_RADIUS.lg,
+    borderRadius: BORDER_RADIUS.md,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: COLORS.borderCard,
-    ...SHADOWS.medium,
     backgroundColor: COLORS.backgroundPrimary,
+    // Border only, no shadow for minimal style
   },
   // Guard Detail Card - Shows selected guard details
   guardDetailCard: {
     backgroundColor: COLORS.cardBackground,
-    borderRadius: BORDER_RADIUS.lg,
+    borderRadius: BORDER_RADIUS.md,
     padding: SPACING.lg,
     marginTop: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.borderCard,
-    ...SHADOWS.medium,
+    // Border only, no shadow for minimal style
   },
   closeButton: {
     position: 'absolute',
@@ -764,12 +764,12 @@ const styles = StyleSheet.create({
   },
   guardStatusCard: {
     backgroundColor: COLORS.backgroundPrimary,
-    borderRadius: BORDER_RADIUS.lg,
+    borderRadius: BORDER_RADIUS.md,
     padding: SPACING.lg,
     marginBottom: SPACING.md,
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    ...SHADOWS.small,
+    borderColor: COLORS.borderCard,
+    // Border only, no shadow for minimal style
   },
   guardCardHeader: {
     flexDirection: 'row',

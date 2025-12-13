@@ -61,6 +61,8 @@ export interface ShiftStats {
   missedShifts: number;
   totalSites: number;
   incidentReports: number;
+  totalHours?: number;
+  averageShiftDuration?: number;
 }
 
 export interface CheckInRequest {

@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { CreditCardIcon, CheckCircleIcon, ClockIcon, ErrorCircleIcon, DollarIcon } from '../../components/ui/AppIcons';
 import paymentService from '../../services/paymentService';
 import apiService from '../../services/api';
@@ -52,66 +52,63 @@ const AdminSubscriptionScreen: React.FC = () => {
     try {
       setLoading(true);
       
-      // Get admin's security company
-      let companyResponse;
-      try {
-        companyResponse = await apiService.get('/admin/company');
-      } catch (error: any) {
-        if (error.response?.status === 404) {
-          Alert.alert(
-            'Company Not Found',
-            'Your account is not associated with a security company. Please contact support to set up your company account.',
-            [{ text: 'OK' }]
-          );
-          return;
-        }
-        throw error;
-      }
-      
-      const company = companyResponse.data.data;
+      // Single consolidated API call - gets company, subscription, and plans in one request
+      const response = await apiService.get('/admin/subscription');
+      const { company, subscription, availablePlans } = response.data.data;
       
       if (!company) {
-        Alert.alert('Error', 'Security company not found');
+        Alert.alert(
+          'Company Not Found',
+          'Your account is not associated with a security company. Please contact support to set up your company account.',
+          [{ text: 'OK' }]
+        );
         return;
       }
       
       setSecurityCompanyId(company.id);
       
-      // Get plans and subscription in parallel
-      let plansData, subscriptionResponse;
-      try {
-        [plansData, subscriptionResponse] = await Promise.all([
-          paymentService.getPlans(),
-          apiService.get('/admin/subscription'),
-        ]);
-      } catch (error: any) {
-        if (error.response?.status === 404) {
-          // Company exists but no subscription yet - this is okay
-          plansData = await paymentService.getPlans();
+      // Set plans from consolidated response
+      if (availablePlans && availablePlans.plans) {
+        setPlans(availablePlans.plans);
+      } else {
+        // Fallback: if plans not in response, try to get them separately
+        try {
+          const plansData = await paymentService.getPlans();
           setPlans(plansData.plans);
-          setCurrentSubscription({
-            plan: company.subscriptionPlan || 'BASIC',
-            status: company.subscriptionStatus || 'TRIAL',
-            currentPeriodEnd: company.subscriptionEndDate,
-            cancelAtPeriodEnd: false,
-          });
-          return;
+        } catch (error) {
+          console.warn('Could not load plans:', error);
         }
-        throw error;
       }
       
-      setPlans(plansData.plans);
-      
-      const subscription = subscriptionResponse.data.data;
-      
-      setCurrentSubscription({
-        plan: subscription.plan,
-        status: subscription.status,
-        currentPeriodEnd: subscription.endDate,
-        cancelAtPeriodEnd: subscription.cancelAtPeriodEnd || false,
-      });
+      // Set subscription data
+      if (subscription) {
+        setCurrentSubscription({
+          plan: subscription.plan,
+          status: subscription.status,
+          currentPeriodEnd: subscription.endDate,
+          cancelAtPeriodEnd: subscription.cancelAtPeriodEnd || false,
+        });
+      } else {
+        // Fallback: use company subscription data if subscription object not available
+        setCurrentSubscription({
+          plan: company.subscriptionPlan || 'BASIC',
+          status: company.subscriptionStatus || 'TRIAL',
+          currentPeriodEnd: company.subscriptionEndDate,
+          cancelAtPeriodEnd: false,
+        });
+      }
     } catch (error: any) {
       console.error('Error loading subscription data:', error);
+      
+      if (error.response?.status === 404) {
+        Alert.alert(
+          'Company Not Found',
+          'Your account is not associated with a security company. Please contact support to set up your company account.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+      
       const errorMessage = error.response?.data?.message || error.message || 'Failed to load subscription information';
       Alert.alert(
         'Error',
@@ -156,21 +153,34 @@ const AdminSubscriptionScreen: React.FC = () => {
         trialDays: 14,
       });
 
-      if (checkout.url) {
-        // Open Stripe checkout in browser
-        const canOpen = await Linking.canOpenURL(checkout.url);
-        if (canOpen) {
-          await Linking.openURL(checkout.url);
-        } else {
-          Alert.alert(
-            'Error',
-            'Unable to open payment page. Please contact support.'
-          );
-        }
-      } else {
+      if (__DEV__) {
+        console.log('Checkout response:', JSON.stringify(checkout, null, 2));
+      }
+
+      if (!checkout || !checkout.url) {
+        console.error('Checkout session created but no URL:', checkout);
         Alert.alert(
           'Error',
           'Checkout session created but no URL available. Please contact support.'
+        );
+        return;
+      }
+
+      // Open Stripe checkout in browser
+      try {
+        if (__DEV__) {
+          console.log('Opening checkout URL:', checkout.url);
+        }
+        // Directly open URL - canOpenURL can be unreliable for HTTPS URLs
+        await Linking.openURL(checkout.url);
+        if (__DEV__) {
+          console.log('URL opened successfully');
+        }
+      } catch (openError: any) {
+        console.error('Error opening checkout URL:', openError);
+        Alert.alert(
+          'Error',
+          `Unable to open payment page: ${openError.message || 'Unknown error'}. Please try again or contact support.`
         );
       }
     } catch (error: any) {
@@ -195,13 +205,24 @@ const AdminSubscriptionScreen: React.FC = () => {
       // securityCompanyId is now automatically included from the auth middleware
       const portal = await paymentService.getBillingPortal(securityCompanyId);
       
-      const canOpen = await Linking.canOpenURL(portal.url);
-      if (canOpen) {
-        await Linking.openURL(portal.url);
-      } else {
+      if (!portal || !portal.url) {
         Alert.alert(
           'Error',
-          'Unable to open billing portal. Please contact support.'
+          'Billing portal session created but no URL available. Please contact support.'
+        );
+        return;
+      }
+
+      try {
+        if (__DEV__) {
+          console.log('Opening billing portal URL:', portal.url);
+        }
+        await Linking.openURL(portal.url);
+      } catch (openError: any) {
+        console.error('Error opening billing portal URL:', openError);
+        Alert.alert(
+          'Error',
+          `Unable to open billing portal: ${openError.message || 'Unknown error'}. Please try again or contact support.`
         );
       }
     } catch (error: any) {
@@ -395,7 +416,7 @@ const AdminSubscriptionScreen: React.FC = () => {
                     disabled={processing}
                   >
                     {processing ? (
-                      <ActivityIndicator color="#FFFFFF" />
+                      <ActivityIndicator color={COLORS.textInverse} />
                     ) : (
                       <Text style={styles.subscribeButtonText}>
                         {currentSubscription ? 'Upgrade' : 'Subscribe'}
@@ -423,7 +444,7 @@ const AdminSubscriptionScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
+    backgroundColor: COLORS.backgroundSecondary,
   },
   scrollView: {
     flex: 1,
@@ -439,10 +460,10 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
   },
   header: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.backgroundPrimary,
     padding: SPACING.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: COLORS.borderLight,
   },
   title: {
     fontSize: TYPOGRAPHY.fontSize.xl,
@@ -465,14 +486,10 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
   },
   currentSubscriptionCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.md,
     padding: SPACING.lg,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    ...SHADOWS.small,
   },
   subscriptionHeader: {
     flexDirection: 'row',
@@ -537,10 +554,10 @@ const styles = StyleSheet.create({
   billingCycleButton: {
     flex: 1,
     paddingVertical: SPACING.md,
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
+    borderRadius: BORDER_RADIUS.sm,
+    backgroundColor: COLORS.backgroundPrimary,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.borderLight,
     alignItems: 'center',
   },
   billingCycleButtonActive: {
@@ -553,18 +570,14 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
   },
   billingCycleButtonTextActive: {
-    color: '#FFFFFF',
+    color: COLORS.textInverse,
   },
   planCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.md,
     padding: SPACING.lg,
     marginBottom: SPACING.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    ...SHADOWS.small,
   },
   planHeader: {
     flexDirection: 'row',
@@ -612,15 +625,16 @@ const styles = StyleSheet.create({
   },
   subscribeButton: {
     backgroundColor: COLORS.primary,
-    borderRadius: 8,
+    borderRadius: BORDER_RADIUS.sm,
     paddingVertical: SPACING.md,
     alignItems: 'center',
+    ...SHADOWS.small,
   },
   subscribeButtonDisabled: {
     opacity: 0.6,
   },
   subscribeButtonText: {
-    color: '#FFFFFF',
+    color: COLORS.textInverse,
     fontSize: TYPOGRAPHY.fontSize.md,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },

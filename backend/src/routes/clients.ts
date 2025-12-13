@@ -18,8 +18,12 @@ router.get('/dashboard/stats', authorize('CLIENT'), clientController.getDashboar
 router.get('/my-guards', authorize('CLIENT'), clientController.getMyGuards);
 router.get('/my-reports', authorize('CLIENT'), clientController.getMyReports);
 router.get('/my-sites', authorize('CLIENT'), clientController.getMySites);
+router.get('/my-shifts', authorize('CLIENT'), clientController.getMyShifts);
 router.get('/my-notifications', authorize('CLIENT'), clientController.getMyNotifications);
 router.put('/reports/:reportId/respond', authorize('CLIENT'), clientController.respondToReport);
+
+// Client shift creation (Option B - Direct Assignment)
+router.post('/shifts', authorize('CLIENT'), clientController.createShift);
 
 // Admin routes
 router.get('/:id', authorize('ADMIN'), clientController.getClientById);

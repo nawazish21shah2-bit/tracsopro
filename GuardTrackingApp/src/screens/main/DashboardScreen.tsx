@@ -23,6 +23,7 @@ import ErrorBoundary from '../../components/common/ErrorBoundary';
 import { useDebounce, useStableCallback } from '../../utils/performance';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 
 type DashboardScreenNavigationProp = StackNavigationProp<any, 'Dashboard'>;
 
@@ -107,7 +108,19 @@ const DashboardScreen: React.FC = () => {
       <SharedHeader
         variant="dashboard"
         title={`${getGreeting()}, ${user?.firstName} ${user?.lastName}`}
-        onNotificationPress={() => navigation.navigate('Messages')}
+        onNotificationPress={() => {
+          // Navigate to notifications based on user role
+          const userRole = user?.role;
+          if (userRole === 'CLIENT') {
+            navigation.navigate('ClientNotifications' as never);
+          } else if (userRole === 'ADMIN') {
+            navigation.navigate('AdminNotifications' as never);
+          } else if (userRole === 'SUPER_ADMIN') {
+            navigation.navigate('SuperAdminNotifications' as never);
+          } else {
+            navigation.navigate('Notifications' as never);
+          }
+        }}
         notificationCount={stats.unreadNotifications}
       />
 
@@ -258,52 +271,52 @@ const getSeverityColor = (severity: string) => {
 
 const getStatusColor = (status: string) => {
   switch (status) {
-    case 'active': return '#00C851';
-    case 'inactive': return '#FF4444';
-    case 'suspended': return '#FF8800';
-    case 'terminated': return '#6C757D';
-    default: return '#6C757D';
+    case 'active': return COLORS.success;
+    case 'inactive': return COLORS.error;
+    case 'suspended': return COLORS.warning;
+    case 'terminated': return COLORS.textSecondary;
+    default: return COLORS.textSecondary;
   }
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: COLORS.backgroundSecondary,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    backgroundColor: '#007AFF',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.lg,
+    backgroundColor: COLORS.primary,
   },
   greetingContainer: {
     flex: 1,
   },
   greeting: {
-    fontSize: 16,
-    color: '#E3F2FD',
-    marginBottom: 4,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textInverse,
+    marginBottom: SPACING.xs,
   },
   userName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#ffffff',
+    fontSize: TYPOGRAPHY.fontSize.xxl,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    color: COLORS.textInverse,
   },
   notificationButton: {
     position: 'relative',
-    padding: 8,
+    padding: SPACING.sm,
   },
   notificationIcon: {
-    fontSize: 24,
+    fontSize: TYPOGRAPHY.fontSize.xxl,
   },
   notificationBadge: {
     position: 'absolute',
     top: 0,
     right: 0,
-    backgroundColor: '#FF4444',
+    backgroundColor: COLORS.error,
     borderRadius: 10,
     minWidth: 20,
     height: 20,
@@ -311,59 +324,55 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   notificationBadgeText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: 'bold',
+    color: COLORS.textInverse,
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
   },
   statsContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.lg,
     justifyContent: 'space-between',
   },
   statCard: {
     flex: 1,
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 16,
-    marginHorizontal: 4,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.lg,
+    marginHorizontal: SPACING.xs,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    ...SHADOWS.small,
   },
   statNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#007AFF',
-    marginBottom: 4,
+    fontSize: TYPOGRAPHY.fontSize.xxl,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    color: COLORS.primary,
+    marginBottom: SPACING.xs,
   },
   statLabel: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textSecondary,
     textAlign: 'center',
   },
   section: {
-    paddingHorizontal: 20,
-    marginBottom: 24,
+    paddingHorizontal: SPACING.lg,
+    marginBottom: SPACING.xxl,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: SPACING.lg,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    color: COLORS.textPrimary,
   },
   seeAllText: {
-    fontSize: 14,
-    color: '#007AFF',
-    fontWeight: '500',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.primary,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
   actionsGrid: {
     flexDirection: 'row',
@@ -372,29 +381,27 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     width: '48%',
-    marginBottom: 12,
+    marginBottom: SPACING.md,
   },
   incidentCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.lg,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    // Border only, no shadow for minimal style
   },
   incidentHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: SPACING.sm,
   },
   incidentType: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
     flex: 1,
   },
   severityBadge: {
@@ -403,36 +410,34 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   incidentDescription: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 8,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.sm,
     lineHeight: 20,
   },
   incidentTime: {
-    fontSize: 12,
-    color: '#999',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textTertiary,
   },
   guardCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.lg,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    // Border only, no shadow for minimal style
   },
   guardInfo: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: SPACING.xs,
   },
   guardName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
     flex: 1,
   },
   statusBadge: {
@@ -441,23 +446,21 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   guardDepartment: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
   },
   emptyState: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 32,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.xxxxl,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    // Border only, no shadow for minimal style
   },
   emptyStateText: {
-    fontSize: 16,
-    color: '#999',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textTertiary,
   },
 });
 

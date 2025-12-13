@@ -192,6 +192,7 @@ const ReportsScreen: React.FC = () => {
   };
 
   const handleNotificationPress = () => {
+    navigation.navigate('Notifications' as never);
     console.log('Notification pressed');
   };
 
@@ -279,7 +280,7 @@ const ReportsScreen: React.FC = () => {
         <TextInput
           style={styles.reportInput}
           placeholder="Write shift report"
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor={COLORS.textTertiary}
           multiline
           numberOfLines={4}
           value={reportText}
@@ -304,7 +305,7 @@ const ReportsScreen: React.FC = () => {
             onPress={handleAddIncidentReport}
             activeOpacity={0.8}
           >
-            <FileTextIcon size={16} color="#1E3A8A" />
+            <FileTextIcon size={16} color={COLORS.primaryDark} />
             <Text style={styles.incidentButtonText}>Add Incident Report</Text>
           </TouchableOpacity>
           
@@ -374,11 +375,11 @@ const ReportsScreen: React.FC = () => {
                   }}
                   activeOpacity={0.7}
                 >
-                  <FileTextIcon size={14} color="#1C6CA9" />
+                  <FileTextIcon size={14} color={COLORS.primary} />
                   <Text style={styles.reportTypeText}>
                     {getReportTypeLabel(report.reportType)}
                   </Text>
-                  <FeatherIcon name="chevronDown" size={12} color="#828282" />
+                  <FeatherIcon name="chevronDown" size={12} color={COLORS.textSecondary} />
                 </TouchableOpacity>
                 <Text style={styles.reportTime}>
                   {formatDate(report.submittedAt)}
@@ -400,7 +401,7 @@ const ReportsScreen: React.FC = () => {
   if (reportsError && reports.length === 0 && !reportsLoading) {
     return (
       <View style={styles.container}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+        <StatusBar barStyle="dark-content" backgroundColor={COLORS.backgroundPrimary} />
         <SharedHeader
           variant="guard"
           title="My Reports"
@@ -430,7 +431,7 @@ const ReportsScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.backgroundPrimary} />
       <SharedHeader
         variant="guard"
         title="My Reports"
@@ -469,7 +470,7 @@ const ReportsScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: COLORS.backgroundSecondary,
   },
   content: {
     flex: 1,
@@ -477,21 +478,13 @@ const styles = StyleSheet.create({
   },
   currentShiftCard: {
     backgroundColor: COLORS.backgroundPrimary,
-    borderRadius: 12,
+    borderRadius: BORDER_RADIUS.md,
     padding: SPACING.lg,
     marginTop: SPACING.lg,
     marginBottom: SPACING.xl,
-    // Drop shadow: X: 0, Y: 4, Blur: 4, Spread: 0, Color: #DCDCDC 25%
-    shadowColor: '#DCDCDC',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
     borderWidth: 1,
-    borderColor: '#DCDCDC',
+    borderColor: COLORS.borderCard,
+    // Border only, no shadow for minimal style
   },
   locationHeader: {
     flexDirection: 'row',
@@ -508,7 +501,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#DBEAFE', // Light blue background for icon
+    backgroundColor: COLORS.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: SPACING.md,
@@ -520,24 +513,24 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.fontSize.md,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
     color: COLORS.textPrimary,
-    marginBottom: 2,
+    marginBottom: SPACING.xs / 2,
     fontFamily: TYPOGRAPHY.fontPrimary,
   },
   locationAddress: {
     fontSize: TYPOGRAPHY.fontSize.sm,
-    color: '#828282',
+    color: COLORS.textSecondary,
     fontFamily: TYPOGRAPHY.fontPrimary,
   },
   statusBadge: {
-    backgroundColor: '#E8F5E8',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: COLORS.success + '20',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderRadius: BORDER_RADIUS.round,
   },
   statusText: {
     fontSize: TYPOGRAPHY.fontSize.xs,
     fontWeight: TYPOGRAPHY.fontWeight.medium,
-    color: '#4CAF50',
+    color: COLORS.success,
     fontFamily: TYPOGRAPHY.fontPrimary,
   },
   shiftDescription: {
@@ -555,7 +548,7 @@ const styles = StyleSheet.create({
   },
   shiftTimeLabel: {
     fontSize: TYPOGRAPHY.fontSize.sm,
-    color: '#828282',
+    color: COLORS.textSecondary,
     fontFamily: TYPOGRAPHY.fontPrimary,
   },
   shiftTimeValue: {
@@ -566,25 +559,26 @@ const styles = StyleSheet.create({
   },
   reportInput: {
     borderWidth: 1,
-    borderColor: '#DCDCDC',
-    borderRadius: 12,
+    borderColor: COLORS.borderLight,
+    borderRadius: BORDER_RADIUS.md,
     padding: SPACING.lg,
     fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.textPrimary,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: COLORS.backgroundSecondary,
     marginBottom: SPACING.lg,
     minHeight: 115,
     textAlignVertical: 'top',
     fontFamily: TYPOGRAPHY.fontPrimary,
   },
   submitButton: {
-    backgroundColor: '#1C6CA9',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.sm,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.xxl,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: SPACING.lg,
+    ...SHADOWS.small,
     alignSelf: 'flex-end',
   },
   submitButtonDisabled: {
@@ -606,14 +600,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#DBEAFE', // Light blue background
-    borderRadius: 8,
-    paddingVertical: 12,
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: BORDER_RADIUS.sm,
+    paddingVertical: SPACING.md,
     paddingHorizontal: SPACING.md,
     gap: SPACING.xs,
   },
   incidentButtonText: {
-    color: '#1E3A8A', // Dark blue text
+    color: COLORS.primaryDark,
     fontSize: TYPOGRAPHY.fontSize.sm,
     fontWeight: TYPOGRAPHY.fontWeight.medium,
     fontFamily: TYPOGRAPHY.fontPrimary,
@@ -623,9 +617,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFEBEE',
-    borderRadius: 8,
-    paddingVertical: 12,
+    backgroundColor: COLORS.error + '15',
+    borderRadius: BORDER_RADIUS.sm,
+    paddingVertical: SPACING.md,
     paddingHorizontal: SPACING.md,
     gap: SPACING.xs,
   },
@@ -636,7 +630,7 @@ const styles = StyleSheet.create({
     fontFamily: TYPOGRAPHY.fontPrimary,
   },
   submittedReportsContainer: {
-    marginBottom: 100,
+    marginBottom: SPACING.xxxxl * 2, // Space for bottom navigator
   },
   sectionTitle: {
     fontSize: TYPOGRAPHY.fontSize.lg,
@@ -647,20 +641,12 @@ const styles = StyleSheet.create({
   },
   reportCard: {
     backgroundColor: COLORS.backgroundPrimary,
-    borderRadius: 12,
+    borderRadius: BORDER_RADIUS.md,
     padding: SPACING.lg,
     marginBottom: SPACING.lg,
-    // Drop shadow: X: 0, Y: 4, Blur: 4, Spread: 0, Color: #DCDCDC 25%
-    shadowColor: '#DCDCDC',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
     borderWidth: 1,
-    borderColor: '#DCDCDC',
+    borderColor: COLORS.borderCard,
+    // Border only, no shadow for minimal style
   },
   reportText: {
     fontSize: TYPOGRAPHY.fontSize.sm,
@@ -681,23 +667,24 @@ const styles = StyleSheet.create({
   },
   reportTypeText: {
     fontSize: TYPOGRAPHY.fontSize.sm,
-    color: '#1C6CA9',
+    color: COLORS.primary,
     fontFamily: TYPOGRAPHY.fontPrimary,
   },
   reportTime: {
     fontSize: TYPOGRAPHY.fontSize.xs,
-    color: '#828282',
+    color: COLORS.textSecondary,
     fontFamily: TYPOGRAPHY.fontPrimary,
   },
   emptyShiftCard: {
     backgroundColor: COLORS.backgroundPrimary,
-    borderRadius: 12,
+    borderRadius: BORDER_RADIUS.md,
     padding: SPACING.xl,
     marginTop: SPACING.lg,
     marginBottom: SPACING.xl,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#DCDCDC',
+    borderColor: COLORS.borderCard,
+    // Border only, no shadow for minimal style
   },
   emptyShiftText: {
     fontSize: TYPOGRAPHY.fontSize.md,
@@ -708,7 +695,7 @@ const styles = StyleSheet.create({
   },
   emptyShiftSubtext: {
     fontSize: TYPOGRAPHY.fontSize.sm,
-    color: '#828282',
+    color: COLORS.textSecondary,
     fontFamily: TYPOGRAPHY.fontPrimary,
   },
   emptyReportsContainer: {
@@ -724,7 +711,7 @@ const styles = StyleSheet.create({
   },
   emptyReportsSubtext: {
     fontSize: TYPOGRAPHY.fontSize.sm,
-    color: '#828282',
+    color: COLORS.textSecondary,
     fontFamily: TYPOGRAPHY.fontPrimary,
   },
   loadingContainer: {
@@ -733,7 +720,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: TYPOGRAPHY.fontSize.sm,
-    color: '#828282',
+    color: COLORS.textSecondary,
     fontFamily: TYPOGRAPHY.fontPrimary,
   },
   errorContainer: {

@@ -22,7 +22,9 @@ import {
   NotificationIcon,
   LogoutIcon,
   DashboardIcon,
+  CheckCircleIcon,
 } from '../ui/AppIcons';
+import { FeatherIcon } from '../ui/FeatherIcons';
 import { COLORS, SPACING, TYPOGRAPHY } from '../../styles/globalStyles';
 
 interface SuperAdminProfileDrawerProps {
@@ -108,16 +110,12 @@ export const SuperAdminProfileDrawer: React.FC<SuperAdminProfileDrawerProps> = (
     );
   };
 
+  const handleContactSupport = () => {
+    onClose();
+    navigation.navigate('ChatListScreen');
+  };
+
   const menuItems: MenuItem[] = [
-    {
-      id: 'profile',
-      label: 'My Profile',
-      icon: <UserIcon size={20} color={COLORS.textPrimary} />,
-      onPress: () => {
-        onClose();
-        onNavigateToProfile?.();
-      },
-    },
     {
       id: 'companies',
       label: 'Company Management',
@@ -176,7 +174,12 @@ export const SuperAdminProfileDrawer: React.FC<SuperAdminProfileDrawerProps> = (
         onClose();
         onNavigateToNotifications?.();
       },
-      showDivider: true,
+    },
+    {
+      id: 'support',
+      label: 'Contact Support',
+      icon: <FeatherIcon name="messageCircle" size={20} color={COLORS.textPrimary} />,
+      onPress: handleContactSupport,
     },
     {
       id: 'logout',
@@ -193,6 +196,7 @@ export const SuperAdminProfileDrawer: React.FC<SuperAdminProfileDrawerProps> = (
     .join('')
     .toUpperCase()
     .slice(0, 2) || 'SA';
+  const isVerified = user?.isActive ?? true;
 
   return (
     <Modal
@@ -201,7 +205,11 @@ export const SuperAdminProfileDrawer: React.FC<SuperAdminProfileDrawerProps> = (
       animationType="none"
       onRequestClose={onClose}
     >
-      <View style={styles.modalContainer}>
+      <TouchableOpacity 
+        style={styles.overlay}
+        activeOpacity={1}
+        onPress={onClose}
+      >
         <Animated.View
           style={[
             styles.drawerContainer,
@@ -209,6 +217,7 @@ export const SuperAdminProfileDrawer: React.FC<SuperAdminProfileDrawerProps> = (
               transform: [{ translateX: slideAnim }],
             },
           ]}
+          onStartShouldSetResponder={() => true}
         >
           <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
             {/* Profile Header */}
@@ -219,73 +228,77 @@ export const SuperAdminProfileDrawer: React.FC<SuperAdminProfileDrawerProps> = (
                 </View>
               </View>
               <Text style={styles.userName}>{userName}</Text>
-              <Text style={styles.userRole}>Super Administrator</Text>
+              {isVerified && (
+                <View style={styles.verifiedContainer}>
+                  <Text style={styles.verifiedText}>Verified</Text>
+                  <CheckCircleIcon size={14} color={COLORS.textPrimary} />
+                </View>
+              )}
+              <View style={styles.separator} />
             </View>
 
             {/* Menu Items */}
             <View style={styles.menuContainer}>
-              {menuItems.map((item, index) => (
-                <React.Fragment key={item.id}>
-                  <TouchableOpacity
-                    style={styles.menuItem}
-                    onPress={item.onPress}
-                    disabled={item.id === 'logout' && isLoggingOut}
-                  >
+              {menuItems.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.menuItem}
+                  onPress={item.onPress}
+                  activeOpacity={0.7}
+                  disabled={item.id === 'logout' && isLoggingOut}
+                >
+                  <View style={styles.menuItemContent}>
                     <View style={styles.menuIcon}>{item.icon}</View>
-                    <Text
-                      style={[
-                        styles.menuLabel,
-                        item.id === 'logout' && styles.logoutLabel,
-                      ]}
-                    >
-                      {item.label}
+                    <Text style={[
+                      styles.menuLabel,
+                      item.id === 'logout' && styles.logoutLabel,
+                    ]}>
+                      {item.id === 'logout' && isLoggingOut ? 'Logging out...' : item.label}
                     </Text>
-                  </TouchableOpacity>
-                  {item.showDivider && index < menuItems.length - 1 && (
-                    <View style={styles.divider} />
-                  )}
-                </React.Fragment>
+                  </View>
+                </TouchableOpacity>
               ))}
             </View>
           </ScrollView>
         </Animated.View>
-        <TouchableOpacity
-          style={styles.backdrop}
-          activeOpacity={1}
-          onPress={onClose}
-        />
-      </View>
+      </TouchableOpacity>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  modalContainer: {
+  overlay: {
     flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     flexDirection: 'row',
   },
   drawerContainer: {
-    width: Dimensions.get('window').width * 0.85,
+    width: '70%',
+    maxWidth: 320,
     backgroundColor: COLORS.backgroundPrimary,
-    shadowColor: '#000',
-    shadowOffset: { width: 2, height: 0 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 10,
-  },
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    paddingTop: SPACING.xl * 2,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.lg,
+    height: '100%',
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    shadowColor: COLORS.cardShadow,
+    shadowOffset: {
+      width: 2,
+      height: 0,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
   },
   scrollView: {
     flex: 1,
   },
   profileHeader: {
-    padding: SPACING.xl,
     alignItems: 'center',
-    backgroundColor: COLORS.backgroundPrimary,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
+    marginBottom: SPACING.lg,
+    paddingBottom: SPACING.lg,
   },
   avatarContainer: {
     marginBottom: SPACING.md,
@@ -294,52 +307,66 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarText: {
-    fontSize: TYPOGRAPHY.fontSize.xl,
+    fontSize: TYPOGRAPHY.fontSize.xxxl,
     fontWeight: TYPOGRAPHY.fontWeight.bold,
-    color: COLORS.textInverse,
+    color: COLORS.primary,
   },
   userName: {
     fontSize: TYPOGRAPHY.fontSize.lg,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
     color: COLORS.textPrimary,
-    marginBottom: SPACING.xs,
+    marginBottom: SPACING.sm,
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
-  userRole: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.textSecondary,
-  },
-  menuContainer: {
-    paddingVertical: SPACING.sm,
-  },
-  menuItem: {
+  verifiedContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  verifiedText: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.regular,
+  },
+  separator: {
+    width: '100%',
+    height: 1,
+    backgroundColor: COLORS.borderLight,
+    marginTop: SPACING.lg,
+  },
+  menuContainer: {
+    flex: 1,
+  },
+  menuItem: {
     paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg,
+    paddingHorizontal: SPACING.xs,
+  },
+  menuItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   menuIcon: {
     width: 24,
+    height: 24,
+    justifyContent: 'center',
     alignItems: 'center',
     marginRight: SPACING.md,
   },
   menuLabel: {
     fontSize: TYPOGRAPHY.fontSize.md,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    fontWeight: TYPOGRAPHY.fontWeight.regular,
     color: COLORS.textPrimary,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    flex: 1,
   },
   logoutLabel: {
     color: COLORS.error,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: COLORS.borderLight,
-    marginHorizontal: SPACING.lg,
-    marginVertical: SPACING.xs,
   },
 });
 

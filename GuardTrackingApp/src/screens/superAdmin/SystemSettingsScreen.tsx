@@ -1,11 +1,12 @@
 /**
  * System Settings Screen - System configuration and settings
+ * Hybrid design: Standard list items + System toggles + Action buttons
  */
 
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, ActivityIndicator } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { ChevronRight, User, Bell, HelpCircle, LogOut, Lock, Trash2, Download } from 'react-native-feather';
 import { useNavigation } from '@react-navigation/native';
 import { useDispatch } from 'react-redux';
 import type { AppDispatch } from '../../store';
@@ -15,29 +16,53 @@ import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SuperAdminProfileDrawer from '../../components/superAdmin/SuperAdminProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 import { superAdminService } from '../../services/superAdminService';
+import { cacheService } from '../../services/cacheService';
+import { SuperAdminStackParamList } from '../../navigation/SuperAdminNavigator';
 
-interface SettingItem {
+// Hardcoded colors to avoid module load issues
+const COLORS = {
+  primary: '#1C6CA9',
+  primaryLight: '#ACD3F1',
+  textPrimary: '#000000',
+  textSecondary: '#828282',
+  error: '#F44336',
+  backgroundPrimary: '#FFFFFF',
+  backgroundSecondary: '#F8F9FA',
+  borderLight: '#ACD3F1',
+  borderCard: '#DCDCDC',
+};
+
+interface MenuItem {
+  id: string;
+  title: string;
+  icon: React.ReactNode;
+  onPress: () => void;
+}
+
+interface ToggleSetting {
   id: string;
   title: string;
   description: string;
-  type: 'toggle' | 'action' | 'info';
-  value?: boolean;
-  action?: () => void;
+  key: keyof typeof defaultSettings;
 }
 
+const defaultSettings = {
+  emailNotifications: true,
+  pushNotifications: true,
+  maintenanceMode: false,
+  autoBackup: true,
+  debugMode: false,
+};
+
 const SystemSettingsScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<StackNavigationProp<SuperAdminStackParamList>>();
   const dispatch = useDispatch<AppDispatch>();
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [settings, setSettings] = useState({
-    emailNotifications: true,
-    pushNotifications: true,
-    maintenanceMode: false,
-    autoBackup: true,
-    debugMode: false,
-  });
+  const [clearingCache, setClearingCache] = useState(false);
+  const [exportingData, setExportingData] = useState(false);
+  const [settings, setSettings] = useState(defaultSettings);
 
   useEffect(() => {
     loadSettings();
@@ -48,7 +73,6 @@ const SystemSettingsScreen: React.FC = () => {
       setLoading(true);
       const data = await superAdminService.getPlatformSettings();
       
-      // Transform backend settings to local state
       setSettings({
         emailNotifications: data.GENERAL?.['notifications.email'] !== 'false',
         pushNotifications: data.GENERAL?.['notifications.push'] !== 'false',
@@ -89,16 +113,12 @@ const SystemSettingsScreen: React.FC = () => {
       'Logout',
       'Are you sure you want to logout?',
       [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
+        { text: 'Cancel', style: 'cancel' },
         {
           text: 'Logout',
           style: 'destructive',
           onPress: async () => {
             try {
-              // Dispatch logout action - this will handle API call, storage cleanup, and navigation
               await dispatch(logoutUser()).unwrap();
             } catch (error) {
               console.error('Logout error:', error);
@@ -110,219 +130,332 @@ const SystemSettingsScreen: React.FC = () => {
     );
   };
 
-  const handleToggleSetting = (key: string, value: boolean) => {
-    setSettings(prev => ({
-      ...prev,
-      [key]: value,
-    }));
-    // Auto-save on toggle
+  const handleToggleSetting = (key: keyof typeof defaultSettings, value: boolean) => {
+    setSettings(prev => ({ ...prev, [key]: value }));
     setTimeout(() => saveSettings(), 500);
   };
 
-  const settingsData: SettingItem[] = [
-    {
-      id: 'email_notifications',
-      title: 'Email Notifications',
-      description: 'Receive email notifications for important events',
-      type: 'toggle',
-      value: settings.emailNotifications,
-    },
-    {
-      id: 'push_notifications',
-      title: 'Push Notifications',
-      description: 'Receive push notifications on your device',
-      type: 'toggle',
-      value: settings.pushNotifications,
-    },
-    {
-      id: 'maintenance_mode',
-      title: 'Maintenance Mode',
-      description: 'Enable maintenance mode for the platform',
-      type: 'toggle',
-      value: settings.maintenanceMode,
-    },
-    {
-      id: 'auto_backup',
-      title: 'Auto Backup',
-      description: 'Automatically backup system data daily',
-      type: 'toggle',
-      value: settings.autoBackup,
-    },
-    {
-      id: 'debug_mode',
-      title: 'Debug Mode',
-      description: 'Enable debug logging for troubleshooting',
-      type: 'toggle',
-      value: settings.debugMode,
-    },
-    {
-      id: 'clear_cache',
-      title: 'Clear Cache',
-      description: 'Clear application cache and temporary files',
-      type: 'action',
-      action: () => {
-        Alert.alert('Cache Cleared', 'Application cache has been cleared successfully.');
-      },
-    },
-    {
-      id: 'export_data',
-      title: 'Export Data',
-      description: 'Export platform data for backup or analysis',
-      type: 'action',
-      action: () => {
-        Alert.alert('Export Started', 'Data export has been initiated. You will receive an email when complete.');
-      },
-    },
-    {
-      id: 'logout',
-      title: 'Logout',
-      description: 'Sign out of your Super Admin account',
-      type: 'action',
-      action: handleLogout,
-    },
-  ];
+  const handleProfile = () => {
+    navigation.navigate('SuperAdminProfileEdit');
+  };
 
-  const renderSettingItem = (item: SettingItem) => {
-    return (
-      <View key={item.id} style={styles.settingItem}>
-        <View style={styles.settingContent}>
-          <Text style={styles.settingTitle}>{item.title}</Text>
-          <Text style={styles.settingDescription}>{item.description}</Text>
-        </View>
-        
-        {item.type === 'toggle' && (
-          <Switch
-            value={item.value}
-            onValueChange={(value) => handleToggleSetting(item.id.replace('_', ''), value)}
-            trackColor={{ false: '#E5E7EB', true: COLORS.primaryLight }}
-            thumbColor={item.value ? COLORS.primary : '#F3F4F6'}
-          />
-        )}
-        
-        {item.type === 'action' && (
-          <TouchableOpacity
-            style={[
-              styles.actionButton,
-              item.id === 'logout' && styles.logoutButton,
-            ]}
-            onPress={item.action}
-          >
-            <Text
-              style={[
-                styles.actionButtonText,
-                item.id === 'logout' && styles.logoutButtonText,
-              ]}
-            >
-              {item.id === 'logout' ? 'Logout' : 'Execute'}
-            </Text>
-          </TouchableOpacity>
-        )}
-      </View>
+  const handleNotifications = () => {
+    navigation.navigate('SuperAdminNotificationSettings');
+  };
+
+  const handleChangePassword = () => {
+    navigation.navigate('SuperAdminChangePassword');
+  };
+
+  const handleSupport = () => {
+    navigation.navigate('SuperAdminSupportContact');
+  };
+
+  const handleClearCache = async () => {
+    Alert.alert(
+      'Clear Cache',
+      'This will clear all cached data. This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setClearingCache(true);
+              await cacheService.clear();
+              Alert.alert('Success', 'Application cache has been cleared successfully.');
+            } catch (error) {
+              console.error('Error clearing cache:', error);
+              Alert.alert('Error', 'Failed to clear cache. Please try again.');
+            } finally {
+              setClearingCache(false);
+            }
+          },
+        },
+      ]
     );
   };
+
+  const handleExportData = async () => {
+    Alert.alert(
+      'Export Data',
+      'This will export all platform data. You will receive an email when the export is complete.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Export',
+          onPress: async () => {
+            try {
+              setExportingData(true);
+              if (superAdminService.exportPlatformData) {
+                await superAdminService.exportPlatformData();
+              }
+              Alert.alert('Export Started', 'Data export has been initiated. You will receive an email when complete.');
+            } catch (error) {
+              console.error('Error exporting data:', error);
+              Alert.alert('Error', 'Failed to start data export. Please try again.');
+            } finally {
+              setExportingData(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const menuItems: MenuItem[] = [
+    { id: '1', title: 'SuperAdmin Profile', icon: <User width={20} height={20} color={COLORS.textSecondary} />, onPress: handleProfile },
+    { id: '2', title: 'Notifications', icon: <Bell width={20} height={20} color={COLORS.textSecondary} />, onPress: handleNotifications },
+    { id: '3', title: 'Change Password', icon: <Lock width={20} height={20} color={COLORS.textSecondary} />, onPress: handleChangePassword },
+    { id: '4', title: 'Contact Support', icon: <HelpCircle width={20} height={20} color={COLORS.textSecondary} />, onPress: handleSupport },
+  ];
+
+  const toggleSettings: ToggleSetting[] = [
+    { id: '1', title: 'Email Notifications', description: 'Receive email notifications for important events', key: 'emailNotifications' },
+    { id: '2', title: 'Push Notifications', description: 'Receive push notifications on your device', key: 'pushNotifications' },
+    { id: '3', title: 'Maintenance Mode', description: 'Enable maintenance mode for the platform', key: 'maintenanceMode' },
+    { id: '4', title: 'Auto Backup', description: 'Automatically backup system data daily', key: 'autoBackup' },
+    { id: '5', title: 'Debug Mode', description: 'Enable debug logging for troubleshooting', key: 'debugMode' },
+  ];
+
+  if (loading) {
+    return (
+      <SafeAreaWrapper>
+        <SharedHeader variant="superAdmin" title="System Settings" profileDrawer={null} />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+        </View>
+      </SafeAreaWrapper>
+    );
+  }
 
   return (
     <SafeAreaWrapper>
       <SharedHeader
         variant="superAdmin"
         title="System Settings"
-        onMenuPress={openDrawer}
-        onNotificationPress={() => {
-          // Handle notification press
-        }}
         profileDrawer={
           <SuperAdminProfileDrawer
             visible={isDrawerVisible}
             onClose={closeDrawer}
-            onNavigateToSystemSettings={() => {
-              closeDrawer();
-            }}
+            onNavigateToSystemSettings={() => closeDrawer()}
           />
         }
       />
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <View style={styles.settingsContainer}>
-          {settingsData.map(renderSettingItem)}
+        {/* Standard Menu Items */}
+        <View style={styles.card}>
+          {menuItems.map((item, idx) => (
+            <TouchableOpacity
+              key={item.id}
+              style={[styles.row, idx === menuItems.length - 1 && styles.lastRow]}
+              onPress={item.onPress}
+            >
+              <View style={styles.left}>
+                <View style={styles.iconWrap}>{item.icon}</View>
+                <Text style={styles.title}>{item.title}</Text>
+              </View>
+              <ChevronRight width={18} height={18} color={COLORS.textSecondary} />
+            </TouchableOpacity>
+          ))}
         </View>
+
+        {/* System Toggle Settings */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Platform Settings</Text>
+          {toggleSettings.map((item, idx) => (
+            <View
+              key={item.id}
+              style={[styles.toggleRow, idx === toggleSettings.length - 1 && styles.lastRow]}
+            >
+              <View style={styles.toggleContent}>
+                <Text style={styles.toggleTitle}>{item.title}</Text>
+                <Text style={styles.toggleDescription}>{item.description}</Text>
+              </View>
+              <Switch
+                value={settings[item.key]}
+                onValueChange={(value) => handleToggleSetting(item.key, value)}
+                disabled={saving}
+                trackColor={{ false: '#E5E7EB', true: COLORS.primaryLight }}
+                thumbColor={settings[item.key] ? COLORS.primary : '#F3F4F6'}
+              />
+            </View>
+          ))}
+        </View>
+
+        {/* Action Buttons */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>System Actions</Text>
+          <TouchableOpacity
+            style={styles.actionRow}
+            onPress={handleClearCache}
+            disabled={clearingCache}
+          >
+            <View style={styles.left}>
+              <Trash2 width={20} height={20} color={COLORS.error} />
+              <View style={styles.actionContent}>
+                <Text style={styles.actionTitle}>Clear Cache</Text>
+                <Text style={styles.actionDescription}>Clear application cache and temporary files</Text>
+              </View>
+            </View>
+            {clearingCache ? (
+              <ActivityIndicator size="small" color={COLORS.error} />
+            ) : (
+              <ChevronRight width={18} height={18} color={COLORS.textSecondary} />
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionRow, styles.lastRow]}
+            onPress={handleExportData}
+            disabled={exportingData}
+          >
+            <View style={styles.left}>
+              <Download width={20} height={20} color={COLORS.primary} />
+              <View style={styles.actionContent}>
+                <Text style={styles.actionTitle}>Export Data</Text>
+                <Text style={styles.actionDescription}>Export platform data for backup or analysis</Text>
+              </View>
+            </View>
+            {exportingData ? (
+              <ActivityIndicator size="small" color={COLORS.primary} />
+            ) : (
+              <ChevronRight width={18} height={18} color={COLORS.textSecondary} />
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {/* Logout */}
+        <TouchableOpacity style={styles.logout} onPress={handleLogout}>
+          <LogOut width={18} height={18} color={COLORS.error} />
+          <Text style={styles.logoutText}> Logout</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaWrapper>
   );
 };
 
+// Use hardcoded values in StyleSheet.create since it's evaluated at module load time
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F7FA',
-  },
-  header: {
-    padding: SPACING.lg,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  title: {
-    fontSize: TYPOGRAPHY.fontSize.xl,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.sm,
-  },
-  subtitle: {
-    fontSize: TYPOGRAPHY.fontSize.md,
-    color: COLORS.textSecondary,
-  },
   scrollView: {
     flex: 1,
+    backgroundColor: '#F8F9FA',
   },
-  settingsContainer: {
-    padding: SPACING.md,
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  settingItem: {
+  card: {
     backgroundColor: '#FFFFFF',
-    padding: SPACING.lg,
-    marginBottom: SPACING.md,
     borderRadius: 12,
+    overflow: 'hidden',
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: '#DCDCDC',
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#828282',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  row: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ACD3F1',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
-  settingContent: {
+  lastRow: {
+    borderBottomWidth: 0,
+  },
+  left: {
+    flexDirection: 'row',
+    alignItems: 'center',
     flex: 1,
-    marginRight: SPACING.md,
   },
-  settingTitle: {
-    fontSize: TYPOGRAPHY.fontSize.md,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.xs,
-  },
-  settingDescription: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.textSecondary,
-    lineHeight: 18,
-  },
-  actionButton: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    backgroundColor: COLORS.primary,
-    borderRadius: 8,
-    minWidth: 80,
+  iconWrap: {
+    width: 32,
     alignItems: 'center',
   },
-  logoutButton: {
-    backgroundColor: COLORS.error,
+  title: {
+    fontSize: 16,
+    color: '#000000',
+    fontWeight: '500',
+    marginLeft: 12,
   },
-  actionButtonText: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
-    color: '#FFFFFF',
+  toggleRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ACD3F1',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  logoutButtonText: {
-    color: '#FFFFFF',
+  toggleContent: {
+    flex: 1,
+    marginRight: 12,
+  },
+  toggleTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#000000',
+    marginBottom: 4,
+  },
+  toggleDescription: {
+    fontSize: 14,
+    color: '#828282',
+    lineHeight: 18,
+  },
+  actionRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ACD3F1',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  actionContent: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  actionTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#000000',
+    marginBottom: 4,
+  },
+  actionDescription: {
+    fontSize: 14,
+    color: '#828282',
+    lineHeight: 18,
+  },
+  logout: {
+    marginTop: 16,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFEBEE',
+    borderRadius: 12,
+    paddingVertical: 12,
+  },
+  logoutText: {
+    color: '#F44336',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 4,
   },
 });
 

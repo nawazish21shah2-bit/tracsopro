@@ -15,6 +15,7 @@
     "db:seed-shifts": "tsx prisma/seed-shifts.ts",
     "db:seed-reports": "node scripts/seed-reports.js",
     "db:seed-test-roles": "node scripts/seed-test-roles-client.js",
+    "db:seed-notifications": "tsx prisma/seed-notifications.ts",
     "db:studio": "prisma studio",
     "db:setup": "npm run db:push && npm run db:generate && npm run db:seed"
   },
@@ -30,6 +31,7 @@
     "express": "^4.19.2",
     "express-rate-limit": "^7.4.1",
     "express-validator": "^7.2.0",
+    "firebase-admin": "^13.6.0",
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
@@ -39,9 +41,9 @@
     "stripe": "^14.9.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
+    "tsx": "^4.19.2",
     "uuid": "^11.0.2",
-    "winston": "^3.17.0",
-    "tsx": "^4.19.2"
+    "winston": "^3.17.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

@@ -14,17 +14,19 @@ import NotificationSettingsScreen from '../screens/settings/NotificationSettings
 import ProfileEditScreen from '../screens/settings/ProfileEditScreen';
 import SupportContactScreen from '../screens/settings/SupportContactScreen';
 import CompanyDetailsScreen from '../screens/settings/CompanyDetailsScreen';
+import ChangePasswordScreen from '../screens/settings/ChangePasswordScreen';
 
 export type ClientStackParamList = {
   ClientTabs: undefined;
   AddSite: undefined;
   SiteDetails: { siteId: string };
-  CreateShift: undefined;
+  CreateShift: { siteId: string };
   ClientNotifications: undefined;
   NotificationSettings: undefined;
   ProfileEdit: undefined;
   SupportContact: undefined;
   CompanyDetails: undefined;
+  ClientChangePassword: undefined;
   IndividualChatScreen: {
     chatId: string;
     chatName: string;
@@ -98,6 +100,11 @@ const ClientStackNavigator: React.FC = () => {
       <Stack.Screen 
         name="PaymentMethods" 
         component={PaymentMethodsScreen} 
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="ClientChangePassword" 
+        component={() => <ChangePasswordScreen variant="client" />} 
         options={{ headerShown: false }}
       />
     </Stack.Navigator>

@@ -13,9 +13,30 @@ import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SharedHeader from '../../components/ui/SharedHeader';
+import * as theme from '../../styles/globalStyles';
 import { settingsService, ProfileSettings } from '../../services/settingsService';
 import { updateUserProfile } from '../../store/slices/authSlice';
 import { User } from 'react-native-feather';
+
+// Safely access design tokens for StyleSheet.create
+const COLORS = theme.COLORS || {
+  backgroundPrimary: '#FFFFFF',
+  backgroundSecondary: '#F5F5F5',
+  textPrimary: '#1A1A1A',
+  textSecondary: '#666666',
+  textTertiary: '#999999',
+  textInverse: '#FFFFFF',
+  borderCard: '#E0E0E0',
+  borderLight: '#E0E0E0',
+  primary: '#1C6CA9',
+};
+const TYPOGRAPHY = theme.TYPOGRAPHY || {
+  fontSize: { xs: 12, sm: 14, md: 15 },
+  fontWeight: { semibold: '600' as const },
+};
+const SPACING = theme.SPACING || { xs: 4, sm: 8, md: 12, lg: 16, fieldGap: 16 };
+const BORDER_RADIUS = theme.BORDER_RADIUS || { sm: 8, md: 12 };
+const SHADOWS = theme.SHADOWS || { small: {} };
 
 interface ProfileEditScreenProps {
   variant?: 'client' | 'guard' | 'admin';
@@ -130,7 +151,7 @@ const ProfileEditScreen: React.FC<ProfileEditScreenProps> = ({
       <SafeAreaWrapper>
         <SharedHeader variant={variant} title="Edit Profile" profileDrawer={profileDrawer} />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#1C6CA9" />
+          <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
       </SafeAreaWrapper>
     );
@@ -205,7 +226,7 @@ const ProfileEditScreen: React.FC<ProfileEditScreenProps> = ({
           disabled={saving}
         >
           {saving ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
+            <ActivityIndicator size="small" color={COLORS.textInverse} />
           ) : (
             <Text style={styles.saveButtonText}>Save Changes</Text>
           )}
@@ -218,8 +239,8 @@ const ProfileEditScreen: React.FC<ProfileEditScreenProps> = ({
 const styles = StyleSheet.create({
   content: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
-    padding: 16,
+    backgroundColor: COLORS.backgroundSecondary,
+    padding: SPACING.lg,
   },
   loadingContainer: {
     flex: 1,
@@ -227,58 +248,57 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.lg,
+    marginBottom: SPACING.fieldGap || SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    // Border only, no shadow for minimal style
   },
   inputGroup: {
-    marginBottom: 20,
+    marginBottom: SPACING.lg,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333333',
-    marginBottom: 8,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.sm,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: '#333333',
-    backgroundColor: '#FFFFFF',
+    borderColor: COLORS.borderLight,
+    borderRadius: BORDER_RADIUS.sm,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textPrimary,
+    backgroundColor: COLORS.backgroundPrimary,
   },
   disabledInput: {
-    backgroundColor: '#F5F5F5',
-    color: '#999999',
+    backgroundColor: COLORS.backgroundSecondary,
+    color: COLORS.textTertiary,
   },
   helperText: {
-    fontSize: 12,
-    color: '#666666',
-    marginTop: 4,
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.xs,
   },
   saveButton: {
-    backgroundColor: '#1C6CA9',
-    borderRadius: 12,
-    paddingVertical: 16,
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: SPACING.lg,
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: SPACING.lg,
+    ...SHADOWS.small,
   },
   saveButtonDisabled: {
     opacity: 0.6,
   },
   saveButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+    color: COLORS.textInverse,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
 });
 

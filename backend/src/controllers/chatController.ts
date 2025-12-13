@@ -1,10 +1,11 @@
 import { Request, Response } from 'express';
 import { ChatService } from '../services/chatService.js';
 import { logger } from '../utils/logger.js';
+import { AuthRequest } from '../middleware/auth.js';
 
 const chatService = ChatService.getInstance();
 
-interface AuthenticatedRequest extends Request {
+interface AuthenticatedRequest extends AuthRequest {
   user?: {
     id: string;
     role: string;
@@ -19,6 +20,7 @@ interface AuthenticatedRequest extends Request {
 export const getUserChats = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user?.id;
+    const securityCompanyId = req.securityCompanyId; // Multi-tenant filter
 
     if (!userId) {
       return res.status(400).json({
@@ -27,7 +29,8 @@ export const getUserChats = async (req: AuthenticatedRequest, res: Response) => 
       });
     }
 
-    const chats = await chatService.getUserChats(userId);
+    // SUPER_ADMIN can see all chats, others filtered by company
+    const chats = await chatService.getUserChats(userId, securityCompanyId);
 
     res.json({
       success: true,
@@ -51,6 +54,7 @@ export const getChatMessages = async (req: AuthenticatedRequest, res: Response) 
     const { chatId } = req.params;
     const { page = 1, limit = 50 } = req.query;
     const userId = req.user?.id;
+    const securityCompanyId = req.securityCompanyId; // Multi-tenant filter
 
     if (!userId) {
       return res.status(400).json({
@@ -70,7 +74,8 @@ export const getChatMessages = async (req: AuthenticatedRequest, res: Response) 
       chatId,
       userId,
       parseInt(page as string),
-      parseInt(limit as string)
+      parseInt(limit as string),
+      securityCompanyId
     );
 
     res.json({
@@ -95,6 +100,7 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response) => {
     const { chatId } = req.params;
     const { content, messageType = 'text' } = req.body;
     const userId = req.user?.id;
+    const securityCompanyId = req.securityCompanyId; // Multi-tenant filter
 
     if (!userId) {
       return res.status(400).json({
@@ -122,6 +128,7 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response) => {
       senderId: userId,
       content: content.trim(),
       messageType,
+      securityCompanyId, // Pass for validation
     });
 
     res.status(201).json({
@@ -191,6 +198,7 @@ export const createChat = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { type, name, participantIds } = req.body;
     const userId = req.user?.id;
+    const securityCompanyId = req.securityCompanyId; // Multi-tenant filter
 
     if (!userId) {
       return res.status(400).json({
@@ -223,6 +231,7 @@ export const createChat = async (req: AuthenticatedRequest, res: Response) => {
       name,
       participantIds: allParticipants,
       createdBy: userId,
+      securityCompanyId, // Pass for validation
     });
 
     res.status(201).json({

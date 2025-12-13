@@ -1,8 +1,10 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { DrawerContentComponentProps } from '@react-navigation/drawer';
-import { useSelector } from 'react-redux';
-import { RootState } from '../store';
+import { useSelector, useDispatch } from 'react-redux';
+import { RootState, AppDispatch } from '../store';
+import { logoutUser } from '../store/slices/authSlice';
+import { LogoutIcon } from '../components/ui/AppIcons';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../styles/globalStyles';
 
 interface DrawerItem {
@@ -14,6 +16,7 @@ interface DrawerItem {
 const CustomDrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
   const { navigation } = props;
   const { user } = useSelector((state: RootState) => state.auth);
+  const dispatch = useDispatch<AppDispatch>();
 
   const fullName = user ? `${user.firstName} ${user.lastName}`.trim() : 'Mark Husdon';
   const initials = fullName
@@ -44,7 +47,6 @@ const CustomDrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
       { id: 'past_jobs', label: 'Past Jobs', onPress: goHome },
       { id: 'assigned_sites', label: 'Assigned Sites', onPress: goHome },
       { id: 'attendance', label: 'Attendance Record', onPress: goHome },
-      { id: 'earnings', label: 'Earnings', onPress: goHome },
       { id: 'notifications', label: 'Notification Settings', onPress: goSettings },
     );
   } else if (role === 'CLIENT') {
@@ -77,6 +79,34 @@ const CustomDrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
   const handleSupport = () => {
     // For now, just close drawer; you can later navigate to a support screen
     navigation.closeDrawer();
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              navigation.closeDrawer();
+              await dispatch(logoutUser()).unwrap();
+              // Navigation will be handled by auth state change
+            } catch (error) {
+              console.error('Logout error:', error);
+              Alert.alert('Error', 'Failed to logout. Please try again.');
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
   return (
@@ -113,10 +143,18 @@ const CustomDrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
         ))}
       </View>
 
-      {/* Footer contact support */}
+      {/* Footer contact support and logout */}
       <View style={styles.footer}>
-        <TouchableOpacity onPress={handleSupport} activeOpacity={0.7}>
+        <TouchableOpacity onPress={handleSupport} activeOpacity={0.7} style={styles.footerItem}>
           <Text style={styles.supportText}>Contact Support</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          onPress={handleLogout} 
+          activeOpacity={0.7} 
+          style={[styles.footerItem, styles.logoutItem]}
+        >
+          <LogoutIcon size={18} color={COLORS.error} />
+          <Text style={[styles.supportText, styles.logoutText]}>Logout</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -200,6 +238,15 @@ const styles = StyleSheet.create({
   },
   footer: {
     paddingVertical: 24,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderLight,
+    marginTop: SPACING.md,
+  },
+  footerItem: {
+    paddingVertical: SPACING.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
   },
   supportText: {
     fontSize: 14,
@@ -208,6 +255,12 @@ const styles = StyleSheet.create({
     fontFamily: TYPOGRAPHY.fontPrimary,
     lineHeight: 17,
     letterSpacing: TYPOGRAPHY.letterSpacing.tight,
+  },
+  logoutItem: {
+    marginTop: SPACING.xs,
+  },
+  logoutText: {
+    color: COLORS.error,
   },
 });
 

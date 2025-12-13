@@ -16,7 +16,7 @@ import {
   LocationIcon,
   EmergencyIcon 
 } from '../components/ui/AppIcons';
-import { COLORS, TYPOGRAPHY, SPACING } from '../styles/globalStyles';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../styles/globalStyles';
 
 // Import Admin Screens
 import AdminDashboard from '../screens/admin/AdminDashboard';
@@ -24,13 +24,19 @@ import AdminOperationsCenter from '../screens/admin/AdminOperationsCenter';
 import ShiftSchedulingScreen from '../screens/admin/ShiftSchedulingScreen';
 import IncidentReviewScreen from '../screens/admin/IncidentReviewScreen';
 import UserManagementScreen from '../screens/admin/UserManagementScreen';
+import InvitationManagementScreen from '../screens/admin/InvitationManagementScreen';
 import SiteManagementScreen from '../screens/admin/SiteManagementScreen';
 import AdminAnalyticsScreen from '../screens/admin/AdminAnalyticsScreen';
 import AdminSettingsScreen from '../screens/admin/AdminSettingsScreen';
 import AdminSubscriptionScreen from '../screens/admin/AdminSubscriptionScreen';
 import NotificationSettingsScreen from '../screens/settings/NotificationSettingsScreen';
+import NotificationListScreen from '../screens/notifications/NotificationListScreen';
 import ProfileEditScreen from '../screens/settings/ProfileEditScreen';
 import SupportContactScreen from '../screens/settings/SupportContactScreen';
+import ChangePasswordScreen from '../screens/settings/ChangePasswordScreen';
+import SystemSettingsScreen from '../screens/superAdmin/SystemSettingsScreen';
+import IndividualChatScreen from '../screens/chat/IndividualChatScreen';
+import ChatListScreen from '../screens/chat/ChatListScreen';
 
 export type AdminTabParamList = {
   Dashboard: undefined;
@@ -46,13 +52,24 @@ export type AdminStackParamList = {
   ShiftScheduling: undefined;
   IncidentReview: undefined;
   UserManagement: undefined;
+  InvitationManagement: undefined;
   SiteManagement: undefined;
   AdminAnalytics: undefined;
   AdminSettings: undefined;
   AdminSubscription: undefined;
   AdminNotificationSettings: undefined;
+  AdminNotifications: undefined;
   AdminProfileEdit: undefined;
   AdminSupportContact: undefined;
+  AdminChangePassword: undefined;
+  AdminSystemSettings: undefined;
+  IndividualChatScreen: {
+    chatId: string;
+    chatName: string;
+    avatar?: string;
+    context?: 'report' | 'site' | 'general';
+  };
+  ChatListScreen: undefined;
 };
 
 const Tab = createBottomTabNavigator<AdminTabParamList>();
@@ -62,6 +79,7 @@ const Stack = createStackNavigator<AdminStackParamList>();
 const ManagementStack = () => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
     <Stack.Screen name="UserManagement" component={UserManagementScreen} />
+    <Stack.Screen name="InvitationManagement" component={InvitationManagementScreen} />
     <Stack.Screen name="SiteManagement" component={SiteManagementScreen} />
     <Stack.Screen name="ShiftScheduling" component={ShiftSchedulingScreen} />
   </Stack.Navigator>
@@ -86,6 +104,14 @@ const AdminProfileEditWrapper: React.FC = () => (
 
 const AdminSupportContactWrapper: React.FC = () => (
   <SupportContactScreen variant="admin" />
+);
+
+const AdminChangePasswordWrapper: React.FC = () => (
+  <ChangePasswordScreen variant="admin" />
+);
+
+const AdminSystemSettingsWrapper: React.FC = () => (
+  <SystemSettingsScreen />
 );
 
 const AdminTabNavigator: React.FC = () => {
@@ -120,7 +146,7 @@ const AdminTabNavigator: React.FC = () => {
             <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
               <IconComponent 
                 size={20}
-                color={focused ? COLORS.primary : '#7A7A7A'} 
+                color={focused ? COLORS.primary : COLORS.textSecondary} 
               />
             </View>
           );
@@ -128,14 +154,14 @@ const AdminTabNavigator: React.FC = () => {
         tabBarLabel: ({ focused, color }) => (
           <Text style={[
             styles.tabLabel,
-            { color: focused ? COLORS.primary : '#7A7A7A' }
+            { color: focused ? COLORS.primary : COLORS.textSecondary }
           ]}>
             {route.name}
           </Text>
         ),
         tabBarStyle: styles.tabBar,
         tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: '#7A7A7A',
+        tabBarInactiveTintColor: COLORS.textSecondary,
       })}
     >
       <Tab.Screen 
@@ -190,6 +216,7 @@ const AdminNavigator: React.FC = () => {
       <Stack.Screen name="ShiftScheduling" component={ShiftSchedulingScreen} />
       <Stack.Screen name="IncidentReview" component={IncidentReviewScreen} />
       <Stack.Screen name="UserManagement" component={UserManagementScreen} />
+      <Stack.Screen name="InvitationManagement" component={InvitationManagementScreen} />
       <Stack.Screen name="SiteManagement" component={SiteManagementScreen} />
       <Stack.Screen name="AdminAnalytics" component={AdminAnalyticsScreen} />
       <Stack.Screen name="AdminSettings" component={AdminSettingsScreen} />
@@ -199,12 +226,34 @@ const AdminNavigator: React.FC = () => {
         component={AdminNotificationSettingsWrapper} 
       />
       <Stack.Screen 
+        name="AdminNotifications" 
+        component={() => <NotificationListScreen variant="admin" />} 
+      />
+      <Stack.Screen 
         name="AdminProfileEdit" 
         component={AdminProfileEditWrapper} 
       />
       <Stack.Screen 
         name="AdminSupportContact" 
         component={AdminSupportContactWrapper} 
+      />
+      <Stack.Screen 
+        name="AdminChangePassword" 
+        component={AdminChangePasswordWrapper} 
+      />
+      <Stack.Screen 
+        name="AdminSystemSettings" 
+        component={AdminSystemSettingsWrapper} 
+      />
+      <Stack.Screen 
+        name="IndividualChatScreen" 
+        component={IndividualChatScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="ChatListScreen" 
+        component={ChatListScreen}
+        options={{ headerShown: false }}
       />
     </Stack.Navigator>
   );
@@ -214,24 +263,26 @@ const styles = StyleSheet.create({
   tabIconWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.backgroundSecondary,
   },
   tabIconWrapperActive: {
-    backgroundColor: 'rgba(28,108,169,0.2)',
+    backgroundColor: COLORS.primaryLight,
   },
   tabLabel: {
-    fontSize: 10,
-    fontWeight: '500',
-    marginTop: 4,
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    marginTop: SPACING.xs,
+    textAlign: 'center',
   },
   tabBar: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.backgroundPrimary,
     borderTopWidth: 1,
-    borderTopColor: '#E0F0FA',
-    paddingBottom: 8,
-    paddingTop: 8,
+    borderTopColor: COLORS.borderLight,
+    paddingBottom: SPACING.sm,
+    paddingTop: SPACING.sm,
     height: 70,
   },
 });

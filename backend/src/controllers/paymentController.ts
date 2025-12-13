@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { logger } from '../utils/logger.js';
 import PaymentService from '../services/paymentService.js';
+import prisma from '../config/database.js';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -91,12 +92,31 @@ export const createPaymentIntent = async (req: AuthenticatedRequest, res: Respon
   try {
     const { amount, currency = 'usd', description, metadata } = req.body;
     const clientId = req.user?.clientId || req.user?.id;
+    const securityCompanyId = (req as any).securityCompanyId; // Multi-tenant filter
 
     if (!clientId) {
       return res.status(400).json({
         success: false,
         message: 'Client ID not found',
       });
+    }
+
+    // Multi-tenant: Validate client belongs to company (if not SUPER_ADMIN)
+    if (securityCompanyId && req.user?.role !== 'SUPER_ADMIN') {
+      const companyClient = await prisma.companyClient.findFirst({
+        where: {
+          clientId,
+          securityCompanyId,
+          isActive: true,
+        },
+      });
+
+      if (!companyClient) {
+        return res.status(403).json({
+          success: false,
+          message: 'Client not found or does not belong to your company',
+        });
+      }
     }
 
     if (!amount || amount <= 0) {
@@ -136,14 +156,33 @@ export const createPaymentIntent = async (req: AuthenticatedRequest, res: Respon
  */
 export const createInvoice = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { items, description, dueDate, currency = 'usd' } = req.body;
-    const clientId = req.user?.clientId || req.user?.id;
+    const { items, description, dueDate, currency = 'usd', clientId: bodyClientId } = req.body;
+    const clientId = bodyClientId || req.user?.clientId || req.user?.id;
+    const securityCompanyId = (req as any).securityCompanyId; // Multi-tenant filter
 
     if (!clientId) {
       return res.status(400).json({
         success: false,
         message: 'Client ID not found',
       });
+    }
+
+    // Multi-tenant: Admin creating invoice - validate client belongs to admin's company
+    if (securityCompanyId && req.user?.role !== 'SUPER_ADMIN') {
+      const companyClient = await prisma.companyClient.findFirst({
+        where: {
+          clientId,
+          securityCompanyId,
+          isActive: true,
+        },
+      });
+
+      if (!companyClient) {
+        return res.status(403).json({
+          success: false,
+          message: 'Client not found or does not belong to your company',
+        });
+      }
     }
 
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -188,14 +227,33 @@ export const createInvoice = async (req: AuthenticatedRequest, res: Response) =>
  */
 export const generateMonthlyInvoice = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { year, month } = req.body;
-    const clientId = req.user?.clientId || req.user?.id;
+    const { year, month, clientId: bodyClientId } = req.body;
+    const clientId = bodyClientId || req.user?.clientId || req.user?.id;
+    const securityCompanyId = (req as any).securityCompanyId; // Multi-tenant filter
 
     if (!clientId) {
       return res.status(400).json({
         success: false,
         message: 'Client ID not found',
       });
+    }
+
+    // Multi-tenant: Admin generating invoice - validate client belongs to admin's company
+    if (securityCompanyId && req.user?.role !== 'SUPER_ADMIN') {
+      const companyClient = await prisma.companyClient.findFirst({
+        where: {
+          clientId,
+          securityCompanyId,
+          isActive: true,
+        },
+      });
+
+      if (!companyClient) {
+        return res.status(403).json({
+          success: false,
+          message: 'Client not found or does not belong to your company',
+        });
+      }
     }
 
     if (!year || !month || month < 1 || month > 12) {
@@ -356,13 +414,33 @@ export const handleWebhook = async (req: Request, res: Response) => {
 export const getInvoices = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const clientId = req.user?.clientId || req.user?.id;
-    const { page = 1, limit = 10, status } = req.query;
+    const { page = 1, limit = 10, status, clientId: queryClientId } = req.query;
+    const securityCompanyId = (req as any).securityCompanyId; // Multi-tenant filter
+    const targetClientId = (queryClientId as string) || clientId;
 
-    if (!clientId) {
+    if (!targetClientId) {
       return res.status(400).json({
         success: false,
         message: 'Client ID not found',
       });
+    }
+
+    // Multi-tenant: Admin viewing invoices - validate client belongs to admin's company
+    if (req.user?.role === 'ADMIN' && securityCompanyId && req.user?.role !== 'SUPER_ADMIN') {
+      const companyClient = await prisma.companyClient.findFirst({
+        where: {
+          clientId: targetClientId,
+          securityCompanyId,
+          isActive: true,
+        },
+      });
+
+      if (!companyClient) {
+        return res.status(403).json({
+          success: false,
+          message: 'Client not found or does not belong to your company',
+        });
+      }
     }
 
     // TODO: Implement database query for invoices

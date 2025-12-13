@@ -14,16 +14,18 @@ import { Platform } from 'react-native';
 // ============================================
 // PRODUCTION CONFIGURATION
 // ============================================
-// Render backend URLs
-const PRODUCTION_API_URL = 'https://tracsopro.onrender.com/api';
-const PRODUCTION_WS_URL = 'https://tracsopro.onrender.com';
+// DigitalOcean Droplet backend URLs
+// TODO: Set up HTTPS/SSL certificate (Let's Encrypt) and update to https://
+const PRODUCTION_API_URL = 'http://143.110.198.38:3000/api';
+const PRODUCTION_WS_URL = 'http://143.110.198.38:3000';
 
 // ============================================
 // DEVELOPMENT CONFIGURATION
 // ============================================
 // Your local IP address for development
 // Find it with: ipconfig (Windows) or ifconfig (Mac/Linux)
-const LOCAL_IP = '192.168.1.12'; // ⚠️ CHANGE THIS TO YOUR ACTUAL IP ADDRESS
+// const LOCAL_IP = '192.168.1.12'; // ⚠️ CHANGE THIS TO YOUR ACTUAL IP ADDRESS
+const LOCAL_IP = '192.168.1.9'; // ⚠️ CHANGE THIS TO YOUR ACTUAL IP ADDRESS
 
 // Development URLs
 const DEV_API_URL_ANDROID = `http://${LOCAL_IP}:3000/api`;
@@ -109,6 +111,5 @@ export const API_CONFIG = {
   DEV_WS_URL,
   LOCAL_IP,
 };
-
 
 

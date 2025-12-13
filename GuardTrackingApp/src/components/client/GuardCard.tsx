@@ -1,8 +1,9 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { PersonIcon } from '../ui/AppIcons';
+import { MessageCircle, User, Phone } from 'react-native-feather';
 import StatusBadge from './StatusBadge';
-import { globalStyles } from '../../styles/globalStyles';
+import { globalStyles, COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../styles/globalStyles';
 
 interface GuardCardProps {
   guard: {
@@ -17,15 +18,52 @@ interface GuardCardProps {
     pastJobs?: number;
     rating?: number;
     availability?: string;
+    phone?: string;
   };
   onPress?: () => void;
-  onHire?: () => void;
-  showHireButton?: boolean;
+  onChat?: (guardId: string, guardName: string) => void;
+  onViewProfile?: (guardId: string) => void;
+  onCall?: (phone: string) => void;
+  showActionButtons?: boolean;
 }
 
-const GuardCard: React.FC<GuardCardProps> = ({ guard, onPress, onHire, showHireButton = false }) => {
+const GuardCard: React.FC<GuardCardProps> = ({ 
+  guard, 
+  onPress, 
+  onChat, 
+  onViewProfile,
+  onCall,
+  showActionButtons = false 
+}) => {
+  const handleChat = (e: any) => {
+    e?.stopPropagation?.(); // Prevent card press when clicking chat button
+    if (onChat) {
+      onChat(guard.id, guard.name);
+    }
+  };
+
+  const handleViewProfile = (e?: any) => {
+    e?.stopPropagation?.(); // Prevent card press when clicking profile button
+    if (onViewProfile) {
+      onViewProfile(guard.id);
+    } else if (onPress) {
+      onPress();
+    }
+  };
+
+  const handleCall = (e: any) => {
+    e?.stopPropagation?.(); // Prevent card press when clicking call button
+    if (onCall && guard.phone) {
+      onCall(guard.phone);
+    }
+  };
+
   return (
-    <TouchableOpacity style={[globalStyles.card, styles.card]} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity 
+      style={styles.card} 
+      onPress={handleViewProfile} 
+      activeOpacity={0.7}
+    >
       <View style={styles.header}>
         <View style={styles.guardInfo}>
           <View style={styles.avatar}>
@@ -38,27 +76,60 @@ const GuardCard: React.FC<GuardCardProps> = ({ guard, onPress, onHire, showHireB
           <View style={styles.details}>
             <Text style={styles.name}>{guard.name}</Text>
             {guard.site && <Text style={styles.site}>{guard.site}</Text>}
-            {showHireButton && guard.pastJobs && (
+            {showActionButtons && guard.pastJobs && (
               <Text style={styles.pastJobs}>Past Jobs: {guard.pastJobs}</Text>
             )}
-            {showHireButton && guard.rating && (
+            {showActionButtons && guard.rating && (
               <Text style={styles.rating}>Rating: {guard.rating}/5</Text>
             )}
-            {showHireButton && guard.availability && (
+            {showActionButtons && guard.availability && (
               <Text style={styles.availability}>Availability: {guard.availability}</Text>
             )}
           </View>
         </View>
-        {showHireButton ? (
-          <TouchableOpacity style={styles.hireButton} onPress={onHire}>
-            <Text style={styles.hireButtonText}>Hire Now</Text>
-          </TouchableOpacity>
+        {showActionButtons ? (
+          <View style={styles.actionButtons}>
+            {onChat && (
+              <TouchableOpacity 
+                style={[styles.iconButton, styles.chatButton]} 
+                onPress={(e) => {
+                  e?.stopPropagation?.();
+                  handleChat(e);
+                }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <MessageCircle width={18} height={18} color={COLORS.primary} strokeWidth={2} />
+              </TouchableOpacity>
+            )}
+            {onCall && guard.phone && (
+              <TouchableOpacity 
+                style={[styles.iconButton, styles.callButton]} 
+                onPress={(e) => {
+                  e?.stopPropagation?.();
+                  handleCall(e);
+                }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Phone width={18} height={18} color={COLORS.success} strokeWidth={2} />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity 
+              style={[styles.iconButton, styles.profileButton]} 
+              onPress={(e) => {
+                e?.stopPropagation?.();
+                handleViewProfile(e);
+              }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <User width={18} height={18} color={COLORS.textSecondary} strokeWidth={2} />
+            </TouchableOpacity>
+          </View>
         ) : (
           <StatusBadge status={guard.status} />
         )}
       </View>
       
-      {!showHireButton && (
+      {!showActionButtons && (
         <View style={styles.shiftDetails}>
           <View style={styles.shiftInfo}>
             <Text style={styles.shiftTime}>{guard.shiftTime}</Text>
@@ -74,7 +145,13 @@ const GuardCard: React.FC<GuardCardProps> = ({ guard, onPress, onHire, showHireB
 
 const styles = StyleSheet.create({
   card: {
-    marginBottom: 12,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.lg,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    // Border only, no shadow for minimal style
   },
   header: {
     flexDirection: 'row',
@@ -90,10 +167,10 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: COLORS.backgroundSecondary,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: SPACING.md,
   },
   avatarImage: {
     width: 48,
@@ -106,39 +183,55 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333333',
-    marginBottom: 4,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.xs,
   },
   site: {
     fontSize: 14,
-    color: '#666666',
-    marginBottom: 2,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.xs / 2,
   },
   pastJobs: {
     fontSize: 12,
-    color: '#666666',
-    marginBottom: 2,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.xs / 2,
   },
   rating: {
     fontSize: 12,
-    color: '#666666',
-    marginBottom: 2,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.xs / 2,
   },
   availability: {
     fontSize: 12,
-    color: '#2E7D32',
+    color: COLORS.success,
     fontWeight: '500',
   },
-  hireButton: {
-    backgroundColor: '#D32F2F',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+  actionButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  hireButtonText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
+  iconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.backgroundSecondary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    marginLeft: 6,
+  },
+  chatButton: {
+    backgroundColor: COLORS.primaryLight,
+    borderColor: COLORS.primary,
+  },
+  callButton: {
+    backgroundColor: COLORS.success + '20',
+    borderColor: COLORS.success,
+  },
+  profileButton: {
+    backgroundColor: COLORS.backgroundSecondary,
+    borderColor: COLORS.borderLight,
   },
   shiftDetails: {
     marginTop: 12,
@@ -153,12 +246,12 @@ const styles = StyleSheet.create({
   },
   shiftTime: {
     fontSize: 14,
-    color: '#333333',
+    color: COLORS.textPrimary,
     fontWeight: '500',
   },
   checkInTime: {
     fontSize: 12,
-    color: '#2E7D32',
+    color: COLORS.success,
     fontWeight: '500',
   },
 });

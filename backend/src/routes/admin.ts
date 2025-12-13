@@ -1,11 +1,12 @@
 /**
  * Admin Routes - Routes for admin (security company) operations
+ * Streamlined for admin-to-super-admin payment flow
  */
 
 import express from 'express';
-import { authenticateToken, authorize } from '../middleware/auth';
-import prisma from '../config/database';
+import { authenticateToken, authorize, requireAdmin, AuthRequest } from '../middleware/auth';
 import adminService from '../services/adminService';
+import adminPaymentController from '../controllers/adminPaymentController';
 
 const router = express.Router();
 
@@ -13,64 +14,19 @@ const router = express.Router();
 router.use(authenticateToken);
 
 /**
- * GET /api/admin/company
- * Get admin's security company information
+ * GET /api/admin/subscription
+ * Get admin's complete subscription information (company + subscription + plans)
+ * Consolidated endpoint - replaces separate /company and /subscription endpoints
+ * Access: ADMIN (own company) or SUPER_ADMIN (all companies)
  */
-router.get('/company', authorize('ADMIN'), async (req: any, res) => {
-  try {
-    const securityCompanyId = req.securityCompanyId;
-    
-    if (!securityCompanyId) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Security company not found for this admin' 
-      });
-    }
-
-    const company = await prisma.securityCompany.findUnique({
-      where: { id: securityCompanyId },
-      include: {
-        subscriptions: {
-          where: { isActive: true },
-          take: 1,
-          orderBy: { createdAt: 'desc' }
-        },
-        _count: {
-          select: {
-            users: true,
-            guards: true,
-            clients: true,
-            sites: true
-          }
-        }
-      }
-    });
-
-    if (!company) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Security company not found' 
-      });
-    }
-
-    res.json({
-      success: true,
-      data: company
-    });
-  } catch (error) {
-    console.error('Error getting admin company:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to get company information' 
-    });
-  }
-});
+router.get('/subscription', requireAdmin, adminPaymentController.getAdminSubscriptionInfo);
 
 /**
  * GET /api/admin/dashboard/stats
  * Get admin dashboard statistics
+ * Access: ADMIN (own company) or SUPER_ADMIN (all companies)
  */
-router.get('/dashboard/stats', authorize('ADMIN'), async (req: any, res) => {
+router.get('/dashboard/stats', requireAdmin, async (req: AuthRequest, res) => {
   try {
     const adminId = req.user?.id;
     if (!adminId) {
@@ -80,7 +36,7 @@ router.get('/dashboard/stats', authorize('ADMIN'), async (req: any, res) => {
       });
     }
 
-    const stats = await adminService.getDashboardStats(adminId);
+    const stats = await adminService.getDashboardStats(adminId, req.securityCompanyId);
     res.json({
       success: true,
       data: stats,
@@ -97,11 +53,12 @@ router.get('/dashboard/stats', authorize('ADMIN'), async (req: any, res) => {
 /**
  * GET /api/admin/dashboard/activity
  * Get recent activity for admin dashboard
+ * Access: ADMIN (own company) or SUPER_ADMIN (all companies)
  */
-router.get('/dashboard/activity', authorize('ADMIN'), async (req: any, res) => {
+router.get('/dashboard/activity', requireAdmin, async (req: AuthRequest, res) => {
   try {
     const limit = parseInt(req.query.limit as string) || 10;
-    const activities = await adminService.getRecentActivity(limit);
+    const activities = await adminService.getRecentActivity(limit, req.securityCompanyId);
     res.json({
       success: true,
       data: activities,
@@ -116,63 +73,12 @@ router.get('/dashboard/activity', authorize('ADMIN'), async (req: any, res) => {
 });
 
 /**
- * GET /api/admin/subscription
- * Get admin's current subscription
+ * GET /api/admin/company
+ * Legacy endpoint - uses same controller for backward compatibility
+ * @deprecated Use /api/admin/subscription instead (includes company info)
+ * Access: ADMIN (own company) or SUPER_ADMIN (all companies)
  */
-router.get('/subscription', authorize('ADMIN'), async (req: any, res) => {
-  try {
-    const securityCompanyId = req.securityCompanyId;
-    
-    if (!securityCompanyId) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Security company not found' 
-      });
-    }
-
-    const company = await prisma.securityCompany.findUnique({
-      where: { id: securityCompanyId },
-      select: {
-        subscriptionPlan: true,
-        subscriptionStatus: true,
-        subscriptionStartDate: true,
-        subscriptionEndDate: true,
-        isActive: true,
-        subscriptions: {
-          where: { isActive: true },
-          take: 1,
-          orderBy: { createdAt: 'desc' }
-        }
-      }
-    });
-
-    if (!company) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Security company not found' 
-      });
-    }
-
-    res.json({
-      success: true,
-      data: {
-        plan: company.subscriptionPlan,
-        status: company.subscriptionStatus,
-        startDate: company.subscriptionStartDate,
-        endDate: company.subscriptionEndDate,
-        isActive: company.isActive,
-        stripeSubscriptionId: company.subscriptions[0]?.stripeSubscriptionId,
-        cancelAtPeriodEnd: company.subscriptions[0]?.cancelAtPeriodEnd || false,
-      }
-    });
-  } catch (error) {
-    console.error('Error getting subscription:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to get subscription information' 
-    });
-  }
-});
+router.get('/company', requireAdmin, adminPaymentController.getAdminSubscriptionInfo);
 
 export default router;
 

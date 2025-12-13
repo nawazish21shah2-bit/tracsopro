@@ -25,6 +25,7 @@ import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { fetchMyReports } from '../../store/slices/clientSlice';
 import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
 import apiService from '../../services/api';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 
 interface ReportData {
   id: string;
@@ -51,12 +52,22 @@ const ClientReports: React.FC = () => {
     reportsLoading, 
     reportsError 
   } = useSelector((state: RootState) => state.client);
+  
+  const { user } = useSelector((state: RootState) => state.auth);
 
   const loadReports = useCallback(async () => {
     try {
-      await dispatch(fetchMyReports({ page: 1, limit: 50 }));
-    } catch (error) {
+      const result = await dispatch(fetchMyReports({ page: 1, limit: 50 }));
+      // Check if the action was rejected
+      if (fetchMyReports.rejected.match(result)) {
+        console.error('Error loading reports:', result.payload || result.error);
+      }
+    } catch (error: any) {
       console.error('Error loading reports:', error);
+      // Ensure we handle errors gracefully
+      if (error?.message) {
+        console.error('Error details:', error.message);
+      }
     }
   }, [dispatch]);
 
@@ -122,14 +133,27 @@ const ClientReports: React.FC = () => {
     }
   };
 
-  const handleChatWithGuard = (guardId: string, guardName: string) => {
-    // Navigate to chat screen with guard
-    (navigation as any).navigate('IndividualChatScreen', {
-      chatId: `client_guard_${guardId}`,
-      chatName: guardName,
-      avatar: undefined,
-      context: 'report'
-    });
+  const handleChatWithGuard = async (guardId: string, guardName: string) => {
+    try {
+      if (!user) {
+        Alert.alert('Error', 'User not logged in');
+        return;
+      }
+
+      // Use centralized chat helper to find or create chat
+      const { findOrCreateClientGuardChat } = await import('../../utils/chatHelper');
+      const chatParams = await findOrCreateClientGuardChat(
+        user.id,
+        guardId,
+        guardName,
+        'report'
+      );
+
+      navigation.navigate('IndividualChatScreen', chatParams);
+    } catch (error) {
+      console.error('Error navigating to chat:', error);
+      Alert.alert('Error', 'Failed to open chat. Please try again.');
+    }
   };
 
   return (
@@ -184,7 +208,7 @@ const ClientReports: React.FC = () => {
       >
         {reportsLoading && reports.length > 0 ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color="#1C6CA9" />
+            <ActivityIndicator size="small" color={COLORS.primary} />
             <Text style={styles.loadingText}>Updating reports...</Text>
           </View>
         ) : null}
@@ -213,17 +237,17 @@ const ClientReports: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: COLORS.backgroundSecondary,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.lg,
+    backgroundColor: COLORS.backgroundPrimary,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: COLORS.borderLight,
   },
   menuButton: {
     width: 40,
@@ -232,9 +256,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#333333',
+    fontSize: TYPOGRAPHY.fontSize.xl,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
   },
   notificationButton: {
     width: 40,
@@ -244,11 +268,11 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: 20,
+    padding: SPACING.lg,
   },
   errorContainer: {
     flex: 1,
-    padding: 20,
+    padding: SPACING.lg,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 200,
@@ -257,29 +281,29 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   loadingContainer: {
-    padding: 20,
+    padding: SPACING.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   loadingText: {
-    marginTop: 8,
-    fontSize: 14,
-    color: '#666666',
+    marginTop: SPACING.sm,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
   },
   emptyContainer: {
-    padding: 40,
+    padding: SPACING.xxxxl,
     alignItems: 'center',
     justifyContent: 'center',
   },
   emptyText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333333',
-    marginBottom: 8,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.sm,
   },
   emptySubtext: {
-    fontSize: 14,
-    color: '#666666',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
     textAlign: 'center',
   },
 });

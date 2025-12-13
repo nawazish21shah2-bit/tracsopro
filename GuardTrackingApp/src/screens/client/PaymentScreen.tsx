@@ -25,6 +25,7 @@ import {
   ErrorCircleIcon,
 } from '../../components/ui/AppIcons';
 import paymentService, { Invoice, PaymentMethod } from '../../services/paymentService';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 
 interface Invoice {
   id: string;
@@ -249,9 +250,9 @@ const PaymentScreen: React.FC = () => {
 
   const getStatusIcon = (status: Invoice['status']) => {
     switch (status) {
-      case 'paid': return <CheckCircleIcon size={16} color="#10B981" />;
-      case 'open': return <ClockIcon size={16} color="#F59E0B" />;
-      default: return <ErrorCircleIcon size={16} color="#6B7280" />;
+      case 'paid': return <CheckCircleIcon size={16} color={COLORS.success} />;
+      case 'open': return <ClockIcon size={16} color={COLORS.warning} />;
+      default: return <ErrorCircleIcon size={16} color={COLORS.textSecondary} />;
     }
   };
 
@@ -275,14 +276,14 @@ const PaymentScreen: React.FC = () => {
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Payment Methods</Text>
         <TouchableOpacity onPress={handleAddPaymentMethod}>
-          <PlusIcon size={20} color="#007AFF" />
+          <PlusIcon size={20} color={COLORS.primary} />
         </TouchableOpacity>
       </View>
       
       {paymentMethods.map((method) => (
         <View key={method.id} style={styles.paymentMethodCard}>
           <View style={styles.paymentMethodInfo}>
-            <CreditCardIcon size={24} color="#374151" />
+            <CreditCardIcon size={24} color={COLORS.textPrimary} />
             <View style={styles.paymentMethodDetails}>
               <Text style={styles.paymentMethodText}>
                 {method.brand?.toUpperCase()} •••• {method.last4}
@@ -303,7 +304,7 @@ const PaymentScreen: React.FC = () => {
       ))}
       
       <TouchableOpacity style={styles.autoPayButton} onPress={handleSetupAutoPay}>
-        <SettingsIcon size={20} color="#007AFF" />
+        <SettingsIcon size={20} color={COLORS.primary} />
         <Text style={styles.autoPayButtonText}>Setup Auto-Pay</Text>
       </TouchableOpacity>
     </View>
@@ -347,7 +348,7 @@ const PaymentScreen: React.FC = () => {
                 style={styles.downloadButton}
                 onPress={() => handleDownloadInvoice(invoice)}
               >
-                <DownloadIcon size={16} color="#6B7280" />
+                <DownloadIcon size={16} color={COLORS.textSecondary} />
               </TouchableOpacity>
               
               <TouchableOpacity
@@ -364,7 +365,7 @@ const PaymentScreen: React.FC = () => {
                   disabled={processingPayment === invoice.id}
                 >
                   {processingPayment === invoice.id ? (
-                    <ActivityIndicator color="#FFFFFF" size="small" />
+                    <ActivityIndicator color={COLORS.textInverse} size="small" />
                   ) : (
                     <Text style={styles.payButtonText}>Pay Now</Text>
                   )}
@@ -381,7 +382,7 @@ const PaymentScreen: React.FC = () => {
     <SafeAreaWrapper>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Billing & Payments</Text>
-        <DollarIcon size={24} color="#007AFF" />
+        <DollarIcon size={24} color={COLORS.primary} />
       </View>
 
       <ScrollView 
@@ -427,21 +428,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: SPACING.lg,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
   },
   paymentMethodCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
+    backgroundColor: COLORS.backgroundSecondary,
+    borderRadius: BORDER_RADIUS.sm,
+    padding: SPACING.md,
+    marginBottom: SPACING.sm,
   },
   paymentMethodInfo: {
     flexDirection: 'row',
@@ -449,76 +450,78 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   paymentMethodDetails: {
-    marginLeft: 12,
+    marginLeft: SPACING.md,
   },
   paymentMethodText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#374151',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    color: COLORS.textPrimary,
   },
   paymentMethodExpiry: {
-    fontSize: 14,
-    color: '#6B7280',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
     marginTop: 2,
   },
   defaultBadge: {
-    backgroundColor: '#EBF8FF',
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    backgroundColor: COLORS.backgroundTertiary,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
   },
   defaultBadgeText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#3B82F6',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    color: COLORS.primary,
   },
   autoPayButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F0F9FF',
-    borderRadius: 8,
-    padding: 12,
-    marginTop: 8,
+    backgroundColor: COLORS.backgroundTertiary,
+    borderRadius: BORDER_RADIUS.sm,
+    padding: SPACING.md,
+    marginTop: SPACING.sm,
   },
   autoPayButtonText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#007AFF',
-    marginLeft: 8,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    color: COLORS.primary,
+    marginLeft: SPACING.sm,
   },
   invoiceCard: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 12,
+    backgroundColor: COLORS.backgroundSecondary,
+    borderRadius: BORDER_RADIUS.sm,
+    padding: SPACING.lg,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
   },
   invoiceHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: SPACING.md,
   },
   invoiceInfo: {
     flex: 1,
   },
   invoiceDescription: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#374151',
-    marginBottom: 4,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.xs,
   },
   invoiceDate: {
-    fontSize: 14,
-    color: '#6B7280',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
   },
   invoiceAmount: {
     alignItems: 'flex-end',
   },
   invoiceAmountText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
   },
   invoiceFooter: {
     flexDirection: 'row',
@@ -531,45 +534,46 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   invoiceStatusText: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginLeft: 6,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    marginLeft: SPACING.xs + 2,
   },
   paidDate: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginLeft: 8,
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textSecondary,
+    marginLeft: SPACING.sm,
   },
   invoiceActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: SPACING.sm,
   },
   downloadButton: {
-    padding: 8,
+    padding: SPACING.sm,
   },
   viewButton: {
-    backgroundColor: '#F3F4F6',
-    borderRadius: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginRight: 8,
+    backgroundColor: COLORS.backgroundSecondary,
+    borderRadius: BORDER_RADIUS.xs,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    marginRight: SPACING.sm,
   },
   viewButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
   },
   payButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.xs,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+    ...SHADOWS.small,
   },
   payButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textInverse,
   },
   payButtonDisabled: {
     opacity: 0.6,

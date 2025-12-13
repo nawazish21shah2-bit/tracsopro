@@ -11,7 +11,9 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { ArrowLeft, MapPin, Save } from 'react-native-feather';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
+import AddressPicker from '../../components/common/AddressPicker';
 import { siteService, CreateSiteData } from '../../services/siteService';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 
 interface SiteFormData {
   name: string;
@@ -39,7 +41,6 @@ const AddSiteScreen: React.FC = () => {
     contactPerson: '',
     contactPhone: '',
   });
-
   const handleInputChange = (field: keyof SiteFormData, value: string) => {
     setFormData(prev => ({
       ...prev,
@@ -84,8 +85,7 @@ const AddSiteScreen: React.FC = () => {
         contactPhone: formData.contactPhone.trim(),
       };
 
-      const createdSite = await siteService.createSite(siteData);
-      console.log('Site created successfully:', createdSite);
+      await siteService.createSite(siteData);
       
       Alert.alert(
         'Success',
@@ -98,7 +98,9 @@ const AddSiteScreen: React.FC = () => {
         ]
       );
     } catch (error) {
-      console.error('Error creating site:', error);
+      if (__DEV__) {
+        console.error('Error creating site:', error);
+      }
       Alert.alert(
         'Error', 
         error instanceof Error ? error.message : 'Failed to create site. Please try again.'
@@ -178,16 +180,16 @@ const AddSiteScreen: React.FC = () => {
             <Text style={styles.sectionTitle}>Location</Text>
           </View>
           
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Street Address *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.address}
-              onChangeText={(value) => handleInputChange('address', value)}
-              placeholder="Enter street address"
-              placeholderTextColor="#999"
-            />
-          </View>
+          <AddressPicker
+            value={formData.address}
+            onChange={(address) => handleInputChange('address', address)}
+            onCityChange={(city) => handleInputChange('city', city)}
+            onStateChange={(state) => handleInputChange('state', state)}
+            onZipChange={(zip) => handleInputChange('zipCode', zip)}
+            label="Street Address"
+            placeholder="Enter or select address on map"
+            required
+          />
 
           <View style={styles.row}>
             <View style={[styles.inputGroup, styles.flex1]}>
@@ -302,31 +304,34 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8F9FA',
   },
   section: {
-    backgroundColor: '#FFFFFF',
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 12,
-    padding: 20,
+    backgroundColor: COLORS.backgroundPrimary,
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.lg,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.formPadding || SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    // Border only, no shadow for minimal style
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: SPACING.fieldGap || SPACING.lg,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333333',
-    marginLeft: 8,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.sm,
   },
   inputGroup: {
-    marginBottom: 16,
+    marginBottom: SPACING.fieldGap || SPACING.lg,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#333333',
-    marginBottom: 8,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.sm,
   },
   input: {
     borderWidth: 1,
@@ -355,12 +360,13 @@ const styles = StyleSheet.create({
     width: 120,
   },
   createButton: {
-    backgroundColor: '#1C6CA9',
-    marginHorizontal: 16,
-    marginVertical: 24,
-    paddingVertical: 16,
-    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+    marginHorizontal: SPACING.lg,
+    marginVertical: SPACING.sectionGap || SPACING.xxl,
+    paddingVertical: SPACING.lg,
+    borderRadius: BORDER_RADIUS.md,
     alignItems: 'center',
+    ...SHADOWS.small,
   },
   createButtonDisabled: {
     backgroundColor: '#B0B0B0',

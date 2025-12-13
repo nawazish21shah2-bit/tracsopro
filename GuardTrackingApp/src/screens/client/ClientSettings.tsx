@@ -10,7 +10,7 @@ import {
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { ChevronRight, User, Briefcase, MapPin, Bell, HelpCircle, LogOut } from 'react-native-feather';
+import { ChevronRight, User, Briefcase, MapPin, Bell, HelpCircle, LogOut, Lock } from 'react-native-feather';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { ClientStackParamList } from '../../navigation/ClientStackNavigator';
 import { RootState, AppDispatch } from '../../store';
@@ -18,6 +18,23 @@ import { logoutUser } from '../../store/slices/authSlice';
 import SharedHeader from '../../components/ui/SharedHeader';
 import ClientProfileDrawer from '../../components/client/ClientProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import * as theme from '../../styles/globalStyles';
+
+// Safely access design tokens for StyleSheet.create
+const COLORS = theme.COLORS || {
+  backgroundPrimary: '#FFFFFF',
+  backgroundSecondary: '#F5F5F5',
+  textPrimary: '#1A1A1A',
+  textSecondary: '#666666',
+  borderCard: '#E0E0E0',
+  error: '#D32F2F',
+};
+const TYPOGRAPHY = theme.TYPOGRAPHY || {
+  fontSize: { md: 15 },
+  fontWeight: { medium: '500' as const, semibold: '600' as const },
+};
+const SPACING = theme.SPACING || { xs: 4, sm: 8, md: 12, lg: 16 };
+const BORDER_RADIUS = theme.BORDER_RADIUS || { lg: 12 };
 
 interface SettingItem {
   id: string;
@@ -41,17 +58,27 @@ const ClientSettings: React.FC = () => {
   };
 
   const handleManageSites = () => {
-    // Navigate to sites management (usually in the main client tabs)
-    // For now, show a message that this is available in the main navigation
-    Alert.alert(
-      'Manage Sites & Shifts',
-      'Site and shift management is available in the main navigation menu.',
-      [{ text: 'OK' }]
-    );
+    // Navigate to Sites & Shifts tab in ClientTabs
+    try {
+      const parent = navigation.getParent();
+      if (parent) {
+        parent.navigate('ClientTabs', { screen: 'Sites & Shifts' });
+      } else {
+        // Fallback: navigate to ClientTabs
+        navigation.navigate('ClientTabs');
+      }
+    } catch (error) {
+      // Fallback: navigate to ClientTabs
+      navigation.navigate('ClientTabs');
+    }
   };
 
   const handleNotifications = () => {
     navigation.navigate('NotificationSettings');
+  };
+
+  const handleChangePassword = () => {
+    navigation.navigate('ClientChangePassword');
   };
 
   const handleSupport = () => {
@@ -70,7 +97,8 @@ const ClientSettings: React.FC = () => {
     { id: '2', title: 'Company Details', icon: <Briefcase width={20} height={20} color="#666666" />, onPress: handleCompanyDetails },
     { id: '3', title: 'Manage Sites & Shifts', icon: <MapPin width={20} height={20} color="#666666" />, onPress: handleManageSites },
     { id: '4', title: 'Notifications', icon: <Bell width={20} height={20} color="#666666" />, onPress: handleNotifications },
-    { id: '5', title: 'Contact Support', icon: <HelpCircle width={20} height={20} color="#666666" />, onPress: handleSupport },
+    { id: '5', title: 'Change Password', icon: <Lock width={20} height={20} color="#666666" />, onPress: handleChangePassword },
+    { id: '6', title: 'Contact Support', icon: <HelpCircle width={20} height={20} color="#666666" />, onPress: handleSupport },
   ];
 
   return (
@@ -102,7 +130,7 @@ const ClientSettings: React.FC = () => {
                 <View style={styles.iconWrap}>{item.icon}</View>
                 <Text style={styles.title}>{item.title}</Text>
               </View>
-              <ChevronRight width={18} height={18} color="#9AA0A6" />
+              <ChevronRight width={18} height={18} color={COLORS.textSecondary} />
             </TouchableOpacity>
           ))}
         </View>
@@ -134,13 +162,15 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
-    padding: 16,
+    backgroundColor: COLORS.backgroundSecondary,
+    padding: SPACING.lg,
   },
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.lg,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
   },
   row: {
     paddingHorizontal: 16,
@@ -163,25 +193,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    fontSize: 16,
-    color: '#333333',
-    fontWeight: '500',
-    marginLeft: 8,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    marginLeft: SPACING.md,
   },
   logout: {
-    marginTop: 16,
+    marginTop: SPACING.lg,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFEBEE',
-    borderRadius: 12,
-    paddingVertical: 14,
+    borderRadius: BORDER_RADIUS.lg,
+    paddingVertical: SPACING.md,
   },
   logoutText: {
-    color: '#D32F2F',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 6,
+    color: COLORS.error,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    marginLeft: SPACING.xs,
   },
 });
 

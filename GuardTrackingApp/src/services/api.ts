@@ -442,6 +442,53 @@ class ApiService {
     }
   }
 
+  // Get admin shifts by date
+  // Client shift creation (Option B - Direct Assignment)
+  async createClientShift(data: {
+    siteId: string;
+    guardId?: string; // Optional - admin can assign later
+    scheduledStartTime: string;
+    scheduledEndTime: string;
+    description?: string;
+    notes?: string;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.post('/clients/shifts', data);
+      return {
+        success: true,
+        data: response.data.data,
+        message: response.data.message || 'Shift created successfully',
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.error || error.response?.data?.message || 'Failed to create shift',
+      };
+    }
+  }
+
+  async getAdminShifts(date: string, guardId?: string): Promise<ApiResponse<any>> {
+    try {
+      const params = new URLSearchParams();
+      params.append('date', date);
+      if (guardId) params.append('guardId', guardId);
+
+      const response = await this.api.get(`/admin/shifts?${params.toString()}`);
+      return {
+        success: true,
+        data: response.data.data || [],
+        message: response.data.message || 'Shifts fetched successfully',
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: [],
+        message: error.response?.data?.error || error.response?.data?.message || 'Failed to fetch shifts',
+      };
+    }
+  }
+
   // Admin Client Management (for dropdowns, etc.)
   async getAdminClients(params: { page?: number; limit?: number; search?: string } = {}): Promise<ApiResponse<any>> {
     try {
@@ -830,6 +877,31 @@ class ApiService {
     }
   }
 
+  async createAdminUser(data: {
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+    role: 'ADMIN' | 'GUARD' | 'CLIENT';
+    phone?: string;
+    department?: string;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.post('/admin/users', data);
+      return {
+        success: true,
+        data: response.data.data,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to create user',
+        errors: error.response?.data?.errors,
+      };
+    }
+  }
+
   async updateAdminUserStatus(id: string, isActive: boolean): Promise<ApiResponse<any>> {
     try {
       const response = await this.api.patch(`/admin/users/${id}/status`, { isActive });
@@ -874,6 +946,89 @@ class ApiService {
         success: false,
         data: null,
         message: error.response?.data?.message || 'Failed to delete user',
+      };
+    }
+  }
+
+  // Invitation Management APIs
+  async getInvitations(filters?: {
+    role?: 'GUARD' | 'CLIENT';
+    isActive?: boolean;
+    isUsed?: boolean;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const query = new URLSearchParams();
+      if (filters?.role) query.append('role', filters.role);
+      if (filters?.isActive !== undefined) query.append('isActive', String(filters.isActive));
+      if (filters?.isUsed !== undefined) query.append('isUsed', String(filters.isUsed));
+
+      const response = await this.api.get(`/admin/invitations?${query.toString()}`);
+      return {
+        success: true,
+        data: response.data.data,
+        message: 'Invitations fetched successfully'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: [],
+        message: error.response?.data?.error || 'Failed to fetch invitations'
+      };
+    }
+  }
+
+  async createInvitation(data: {
+    email?: string;
+    role: 'GUARD' | 'CLIENT';
+    expiresInDays?: number;
+    maxUses?: number;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.post('/admin/invitations', data);
+      return {
+        success: true,
+        data: response.data.data,
+        message: response.data.message || 'Invitation created successfully'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.error || 'Failed to create invitation'
+      };
+    }
+  }
+
+  async revokeInvitation(invitationId: string): Promise<ApiResponse<null>> {
+    try {
+      const response = await this.api.put(`/admin/invitations/${invitationId}/revoke`);
+      return {
+        success: true,
+        data: null,
+        message: response.data.message || 'Invitation revoked successfully'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.error || 'Failed to revoke invitation'
+      };
+    }
+  }
+
+  async deleteInvitation(invitationId: string): Promise<ApiResponse<null>> {
+    try {
+      const response = await this.api.delete(`/admin/invitations/${invitationId}`);
+      return {
+        success: true,
+        data: null,
+        message: response.data.message || 'Invitation deleted successfully'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.error || 'Failed to delete invitation'
       };
     }
   }
@@ -1123,18 +1278,29 @@ class ApiService {
   }
 
   // Notification Methods
-  async getNotifications(): Promise<ApiResponse<Notification[]>> {
+  async getNotifications(isRead?: boolean, type?: string, page: number = 1, limit: number = 10): Promise<ApiResponse<Notification[]>> {
     try {
-      const response = await this.api.get('/notifications');
+      const query = new URLSearchParams();
+      if (isRead !== undefined) query.append('isRead', String(isRead));
+      if (type) query.append('type', type);
+      query.append('page', String(page));
+      query.append('limit', String(limit));
+
+      const response = await this.api.get(`/notifications?${query.toString()}`);
+      // Backend returns: { success: true, data: [...], pagination: {...}, unreadCount: ... }
+      // The 'data' field contains the array of notifications directly
+      const notifications = response.data.data || [];
       return {
         success: true,
-        data: response.data.data
+        data: Array.isArray(notifications) ? notifications : [],
+        message: 'Notifications fetched successfully',
       };
     } catch (error: any) {
+      console.error('Error fetching notifications:', error);
       return {
         success: false,
         data: [],
-        message: error.response?.data?.message || 'Failed to fetch notifications'
+        message: error.response?.data?.message || error.message || 'Failed to fetch notifications'
       };
     }
   }
@@ -1151,6 +1317,58 @@ class ApiService {
         success: false,
         data: null,
         message: error.response?.data?.message || 'Failed to mark notification as read'
+      };
+    }
+  }
+
+  async markAllNotificationsAsRead(): Promise<ApiResponse<{ count: number }>> {
+    try {
+      const response = await this.api.put('/notifications/read-all');
+      return {
+        success: true,
+        data: response.data.data
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: { count: 0 },
+        message: error.response?.data?.message || 'Failed to mark all notifications as read'
+      };
+    }
+  }
+
+  async deleteNotification(notificationId: string): Promise<ApiResponse<null>> {
+    try {
+      await this.api.delete(`/notifications/${notificationId}`);
+      return {
+        success: true,
+        data: null
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to delete notification'
+      };
+    }
+  }
+
+  async registerDeviceToken(token: string, platform: string, deviceId?: string): Promise<ApiResponse<null>> {
+    try {
+      const response = await this.api.post('/notifications/register-device', {
+        token,
+        platform,
+        deviceId
+      });
+      return {
+        success: true,
+        data: null
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to register device token'
       };
     }
   }
@@ -1191,15 +1409,36 @@ class ApiService {
   async getClientReports(page: number = 1, limit: number = 50): Promise<ApiResponse<any>> {
     try {
       const response = await this.api.get(`/clients/my-reports?page=${page}&limit=${limit}`);
+      
+      // Handle different response structures
+      const responseData = response.data?.data || response.data;
+      
+      // Ensure we always return the expected structure
+      if (!responseData || !responseData.reports) {
+        return {
+          success: true,
+          data: {
+            reports: [],
+            pagination: {
+              page,
+              limit,
+              total: 0,
+              pages: 0,
+            },
+          },
+        };
+      }
+      
       return {
         success: true,
-        data: response.data.data
+        data: responseData
       };
     } catch (error: any) {
+      console.error('getClientReports API error:', error);
       return {
         success: false,
         data: null,
-        message: error.response?.data?.message || 'Failed to fetch reports'
+        message: error.response?.data?.message || error.message || 'Failed to fetch reports'
       };
     }
   }
@@ -1212,83 +1451,10 @@ class ApiService {
         data: response.data.data
       };
     } catch (error: any) {
-      // Fallback to mock data when backend is not available
-      console.log('Backend not available, using mock sites data');
-      
-      const mockSites = [
-        {
-          id: 'site_1',
-          name: 'Central Office Building',
-          address: '123 Business District, New York, NY 10001',
-          latitude: 40.7589,
-          longitude: -73.9851,
-          description: 'Main corporate office building requiring 24/7 security coverage',
-          requirements: 'Professional appearance, valid security license, experience with access control systems',
-          isActive: true,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          client: {
-            id: 'client_1',
-            user: {
-              firstName: 'John',
-              lastName: 'Smith',
-              email: 'john.smith@company.com'
-            }
-          }
-        },
-        {
-          id: 'site_2',
-          name: 'Warehouse Distribution Center',
-          address: '456 Industrial Ave, Brooklyn, NY 11201',
-          latitude: 40.7505,
-          longitude: -73.9934,
-          description: 'Large warehouse facility with multiple loading docks and inventory areas',
-          requirements: 'Physical fitness required, forklift certification preferred, night shift availability',
-          isActive: true,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          client: {
-            id: 'client_1',
-            user: {
-              firstName: 'John',
-              lastName: 'Smith',
-              email: 'john.smith@company.com'
-            }
-          }
-        },
-        {
-          id: 'site_3',
-          name: 'Retail Shopping Plaza',
-          address: '789 Commerce St, Manhattan, NY 10014',
-          latitude: 40.7614,
-          longitude: -73.9776,
-          description: 'Multi-tenant retail plaza with various shops and restaurants',
-          requirements: 'Customer service skills, crowd management experience, weekend availability',
-          isActive: true,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          client: {
-            id: 'client_1',
-            user: {
-              firstName: 'John',
-              lastName: 'Smith',
-              email: 'john.smith@company.com'
-            }
-          }
-        }
-      ];
-
       return {
-        success: true,
-        data: {
-          sites: mockSites,
-          pagination: {
-            page: 1,
-            limit: 50,
-            total: mockSites.length,
-            pages: 1
-          }
-        }
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to fetch sites. Please check your connection and try again.'
       };
     }
   }
@@ -1360,23 +1526,6 @@ class ApiService {
         success: false,
         data: null,
         message: error.response?.data?.message || 'Failed to update guard profile'
-      };
-    }
-  }
-
-  async applyForShift(shiftPostingId: string, message?: string): Promise<ApiResponse<any>> {
-    try {
-      const response = await this.api.post(`/shift-postings/${shiftPostingId}/apply`, { message });
-      return {
-        success: true,
-        data: response.data.data,
-        message: response.data.message || 'Application submitted successfully'
-      };
-    } catch (error: any) {
-      return {
-        success: false,
-        data: null,
-        message: error.response?.data?.message || 'Failed to submit application'
       };
     }
   }
@@ -1486,44 +1635,11 @@ class ApiService {
     }
   }
 
-  async getAvailableShiftPostings(page: number = 1, limit: number = 10, search?: string): Promise<ApiResponse<any>> {
-    try {
-      const params = new URLSearchParams();
-      params.append('page', String(page));
-      params.append('limit', String(limit));
-      if (search) params.append('search', search);
-      
-      const response = await this.api.get(`/shift-postings/available?${params.toString()}`);
-      return {
-        success: true,
-        data: response.data.data || response.data,
-        message: 'Shift postings fetched successfully'
-      };
-    } catch (error: any) {
-      return {
-        success: false,
-        data: { shiftPostings: [], pagination: { page, limit, total: 0, pages: 0 } },
-        message: error.response?.data?.message || 'Failed to fetch shift postings'
-      };
-    }
-  }
+  // REMOVED: getAvailableShiftPostings - Job board system removed (Option B)
+  // Guards now see shifts assigned to them directly
 
-  async getShiftPostingById(shiftPostingId: string): Promise<ApiResponse<any>> {
-    try {
-      const response = await this.api.get(`/shift-postings/${shiftPostingId}`);
-      return {
-        success: true,
-        data: response.data.data || response.data,
-        message: 'Shift posting details fetched successfully'
-      };
-    } catch (error: any) {
-      return {
-        success: false,
-        data: null,
-        message: error.response?.data?.message || 'Failed to fetch shift posting details'
-      };
-    }
-  }
+  // REMOVED: getShiftPostingById - Job board system removed (Option B)
+  // Use getShiftById instead
 
   async getSiteById(siteId: string): Promise<ApiResponse<any>> {
     try {

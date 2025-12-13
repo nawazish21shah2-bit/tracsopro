@@ -20,8 +20,11 @@ class StripeService {
     }
 
     try {
+      // Use publishable key from config or fallback
+      const publishableKey = 'pk_test_51SVpTpLEsN8TIkgKDnKDuj9xtgOWuO2SMQ0RtbCIsnxjuO7bVzn4SOvBhEnQZbOhozpwVZOPFeDWTdUo7Tc03sJj002Mdzdgkg';
+      
       await initStripe({
-        publishableKey: STRIPE_PUBLISHABLE_KEY,
+        publishableKey,
         merchantIdentifier: 'merchant.com.tracsopro', // iOS only
       });
       this.initialized = true;

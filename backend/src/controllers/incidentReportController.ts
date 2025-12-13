@@ -36,6 +36,7 @@ class IncidentReportController {
     try {
       const guardId = req.userId!;
       const { page = 1, limit = 10, reportType, startDate, endDate } = req.query;
+      const securityCompanyId = req.securityCompanyId; // Multi-tenant filter
 
       const filters = {
         guardId,
@@ -47,7 +48,8 @@ class IncidentReportController {
       const reports = await incidentReportService.getIncidentReports(
         filters,
         parseInt(page as string),
-        parseInt(limit as string)
+        parseInt(limit as string),
+        securityCompanyId
       );
 
       res.json({
@@ -122,6 +124,15 @@ class IncidentReportController {
   async getAllIncidentReports(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { page = 1, limit = 10, guardId, reportType, startDate, endDate } = req.query;
+      const securityCompanyId = req.securityCompanyId; // Multi-tenant filter
+
+      // SUPER_ADMIN can see all, others must have company
+      if (req.user?.role !== 'SUPER_ADMIN' && !securityCompanyId) {
+        return res.status(403).json({
+          success: false,
+          error: 'Security company ID not found. Admin must be linked to a company.',
+        });
+      }
 
       const filters = {
         guardId: guardId as string,
@@ -133,7 +144,8 @@ class IncidentReportController {
       const reports = await incidentReportService.getAllIncidentReports(
         filters,
         parseInt(page as string),
-        parseInt(limit as string)
+        parseInt(limit as string),
+        securityCompanyId
       );
 
       res.json({
@@ -148,12 +160,21 @@ class IncidentReportController {
   async getIncidentReportStats(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { startDate, endDate, guardId } = req.query;
+      const securityCompanyId = req.securityCompanyId; // Multi-tenant filter
+
+      // SUPER_ADMIN can see all, others must have company
+      if (req.user?.role !== 'SUPER_ADMIN' && !securityCompanyId) {
+        return res.status(403).json({
+          success: false,
+          error: 'Security company ID not found. Admin must be linked to a company.',
+        });
+      }
 
       const stats = await incidentReportService.getIncidentReportStats({
         startDate: startDate as string,
         endDate: endDate as string,
         guardId: guardId as string,
-      });
+      }, securityCompanyId);
 
       res.json({
         success: true,

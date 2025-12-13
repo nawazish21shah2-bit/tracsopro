@@ -16,7 +16,7 @@ import {
   LocationIcon,
   EmergencyIcon 
 } from '../components/ui/AppIcons';
-import { COLORS, TYPOGRAPHY, SPACING } from '../styles/globalStyles';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../styles/globalStyles';
 
 // Import Super Admin Screens
 import SuperAdminDashboard from '../screens/superAdmin/SuperAdminDashboard';
@@ -29,6 +29,11 @@ import CompanyDetailsScreen from '../screens/superAdmin/CompanyDetailsScreen';
 import CreateCompanyScreen from '../screens/superAdmin/CreateCompanyScreen';
 import BuyPlanScreen from '../screens/superAdmin/BuyPlanScreen';
 import PaymentDetailScreen from '../screens/superAdmin/PaymentDetailScreen';
+import NotificationListScreen from '../screens/notifications/NotificationListScreen';
+import NotificationSettingsScreen from '../screens/settings/NotificationSettingsScreen';
+import ProfileEditScreen from '../screens/settings/ProfileEditScreen';
+import ChangePasswordScreen from '../screens/settings/ChangePasswordScreen';
+import SupportContactScreen from '../screens/settings/SupportContactScreen';
 
 export type SuperAdminTabParamList = {
   Dashboard: undefined;
@@ -49,6 +54,11 @@ export type SuperAdminStackParamList = {
   SystemSettings: undefined;
   AuditLogs: undefined;
   BuyPlan: undefined;
+  SuperAdminNotifications: undefined;
+  SuperAdminProfileEdit: undefined;
+  SuperAdminNotificationSettings: undefined;
+  SuperAdminChangePassword: undefined;
+  SuperAdminSupportContact: undefined;
 };
 
 const Tab = createBottomTabNavigator<SuperAdminTabParamList>();
@@ -111,7 +121,7 @@ const SuperAdminTabNavigator: React.FC = () => {
             <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
               <IconComponent 
                 size={20} 
-                color={focused ? COLORS.primary : '#7A7A7A'} 
+                color={focused ? COLORS.primary : COLORS.textSecondary} 
               />
             </View>
           );
@@ -119,14 +129,14 @@ const SuperAdminTabNavigator: React.FC = () => {
         tabBarLabel: ({ focused, color }) => (
           <Text style={[
             styles.tabLabel,
-            { color: focused ? COLORS.primary : '#7A7A7A' }
+            { color: focused ? COLORS.primary : COLORS.textSecondary }
           ]}>
             {route.name}
           </Text>
         ),
         tabBarStyle: styles.tabBar,
         tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: '#7A7A7A',
+        tabBarInactiveTintColor: COLORS.textSecondary,
       })}
     >
       <Tab.Screen 
@@ -186,6 +196,26 @@ const SuperAdminNavigator: React.FC = () => {
       <Stack.Screen name="SystemSettings" component={SystemSettingsScreen} />
       <Stack.Screen name="AuditLogs" component={AuditLogsScreen} />
       <Stack.Screen name="BuyPlan" component={BuyPlanScreen} />
+      <Stack.Screen 
+        name="SuperAdminNotifications" 
+        component={() => <NotificationListScreen variant="superAdmin" />} 
+      />
+      <Stack.Screen 
+        name="SuperAdminProfileEdit" 
+        component={() => <ProfileEditScreen variant="admin" />} 
+      />
+      <Stack.Screen 
+        name="SuperAdminNotificationSettings" 
+        component={() => <NotificationSettingsScreen variant="admin" />} 
+      />
+      <Stack.Screen 
+        name="SuperAdminChangePassword" 
+        component={() => <ChangePasswordScreen variant="superAdmin" />} 
+      />
+      <Stack.Screen 
+        name="SuperAdminSupportContact" 
+        component={() => <SupportContactScreen variant="admin" />} 
+      />
     </Stack.Navigator>
   );
 };
@@ -194,24 +224,26 @@ const styles = StyleSheet.create({
   tabIconWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: BORDER_RADIUS.round,
+    backgroundColor: COLORS.backgroundSecondary,
   },
   tabIconWrapperActive: {
-    backgroundColor: 'rgba(28,108,169,0.2)',
+    backgroundColor: COLORS.primaryLight,
   },
   tabLabel: {
-    fontSize: 10,
-    fontWeight: '500',
-    marginTop: 4,
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    marginTop: SPACING.xs,
+    textAlign: 'center',
   },
   tabBar: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.backgroundPrimary,
     borderTopWidth: 1,
-    borderTopColor: '#E0F0FA',
-    paddingBottom: 8,
-    paddingTop: 8,
+    borderTopColor: COLORS.borderLight,
+    paddingBottom: SPACING.sm,
+    paddingTop: SPACING.sm,
     height: 70,
   },
 });

@@ -122,6 +122,44 @@ class WebSocketService {
         }
       });
 
+      // Handle chat room joining
+      socket.on('join_room', (roomId: string) => {
+        try {
+          const userId = this.connectedClients.get(socket.id);
+          if (!userId) {
+            socket.emit('error', { message: 'Not authenticated' });
+            return;
+          }
+
+          const chatRoom = `chat_${roomId}`;
+          socket.join(chatRoom);
+          logger.debug(`User ${userId} joined chat room ${chatRoom}`);
+          socket.emit('room_joined', { roomId, chatRoom });
+        } catch (error) {
+          logger.error('Failed to join room:', error);
+          socket.emit('error', { message: 'Failed to join room' });
+        }
+      });
+
+      // Handle chat room leaving
+      socket.on('leave_room', (roomId: string) => {
+        try {
+          const userId = this.connectedClients.get(socket.id);
+          if (!userId) {
+            socket.emit('error', { message: 'Not authenticated' });
+            return;
+          }
+
+          const chatRoom = `chat_${roomId}`;
+          socket.leave(chatRoom);
+          logger.debug(`User ${userId} left chat room ${chatRoom}`);
+          socket.emit('room_left', { roomId, chatRoom });
+        } catch (error) {
+          logger.error('Failed to leave room:', error);
+          socket.emit('error', { message: 'Failed to leave room' });
+        }
+      });
+
       // Handle disconnection
       socket.on('disconnect', () => {
         this.handleDisconnection(socket.id);
@@ -259,6 +297,25 @@ class WebSocketService {
     logger.debug(`Sent ${event} to socket ${socketId}`);
   }
 
+  broadcastShiftStatusUpdate(data: { shiftId: string; guardId: string; status: string }): void {
+    if (!this.io) return;
+
+    this.broadcastToAdmins('shift_status_changed', data);
+    logger.debug(`Broadcasted shift status update: Shift ${data.shiftId}, Status: ${data.status}`);
+  }
+
+  broadcastIncidentAlert(data: { incidentId: string; shiftId: string; guardId: string; message?: string }): void {
+    if (!this.io) return;
+
+    const alertData = {
+      ...data,
+      timestamp: Date.now(),
+    };
+
+    this.broadcastToAdmins('incident_alert', alertData);
+    logger.warn(`Broadcasted incident alert: Incident ${data.incidentId}, Guard ${data.guardId}`);
+  }
+
   // Broadcast live location updates periodically
   startLiveLocationBroadcast(): void {
     setInterval(async () => {
@@ -299,6 +356,72 @@ class WebSocketService {
         break;
       }
     }
+  }
+
+  // Broadcast to a specific room (e.g., chat rooms)
+  broadcastToRoom(room: string, event: string, data: any): void {
+    if (!this.io) return;
+
+    this.io.to(room).emit(event, data);
+    logger.debug(`Broadcasted ${event} to room ${room}`);
+  }
+
+  // Broadcast to a specific user by userId
+  broadcastToUser(userId: string, event: string, data: any): void {
+    if (!this.io) return;
+
+    // Find socket by userId
+    for (const [socketId, connectedUserId] of this.connectedClients.entries()) {
+      if (connectedUserId === userId) {
+        this.io.to(socketId).emit(event, data);
+        logger.debug(`Broadcasted ${event} to user ${userId}`);
+        return;
+      }
+    }
+    logger.warn(`User ${userId} not found for broadcast`);
+  }
+
+  // Get socket IDs for a user (user can have multiple connections)
+  getSocketIdsByUserId(userId: string): string[] {
+    const socketIds: string[] = [];
+    for (const [socketId, connectedUserId] of this.connectedClients.entries()) {
+      if (connectedUserId === userId) {
+        socketIds.push(socketId);
+      }
+    }
+    return socketIds;
+  }
+
+  // Join user to a chat room (if user is connected)
+  joinUserToChatRoom(userId: string, chatId: string): void {
+    if (!this.io) return;
+
+    const socketIds = this.getSocketIdsByUserId(userId);
+    const chatRoom = `chat_${chatId}`;
+
+    socketIds.forEach(socketId => {
+      const socket = this.io!.sockets.sockets.get(socketId);
+      if (socket) {
+        socket.join(chatRoom);
+        logger.debug(`User ${userId} (socket ${socketId}) joined chat room ${chatRoom}`);
+      }
+    });
+  }
+
+  // Leave user from a chat room
+  leaveUserFromChatRoom(userId: string, chatId: string): void {
+    if (!this.io) return;
+
+    const socketIds = this.getSocketIdsByUserId(userId);
+    const chatRoom = `chat_${chatId}`;
+
+    socketIds.forEach(socketId => {
+      const socket = this.io!.sockets.sockets.get(socketId);
+      if (socket) {
+        socket.leave(chatRoom);
+        logger.debug(`User ${userId} (socket ${socketId}) left chat room ${chatRoom}`);
+      }
+    });
   }
 }
 

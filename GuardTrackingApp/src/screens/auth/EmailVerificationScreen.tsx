@@ -19,14 +19,16 @@ import Button from '../../components/common/Button';
 import { AppIcon } from '../../components/ui/AppIcons';
 import Logo from '../../assets/images/tracSOpro-logo.png';
 
-type EmailVerificationScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'EmailVerification'>;
-type EmailVerificationScreenRouteProp = RouteProp<AuthStackParamList, 'EmailVerification'>;
+// Note: This screen is deprecated - replaced by GuardOTPScreen, ClientOTPScreen, AdminOTPScreen
+// Keeping for backward compatibility but not registered in navigation
+type EmailVerificationScreenNavigationProp = StackNavigationProp<any>;
+type EmailVerificationScreenRouteProp = RouteProp<any>;
 
 const EmailVerificationScreen: React.FC = () => {
   const navigation = useNavigation<EmailVerificationScreenNavigationProp>();
   const route = useRoute<EmailVerificationScreenRouteProp>();
-  const email = route.params?.email || '';
-  const isPasswordReset = route.params?.isPasswordReset || false;
+  const email = (route.params as any)?.email || '';
+  const isPasswordReset = (route.params as any)?.isPasswordReset || false;
 
   const [otp, setOtp] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -40,34 +42,92 @@ const EmailVerificationScreen: React.FC = () => {
   };
 
   const handleVerifyOtp = async () => {
-    // For now, skip OTP verification since backend doesn't have it yet
-    // TODO: Implement proper OTP verification with backend
+    if (!otp || otp.length < 6) {
+      Alert.alert('Error', 'Please enter a valid 6-digit OTP code');
+      return;
+    }
+
     setIsLoading(true);
     try {
-      // Simulate verification delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const apiService = (await import('../../services/api')).default;
       
       if (isPasswordReset) {
-        // Navigate to reset password screen
-        navigation.navigate('ResetPassword', { email, otp: '12345' });
+        // For password reset, verify OTP first, then navigate to reset password
+        // The OTP verification is done in the reset password API call
+        navigation.navigate('ResetPassword', { email, otp });
       } else {
-        // Navigate to profile setup for registration
-        navigation.navigate('ProfileSetup');
+        // For email verification, we need userId from route params or temp state
+        // This screen should receive userId from registration flow
+        const tempUserId = route.params?.userId;
+        if (!tempUserId) {
+          Alert.alert('Error', 'User ID not found. Please register again.');
+          navigation.navigate('RoleSelection' as never);
+          return;
+        }
+
+        // Verify OTP for email verification
+        const result = await apiService.verifyOTP(tempUserId, otp);
+        
+        if (result.success) {
+          // Navigate to profile setup for registration
+          // Navigate to appropriate profile setup based on role
+          // This screen is deprecated - should use role-specific OTP screens
+          navigation.navigate('GuardProfileSetup' as never);
+        } else {
+          Alert.alert('Error', result.message || 'Invalid OTP. Please try again.');
+        }
       }
-    } catch (error) {
-      Alert.alert('Error', 'Verification failed. Please try again.');
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Verification failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleResendCode = async () => {
+    if (!canResend) return;
+
+    setCanResend(false);
+    setIsLoading(true);
+    
     try {
-      // Simulate resend API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      Alert.alert('Success', 'Verification code sent to your email');
-    } catch (error) {
-      Alert.alert('Error', 'Failed to resend code. Please try again.');
+      const apiService = (await import('../../services/api')).default;
+      
+      if (isPasswordReset) {
+        // For password reset, use forgot password again
+        const result = await apiService.forgotPassword(email);
+        if (result.success) {
+          Alert.alert('Success', 'A new password reset code has been sent to your email');
+          // Start 60 second timer
+          setTimeout(() => setCanResend(true), 60000);
+        } else {
+          Alert.alert('Error', result.message || 'Failed to resend code. Please try again.');
+          setCanResend(true);
+        }
+      } else {
+        // For email verification, resend OTP
+        const tempUserId = route.params?.userId;
+        if (!tempUserId) {
+          Alert.alert('Error', 'User ID not found. Please register again.');
+          setCanResend(true);
+          return;
+        }
+
+        const result = await apiService.resendOTP(tempUserId);
+        if (result.success) {
+          Alert.alert('Success', 'A new verification code has been sent to your email');
+          // Start 60 second timer
+          setTimeout(() => setCanResend(true), 60000);
+        } else {
+          Alert.alert('Error', result.message || 'Failed to resend code. Please try again.');
+          setCanResend(true);
+        }
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to resend code. Please try again.');
+      setCanResend(true);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -123,7 +183,7 @@ const EmailVerificationScreen: React.FC = () => {
         <Button
           title={isLoading ? 'Verifying...' : 'Verify'}
           onPress={handleVerifyOtp}
-          disabled={isLoading || otp.length < 4}
+          disabled={isLoading || otp.length < 6}
           loading={isLoading}
           fullWidth
           size="large"

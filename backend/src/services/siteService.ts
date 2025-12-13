@@ -70,23 +70,20 @@ export class SiteService {
         prisma.site.findMany({
           where: { clientId },
           include: {
-            shiftPostings: {
-              where: { status: 'OPEN' },
-              select: { id: true, title: true, startTime: true, endTime: true }
-            },
-            shiftAssignments: {
-              where: { 
-                status: { in: ['ASSIGNED', 'IN_PROGRESS'] }
+            shifts: {
+              where: {
+                status: { in: ['SCHEDULED', 'IN_PROGRESS'] }
               },
               include: {
                 guard: {
                   include: {
                     user: {
-                      select: { firstName: true, lastName: true }
+                      select: { firstName: true, lastName: true, email: true }
                     }
                   }
                 }
-              }
+              },
+              orderBy: { scheduledStartTime: 'asc' }
             }
           },
           orderBy: { createdAt: 'desc' },
@@ -121,32 +118,6 @@ export class SiteService {
             include: {
               user: {
                 select: { id: true, firstName: true, lastName: true, email: true }
-              }
-            }
-          },
-          shiftPostings: {
-            include: {
-              applications: {
-                include: {
-                  guard: {
-                    include: {
-                      user: {
-                        select: { firstName: true, lastName: true, email: true }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          },
-          shiftAssignments: {
-            include: {
-              guard: {
-                include: {
-                  user: {
-                    select: { firstName: true, lastName: true, email: true }
-                  }
-                }
               }
             }
           }
@@ -206,16 +177,16 @@ export class SiteService {
   // Delete site
   async deleteSite(siteId: string, clientId: string) {
     try {
-      // Check if site has active assignments
-      const activeAssignments = await prisma.shiftAssignment.count({
+      // Check if site has active shifts (Option B)
+      const activeShifts = await prisma.shift.count({
         where: {
           siteId,
-          status: { in: ['ASSIGNED', 'IN_PROGRESS'] }
+          status: { in: ['SCHEDULED', 'IN_PROGRESS'] }
         }
       });
 
-      if (activeAssignments > 0) {
-        throw new ValidationError('Cannot delete site with active assignments');
+      if (activeShifts > 0) {
+        throw new ValidationError('Cannot delete site with active shifts');
       }
 
       // Verify site belongs to client
@@ -246,9 +217,9 @@ export class SiteService {
       
       const whereClause: any = {
         isActive: true,
-        shiftPostings: {
+        shifts: {
           some: {
-            status: 'OPEN'
+            status: { in: ['SCHEDULED', 'IN_PROGRESS'] }
           }
         }
       };
@@ -272,13 +243,9 @@ export class SiteService {
                 }
               }
             },
-            shiftPostings: {
-              where: { status: 'OPEN' },
-              include: {
-                applications: {
-                  select: { id: true, status: true }
-                }
-              }
+            shifts: {
+              where: { status: { in: ['SCHEDULED', 'IN_PROGRESS'] } },
+              select: { id: true, scheduledStartTime: true, scheduledEndTime: true, status: true }
             }
           },
           orderBy: { createdAt: 'desc' },

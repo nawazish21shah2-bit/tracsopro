@@ -1,4 +1,5 @@
 import prisma from '../config/database.js';
+import subscriptionService from './subscriptionService.js';
 import { logger } from '../utils/logger.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
 
@@ -25,11 +26,20 @@ interface AdminSiteUpdateData extends Partial<AdminSiteCreateData> {
 }
 
 export class AdminSiteService {
-  async getSites(filters: AdminSiteFilter) {
+  async getSites(filters: AdminSiteFilter, securityCompanyId?: string) {
     const { page = 1, limit = 20, clientId, isActive, search } = filters;
     const skip = (page - 1) * limit;
 
     const where: any = {};
+
+    // Multi-tenant: Filter by company
+    if (securityCompanyId) {
+      where.companySites = {
+        some: {
+          securityCompanyId,
+        },
+      };
+    }
 
     if (clientId) {
       where.clientId = clientId;
@@ -58,7 +68,7 @@ export class AdminSiteService {
               },
             },
           },
-          shiftAssignments: true,
+          shifts: true,
         },
         orderBy: { createdAt: 'desc' },
         skip,
@@ -78,34 +88,63 @@ export class AdminSiteService {
     };
   }
 
-  async createSite(data: AdminSiteCreateData) {
+  async createSite(data: AdminSiteCreateData, securityCompanyId: string) {
+    // Free tier check
+    await subscriptionService.validateSiteLimit(securityCompanyId);
+
+    // Verify client belongs to company
+    const companyClient = await prisma.companyClient.findFirst({
+      where: {
+        clientId: data.clientId,
+        securityCompanyId,
+        isActive: true,
+      },
+    });
+
+    if (!companyClient) {
+      throw new ValidationError('Client not found or does not belong to your company');
+    }
+
     const client = await prisma.client.findUnique({ where: { id: data.clientId } });
     if (!client) {
       throw new NotFoundError('Client not found');
     }
 
-    const site = await prisma.site.create({
-      data: {
-        clientId: data.clientId,
-        name: data.name,
-        address: data.address,
-        latitude: data.latitude,
-        longitude: data.longitude,
-        description: data.description,
-        requirements: data.requirements,
-      },
-      include: {
-        client: {
-          include: {
-            user: {
-              select: { firstName: true, lastName: true, email: true },
+    // Create site and link to company
+    const site = await prisma.$transaction(async (tx) => {
+      const newSite = await tx.site.create({
+        data: {
+          clientId: data.clientId,
+          name: data.name,
+          address: data.address,
+          latitude: data.latitude,
+          longitude: data.longitude,
+          description: data.description,
+          requirements: data.requirements,
+        },
+        include: {
+          client: {
+            include: {
+              user: {
+                select: { firstName: true, lastName: true, email: true },
+              },
             },
           },
         },
-      },
+      });
+
+      // Link site to company
+      await tx.companySite.create({
+        data: {
+          securityCompanyId,
+          siteId: newSite.id,
+        },
+      });
+
+      return newSite;
     });
 
-    logger.info(`Admin created site ${site.id} for client ${data.clientId}`);
+    logger.info(`Admin created site ${site.id} for client ${data.clientId} in company ${securityCompanyId}`);
     return site;
   }
 
@@ -150,14 +189,14 @@ export class AdminSiteService {
   }
 
   async deleteSite(siteId: string) {
-    const activeAssignments = await prisma.shiftAssignment.count({
+    const activeShifts = await prisma.shift.count({
       where: {
         siteId,
-        status: { in: ['ASSIGNED', 'IN_PROGRESS'] },
+        status: { in: ['SCHEDULED', 'IN_PROGRESS'] },
       },
     });
 
-    if (activeAssignments > 0) {
+    if (activeShifts > 0) {
       throw new ValidationError('Cannot delete site with active assignments');
     }
 

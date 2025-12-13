@@ -49,13 +49,28 @@ export class TrackingService {
     return record;
   }
 
-  async getGuardTrackingHistory(guardId: string, startDate?: Date, endDate?: Date, limit: number = 100) {
+  async getGuardTrackingHistory(guardId: string, startDate?: Date, endDate?: Date, limit: number = 100, securityCompanyId?: string) {
     const guard = await prisma.guard.findUnique({
       where: { id: guardId },
     });
 
     if (!guard) {
       throw new NotFoundError('Guard not found');
+    }
+
+    // Multi-tenant: Validate guard belongs to company (if provided)
+    if (securityCompanyId) {
+      const companyGuard = await prisma.companyGuard.findFirst({
+        where: {
+          guardId: guard.id,
+          securityCompanyId,
+          isActive: true,
+        },
+      });
+
+      if (!companyGuard) {
+        throw new NotFoundError('Guard not found or does not belong to your company');
+      }
     }
 
     const where: any = { guardId };
@@ -96,12 +111,25 @@ export class TrackingService {
     return latest;
   }
 
-  async getActiveGuardsLocations() {
+  async getActiveGuardsLocations(securityCompanyId?: string) {
+    // Multi-tenant: Get guards from specific company (if provided)
     // Get all guards currently on duty
+    const whereClause: any = {
+      status: 'ON_DUTY',
+    };
+
+    // Multi-tenant: Filter by company if provided
+    if (securityCompanyId) {
+      whereClause.companyGuards = {
+        some: {
+          securityCompanyId,
+          isActive: true,
+        },
+      };
+    }
+
     const activeGuards = await prisma.guard.findMany({
-      where: {
-        status: 'ON_DUTY',
-      },
+      where: whereClause,
       include: {
         user: {
           select: {
@@ -109,6 +137,10 @@ export class TrackingService {
             lastName: true,
           },
         },
+        companyGuards: securityCompanyId ? {
+          where: { securityCompanyId, isActive: true },
+          take: 1,
+        } : false,
       },
     });
 

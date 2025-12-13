@@ -1,14 +1,43 @@
 import prisma from '../config/database.js';
-import { GuardStatus, ShiftStatus, ShiftAssignmentStatus } from '@prisma/client';
+import { GuardStatus, ShiftStatus } from '@prisma/client';
 
 export class AdminService {
   /**
    * Get admin dashboard statistics
    */
-  async getDashboardStats(adminId: string) {
+  async getDashboardStats(adminId: string, securityCompanyId?: string) {
     try {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
+
+      // Multi-tenant: Build company filters
+      const guardWhere = securityCompanyId ? {
+        companyGuards: {
+          some: {
+            securityCompanyId,
+            isActive: true,
+          },
+        },
+      } : {};
+
+      const siteWhere = securityCompanyId ? {
+        companySites: {
+          some: {
+            securityCompanyId,
+          },
+        },
+      } : {};
+
+      const shiftWhere = securityCompanyId ? {
+        guard: {
+          companyGuards: {
+            some: {
+              securityCompanyId,
+              isActive: true,
+            },
+          },
+        },
+      } : {};
 
       const [
         totalGuards,
@@ -20,65 +49,104 @@ export class AdminService {
         emergencyAlerts,
         scheduledShifts,
       ] = await Promise.all([
-        // Total guards
-        prisma.guard.count(),
+        // Total guards - filtered by company
+        prisma.guard.count({
+          where: guardWhere,
+        }),
         
-        // Active guards (ON_DUTY or ACTIVE)
+        // Active guards (ON_DUTY or ACTIVE) - filtered by company
         prisma.guard.count({
           where: {
+            ...guardWhere,
             status: { in: [GuardStatus.ON_DUTY, GuardStatus.ACTIVE] },
           },
         }),
         
-        // Total sites - using Site model instead of Location
-        prisma.site.count(),
-        
-        // Active sites
+        // Total sites - filtered by company
         prisma.site.count({
-          where: { isActive: true },
+          where: siteWhere,
         }),
         
-      // Today's incidents - count from AssignmentReport
-      prisma.assignmentReport.count({
-        where: {
-          submittedAt: { gte: today },
-          type: { in: ['INCIDENT', 'MEDICAL_EMERGENCY', 'SECURITY_BREACH'] },
-        },
-      }),
-      
-      // Pending incidents (not resolved) - count from AssignmentReport with SUBMITTED status
-      prisma.assignmentReport.count({
-        where: {
-          status: 'SUBMITTED',
-          type: { in: ['INCIDENT', 'MEDICAL_EMERGENCY', 'SECURITY_BREACH'] },
-        },
-      }),
-        
-      // Emergency alerts - count from AssignmentReport with MEDICAL_EMERGENCY type and SUBMITTED status
-      prisma.assignmentReport.count({
-        where: {
-          type: 'MEDICAL_EMERGENCY',
-          status: 'SUBMITTED',
-        },
-      }),
-        
-        // Scheduled shifts (this week) - count ShiftAssignments instead
-        prisma.shiftAssignment.count({
+        // Active sites - filtered by company
+        prisma.site.count({
           where: {
-            startTime: {
+            ...siteWhere,
+            isActive: true,
+          },
+        }),
+        
+      // Today's incidents - filtered by company
+      (await Promise.all([
+        prisma.shiftReport.count({
+          where: {
+            submittedAt: { gte: today },
+            reportType: { in: ['INCIDENT', 'EMERGENCY'] },
+            shift: shiftWhere,
+          },
+        }),
+        prisma.incidentReport.count({
+          where: {
+            submittedAt: { gte: today },
+            guard: guardWhere,
+          },
+        }),
+      ])).reduce((a, b) => a + b, 0),
+      
+      // Pending incidents (not resolved) - filtered by company
+      prisma.incidentReport.count({
+        where: {
+          status: 'SUBMITTED',
+          reportType: { in: ['INCIDENT', 'MEDICAL_EMERGENCY', 'SECURITY_BREACH'] },
+          guard: guardWhere,
+        },
+      }),
+        
+      // Emergency alerts - filtered by company
+      (await Promise.all([
+        prisma.shiftReport.count({
+          where: {
+            reportType: 'EMERGENCY',
+            submittedAt: { gte: today },
+            shift: shiftWhere,
+          },
+        }),
+        prisma.incidentReport.count({
+          where: {
+            reportType: 'MEDICAL_EMERGENCY',
+            status: 'SUBMITTED',
+            guard: guardWhere,
+          },
+        }),
+      ])).reduce((a, b) => a + b, 0),
+        
+        // Scheduled shifts (this week) - filtered by company
+        prisma.shift.count({
+          where: {
+            ...shiftWhere,
+            scheduledStartTime: {
               gte: today,
               lte: new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000),
             },
-            status: { in: [ShiftAssignmentStatus.ASSIGNED, ShiftAssignmentStatus.IN_PROGRESS] },
+            status: { in: [ShiftStatus.SCHEDULED, ShiftStatus.IN_PROGRESS] },
           },
         }),
       ]);
 
-      // Calculate revenue (mock for now - can be calculated from shift assignments)
-      const revenue = 0; // TODO: Calculate from shift assignments and billing
+      // Calculate revenue from paid billing records
+      const paidBilling = await prisma.billingRecord.aggregate({
+        where: {
+          securityCompanyId,
+          status: 'PAID',
+        },
+        _sum: {
+          amount: true,
+        },
+      });
 
-      // Calculate client satisfaction (mock for now)
-      const clientSatisfaction = 4.8; // TODO: Calculate from ratings/feedback
+      const revenue = paidBilling._sum.amount || 0;
+
+      // Calculate client satisfaction (mock for now - can be enhanced with ratings/feedback system)
+      const clientSatisfaction = 4.8; // TODO: Calculate from ratings/feedback when implemented
 
       return {
         totalGuards,
@@ -101,8 +169,20 @@ export class AdminService {
   /**
    * Get recent activity for admin dashboard
    */
-  async getRecentActivity(limit: number = 10) {
-    const activities = await prisma.shiftAssignment.findMany({
+  async getRecentActivity(limit: number = 10, securityCompanyId?: string) {
+    const where = securityCompanyId ? {
+      guard: {
+        companyGuards: {
+          some: {
+            securityCompanyId,
+            isActive: true,
+          },
+        },
+      },
+    } : {};
+
+    const activities = await prisma.shift.findMany({
+      where,
       take: limit,
       orderBy: { createdAt: 'desc' },
       include: {
@@ -116,13 +196,6 @@ export class AdminService {
         site: {
           select: { name: true },
         },
-        shiftPosting: {
-          include: {
-            site: {
-              select: { name: true },
-            },
-          },
-        },
       },
     });
 
@@ -130,21 +203,21 @@ export class AdminService {
       const guardName = activity.guard?.user
         ? `${activity.guard.user.firstName} ${activity.guard.user.lastName}`
         : 'Unknown Guard';
-      const siteName = activity.site?.name || activity.shiftPosting?.site?.name || 'Unknown Site';
+      const siteName = activity.site?.name || 'Unknown Site';
 
       let text = '';
       let icon = 'user';
       let iconColor = '#16A34A';
 
-      if (activity.status === ShiftAssignmentStatus.IN_PROGRESS && activity.checkInTime) {
+      if (activity.status === ShiftStatus.IN_PROGRESS && activity.actualStartTime) {
         text = `${guardName} checked in at ${siteName}`;
         icon = 'check-in';
         iconColor = '#16A34A';
-      } else if (activity.status === ShiftAssignmentStatus.COMPLETED && activity.checkOutTime) {
+      } else if (activity.status === ShiftStatus.COMPLETED && activity.actualEndTime) {
         text = `${guardName} completed shift at ${siteName}`;
         icon = 'check-out';
         iconColor = '#3B82F6';
-      } else if (activity.status === ShiftAssignmentStatus.ASSIGNED) {
+      } else if (activity.status === ShiftStatus.SCHEDULED) {
         text = `${guardName} assigned to shift at ${siteName}`;
         icon = 'schedule';
         iconColor = '#EC4899';

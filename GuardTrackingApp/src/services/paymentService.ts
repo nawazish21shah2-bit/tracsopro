@@ -221,9 +221,23 @@ class PaymentService {
   }): Promise<{ id: string; url: string | null }> {
     try {
       const response = await apiService.post('/payments/subscriptions/checkout', data);
-      return response.data.data;
-    } catch (error) {
+      if (__DEV__) {
+        console.log('Checkout response:', JSON.stringify(response.data, null, 2));
+      }
+      
+      // Handle different response structures
+      const checkoutData = response.data?.data || response.data;
+      
+      if (!checkoutData) {
+        throw new Error('Invalid response from checkout endpoint');
+      }
+      
+      return checkoutData;
+    } catch (error: any) {
       console.error('Error creating subscription checkout:', error);
+      if (__DEV__) {
+        console.error('Error details:', error.response?.data || error.message);
+      }
       throw error;
     }
   }

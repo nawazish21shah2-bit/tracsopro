@@ -71,10 +71,32 @@ export class IncidentService {
   }
 
   async createIncident(reportedBy: string, data: any) {
+    // Handle location - create if not provided as locationId
+    let locationId = data.locationId;
+    
+    if (!locationId && data.location) {
+      // Create a location from the provided coordinates
+      const location = await prisma.location.create({
+        data: {
+          name: data.location.address || 'Incident Location',
+          address: data.location.address || '',
+          latitude: data.location.latitude,
+          longitude: data.location.longitude,
+          type: 'FACILITY', // Use valid LocationType enum value
+          description: `Location for incident: ${data.title}`,
+        },
+      });
+      locationId = location.id;
+    }
+
+    if (!locationId) {
+      throw new Error('locationId or location coordinates are required');
+    }
+
     const incident = await prisma.incident.create({
       data: {
         reportedBy,
-        locationId: data.locationId,
+        locationId,
         type: data.type,
         severity: data.severity,
         title: data.title,

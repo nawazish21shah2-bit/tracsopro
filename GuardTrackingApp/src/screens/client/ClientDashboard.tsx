@@ -30,6 +30,7 @@ import SharedHeader from '../../components/ui/SharedHeader';
 import ClientProfileDrawer from '../../components/client/ClientProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 
 const { width } = Dimensions.get('window');
 
@@ -64,15 +65,42 @@ const ClientDashboard: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingTimeout, setLoadingTimeout] = useState(false);
+
+  // Add timeout to prevent infinite loading
+  useEffect(() => {
+    if (loading) {
+      const timeout = setTimeout(() => {
+        setLoadingTimeout(true);
+        if (__DEV__) {
+          console.warn('⚠️ Dashboard loading timeout - showing UI anyway');
+        }
+      }, 8000); // 8 second timeout
+
+      return () => clearTimeout(timeout);
+    } else {
+      setLoadingTimeout(false);
+    }
+  }, [loading]);
 
   const loadDashboardData = useCallback(async () => {
     try {
-      await Promise.all([
-        dispatch(fetchDashboardStats()),
-        dispatch(fetchMyGuards({ page: 1, limit: 10 })),
-      ]);
+      // Load data with individual error handling so one failure doesn't block the other
+      const statsPromise = dispatch(fetchDashboardStats()).catch((err) => {
+        console.error('Error loading dashboard stats:', err);
+        return null; // Return null on error instead of throwing
+      });
+
+      const guardsPromise = dispatch(fetchMyGuards({ page: 1, limit: 10 })).catch((err) => {
+        console.error('Error loading guards:', err);
+        return null; // Return null on error instead of throwing
+      });
+
+      // Wait for both, but don't fail if one fails
+      await Promise.allSettled([statsPromise, guardsPromise]);
     } catch (error) {
       console.error('Error loading dashboard data:', error);
+      // Don't block the UI - allow user to see the screen even if data fails to load
     }
   }, [dispatch]);
 
@@ -98,8 +126,8 @@ const ClientDashboard: React.FC = () => {
     }
   }, [loadDashboardData]);
 
-  const handleAssignNewShift = () => {
-    navigation.navigate('CreateShift');
+  const handleAddNewSite = () => {
+    navigation.navigate('AddSite');
   };
 
   const handleGuardPress = (guardId: string) => {
@@ -170,7 +198,7 @@ const ClientDashboard: React.FC = () => {
               <StatsCard
                 label="Guards On Duty"
                 value={dashboardStats?.guardsOnDuty || 0}
-                icon={<UserIcon size={20} color="#16A34A" />}
+                icon={<UserIcon size={20} color={COLORS.success} />}
                 variant="success"
               />
             </View>
@@ -178,7 +206,7 @@ const ClientDashboard: React.FC = () => {
               <StatsCard
                 label="Missed Shifts"
                 value={dashboardStats?.missedShifts || 0}
-                icon={<EmergencyIcon size={20} color="#DC2626" />}
+                icon={<EmergencyIcon size={20} color={COLORS.error} />}
                 variant="danger"
               />
             </View>
@@ -188,7 +216,7 @@ const ClientDashboard: React.FC = () => {
               <StatsCard
                 label="Active Sites"
                 value={dashboardStats?.activeSites || 0}
-                icon={<LocationIcon size={20} color="#1976D2" />}
+                icon={<LocationIcon size={20} color={COLORS.info} />}
                 variant="info"
               />
             </View>
@@ -196,23 +224,16 @@ const ClientDashboard: React.FC = () => {
               <StatsCard
                 label="New Reports"
                 value={dashboardStats?.newReports || 0}
-                icon={<ReportsIcon size={20} color="#6B7280" />}
+                icon={<ReportsIcon size={20} color={COLORS.textSecondary} />}
                 variant="neutral"
               />
             </View>
           </View>
         </View>
 
-        {/* Assign New Shift Button */}
-        <View style={styles.assignButtonContainer}>
-          <TouchableOpacity style={styles.assignButton} onPress={handleAssignNewShift}>
-            <Text style={styles.assignButtonText}>Assign New Shift</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Loading Overlay */}
+        {/* Loading Overlay - Only show if loading and no timeout */}
         <LoadingOverlay
-          visible={loading && !dashboardStats && guards.length === 0}
+          visible={loading && !dashboardStats && guards.length === 0 && !error && !loadingTimeout}
           message="Loading dashboard..."
         />
 
@@ -236,10 +257,15 @@ const ClientDashboard: React.FC = () => {
 
         {/* Today's Shifts - Shift Cards */}
         <View style={styles.shiftsSection}>
-          <Text style={styles.sectionTitle}>Today's Shifts</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Today's Shifts</Text>
+            <TouchableOpacity style={styles.addSiteButton} onPress={handleAddNewSite}>
+              <Text style={styles.addSiteButtonText}>Add New Site</Text>
+            </TouchableOpacity>
+          </View>
           {guardsLoading && guards.length === 0 ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#1C6CA9" />
+              <ActivityIndicator size="large" color={COLORS.primary} />
               <Text style={styles.loadingText}>Loading shifts...</Text>
             </View>
           ) : guards && guards.length > 0 ? (
@@ -361,77 +387,77 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   statsContainer: {
-    padding: 16,
-    gap: 8,
+    padding: SPACING.lg,
+    gap: SPACING.sm,
   },
   statsRow: {
     flexDirection: 'row',
-    marginBottom: 8,
-    gap: 8,
+    marginBottom: SPACING.sm,
+    gap: SPACING.sm,
   },
   statsColumn: {
     flex: 1,
   },
-  assignButtonContainer: {
-    paddingHorizontal: 20,
-    marginBottom: 20,
-  },
-  assignButton: {
-    backgroundColor: '#1C6CA9',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  assignButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
   mapContainer: {
-    paddingHorizontal: 20,
-    marginBottom: 20,
+    paddingHorizontal: SPACING.lg,
+    marginBottom: SPACING.lg,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.fieldGap || SPACING.lg,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333333',
-    marginBottom: 16,
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    flex: 1,
+  },
+  addSiteButton: {
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.sm,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    ...SHADOWS.small,
+  },
+  addSiteButtonText: {
+    color: COLORS.textInverse,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
   mapPlaceholder: {
     height: 200,
-    backgroundColor: '#E3F2FD',
-    borderRadius: 12,
+    backgroundColor: COLORS.backgroundTertiary,
+    borderRadius: BORDER_RADIUS.md,
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
   },
   mapText: {
-    fontSize: 16,
-    color: '#1976D2',
-    fontWeight: '500',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.info,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
   onlineText: {
     position: 'absolute',
-    top: 16,
-    right: 16,
-    fontSize: 14,
-    color: '#2E7D32',
-    fontWeight: '600',
+    top: SPACING.lg,
+    right: SPACING.lg,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.success,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
   shiftsSection: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.lg,
   },
   tableContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.md,
     overflow: 'hidden',
-    // Drop shadow: X 0, Y 4, Blur 4, Spread 0, Color #000000 at 6% opacity
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    // Border only, no shadow for minimal style
   },
   tableScrollContent: {
     minWidth: '100%',
@@ -441,17 +467,17 @@ const styles = StyleSheet.create({
   },
   tableHeader: {
     flexDirection: 'row',
-    backgroundColor: '#D7EAF9',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
+    backgroundColor: COLORS.primaryLight,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderTopLeftRadius: BORDER_RADIUS.md,
+    borderTopRightRadius: BORDER_RADIUS.md,
     minHeight: 31,
   },
   tableHeaderText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#323232',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
     textAlign: 'left',
   },
   guardHeader: {
@@ -479,17 +505,17 @@ const styles = StyleSheet.create({
     flex: 0.9,
   },
   emptyState: {
-    padding: 20,
+    padding: SPACING.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   emptyStateText: {
-    fontSize: 16,
-    color: '#666666',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textSecondary,
     textAlign: 'center',
   },
   errorContainer: {
-    padding: 20,
+    padding: SPACING.lg,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 200,
@@ -498,14 +524,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   loadingContainer: {
-    padding: 40,
+    padding: SPACING.xxxxl,
     alignItems: 'center',
     justifyContent: 'center',
   },
   loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: '#666666',
+    marginTop: SPACING.md,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
   },
 });
 

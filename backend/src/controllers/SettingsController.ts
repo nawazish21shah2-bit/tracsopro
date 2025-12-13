@@ -335,6 +335,82 @@ export class SettingsController {
 
   /**
    * @swagger
+   * /api/settings/support/tickets:
+   *   get:
+   *     summary: Get user's support tickets
+   *     tags: [Settings]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: page
+   *         schema:
+   *           type: integer
+   *           default: 1
+   *       - in: query
+   *         name: limit
+   *         schema:
+   *           type: integer
+   *           default: 20
+   *     responses:
+   *       200:
+   *         description: Support tickets retrieved successfully
+   */
+  async getSupportTickets(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user!.id;
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 20;
+      
+      const result = await this.settingsService.getSupportTickets(userId, page, limit);
+      
+      res.json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      console.error('Error getting support tickets:', error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to get support tickets'
+      });
+    }
+  }
+
+  /**
+   * @swagger
+   * /api/settings/support/tickets/:id:
+   *   get:
+   *     summary: Get support ticket by ID
+   *     tags: [Settings]
+   *     security:
+   *       - bearerAuth: []
+   *     responses:
+   *       200:
+   *         description: Support ticket retrieved successfully
+   */
+  async getSupportTicketById(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user!.id;
+      const { id } = req.params;
+      
+      const ticket = await this.settingsService.getSupportTicketById(id, userId);
+      
+      res.json({
+        success: true,
+        data: ticket
+      });
+    } catch (error) {
+      console.error('Error getting support ticket:', error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to get support ticket'
+      });
+    }
+  }
+
+  /**
+   * @swagger
    * /api/settings/attendance-history:
    *   get:
    *     summary: Get user attendance history (Guards only)
@@ -578,6 +654,76 @@ export class SettingsController {
       res.status(500).json({
         success: false,
         message: error instanceof Error ? error.message : 'Failed to update company details'
+      });
+    }
+  }
+
+  /**
+   * @swagger
+   * /api/settings/change-password:
+   *   post:
+   *     summary: Change user password
+   *     tags: [Settings]
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - currentPassword
+   *               - newPassword
+   *             properties:
+   *               currentPassword:
+   *                 type: string
+   *               newPassword:
+   *                 type: string
+   *     responses:
+   *       200:
+   *         description: Password changed successfully
+   */
+  async changePassword(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.user!.id;
+      const { currentPassword, newPassword } = req.body;
+
+      if (!currentPassword || typeof currentPassword !== 'string') {
+        return res.status(400).json({
+          success: false,
+          message: 'Current password is required'
+        });
+      }
+
+      if (!newPassword || typeof newPassword !== 'string') {
+        return res.status(400).json({
+          success: false,
+          message: 'New password is required'
+        });
+      }
+
+      if (newPassword.length < 8) {
+        return res.status(400).json({
+          success: false,
+          message: 'New password must be at least 8 characters long'
+        });
+      }
+
+      // Use AuthService to change password
+      const { AuthService } = await import('../services/authService');
+      const authService = new AuthService();
+      await authService.changePassword(userId, currentPassword, newPassword);
+
+      res.json({
+        success: true,
+        message: 'Password changed successfully'
+      });
+    } catch (error) {
+      console.error('Error changing password:', error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to change password'
       });
     }
   }

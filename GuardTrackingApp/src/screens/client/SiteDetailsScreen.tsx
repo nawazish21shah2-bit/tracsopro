@@ -9,10 +9,11 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { ArrowLeft, MapPin, Users, Clock } from 'react-native-feather';
+import { LocationIcon, ClockIcon, ArrowLeftIcon } from '../../components/ui/AppIcons';
 import apiService from '../../services/api';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { ClientStackParamList } from '../../navigation/ClientStackNavigator';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 
 interface SiteDetails {
   id: string;
@@ -29,14 +30,17 @@ interface SiteDetails {
   createdAt: string;
 }
 
-interface ShiftPosting {
+interface Shift {
   id: string;
-  title: string;
-  startTime: string;
-  endTime: string;
-  hourlyRate: number;
-  status: 'Open' | 'Filled' | 'Completed';
-  applicationsCount: number;
+  scheduledStartTime: string;
+  scheduledEndTime: string;
+  status: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+  guard?: {
+    user: {
+      firstName: string;
+      lastName: string;
+    };
+  };
 }
 
 const SiteDetailsScreen: React.FC = () => {
@@ -46,7 +50,7 @@ const SiteDetailsScreen: React.FC = () => {
   
   const [loading, setLoading] = useState(true);
   const [site, setSite] = useState<SiteDetails | null>(null);
-  const [shiftPostings, setShiftPostings] = useState<ShiftPosting[]>([]);
+  const [shifts, setShifts] = useState<Shift[]>([]);
 
   useEffect(() => {
     loadSiteDetails();
@@ -54,6 +58,25 @@ const SiteDetailsScreen: React.FC = () => {
 
   const loadSiteDetails = async () => {
     try {
+      setLoading(true);
+      
+      // Validate siteId exists
+      if (!siteId || typeof siteId !== 'string' || siteId.trim() === '') {
+        Alert.alert(
+          'Error',
+          'Invalid site ID. Please go back and try selecting the site again.',
+          [
+            {
+              text: 'Go Back',
+              onPress: () => navigation.goBack(),
+              style: 'default'
+            }
+          ]
+        );
+        setLoading(false);
+        return;
+      }
+      
       // Load site details
       const siteResult = await apiService.getSiteById(siteId);
       
@@ -68,35 +91,72 @@ const SiteDetailsScreen: React.FC = () => {
           zipCode: siteData.zipCode || '',
           description: siteData.description || '',
           requirements: siteData.requirements || '',
-          contactPerson: siteData.contactPerson || siteData.client?.user?.firstName + ' ' + siteData.client?.user?.lastName || '',
+          contactPerson: siteData.contactPerson || 
+            (siteData.client?.user 
+              ? `${siteData.client.user.firstName || ''} ${siteData.client.user.lastName || ''}`.trim() 
+              : '') || '',
           contactPhone: siteData.contactPhone || '',
           status: siteData.isActive ? 'Active' : 'Inactive',
           createdAt: siteData.createdAt || new Date().toISOString()
         });
 
-        // Load shift postings for this site
-        // Note: This would ideally be a separate endpoint like /sites/:id/shift-postings
-        // For now, we'll use client sites endpoint and filter
-        const sitesResult = await apiService.getClientSites(1, 100);
-        if (sitesResult.success && sitesResult.data?.sites) {
-          const foundSite = sitesResult.data.sites.find((s: any) => s.id === siteId);
-          if (foundSite && foundSite.shiftPostings) {
-            setShiftPostings(foundSite.shiftPostings.map((sp: any) => ({
-              id: sp.id,
-              title: sp.title,
-              startTime: sp.startTime,
-              endTime: sp.endTime,
-              hourlyRate: sp.hourlyRate || 0,
-              status: sp.status === 'OPEN' ? 'Open' : sp.status === 'FILLED' ? 'Filled' : 'Completed',
-              applicationsCount: sp.applications?.length || 0
-            })));
+        // Load shifts for this site (Option B - Direct Assignment)
+        try {
+          const sitesResult = await apiService.getClientSites(1, 100);
+          if (sitesResult.success && sitesResult.data?.sites) {
+            const foundSite = sitesResult.data.sites.find((s: any) => s.id === siteId);
+            if (foundSite && foundSite.shifts) {
+              setShifts(foundSite.shifts.map((shift: any) => ({
+                id: shift.id,
+                scheduledStartTime: shift.scheduledStartTime,
+                scheduledEndTime: shift.scheduledEndTime,
+                status: shift.status,
+                guard: shift.guard
+              })));
+            }
           }
+        } catch (shiftError) {
+          // Non-critical - shifts will just be empty
+          console.warn('Failed to load shifts:', shiftError);
         }
       } else {
-        Alert.alert('Error', siteResult.message || 'Failed to load site details');
+        const errorMessage = siteResult.message || 'Failed to fetch site details';
+        Alert.alert(
+          'Site Not Found',
+          errorMessage === 'Site not found' 
+            ? 'The requested site could not be found. It may have been deleted or you may not have access to it.'
+            : errorMessage,
+          [
+            {
+              text: 'Go Back',
+              onPress: () => navigation.goBack(),
+              style: 'default'
+            }
+          ]
+        );
+        console.error('Site fetch error:', siteResult);
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to load site details');
+      console.error('Load site details error:', error);
+      const errorMessage = error.response?.data?.message || 
+                          error.message || 
+                          'Failed to load site details. Please check your connection and try again.';
+      Alert.alert(
+        'Error',
+        errorMessage,
+        [
+          {
+            text: 'Go Back',
+            onPress: () => navigation.goBack(),
+            style: 'default'
+          },
+          {
+            text: 'Retry',
+            onPress: () => loadSiteDetails(),
+            style: 'default'
+          }
+        ]
+      );
     } finally {
       setLoading(false);
     }
@@ -111,16 +171,27 @@ const SiteDetailsScreen: React.FC = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'Open': return '#28A745';
-      case 'Filled': return '#1C6CA9';
-      case 'Completed': return '#6C757D';
-      default: return '#6C757D';
+      case 'SCHEDULED': return COLORS.primary; // Blue for scheduled
+      case 'IN_PROGRESS': return COLORS.success;
+      case 'COMPLETED': return COLORS.textSecondary;
+      case 'CANCELLED': return COLORS.error;
+      default: return COLORS.textSecondary;
     }
   };
 
   const formatDateTime = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const formattedDate = date.toLocaleDateString('en-US', { 
+      month: '2-digit', 
+      day: '2-digit', 
+      year: 'numeric' 
+    });
+    const formattedTime = date.toLocaleTimeString('en-US', { 
+      hour: 'numeric', 
+      minute: '2-digit',
+      hour12: true 
+    });
+    return `${formattedDate} ${formattedTime}`;
   };
 
   if (loading) {
@@ -151,87 +222,78 @@ const SiteDetailsScreen: React.FC = () => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <ArrowLeft width={24} height={24} color="#333" />
+          <ArrowLeftIcon size={24} color={COLORS.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Site Details</Text>
-        {/* Clients cannot edit the site */}
         <View style={styles.editButton} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Site Information */}
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={true}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* Site Information Card */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{site.name}</Text>
-          <View style={styles.statusContainer}>
-            <View style={[styles.statusBadge, { backgroundColor: site.status === 'Active' ? '#28A745' : '#DC3545' }]}>
+          <View style={styles.siteHeader}>
+            <Text style={styles.siteName}>{site.name}</Text>
+            <View style={[styles.statusBadge, { 
+              backgroundColor: site.status === 'Active' ? COLORS.success : COLORS.error 
+            }]}>
               <Text style={styles.statusText}>{site.status}</Text>
             </View>
           </View>
           
           <View style={styles.infoRow}>
-            <MapPin width={16} height={16} color="#666" />
+            <LocationIcon size={16} color={COLORS.textSecondary} />
             <Text style={styles.infoText}>
               {site.address}, {site.city}, {site.state} {site.zipCode}
             </Text>
           </View>
 
-          {site.description && (
-            <View style={styles.descriptionContainer}>
-              <Text style={styles.label}>Description</Text>
-              <Text style={styles.description}>{site.description}</Text>
-            </View>
-          )}
-
-          {site.requirements && (
-            <View style={styles.descriptionContainer}>
-              <Text style={styles.label}>Security Requirements</Text>
-              <Text style={styles.description}>{site.requirements}</Text>
-            </View>
-          )}
-
           <View style={styles.contactContainer}>
-            <Text style={styles.label}>Contact Information</Text>
-            <Text style={styles.contactText}>{site.contactPerson}</Text>
+            <Text style={styles.contactLabel}>Contact Information</Text>
+            <Text style={styles.contactText}>{site.contactPerson || 'N/A'}</Text>
             {site.contactPhone && (
               <Text style={styles.contactText}>{site.contactPhone}</Text>
             )}
           </View>
         </View>
 
-        {/* Shift Postings (view-only for client) */}
+        {/* Shifts Card */}
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Shift Postings</Text>
-          </View>
+          <Text style={styles.shiftsSectionTitle}>Shifts</Text>
 
-          {shiftPostings.length > 0 ? (
-            shiftPostings.map((shift) => (
-              <TouchableOpacity 
-                key={shift.id}
-                style={styles.shiftCard}
-                onPress={() => handleShiftPress(shift.id)}
-              >
+          {shifts.length > 0 ? (
+            shifts.map((shift) => (
+              <View key={shift.id} style={styles.shiftCard}>
                 <View style={styles.shiftHeader}>
-                  <Text style={styles.shiftTitle}>{shift.title}</Text>
-                  <View style={[styles.shiftStatus, { backgroundColor: getStatusColor(shift.status) }]}>
+                  <Text style={styles.shiftTitle}>
+                    {shift.guard 
+                      ? `${shift.guard.user.firstName} ${shift.guard.user.lastName}` 
+                      : 'Unassigned'}
+                  </Text>
+                  <View style={[styles.shiftStatusBadge, { 
+                    backgroundColor: getStatusColor(shift.status) 
+                  }]}>
                     <Text style={styles.shiftStatusText}>{shift.status}</Text>
                   </View>
                 </View>
                 
-                <View style={styles.shiftDetails}>
-                  <View style={styles.shiftDetailRow}>
-                    <Clock width={14} height={14} color="#666" />
-                    <Text style={styles.shiftDetailText}>
-                      {formatDateTime(shift.startTime)} - {formatDateTime(shift.endTime)}
-                    </Text>
-                  </View>
+                <View style={styles.shiftDetailRow}>
+                  <ClockIcon size={14} color={COLORS.textSecondary} />
+                  <Text style={styles.shiftDetailText}>
+                    {formatDateTime(shift.scheduledStartTime)} - {formatDateTime(shift.scheduledEndTime)}
+                  </Text>
                 </View>
-              </TouchableOpacity>
+              </View>
             ))
           ) : (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No shift postings yet</Text>
-              <Text style={styles.emptyStateSubtext}>Contact your security provider to schedule shifts for this site.</Text>
+              <Text style={styles.emptyStateText}>No shifts scheduled yet</Text>
+              <Text style={styles.emptyStateSubtext}>
+                Contact your security provider to schedule shifts for this site.
+              </Text>
             </View>
           )}
         </View>
@@ -245,11 +307,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.lg,
+    backgroundColor: COLORS.backgroundPrimary,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: COLORS.borderLight,
   },
   backButton: {
     width: 40,
@@ -258,9 +320,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333333',
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
   },
   editButton: {
     width: 40,
@@ -270,7 +332,10 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: COLORS.backgroundSecondary,
+  },
+  scrollContent: {
+    paddingBottom: SPACING.xxl,
   },
   loadingContainer: {
     flex: 1,
@@ -283,143 +348,139 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   section: {
-    backgroundColor: '#FFFFFF',
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 12,
-    padding: 20,
+    backgroundColor: COLORS.backgroundPrimary,
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.lg,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.lg,
+    ...SHADOWS.small,
   },
-  sectionHeader: {
+  siteHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: SPACING.md,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#333333',
-    marginLeft: -15,
-  },
-  statusContainer: {
-    marginTop: 8,
-    marginBottom: 16,
+  siteName: {
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    color: COLORS.textPrimary,
+    flex: 1,
   },
   statusBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderRadius: BORDER_RADIUS.sm,
+  },
+  shiftsSectionTitle: {
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.md,
   },
   statusText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
+    color: COLORS.textInverse,
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
   infoRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
+    alignItems: 'flex-start',
+    marginBottom: SPACING.lg,
+    gap: SPACING.sm,
   },
   infoText: {
-    marginLeft: 8,
-    fontSize: 14,
-    color: '#666666',
-  },
-  descriptionContainer: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333333',
-    marginBottom: 4,
-  },
-  description: {
-    fontSize: 14,
-    color: '#666666',
+    flex: 1,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
     lineHeight: 20,
   },
   contactContainer: {
-    marginTop: 8,
+    marginTop: SPACING.md,
+  },
+  contactLabel: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.xs,
   },
   contactText: {
-    fontSize: 14,
-    color: '#666666',
-    marginTop: 2,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.xs,
   },
   createShiftButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1C6CA9',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: BORDER_RADIUS.sm,
+    ...SHADOWS.small,
   },
   createShiftText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-    marginLeft: 4,
+    color: COLORS.textInverse,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    marginLeft: SPACING.xs,
   },
   shiftCard: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 12,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.lg,
+    marginBottom: SPACING.md,
+    ...SHADOWS.small,
   },
   shiftHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: SPACING.sm,
   },
   shiftTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333333',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
     flex: 1,
   },
-  shiftStatus: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+  shiftStatusBadge: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderRadius: BORDER_RADIUS.sm,
   },
   shiftStatusText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  shiftDetails: {
-    gap: 8,
+    color: COLORS.textInverse,
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    textTransform: 'uppercase',
   },
   shiftDetailRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: SPACING.xs,
   },
   shiftDetailText: {
-    marginLeft: 8,
-    fontSize: 14,
-    color: '#666666',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
   },
   hourlyRate: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#28A745',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.success,
   },
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 32,
+    paddingVertical: SPACING.xxl,
   },
   emptyStateText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#666666',
-    marginBottom: 4,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.xs,
   },
   emptyStateSubtext: {
-    fontSize: 14,
-    color: '#999999',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textTertiary,
     textAlign: 'center',
   },
 });

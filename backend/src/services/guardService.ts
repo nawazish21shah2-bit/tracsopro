@@ -11,12 +11,22 @@ interface GuardProfileUpdateData {
 }
 
 export class GuardService {
-  async getAllGuards(page: number = 1, limit: number = 50, status?: string) {
+  async getAllGuards(page: number = 1, limit: number = 50, status?: string, securityCompanyId?: string) {
     const skip = (page - 1) * limit;
     
     const where: any = {};
     if (status) {
       where.status = status;
+    }
+
+    // Multi-tenant: Filter by company
+    if (securityCompanyId) {
+      where.companyGuards = {
+        some: {
+          securityCompanyId,
+          isActive: true,
+        },
+      };
     }
 
     const [guards, total] = await Promise.all([
