@@ -21,7 +21,8 @@ class StripeService {
 
     try {
       // Use publishable key from config or fallback
-      const publishableKey = 'pk_test_51SVpTpLEsN8TIkgKDnKDuj9xtgOWuO2SMQ0RtbCIsnxjuO7bVzn4SOvBhEnQZbOhozpwVZOPFeDWTdUo7Tc03sJj002Mdzdgkg';
+      // ⚠️ IMPORTANT: Replace with your actual Stripe publishable key from https://dashboard.stripe.com/test/apikeys
+      const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY || 'pk_test_YOUR_STRIPE_PUBLISHABLE_KEY_HERE';
       
       await initStripe({
         publishableKey,

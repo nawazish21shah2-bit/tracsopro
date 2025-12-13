@@ -5,7 +5,9 @@
 
 // Stripe Publishable Key (Test Mode)
 // ⚠️ For production, use environment variables or secure config
-export const STRIPE_PUBLISHABLE_KEY = 'pk_test_51SVpTpLEsN8TIkgKDnKDuj9xtgOWuO2SMQ0RtbCIsnxjuO7bVzn4SOvBhEnQZbOhozpwVZOPFeDWTdUo7Tc03sJj002Mdzdgkg';
+// ⚠️ IMPORTANT: Replace with your actual Stripe publishable key from https://dashboard.stripe.com/test/apikeys
+// Set this via environment variable or replace the placeholder
+export const STRIPE_PUBLISHABLE_KEY = process.env.STRIPE_PUBLISHABLE_KEY || 'pk_test_YOUR_STRIPE_PUBLISHABLE_KEY_HERE';
 
 // Stripe Configuration
 export const STRIPE_CONFIG = {
