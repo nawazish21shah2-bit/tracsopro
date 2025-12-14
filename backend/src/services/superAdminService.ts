@@ -446,9 +446,10 @@ export class SuperAdminService {
     }
   }
 
+
   /**
    * Log system action
-   */
+  */
   static async logAction(params: {
     userId?: string;
     securityCompanyId?: string;
