@@ -10,6 +10,7 @@ export class AdminService {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
+      
       // Multi-tenant: Build company filters
       const guardWhere = securityCompanyId ? {
         companyGuards: {
