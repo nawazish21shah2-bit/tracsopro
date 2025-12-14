@@ -730,12 +730,14 @@ export class ClientService {
         }
 
         // Map status from IncidentReport status
-        let status: 'Respond' | 'New' | 'Reviewed' = 'New';
+        let status: 'Respond' | 'New' | 'Reviewed' = 'Respond';
         const statusUpper = (report.status || '').toUpperCase();
         if (statusUpper === 'REVIEWED' || statusUpper === 'RESOLVED') {
           status = 'Reviewed';
         } else if (statusUpper === 'PENDING' || statusUpper === 'SUBMITTED') {
-          status = 'New';
+          status = 'Respond'; // Show "Respond" button for new reports
+        } else {
+          status = 'Respond'; // Default to Respond for any other status
         }
 
         const siteName = report.locationName || 'Unknown Site';

@@ -12,6 +12,9 @@ router.get('/:id', authenticate, incidentReportController.getIncidentReportById)
 router.put('/:id', authenticate, incidentReportController.updateIncidentReport);
 router.delete('/:id', authenticate, incidentReportController.deleteIncidentReport);
 
+// Respond to report (Client/Admin)
+router.put('/:id/respond', authenticate, incidentReportController.respondToReport);
+
 // Admin routes
 router.get('/admin/all', authenticate, authorize('ADMIN'), incidentReportController.getAllIncidentReports);
 router.get('/admin/stats', authenticate, authorize('ADMIN'), incidentReportController.getIncidentReportStats);

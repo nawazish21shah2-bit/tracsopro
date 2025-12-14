@@ -11,3 +11,9 @@ logs/
 coverage/
 junit.xml
 .nyc_output/
+
+# Firebase Service Account Keys - NEVER COMMIT THESE!
+keys/
+firebase-service-account*.json
+*-firebase-adminsdk-*.json
+**/firebase-adminsdk-*.json

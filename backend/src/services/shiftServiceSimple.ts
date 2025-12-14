@@ -2,7 +2,7 @@
 import prisma from '../config/database.js';
 import { NotFoundError, BadRequestError, ValidationError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
-import { ShiftStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 export interface CreateShiftData {
   guardId?: string; // Optional: Admin assigns directly, client can leave empty for admin to assign later
@@ -408,9 +408,9 @@ class ShiftServiceSimple {
       },
     });
 
-    const completedShifts = shifts.filter(s => s.status === ShiftStatus.COMPLETED).length;
+    const completedShifts = shifts.filter(s => s.status === Prisma.ShiftStatus.COMPLETED).length;
     const missedShifts = shifts.filter(s => 
-      s.status === ShiftStatus.CANCELLED || s.status === ShiftStatus.NO_SHOW
+      s.status === Prisma.ShiftStatus.CANCELLED || s.status === Prisma.ShiftStatus.NO_SHOW
     ).length;
     
     // Get unique sites from shifts
@@ -426,7 +426,7 @@ class ShiftServiceSimple {
 
     // Calculate total hours
     const completedShiftsWithTimes = shifts.filter(s => 
-      s.status === ShiftStatus.COMPLETED && 
+      s.status === Prisma.ShiftStatus.COMPLETED && 
       s.actualStartTime && 
       s.actualEndTime
     );
@@ -499,7 +499,7 @@ class ShiftServiceSimple {
     const shift = await prisma.shift.findFirst({
       where: {
         guardId,
-        status: ShiftStatus.IN_PROGRESS,
+        status: Prisma.ShiftStatus.IN_PROGRESS,
       },
       include: {
         site: true,
@@ -707,7 +707,7 @@ class ShiftServiceSimple {
     const shifts = await prisma.shift.findMany({
       where: {
         guardId,
-        status: { in: [ShiftStatus.COMPLETED, ShiftStatus.CANCELLED, ShiftStatus.NO_SHOW] },
+        status: { in: [Prisma.ShiftStatus.COMPLETED, Prisma.ShiftStatus.CANCELLED, Prisma.ShiftStatus.NO_SHOW] },
         scheduledEndTime: {
           lt: now,
         },

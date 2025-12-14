@@ -25,12 +25,53 @@ export interface NotificationPreferences {
 
 export class NotificationService {
   private static instance: NotificationService;
+  private firebaseInitialized: boolean = false;
 
   static getInstance(): NotificationService {
     if (!NotificationService.instance) {
       NotificationService.instance = new NotificationService();
+      NotificationService.instance.initializeFirebase();
     }
     return NotificationService.instance;
+  }
+
+  /**
+   * Initialize Firebase Admin SDK
+   */
+  private initializeFirebase(): void {
+    if (this.firebaseInitialized) return;
+    try {
+      const { initializeFirebaseAdmin } = require('../config/firebase.js');
+      if (initializeFirebaseAdmin()) {
+        this.firebaseInitialized = true;
+        logger.info('Firebase Admin initialized for NotificationService');
+      }
+    } catch (error) {
+      logger.warn('Firebase Admin initialization failed - push notifications disabled');
+    }
+  }
+
+  /**
+   * Validate user belongs to company (multi-tenant)
+   */
+  private async validateUserBelongsToCompany(userId: string, securityCompanyId: string): Promise<boolean> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        companyUsers: { where: { securityCompanyId, isActive: true }, take: 1 },
+        guard: { include: { companyGuards: { where: { securityCompanyId, isActive: true }, take: 1 } } },
+        client: { include: { companyClients: { where: { securityCompanyId, isActive: true }, take: 1 } } },
+      },
+    });
+
+    if (!user) return false;
+
+    return (
+      user.role === 'SUPER_ADMIN' ||
+      (user.role === 'ADMIN' && user.companyUsers.length > 0) ||
+      (user.role === 'GUARD' && (user.guard?.companyGuards?.length ?? 0) > 0) ||
+      (user.role === 'CLIENT' && (user.client?.companyClients?.length ?? 0) > 0)
+    );
   }
 
   /**
@@ -42,31 +83,9 @@ export class NotificationService {
     securityCompanyId?: string
   ): Promise<any> {
     try {
-      // Multi-tenant: Validate user belongs to company if provided
-      if (securityCompanyId) {
-        const user = await prisma.user.findUnique({
-          where: { id: data.userId },
-          include: {
-            companyUsers: { where: { securityCompanyId, isActive: true }, take: 1 },
-            guard: { include: { companyGuards: { where: { securityCompanyId, isActive: true }, take: 1 } } },
-            client: { include: { companyClients: { where: { securityCompanyId, isActive: true }, take: 1 } } },
-          },
-        });
-
-        if (!user) {
-          throw new Error('User not found');
-        }
-
-        // Check if user belongs to company
-        const belongsToCompany =
-          (user.role === 'ADMIN' && user.companyUsers.length > 0) ||
-          (user.role === 'GUARD' && user.guard?.companyGuards.length > 0) ||
-          (user.role === 'CLIENT' && user.client?.companyClients.length > 0) ||
-          user.role === 'SUPER_ADMIN';
-
-        if (!belongsToCompany) {
-          throw new Error('User does not belong to the specified company');
-        }
+      // Multi-tenant validation
+      if (securityCompanyId && !(await this.validateUserBelongsToCompany(data.userId, securityCompanyId))) {
+        throw new Error('User does not belong to the specified company');
       }
 
       // Get user notification preferences
@@ -105,38 +124,51 @@ export class NotificationService {
         title: data.title,
         message: data.message,
         type: data.type,
-        data: data.data,
-        id: notification.id,
-        createdAt: notification.createdAt,
+        data: {
+          ...(data.data || {}),
+          notificationId: notification.id,
+          createdAt: notification.createdAt.toISOString(),
+        },
       });
 
-      // Send push notification if enabled
+      // Send notifications in parallel (non-blocking)
+      const notificationPromises: Promise<void>[] = [];
+
       if (data.sendPush !== false && preferences.pushNotifications) {
-        await this.sendPushNotification(data.userId, {
-          title: data.title,
-          body: data.message,
-          type: data.type,
-          data: data.data,
-          priority: data.priority || 'normal',
-        });
+        notificationPromises.push(
+          this.sendPushNotification(data.userId, {
+            title: data.title,
+            body: data.message,
+            type: data.type,
+            data: data.data,
+            priority: data.priority || 'normal',
+          }).catch(err => logger.error('Push notification failed:', err))
+        );
       }
 
-      // Send email notification if enabled
       if (data.sendEmail && preferences.emailNotifications) {
-        await this.sendEmailNotification(data.userId, {
-          title: data.title,
-          message: data.message,
-          type: data.type,
-        });
+        notificationPromises.push(
+          this.sendEmailNotification(data.userId, {
+            title: data.title,
+            message: data.message,
+            type: data.type,
+          }).catch(err => logger.error('Email notification failed:', err))
+        );
       }
 
-      // Send SMS notification if enabled
       if (data.sendSMS && preferences.smsNotifications) {
-        await this.sendSMSNotification(data.userId, {
-          message: data.message,
-          type: data.type,
-        });
+        notificationPromises.push(
+          this.sendSMSNotification(data.userId, {
+            message: data.message,
+            type: data.type,
+          }).catch(err => logger.error('SMS notification failed:', err))
+        );
       }
+
+      // Execute all notifications in parallel (don't await - fire and forget)
+      Promise.all(notificationPromises).catch(() => {
+        // Errors already logged in individual catch blocks
+      });
 
       logger.info(`Notification created and sent: ${notification.id} to user ${data.userId}`);
       return notification;
@@ -227,30 +259,9 @@ export class NotificationService {
     securityCompanyId?: string
   ): Promise<{ notifications: any[]; total: number; unreadCount: number }> {
     try {
-      // Multi-tenant: Validate user belongs to company if provided
-      if (securityCompanyId) {
-        const user = await prisma.user.findUnique({
-          where: { id: userId },
-          include: {
-            companyUsers: { where: { securityCompanyId, isActive: true }, take: 1 },
-            guard: { include: { companyGuards: { where: { securityCompanyId, isActive: true }, take: 1 } } },
-            client: { include: { companyClients: { where: { securityCompanyId, isActive: true }, take: 1 } } },
-          },
-        });
-
-        if (!user) {
-          throw new Error('User not found');
-        }
-
-        const belongsToCompany =
-          (user.role === 'ADMIN' && user.companyUsers.length > 0) ||
-          (user.role === 'GUARD' && user.guard?.companyGuards.length > 0) ||
-          (user.role === 'CLIENT' && user.client?.companyClients.length > 0) ||
-          user.role === 'SUPER_ADMIN';
-
-        if (!belongsToCompany) {
-          throw new Error('User does not belong to the specified company');
-        }
+      // Multi-tenant validation
+      if (securityCompanyId && !(await this.validateUserBelongsToCompany(userId, securityCompanyId))) {
+        throw new Error('User does not belong to the specified company');
       }
 
       const page = options.page || 1;
@@ -427,46 +438,63 @@ export class NotificationService {
     }
   ): Promise<void> {
     try {
-      // Get user's FCM token
       const deviceToken = await this.getDeviceToken(userId);
       if (!deviceToken) {
-        logger.debug(`No device token found for user ${userId}`);
+        logger.debug(`No device token for user ${userId}`);
         return;
       }
 
-      // TODO: Implement FCM push notification sending
-      // This would use Firebase Admin SDK or a push notification service
-      // For now, log the notification
-      logger.info(`Push notification queued for user ${userId}:`, {
-        title: payload.title,
-        body: payload.body,
-        type: payload.type,
-      });
+      const firebaseAdmin = (await import('../config/firebase.js')).getFirebaseAdmin();
+      if (!firebaseAdmin) {
+        logger.warn('Firebase Admin not initialized - skipping push notification');
+        return;
+      }
 
-      // Example FCM implementation (commented out until FCM is configured):
-      // const admin = require('firebase-admin');
-      // await admin.messaging().send({
-      //   token: deviceToken,
-      //   notification: {
-      //     title: payload.title,
-      //     body: payload.body,
-      //   },
-      //   data: {
-      //     type: payload.type,
-      //     ...payload.data,
-      //   },
-      //   android: {
-      //     priority: payload.priority === 'urgent' || payload.priority === 'high' ? 'high' : 'normal',
-      //   },
-      //   apns: {
-      //     headers: {
-      //       'apns-priority': payload.priority === 'urgent' || payload.priority === 'high' ? '10' : '5',
-      //     },
-      //   },
-      // });
-    } catch (error) {
-      logger.error('Error sending push notification:', error);
-      // Don't throw - push notifications are not critical
+      // Convert data values to strings (FCM requirement)
+      const stringifiedData: Record<string, string> = {};
+      if (payload.data) {
+        Object.keys(payload.data).forEach((key) => {
+          const value = payload.data![key];
+          if (value !== null && value !== undefined) {
+            stringifiedData[key] = typeof value === 'string' ? value : JSON.stringify(value);
+          }
+        });
+      }
+
+      const isHighPriority = payload.priority === 'urgent' || payload.priority === 'high';
+
+      const message = {
+        token: deviceToken,
+        notification: { title: payload.title, body: payload.body },
+        data: { type: payload.type, ...stringifiedData },
+        android: {
+          priority: isHighPriority ? 'high' : 'normal',
+          notification: {
+            sound: 'default',
+            channelId: 'default',
+            priority: isHighPriority ? 'max' : 'high',
+          },
+        },
+        apns: {
+          headers: { 'apns-priority': isHighPriority ? '10' : '5' },
+          payload: {
+            aps: { sound: 'default', badge: 1, contentAvailable: true },
+          },
+        },
+      };
+
+      const response = await firebaseAdmin.messaging().send(message);
+      logger.info(`Push notification sent to user ${userId}`, { messageId: response });
+    } catch (error: any) {
+      if (error.code === 'messaging/invalid-registration-token' || error.code === 'messaging/registration-token-not-registered') {
+        logger.warn(`Invalid device token for user ${userId} - marking inactive`);
+        await prisma.deviceToken.updateMany({
+          where: { userId },
+          data: { isActive: false },
+        });
+      } else {
+        logger.error(`Error sending push notification to user ${userId}:`, error);
+      }
     }
   }
 
@@ -488,13 +516,173 @@ export class NotificationService {
         return;
       }
 
-      // TODO: Implement email sending
-      // This would use your email service (e.g., SendGrid, AWS SES)
-      logger.info(`Email notification queued for user ${userId} (${user.email}):`, data);
-    } catch (error) {
-      logger.error('Error sending email notification:', error);
+      // Import nodemailer transporter from otpService
+      const { getEmailTransporter } = await import('./otpService.js');
+      const transporter = getEmailTransporter();
+
+      if (!transporter) {
+        logger.warn('Email transporter not configured. Skipping email notification.');
+        return;
+      }
+
+      // Determine email subject based on notification type
+      const subject = this.getEmailSubject(data.type, data.title);
+      
+      // Generate email HTML content
+      const emailHtml = this.generateEmailHtml(data.title, data.message, data.type, user.firstName || 'User');
+
+      const mailOptions = {
+        from: process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@tracsopro.com',
+        to: user.email,
+        subject: subject,
+        html: emailHtml,
+        text: `${data.title}\n\n${data.message}`,
+      };
+
+      const info = await transporter.sendMail(mailOptions);
+      logger.info(`Email notification sent successfully to ${user.email}`, { 
+        messageId: info.messageId,
+        type: data.type 
+      });
+    } catch (error: any) {
+      logger.error('Error sending email notification:', {
+        userId,
+        error: error.message,
+        code: error.code,
+      });
       // Don't throw - email notifications are not critical
     }
+  }
+
+  /**
+   * Get email subject based on notification type
+   */
+  private getEmailSubject(type: string, title: string): string {
+    const prefixes: Record<string, string> = {
+      'SHIFT_REMINDER': '📅 Shift Reminder - ',
+      'INCIDENT_ALERT': '🚨 Incident Alert - ',
+      'EMERGENCY': '🚨 EMERGENCY - ',
+      'MESSAGE': '💬 New Message - ',
+      'SYSTEM': 'ℹ️ System Notification - ',
+    };
+
+    return `${prefixes[type] || '📧 '}${title}`;
+  }
+
+  /**
+   * Generate HTML email content
+   */
+  private generateEmailHtml(title: string, message: string, type: string, userName: string): string {
+    const colors: Record<string, { primary: string; background: string }> = {
+      'SHIFT_REMINDER': { primary: '#1C6CA9', background: '#E3F2FD' },
+      'INCIDENT_ALERT': { primary: '#F44336', background: '#FFEBEE' },
+      'EMERGENCY': { primary: '#D32F2F', background: '#FFCDD2' },
+      'MESSAGE': { primary: '#4CAF50', background: '#E8F5E9' },
+      'SYSTEM': { primary: '#757575', background: '#F5F5F5' },
+    };
+
+    const colorScheme = colors[type] || colors['SYSTEM'];
+    const logoUrl = process.env.EMAIL_LOGO_URL || 'https://via.placeholder.com/180x60/1C6CA9/FFFFFF?text=tracSOpro';
+
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background-color: #f4f4f4;
+    }
+    .email-wrapper {
+      max-width: 600px;
+      margin: 0 auto;
+      background-color: #ffffff;
+    }
+    .email-container {
+      padding: 40px 30px;
+      background-color: ${colorScheme.background};
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .logo {
+      max-width: 180px;
+      height: auto;
+      margin-bottom: 20px;
+    }
+    .content {
+      background-color: #ffffff;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .title {
+      color: ${colorScheme.primary};
+      font-size: 24px;
+      font-weight: 600;
+      margin: 0 0 20px 0;
+    }
+    .greeting {
+      color: #333333;
+      font-size: 16px;
+      margin: 0 0 15px 0;
+    }
+    .message {
+      color: #666666;
+      font-size: 15px;
+      line-height: 1.6;
+      margin: 0 0 20px 0;
+    }
+    .button {
+      display: inline-block;
+      padding: 12px 30px;
+      background-color: ${colorScheme.primary};
+      color: #ffffff;
+      text-decoration: none;
+      border-radius: 5px;
+      font-weight: 500;
+      margin: 20px 0;
+    }
+    .footer {
+      text-align: center;
+      padding: 20px;
+      color: #999999;
+      font-size: 12px;
+      border-top: 1px solid #eeeeee;
+    }
+    .footer-text {
+      margin: 5px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="email-wrapper">
+    <div class="email-container">
+      <div class="header">
+        <img src="${logoUrl}" alt="tracSOpro Logo" class="logo">
+      </div>
+      <div class="content">
+        <h1 class="title">${title}</h1>
+        <p class="greeting">Hello ${userName},</p>
+        <div class="message">
+          ${message.split('\n').map(line => `<p>${line}</p>`).join('')}
+        </div>
+      </div>
+      <div class="footer">
+        <p class="footer-text">This is an automated email from tracSOpro.</p>
+        <p class="footer-text">Need help? Contact us at <a href="mailto:support@tracsopro.com">support@tracsopro.com</a></p>
+        <p class="footer-text">© ${new Date().getFullYear()} tracSOpro. All rights reserved.</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+    `.trim();
   }
 
   /**

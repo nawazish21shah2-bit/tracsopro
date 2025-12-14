@@ -184,6 +184,36 @@ class IncidentReportController {
       next(error);
     }
   }
+
+  // Respond to report (Client/Admin)
+  async respondToReport(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+      const { status, responseNotes } = req.body;
+      const userId = req.userId!;
+      const userRole = req.user?.role || '';
+
+      if (!status) {
+        throw new BadRequestError('Status is required');
+      }
+
+      const report = await incidentReportService.respondToReport(
+        id,
+        userId,
+        userRole,
+        status,
+        responseNotes
+      );
+
+      res.json({
+        success: true,
+        data: report,
+        message: 'Report response saved successfully'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export default new IncidentReportController();

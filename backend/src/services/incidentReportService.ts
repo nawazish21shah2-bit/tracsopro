@@ -493,12 +493,139 @@ class IncidentReportService {
     };
   }
 
+  async respondToReport(reportId: string, userId: string, userRole: string, status: string, responseNotes?: string) {
+    try {
+      // Find the report
+      const report = await prisma.incidentReport.findUnique({
+        where: { id: reportId },
+        include: {
+          guard: {
+            include: {
+              user: true,
+              companyGuards: {
+                include: {
+                  securityCompany: {
+                    include: {
+                      clients: {
+                        include: {
+                          user: true
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
+
+      if (!report) {
+        throw new Error('Report not found');
+      }
+
+      // Verify access based on role
+      if (userRole === 'CLIENT') {
+        // Client can only respond to reports from guards assigned to their sites
+        const client = await prisma.client.findUnique({
+          where: { userId },
+          include: {
+            sites: {
+              include: {
+                shifts: {
+                  where: {
+                    guardId: report.guardId
+                  }
+                }
+              }
+            }
+          }
+        });
+
+        if (!client) {
+          throw new Error('Client not found');
+        }
+
+        // Check if guard has any shifts for this client's sites
+        const hasAccess = client.sites.some(site => site.shifts.length > 0);
+        if (!hasAccess) {
+          throw new Error('Access denied: This report does not belong to your sites');
+        }
+      } else if (userRole === 'ADMIN' || userRole === 'SUPER_ADMIN') {
+        // Admin can respond to reports from guards in their company
+        if (userRole !== 'SUPER_ADMIN') {
+          const admin = await prisma.securityCompanyAdmin.findFirst({
+            where: { userId },
+            include: {
+              securityCompany: {
+                include: {
+                  companyGuards: {
+                    where: {
+                      guardId: report.guardId,
+                      isActive: true
+                    }
+                  }
+                }
+              }
+            }
+          });
+
+          if (!admin || admin.securityCompany.companyGuards.length === 0) {
+            throw new Error('Access denied: This report does not belong to your company');
+          }
+        }
+      } else {
+        throw new Error('Unauthorized: Only clients and admins can respond to reports');
+      }
+
+      // Update report status and add response to description
+      const responseText = responseNotes 
+        ? `\n\n[Response by ${userRole} - ${status}]: ${responseNotes}`
+        : `\n\n[Response by ${userRole} - ${status}]`;
+      
+      const updatedReport = await prisma.incidentReport.update({
+        where: { id: reportId },
+        data: {
+          status: status === 'REVIEWED' ? 'REVIEWED' : status === 'RESOLVED' ? 'RESOLVED' : report.status,
+          description: report.description + responseText,
+          updatedAt: new Date(),
+        },
+        include: {
+          guard: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  email: true,
+                }
+              }
+            }
+          },
+          media: true,
+        }
+      });
+
+      return this.formatIncidentReport(updatedReport);
+    } catch (error) {
+      console.error('Error responding to report:', error);
+      throw error;
+    }
+  }
+
   private formatIncidentReport(report: any) {
+    // Extract response from description if present
+    const responseMatch = report.description?.match(/\[Response by (.+?) - (.+?)\]:?\s*(.+?)$/s);
+    const responseNotes = responseMatch ? responseMatch[3]?.trim() : null;
+    const description = responseMatch ? report.description.substring(0, responseMatch.index) : report.description;
+
     return {
       id: report.id,
       reportType: report.reportType,
-      description: report.description,
+      description: description || report.description,
       status: report.status,
+      responseNotes: responseNotes || null,
       location: {
         name: report.locationName,
         address: report.locationAddress,

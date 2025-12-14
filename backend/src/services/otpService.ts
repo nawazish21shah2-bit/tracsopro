@@ -30,12 +30,21 @@ const createTransporter = () => {
 
   if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
     logger.warn('SMTP credentials not configured. Email sending will fail.');
+    return null;
   }
 
   return nodemailer.createTransport(config);
 };
 
 const transporter = createTransporter();
+
+/**
+ * Get email transporter instance
+ * Export for use in other services
+ */
+export const getEmailTransporter = () => {
+  return transporter;
+};
 
 /**
  * Generate a cryptographically secure random OTP code
