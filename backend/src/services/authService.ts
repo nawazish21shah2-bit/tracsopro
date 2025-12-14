@@ -24,6 +24,7 @@ interface RegisterData {
   companyPhone?: string;
 }
 
+
 interface LoginData {
   email: string;
   password: string;
