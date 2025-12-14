@@ -198,7 +198,7 @@ class InvitationService {
 
     if (filters?.isUsed !== undefined) {
       if (filters.isUsed) {
-        where.usedAt = { not: null };
+        where.usedAt = { isNot: null };
       } else {
         where.usedAt = null;
       }

@@ -366,7 +366,7 @@ export class ClientService {
         prisma.shift.findMany({
           where: {
             clientId,
-            guardId: { not: null }, // Only shifts with assigned guards
+            guardId: { isNot: null }, // Only shifts with assigned guards
             OR: [
               {
                 // Active shifts
@@ -442,7 +442,7 @@ export class ClientService {
         prisma.shift.count({
           where: {
             clientId,
-            guardId: { not: null },
+            guardId: { isNot: null },
             OR: [
               {
                 status: 'IN_PROGRESS',
@@ -682,8 +682,8 @@ export class ClientService {
             type = 'Incident';
         }
 
-        // ShiftReport doesn't have status field, default to 'New'
-        let status: 'Respond' | 'New' | 'Reviewed' = 'New';
+        // ShiftReport doesn't have status field, default to 'Respond' to show Respond button
+        let status: 'Respond' | 'New' | 'Reviewed' = 'Respond';
 
         const siteName = report.shift?.site?.name || 'Unknown Site';
         const checkInTime = report.shift?.checkInTime;
@@ -730,12 +730,14 @@ export class ClientService {
         }
 
         // Map status from IncidentReport status
+        // 'SUBMITTED' or 'PENDING' = 'Respond' (show Respond button)
+        // 'REVIEWED' or 'RESOLVED' = 'Reviewed' (already responded)
         let status: 'Respond' | 'New' | 'Reviewed' = 'Respond';
         const statusUpper = (report.status || '').toUpperCase();
         if (statusUpper === 'REVIEWED' || statusUpper === 'RESOLVED') {
           status = 'Reviewed';
-        } else if (statusUpper === 'PENDING' || statusUpper === 'SUBMITTED') {
-          status = 'Respond'; // Show "Respond" button for new reports
+        } else if (statusUpper === 'SUBMITTED' || statusUpper === 'PENDING') {
+          status = 'Respond'; // New reports - show "Respond" button
         } else {
           status = 'Respond'; // Default to Respond for any other status
         }

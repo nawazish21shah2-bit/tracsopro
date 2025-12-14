@@ -69,7 +69,7 @@ export const getOperationsMetrics = async (req: AuthRequest, res: Response) => {
       prisma.incident.findMany({
         where: {
           createdAt: { gte: last24Hours },
-          resolvedAt: { not: null },
+          resolvedAt: { isNot: null },
         },
         select: { createdAt: true, resolvedAt: true },
       }),
