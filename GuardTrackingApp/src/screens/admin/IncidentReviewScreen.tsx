@@ -117,11 +117,13 @@ const IncidentReviewScreen: React.FC<IncidentReviewScreenProps> = ({ navigation 
           ? report.reportType.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
           : 'Incident Report';
         
-        // Map status
+        // Map status - handle both old and new status values
         let status: IncidentReport['status'] = 'pending';
-        if (report.status === 'APPROVED') status = 'approved';
-        else if (report.status === 'REJECTED') status = 'rejected';
-        else if (report.status === 'UNDER_REVIEW') status = 'under_review';
+        const statusUpper = (report.status || '').toUpperCase();
+        if (statusUpper === 'APPROVED' || statusUpper === 'RESOLVED') status = 'approved';
+        else if (statusUpper === 'REJECTED') status = 'rejected';
+        else if (statusUpper === 'UNDER_REVIEW' || statusUpper === 'REVIEWED') status = 'under_review';
+        else if (statusUpper === 'SUBMITTED' || statusUpper === 'PENDING') status = 'pending';
         else status = 'pending';
 
         // Map severity (default to medium if not provided)
@@ -179,53 +181,40 @@ const IncidentReviewScreen: React.FC<IncidentReviewScreenProps> = ({ navigation 
     setReviewModal(true);
   };
 
-  const handleApproveIncident = async () => {
+  const handleRespondToReport = async (status: 'REVIEWED' | 'RESOLVED') => {
     if (!selectedIncident) return;
 
     try {
-      const response = await apiService.updateIncidentReport(selectedIncident.id, {
-        status: 'APPROVED',
-        reviewNotes: reviewNotes.trim() || undefined,
-      });
+      const response = await apiService.respondToReport(
+        selectedIncident.id,
+        status,
+        reviewNotes.trim() || undefined
+      );
 
       if (!response.success) {
-        throw new Error(response.message || 'Failed to approve incident');
+        throw new Error(response.message || 'Failed to respond to report');
       }
 
-      Alert.alert('Success', 'Incident approved successfully');
+      Alert.alert('Success', `Report marked as ${status.toLowerCase()} successfully`);
       setReviewModal(false);
       setReviewNotes('');
       await loadIncidents();
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to approve incident');
+      Alert.alert('Error', error.message || 'Failed to respond to report');
     }
   };
 
-  const handleRejectIncident = async () => {
-    if (!selectedIncident) return;
+  const handleApproveIncident = async () => {
+    await handleRespondToReport('RESOLVED');
+  };
 
+  const handleRejectIncident = async () => {
     if (!reviewNotes.trim()) {
       Alert.alert('Error', 'Please provide rejection notes');
       return;
     }
-
-    try {
-      const response = await apiService.updateIncidentReport(selectedIncident.id, {
-        status: 'REJECTED',
-        reviewNotes: reviewNotes.trim(),
-      });
-
-      if (!response.success) {
-        throw new Error(response.message || 'Failed to reject incident');
-      }
-
-      Alert.alert('Success', 'Incident rejected with notes');
-      setReviewModal(false);
-      setReviewNotes('');
-      await loadIncidents();
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to reject incident');
-    }
+    // For rejection, we can use REVIEWED status with notes
+    await handleRespondToReport('REVIEWED');
   };
 
   const getSeverityColor = (severity: IncidentReport['severity']) => {
@@ -362,17 +351,17 @@ const IncidentReviewScreen: React.FC<IncidentReviewScreenProps> = ({ navigation 
             
             <View style={styles.reviewActions}>
               <TouchableOpacity 
-                style={[styles.reviewButton, styles.approveButton]}
-                onPress={handleApproveIncident}
+                style={[styles.reviewButton, styles.respondButton]}
+                onPress={() => handleRespondToReport('REVIEWED')}
               >
-                <Text style={styles.reviewButtonText}>✓ Approve</Text>
+                <Text style={styles.reviewButtonText}>✓ Mark as Reviewed</Text>
               </TouchableOpacity>
               
               <TouchableOpacity 
-                style={[styles.reviewButton, styles.rejectButton]}
-                onPress={handleRejectIncident}
+                style={[styles.reviewButton, styles.approveButton]}
+                onPress={handleApproveIncident}
               >
-                <Text style={styles.reviewButtonText}>✗ Reject</Text>
+                <Text style={styles.reviewButtonText}>✓ Resolve</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -692,6 +681,9 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.md,
     borderRadius: 8,
     alignItems: 'center',
+  },
+  respondButton: {
+    backgroundColor: COLORS.primary,
   },
   approveButton: {
     backgroundColor: COLORS.success,

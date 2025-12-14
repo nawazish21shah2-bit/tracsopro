@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity } from 'react-native';
 import { Country, defaultCountry } from '../../utils/countries';
 import CountryPicker from './CountryPicker';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../styles/globalStyles';
 
 interface PhoneInputProps {
   label?: string;
@@ -11,16 +12,18 @@ interface PhoneInputProps {
   error?: string;
   placeholder?: string;
   selectedCountry?: Country;
+  icon?: string;
 }
 
 const PhoneInput: React.FC<PhoneInputProps> = ({
-  label = 'Phone Number',
+  label,
   value,
   onChangeText,
   onCountryChange,
   error,
   placeholder,
   selectedCountry: initialCountry,
+  icon,
 }) => {
   const [selectedCountry, setSelectedCountry] = useState<Country>(initialCountry || defaultCountry);
   const [showCountryPicker, setShowCountryPicker] = useState(false);
@@ -72,10 +75,16 @@ const PhoneInput: React.FC<PhoneInputProps> = ({
     return 'Enter phone number';
   };
 
+  const [focused, setFocused] = useState(false);
+
   return (
     <View style={styles.container}>
       {label && <Text style={styles.phoneLabel}>{label}</Text>}
-      <View style={[styles.phoneInputWrapper, error && styles.inputError]}>
+      <View style={[
+        styles.phoneInputWrapper,
+        focused && styles.inputFocused,
+        error && styles.inputError
+      ]}>
         <TouchableOpacity
           style={styles.countryCodeContainer}
           onPress={() => setShowCountryPicker(true)}
@@ -90,9 +99,11 @@ const PhoneInput: React.FC<PhoneInputProps> = ({
           placeholder={getPlaceholder()}
           value={value}
           onChangeText={handlePhoneChange}
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor={COLORS.textSecondary}
           keyboardType="phone-pad"
           maxLength={getMaxLength()}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
         />
       </View>
       {error && <Text style={styles.errorText}>{error}</Text>}
@@ -109,67 +120,72 @@ const PhoneInput: React.FC<PhoneInputProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 20,
+    // No margin - handled by parent inputContainer
   },
   phoneLabel: {
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 8,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.regular,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.sm,
   },
   phoneInputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.backgroundSecondary, // Light gray like AuthInput
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
+    borderColor: COLORS.borderLight,
+    borderRadius: BORDER_RADIUS.md,
     height: 56,
+    paddingHorizontal: SPACING.lg,
+  },
+  inputFocused: {
+    borderColor: COLORS.primary,
+    borderWidth: 1,
   },
   inputError: {
-    borderColor: '#EF4444',
+    borderColor: COLORS.error,
   },
   countryCodeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: SPACING.sm,
     borderRightWidth: 1,
-    borderRightColor: '#E5E7EB',
+    borderRightColor: COLORS.borderLight,
     minWidth: 100,
+    marginRight: SPACING.sm,
   },
   flagText: {
     fontSize: 20,
-    marginRight: 6,
+    marginRight: SPACING.xs,
   },
   countryCode: {
-    fontFamily: 'Inter',
-    fontWeight: '600',
-    fontSize: 16,
-    color: '#000000',
-    marginRight: 4,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textPrimary,
+    marginRight: SPACING.xs,
   },
   dropdownIcon: {
     fontSize: 10,
-    color: '#6B7280',
-    marginLeft: 2,
+    color: COLORS.textSecondary,
+    marginLeft: SPACING.xs,
   },
   phoneInput: {
     flex: 1,
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    fontSize: 16,
-    color: '#000000',
-    paddingHorizontal: 16,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.regular,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textPrimary,
     paddingVertical: 0,
   },
   errorText: {
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    fontSize: 12,
-    color: '#EF4444',
-    marginTop: 4,
-    marginLeft: 4,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.regular,
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.error,
+    marginTop: SPACING.xs,
+    marginLeft: SPACING.xs,
   },
 });
 

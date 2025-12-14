@@ -16,6 +16,8 @@ import { useTheme } from '../../utils/theme';
 import Button from '../../components/common/Button';
 import { AuthStackParamList } from '../../types';
 import Logo from '../../assets/images/tracSOpro-logo.png';
+import { authStyles, AUTH_HEADING_TO_FORM } from '../../styles/authStyles';
+import { COLORS } from '../../styles/globalStyles';
 
 type AccountTypeScreenNavigationProp = StackNavigationProp<any, any>;
 
@@ -42,14 +44,14 @@ const AccountTypeScreen: React.FC = () => {
         showsVerticalScrollIndicator={false}
       >
         {/* Logo */}
-        <View style={styles.logoContainer}>
-          <Image source={Logo} style={styles.logoImage} resizeMode="contain" />
+        <View style={authStyles.logoContainer}>
+          <Image source={Logo} style={authStyles.logoImage} resizeMode="contain" />
         </View>
 
         {/* Title */}
         <View style={styles.titleContainer}>
-          <Text style={styles.title}>SELECT ACCOUNT</Text>
-          <Text style={styles.subtitle}>
+          <Text style={authStyles.title}>SELECT ACCOUNT</Text>
+          <Text style={authStyles.subtitle}>
             Please select the account type that is relevant to your need.
           </Text>
         </View>
@@ -94,12 +96,12 @@ const AccountTypeScreen: React.FC = () => {
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            Already have an account? 
-            <TouchableOpacity onPress={handleAlreadyHaveAccount}>
-              <Text style={styles.loginLink}> Login</Text>
+          <View style={styles.footerRow}>
+            <Text style={styles.footerText}>Already have an account? </Text>
+            <TouchableOpacity onPress={handleAlreadyHaveAccount} activeOpacity={0.7}>
+              <Text style={styles.loginLink}>Login</Text>
             </TouchableOpacity>
-          </Text>
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -116,33 +118,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 40,
   },
-  logoContainer: {
-    alignItems: 'center',
-    marginTop: 40,
-    marginBottom: 60,
-  },
-  logoImage: {
-    width: 160,
-    height: 40,
-  },
   titleContainer: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: AUTH_HEADING_TO_FORM,
   },
-  title: {
-    fontFamily: 'Montserrat',
-    fontWeight: '700',
-    fontSize: 24,
-    lineHeight: 29,
-    textAlign: 'center',
-    letterSpacing: 1,
-    color: '#000000',
-    marginBottom: 16,
-  },
-  subtitle: {
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    fontSize: 14,
     lineHeight: 20,
     textAlign: 'center',
     color: '#6B7280',
@@ -202,6 +181,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 17,
     color: '#1C6CA9',
+  },
+  footerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'nowrap',
   },
 });
 

@@ -50,7 +50,7 @@ class CameraService {
     includeBase64: false,
     storageOptions: {
       skipBackup: true,
-      path: 'GuardTrackingApp',
+      path: 'TracSOpro',
     },
   };
 

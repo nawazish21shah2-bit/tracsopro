@@ -28,6 +28,7 @@ import { useTheme } from '../../utils/theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Logo from '../../assets/images/tracSOpro-logo.png';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
+import { authStyles, AUTH_INPUT_GAP } from '../../styles/authStyles';
 
 type LoginScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'Login'>;
 
@@ -159,12 +160,12 @@ const LoginScreen: React.FC = () => {
         <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
         
         {/* Logo */}
-        <View style={styles.logoContainer}>
-          <Image source={Logo} style={styles.logoImage} resizeMode="contain" />
+        <View style={authStyles.logoContainer}>
+          <Image source={Logo} style={authStyles.logoImage} resizeMode="contain" />
         </View>
 
         {/* Title */}
-        <Text style={styles.title}>LOGIN</Text>
+        <Text style={authStyles.title}>LOGIN</Text>
 
         {/* Form */}
         <View style={styles.form}>
@@ -242,17 +243,17 @@ const LoginScreen: React.FC = () => {
         </View>
 
         {/* Footer */}
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            Don't have an account? 
+        <View style={authStyles.footer}>
+          <View style={styles.footerRow}>
+            <Text style={authStyles.footerText}>Don't have an account? </Text>
             <TouchableOpacity 
               onPress={navigateToRegister}
               disabled={isLoading}
               activeOpacity={isLoading ? 1 : 0.7}
             >
-              <Text style={[styles.registerText, isLoading && styles.disabledLink]}> Register now</Text>
+              <Text style={[authStyles.linkText, isLoading && styles.disabledLink]}>Register now</Text>
             </TouchableOpacity>
-          </Text>
+          </View>
         </View>
       </View>
     </ErrorBoundary>
@@ -264,32 +265,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.backgroundPrimary,
   },
-  logoContainer: {
-    alignItems: 'center',
-    marginTop: SPACING.xxxxl * 2,
-    marginBottom: SPACING.xxxxl,
-  },
-  logoImage: {
-    width: 160,
-    height: 140,
-  },
-  title: {
-    fontFamily: TYPOGRAPHY.fontPrimary,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
-    fontSize: TYPOGRAPHY.fontSize.xxl,
-    lineHeight: 29,
-    textAlign: 'center',
-    letterSpacing: -0.408,
-    color: COLORS.textPrimary,
-    textTransform: 'uppercase',
-    marginBottom: SPACING.xxxxl + SPACING.lg,
-  },
+  // Logo, title, footer styles moved to authStyles.ts
   form: {
     paddingHorizontal: SPACING.lg,
     flex: 1,
   },
   inputContainer: {
-    marginBottom: SPACING.fieldGap || SPACING.lg,
+    marginBottom: AUTH_INPUT_GAP, // 16px - consistent spacing
   },
   inputWrapper: {
     flexDirection: 'row',
@@ -329,7 +311,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: SPACING.fieldGap || SPACING.lg,
+    marginTop: SPACING.xl, // 20px - reduced space between password field and Remember Me
   },
   rememberContainer: {
     flexDirection: 'row',
@@ -396,32 +378,15 @@ const styles = StyleSheet.create({
     color: COLORS.textInverse,
     fontWeight: TYPOGRAPHY.fontWeight.bold,
   },
-  footer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 'auto',
-    marginBottom: SPACING.xxxxl,
-  },
-  footerText: {
-    fontFamily: TYPOGRAPHY.fontPrimary,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    lineHeight: 17,
-    textAlign: 'center',
-    letterSpacing: -0.408,
-    color: COLORS.textSecondary,
-  },
-  registerText: {
-    fontFamily: TYPOGRAPHY.fontPrimary,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    lineHeight: 17,
-    letterSpacing: -0.408,
-    color: COLORS.primary,
-    marginTop: SPACING.xs,
-  },
+  // Footer styles moved to authStyles.ts
   disabledLink: {
     opacity: 0.5,
+  },
+  footerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'nowrap',
   },
 });
 

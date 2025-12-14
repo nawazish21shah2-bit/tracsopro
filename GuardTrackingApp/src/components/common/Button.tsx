@@ -166,12 +166,12 @@ const styles = StyleSheet.create({
   
   // Variants
   primary: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
+    backgroundColor: '#1C6CA9', // Using app primary color
+    borderColor: '#1C6CA9',
   },
   secondary: {
     backgroundColor: 'transparent',
-    borderColor: '#007AFF',
+    borderColor: '#1C6CA9', // App primary color
   },
   danger: {
     backgroundColor: '#FF4444',
@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   secondaryText: {
-    color: '#007AFF',
+    color: '#1C6CA9', // Using app primary color
   },
   dangerText: {
     color: '#ffffff',

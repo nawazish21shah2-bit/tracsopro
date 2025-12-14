@@ -172,12 +172,12 @@ const ForgotPasswordScreen: React.FC = () => {
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            Remember your password? 
-            <TouchableOpacity onPress={navigateToLogin} disabled={isLoading}>
-              <Text style={styles.loginLink}> Login</Text>
+          <View style={styles.footerRow}>
+            <Text style={styles.footerText}>Remember your password? </Text>
+            <TouchableOpacity onPress={navigateToLogin} disabled={isLoading} activeOpacity={isLoading ? 1 : 0.7}>
+              <Text style={styles.loginLink}>Login</Text>
             </TouchableOpacity>
-          </Text>
+          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -312,6 +312,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 'auto',
     marginBottom: 40,
+  },
+  footerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'nowrap',
   },
   footerText: {
     fontFamily: 'Inter',

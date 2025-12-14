@@ -1,5 +1,5 @@
 // Add Incident Report Screen - Updated UI
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,11 +11,13 @@ import {
   Image,
   Platform,
   Modal,
+  PermissionsAndroid,
 } from 'react-native';
 import { useSelector } from 'react-redux';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { launchImageLibrary, launchCamera, ImagePickerResponse, MediaType } from 'react-native-image-picker';
+import Geolocation from 'react-native-geolocation-service';
 import { RootState } from '../../store';
 import { COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import SharedHeader from '../../components/ui/SharedHeader';
@@ -44,12 +46,20 @@ const AddIncidentReportScreen: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showReportTypeModal, setShowReportTypeModal] = useState(false);
 
-  // Current location and date
-  const currentLocation = {
-    name: 'Ocean View Vila',
-    address: '1321 Baker Street, NY',
-    status: 'Active'
-  };
+  // Get active shift location
+  const { activeShift } = useSelector((state: RootState) => state.shifts);
+  const [currentLocation, setCurrentLocation] = useState<{
+    name: string;
+    address: string;
+    latitude?: number;
+    longitude?: number;
+    status: string;
+  }>({
+    name: activeShift?.locationName || 'Current Location',
+    address: activeShift?.locationAddress || 'Getting location...',
+    status: activeShift ? 'Active' : 'No Active Shift'
+  });
+  const [locationLoading, setLocationLoading] = useState(false);
 
   const currentDate = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
@@ -57,6 +67,94 @@ const AddIncidentReportScreen: React.FC = () => {
     day: '2-digit',
     year: 'numeric'
   });
+
+  // Get current GPS location
+  useEffect(() => {
+    getCurrentLocation();
+  }, []);
+
+  const getCurrentLocation = async () => {
+    try {
+      setLocationLoading(true);
+      
+      // Use active shift location if available
+      if (activeShift?.locationName && activeShift?.locationAddress) {
+        setCurrentLocation({
+          name: activeShift.locationName,
+          address: activeShift.locationAddress,
+          status: 'Active'
+        });
+        setLocationLoading(false);
+        return;
+      }
+
+      // Otherwise get GPS location
+      // Request permissions
+      let hasPermission = false;
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+        );
+        hasPermission = granted === PermissionsAndroid.RESULTS.GRANTED;
+      } else {
+        // iOS - Geolocation service handles permissions automatically
+        hasPermission = true;
+      }
+
+      if (!hasPermission) {
+        setCurrentLocation({
+          name: 'Location Permission Required',
+          address: 'Please enable location services',
+          status: 'Permission Denied'
+        });
+        setLocationLoading(false);
+        return;
+      }
+
+      // Get current position
+      Geolocation.getCurrentPosition(
+        (position) => {
+          const latitude = position.coords.latitude;
+          const longitude = position.coords.longitude;
+          
+          // Format address as coordinates (can be enhanced with geocoding API later)
+          const address = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+
+          setCurrentLocation({
+            name: 'Current Location',
+            address: address,
+            latitude: latitude,
+            longitude: longitude,
+            status: 'Active'
+          });
+          setLocationLoading(false);
+        },
+        (error) => {
+          console.error('Error getting location:', error);
+          setCurrentLocation({
+            name: 'Location Error',
+            address: 'Unable to get location',
+            status: 'Error'
+          });
+          setLocationLoading(false);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 10000,
+        }
+      );
+    } catch (error) {
+      console.error('Error getting location:', error);
+      setCurrentLocation({
+        name: 'Location Error',
+        address: 'Unable to get location',
+        status: 'Error'
+      });
+    } finally {
+      setLocationLoading(false);
+    }
+  };
 
   const reportTypes = [
     'End of the Day Report',
@@ -127,25 +225,43 @@ const AddIncidentReportScreen: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      // Prepare report data
+      // Upload media files first if any
+      const uploadedMediaFiles = [];
+      if (mediaItems.length > 0) {
+        for (const mediaItem of mediaItems) {
+          try {
+            // For now, we'll send the local URI
+            // In production, you should upload to cloud storage first
+            // TODO: Implement proper file upload to cloud storage (S3, Cloudinary, etc.)
+            uploadedMediaFiles.push({
+              url: mediaItem.uri, // This should be a cloud URL in production
+              type: mediaItem.type,
+              name: mediaItem.name || `media_${Date.now()}.${mediaItem.type === 'video' ? 'mp4' : 'jpg'}`,
+            });
+          } catch (uploadError) {
+            console.warn('Failed to upload media file:', uploadError);
+            // Continue with other files
+          }
+        }
+      }
+
+      // Prepare report data with location
       const reportData = {
         reportType,
         description,
         location: {
           name: currentLocation.name,
           address: currentLocation.address,
+          latitude: currentLocation.latitude,
+          longitude: currentLocation.longitude,
         },
-        mediaFiles: mediaItems.map(item => ({
-          url: item.uri,
-          type: item.type,
-          name: item.name,
-        }))
+        mediaFiles: uploadedMediaFiles
       };
 
       // Submit to backend using API service
       const response = await apiService.post('/incident-reports', reportData);
 
-      if (response.data.success) {
+      if (response.data?.success || response.data) {
         Alert.alert(
           'Success',
           'Your incident report has been submitted successfully',
@@ -154,11 +270,11 @@ const AddIncidentReportScreen: React.FC = () => {
           ]
         );
       } else {
-        Alert.alert('Error', response.data.message || 'Failed to submit report');
+        Alert.alert('Error', response.data?.message || 'Failed to submit report');
       }
     } catch (error: any) {
       console.error('Submit error:', error);
-      const errorMessage = error.message || 'Failed to submit report. Please try again.';
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to submit report. Please try again.';
       Alert.alert('Error', errorMessage);
     } finally {
       setIsSubmitting(false);

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "330563737422",
+    "project_id": "tracsopro-7a9f7",
+    "storage_bucket": "tracsopro-7a9f7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:330563737422:android:0568dd39d93299883e701f",
+        "android_client_info": {
+          "package_name": "com.tracsopro"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDYtD3sQvofDXivqBTlU7dredPbuG9alvo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

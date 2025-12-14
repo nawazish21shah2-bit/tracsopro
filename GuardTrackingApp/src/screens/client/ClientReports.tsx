@@ -11,6 +11,8 @@ import {
   RefreshControl,
   ActivityIndicator,
   Alert,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
@@ -38,6 +40,7 @@ interface ReportData {
   status: 'Respond' | 'New' | 'Reviewed';
   checkInTime?: string;
   guardId?: string;
+  guardUserId?: string;
 }
 
 const ClientReports: React.FC = () => {
@@ -45,6 +48,10 @@ const ClientReports: React.FC = () => {
   const navigation = useNavigation<StackNavigationProp<ClientStackParamList>>();
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
   const [refreshing, setRefreshing] = useState(false);
+  const [showResponseModal, setShowResponseModal] = useState(false);
+  const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
+  const [responseNotes, setResponseNotes] = useState('');
+  const [isSubmittingResponse, setIsSubmittingResponse] = useState(false);
 
   // Redux state
   const { 
@@ -103,33 +110,37 @@ const ClientReports: React.FC = () => {
     console.log('Report pressed:', reportId);
   };
 
-  const handleRespond = async (reportId: string) => {
+  const handleRespond = (reportId: string) => {
+    setSelectedReportId(reportId);
+    setResponseNotes('');
+    setShowResponseModal(true);
+  };
+
+  const submitResponse = async () => {
+    if (!selectedReportId) return;
+
+    setIsSubmittingResponse(true);
     try {
-      Alert.alert(
-        'Respond to Report',
-        'Mark this report as reviewed?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Mark as Reviewed',
-            onPress: async () => {
-              try {
-                const response = await apiService.respondToReport(reportId, 'REVIEWED');
-                if (response.success) {
-                  Alert.alert('Success', 'Report marked as reviewed');
-                  await loadReports();
-                } else {
-                  Alert.alert('Error', response.message || 'Failed to update report');
-                }
-              } catch (error: any) {
-                Alert.alert('Error', error.message || 'Failed to respond to report');
-              }
-            }
-          }
-        ]
+      const response = await apiService.respondToReport(
+        selectedReportId, 
+        'REVIEWED', 
+        responseNotes.trim() || undefined
       );
+      
+      if (response.success) {
+        Alert.alert('Success', 'Report marked as reviewed');
+        setShowResponseModal(false);
+        setSelectedReportId(null);
+        setResponseNotes('');
+        await loadReports();
+      } else {
+        Alert.alert('Error', response.message || 'Failed to update report');
+      }
     } catch (error: any) {
+      console.error('Respond error:', error);
       Alert.alert('Error', error.message || 'Failed to respond to report');
+    } finally {
+      setIsSubmittingResponse(false);
     }
   };
 
@@ -228,8 +239,60 @@ const ClientReports: React.FC = () => {
             <Text style={styles.emptyText}>No reports available</Text>
             <Text style={styles.emptySubtext}>Reports from your guards will appear here</Text>
           </View>
-        ) : null}
+          ) : null}
       </ScrollView>
+
+      {/* Response Modal */}
+      <Modal
+        visible={showResponseModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowResponseModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Respond to Report</Text>
+            <Text style={styles.modalSubtitle}>Add a response note (optional):</Text>
+            
+            <TextInput
+              style={styles.responseInput}
+              placeholder="Enter your response..."
+              placeholderTextColor={COLORS.textTertiary}
+              value={responseNotes}
+              onChangeText={setResponseNotes}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => {
+                  setShowResponseModal(false);
+                  setSelectedReportId(null);
+                  setResponseNotes('');
+                }}
+                disabled={isSubmittingResponse}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.modalButton, styles.submitButton]}
+                onPress={submitResponse}
+                disabled={isSubmittingResponse}
+              >
+                {isSubmittingResponse ? (
+                  <ActivityIndicator color={COLORS.textInverse} />
+                ) : (
+                  <Text style={styles.submitButtonText}>Mark as Reviewed</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaWrapper>
   );
 };
@@ -305,6 +368,70 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.textSecondary,
     textAlign: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.xl,
+    width: '90%',
+    maxWidth: 500,
+  },
+  modalTitle: {
+    fontSize: TYPOGRAPHY.fontSize.xl,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.sm,
+  },
+  modalSubtitle: {
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.lg,
+  },
+  responseInput: {
+    backgroundColor: COLORS.backgroundSecondary,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textPrimary,
+    minHeight: 100,
+    marginBottom: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: SPACING.md,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButton: {
+    backgroundColor: COLORS.backgroundSecondary,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  cancelButtonText: {
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    color: COLORS.textPrimary,
+  },
+  submitButton: {
+    backgroundColor: COLORS.primary,
+  },
+  submitButtonText: {
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textInverse,
   },
 });
 

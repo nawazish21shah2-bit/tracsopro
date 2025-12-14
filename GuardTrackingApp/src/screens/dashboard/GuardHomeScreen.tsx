@@ -159,29 +159,96 @@ const GuardHomeScreen: React.FC = () => {
     }
   }, [dispatch]);
 
-  // Get current GPS location
-  const getCurrentLocation = (): Promise<{ latitude: number; longitude: number; accuracy: number; address?: string }> => {
-    return new Promise((resolve, reject) => {
-      Geolocation.getCurrentPosition(
-        (position: Geolocation.GeoPosition) => {
-          resolve({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            accuracy: position.coords.accuracy || 0,
-            address: `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`,
-          });
-        },
-        (error: Geolocation.GeoError) => {
-          console.error('Location error:', error);
-          reject(new Error('Unable to get your location. Please enable GPS and try again.'));
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 10000,
+  // Get current GPS location with retry logic
+  const getCurrentLocation = async (retries: number = 2): Promise<{ latitude: number; longitude: number; accuracy: number; address?: string }> => {
+    const attemptGetLocation = (useHighAccuracy: boolean): Promise<{ latitude: number; longitude: number; accuracy: number; address?: string }> => {
+      return new Promise((resolve, reject) => {
+        Geolocation.getCurrentPosition(
+          (position: Geolocation.GeoPosition) => {
+            // Validate location data
+            if (!position.coords || 
+                typeof position.coords.latitude !== 'number' || 
+                typeof position.coords.longitude !== 'number' ||
+                isNaN(position.coords.latitude) ||
+                isNaN(position.coords.longitude)) {
+              reject(new Error('Invalid location data received. Please try again.'));
+              return;
+            }
+
+            resolve({
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+              accuracy: position.coords.accuracy || 0,
+              address: `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`,
+            });
+          },
+          (error: Geolocation.GeoError) => {
+            console.error('Location error:', error);
+            
+            // Provide specific error messages based on error code
+            let errorMessage = 'Unable to get your location.';
+            let shouldRetry = true;
+            
+            switch (error.code) {
+              case 1: // PERMISSION_DENIED
+                errorMessage = 'Location permission denied. Please enable location access in settings.';
+                shouldRetry = false; // Don't retry permission errors
+                break;
+              case 2: // POSITION_UNAVAILABLE
+                errorMessage = 'Location unavailable. Please ensure GPS is enabled and try again.';
+                break;
+              case 3: // TIMEOUT
+                errorMessage = 'Location request timed out. Please try again.';
+                break;
+              default:
+                errorMessage = 'Unable to get your location. Please ensure GPS is enabled and try again.';
+            }
+            
+            const locationError = new Error(errorMessage) as any;
+            locationError.code = error.code;
+            locationError.shouldRetry = shouldRetry;
+            reject(locationError);
+          },
+          {
+            enableHighAccuracy: useHighAccuracy,
+            timeout: 20000, // Increased timeout to 20 seconds
+            maximumAge: 30000, // Accept location up to 30 seconds old
+          }
+        );
+      });
+    };
+
+    // Try with high accuracy first
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        // First attempt: high accuracy
+        if (attempt === 0) {
+          return await attemptGetLocation(true);
         }
-      );
-    });
+        // Retry attempts: try with lower accuracy requirement
+        else {
+          console.log(`Location attempt ${attempt + 1}/${retries + 1}, trying with lower accuracy...`);
+          return await attemptGetLocation(false);
+        }
+      } catch (error: any) {
+        // If permission denied, don't retry - fail immediately
+        if (error.code === 1 || error.shouldRetry === false) {
+          throw error;
+        }
+        
+        // If this was the last attempt, throw the error
+        if (attempt === retries) {
+          throw error;
+        }
+        
+        // Otherwise, wait a bit before retrying
+        console.log(`Location attempt ${attempt + 1} failed, retrying in 2 seconds...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+
+    // This should never be reached, but TypeScript needs it
+    throw new Error('Unable to get your location after multiple attempts.');
   };
 
   const handleCheckIn = async () => {
@@ -210,11 +277,41 @@ const GuardHomeScreen: React.FC = () => {
   };
 
   const handleCheckInToShift = async (shiftId: string) => {
+    // Prevent multiple simultaneous requests
+    if (gettingLocation || checkInLoading) {
+      console.log('Check-in already in progress, skipping...');
+      return;
+    }
+
     try {
       setGettingLocation(true);
       
-      // Get GPS location
-      const location = await getCurrentLocation();
+      // Get GPS location with retry logic
+      let location;
+      try {
+        location = await getCurrentLocation(2); // Retry up to 2 times
+      } catch (locationError: any) {
+        // If location fails, show specific error and don't proceed with check-in
+        const locationErrorMessage = locationError?.message || 'Unable to get your location. Please enable GPS and try again.';
+        Alert.alert(
+          'Location Required',
+          locationErrorMessage,
+          [
+            { 
+              text: 'Retry', 
+              onPress: () => {
+                // Retry getting location after a short delay
+                setTimeout(() => {
+                  handleCheckInToShift(shiftId);
+                }, 500);
+              }
+            },
+            { text: 'Cancel', style: 'cancel' }
+          ]
+        );
+        setGettingLocation(false);
+        return;
+      }
       
       // Dispatch check-in action
       await dispatch(checkInToShiftWithLocation({
@@ -228,8 +325,19 @@ const GuardHomeScreen: React.FC = () => {
       await dispatch(fetchActiveShift());
       await dispatch(fetchShiftStatistics({}));
     } catch (error: any) {
+      // Handle check-in API errors separately from location errors
       const errorMessage = error?.message || 'Failed to check in. Please try again.';
-      Alert.alert('Check-In Failed', errorMessage);
+      Alert.alert(
+        'Check-In Failed',
+        errorMessage,
+        [
+          { 
+            text: 'Retry', 
+            onPress: () => handleCheckInToShift(shiftId)
+          },
+          { text: 'OK' }
+        ]
+      );
     } finally {
       setGettingLocation(false);
     }
@@ -238,6 +346,12 @@ const GuardHomeScreen: React.FC = () => {
   const handleCheckOut = async () => {
     if (!activeShift) {
       Alert.alert('No Active Shift', 'You do not have an active shift to check out from.');
+      return;
+    }
+
+    // Prevent multiple simultaneous requests
+    if (gettingLocation || checkOutLoading) {
+      console.log('Check-out already in progress, skipping...');
       return;
     }
 
@@ -253,8 +367,32 @@ const GuardHomeScreen: React.FC = () => {
             try {
               setGettingLocation(true);
               
-              // Get GPS location
-              const location = await getCurrentLocation();
+              // Get GPS location with retry logic
+              let location;
+              try {
+                location = await getCurrentLocation(2); // Retry up to 2 times
+              } catch (locationError: any) {
+                // If location fails, show specific error and don't proceed with check-out
+                const locationErrorMessage = locationError?.message || 'Unable to get your location. Please enable GPS and try again.';
+                Alert.alert(
+                  'Location Required',
+                  locationErrorMessage,
+                  [
+                    { 
+                      text: 'Retry', 
+                      onPress: () => {
+                        // Retry getting location after a short delay
+                        setTimeout(() => {
+                          handleCheckOut();
+                        }, 500);
+                      }
+                    },
+                    { text: 'Cancel', style: 'cancel' }
+                  ]
+                );
+                setGettingLocation(false);
+                return;
+              }
               
               // Dispatch check-out action
               await dispatch(checkOutFromShiftWithLocation({
@@ -268,8 +406,19 @@ const GuardHomeScreen: React.FC = () => {
               await dispatch(fetchActiveShift());
               await dispatch(fetchShiftStatistics({}));
             } catch (error: any) {
+              // Handle check-out API errors separately from location errors
               const errorMessage = error?.message || 'Failed to check out. Please try again.';
-              Alert.alert('Check-Out Failed', errorMessage);
+              Alert.alert(
+                'Check-Out Failed',
+                errorMessage,
+                [
+                  { 
+                    text: 'Retry', 
+                    onPress: () => handleCheckOut()
+                  },
+                  { text: 'OK' }
+                ]
+              );
             } finally {
               setGettingLocation(false);
             }
@@ -306,7 +455,7 @@ const GuardHomeScreen: React.FC = () => {
   const handleEmergencyAlert = async () => {
     Alert.alert(
       'Emergency Alert',
-      'Are you sure you want to send an emergency alert? This will notify all supervisors and administrators.',
+      'Are you sure you want to send an emergency alert? This will notify all supervisors, administrators, and clients.',
       [
         { text: 'Cancel', style: 'cancel' },
         { 
@@ -314,34 +463,24 @@ const GuardHomeScreen: React.FC = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              // Get current location if available
-              const location = {
-                latitude: 0,
-                longitude: 0,
-                accuracy: 10,
-                address: 'Current location'
-              };
-
-              // Try to get actual location
+              setGettingLocation(true);
+              
+              // Get current location with retry logic
+              let location;
               try {
-                const position = await new Promise<any>((resolve, reject) => {
-                  Geolocation.getCurrentPosition(
-                    resolve,
-                    reject,
-                    {
-                      enableHighAccuracy: true,
-                      timeout: 10000,
-                      maximumAge: 0
-                    }
-                  );
-                });
-                location.latitude = position.coords.latitude;
-                location.longitude = position.coords.longitude;
-                location.accuracy = position.coords.accuracy || 10;
-              } catch (locError) {
-                console.warn('Could not get location:', locError);
+                location = await getCurrentLocation(1); // Quick retry for emergency
+              } catch (locationError: any) {
+                // For emergency, use last known location or default
+                console.warn('Could not get location for emergency:', locationError);
+                location = {
+                  latitude: 0,
+                  longitude: 0,
+                  accuracy: 1000, // Low accuracy if GPS unavailable
+                  address: 'Location unavailable - Emergency alert sent'
+                };
               }
 
+              // Trigger emergency alert with shiftId if available
               const result = await apiService.triggerEmergencyAlert({
                 type: 'PANIC',
                 severity: 'CRITICAL',
@@ -349,18 +488,34 @@ const GuardHomeScreen: React.FC = () => {
                   latitude: location.latitude,
                   longitude: location.longitude,
                   accuracy: location.accuracy,
-                  address: location.address
+                  address: location.address || 'Emergency location'
                 },
-                message: 'Emergency alert triggered by guard'
+                message: `Emergency alert triggered by ${user?.firstName || 'Guard'} ${user?.lastName || ''}`,
+                shiftId: activeShift?.id // Include shiftId to notify correct client/admin
               });
 
               if (result.success) {
-                Alert.alert('Emergency Alert Sent', 'Help is on the way! All supervisors have been notified.');
+                Alert.alert(
+                  'Emergency Alert Sent', 
+                  'Help is on the way! All supervisors, administrators, and clients have been notified.',
+                  [{ text: 'OK' }]
+                );
               } else {
-                Alert.alert('Error', result.message || 'Failed to send emergency alert. Please try again.');
+                Alert.alert(
+                  'Error', 
+                  result.message || 'Failed to send emergency alert. Please try again or contact emergency services directly.',
+                  [{ text: 'OK' }]
+                );
               }
             } catch (error: any) {
-              Alert.alert('Error', error.message || 'Failed to send emergency alert. Please try again.');
+              console.error('Emergency alert error:', error);
+              Alert.alert(
+                'Error', 
+                error.message || 'Failed to send emergency alert. Please contact emergency services directly.',
+                [{ text: 'OK' }]
+              );
+            } finally {
+              setGettingLocation(false);
             }
           }
         },

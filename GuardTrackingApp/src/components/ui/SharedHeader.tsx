@@ -7,6 +7,7 @@ import {  NotificationIcon, EmergencyIcon, SettingsIcon } from './AppIcons';
 import { MenuIcon, BellIcon } from './FeatherIcons';
 
 import { COLORS, SPACING, TYPOGRAPHY } from '../../styles/globalStyles';
+import { authStyles, AUTH_LOGO_TOP, AUTH_LOGO_TO_HEADING, AUTH_HEADING_TO_FORM } from '../../styles/authStyles';
 import Logo from '../../assets/images/tracSOpro-logo.png';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 
@@ -129,13 +130,13 @@ export const SharedHeader: React.FC<SharedHeaderProps> = (props) => {
 const AuthHeaderComponent: React.FC<AuthHeaderProps> = ({ title, subtitle, style }) => {
   return (
     <View style={[sharedStyles.authContainer, style]}>
-      <View style={sharedStyles.logoContainer}>
-        <Image source={Logo} style={sharedStyles.authLogoImage as ImageStyle} resizeMode="contain" />
+      <View style={authStyles.logoContainer}>
+        <Image source={Logo} style={authStyles.logoImage as ImageStyle} resizeMode="contain" />
       </View>
       {title && (
         <View style={sharedStyles.titleContainer}>
-          <Text style={sharedStyles.authTitle}>{title}</Text>
-          {subtitle && <Text style={sharedStyles.authSubtitle}>{subtitle}</Text>}
+          <Text style={authStyles.title}>{title}</Text>
+          {subtitle && <Text style={authStyles.subtitle}>{subtitle}</Text>}
         </View>
       )}
     </View>
@@ -534,34 +535,10 @@ const sharedStyles = StyleSheet.create({
   // Auth Styles
   authContainer: {
     alignItems: 'center',
-    marginBottom: SPACING.xxxxl,
-  },
-  authLogoImage: {
-    width: 160,
-    height: 140,
-  },
-  authTitle: {
-    fontFamily: TYPOGRAPHY.fontSecondary,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
-    fontSize: TYPOGRAPHY.fontSize.xxl,
-    lineHeight: 29,
-    textAlign: 'center',
-    letterSpacing: 1,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.sm,
-  },
-  authSubtitle: {
-    fontFamily: TYPOGRAPHY.fontPrimary,
-    fontWeight: TYPOGRAPHY.fontWeight.regular,
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    lineHeight: 20,
-    textAlign: 'center',
-    color: COLORS.textSecondary,
-    paddingHorizontal: SPACING.xl,
+    marginBottom: AUTH_HEADING_TO_FORM,
   },
   titleContainer: {
     alignItems: 'center',
-    marginTop: SPACING.xxxxl,
   },
 
   // Dashboard/Default Styles

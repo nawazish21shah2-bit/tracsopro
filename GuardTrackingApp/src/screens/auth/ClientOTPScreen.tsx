@@ -21,6 +21,8 @@ import { verifyOTP, resendOTP } from '../../store/slices/authSlice';
 import Button from '../../components/common/Button';
 import Icon from 'react-native-vector-icons/Ionicons';
 import Logo from '../../assets/images/tracSOpro-logo.png';
+import { authStyles, AUTH_HEADING_TO_FORM } from '../../styles/authStyles';
+import { COLORS, SPACING } from '../../styles/globalStyles';
 
 type ClientOTPScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'ClientOTP'>;
 type ClientOTPScreenRouteProp = RouteProp<AuthStackParamList, 'ClientOTP'>;
@@ -160,14 +162,14 @@ const ClientOTPScreen: React.FC = () => {
         keyboardShouldPersistTaps="handled"
       >
         {/* Logo */}
-        <View style={styles.logoContainer}>
-          <Image source={Logo} style={styles.logoImage} resizeMode="contain" />
+        <View style={authStyles.logoContainer}>
+          <Image source={Logo} style={authStyles.logoImage} resizeMode="contain" />
         </View>
 
         {/* Title */}
         <View style={styles.titleContainer}>
-          <Text style={styles.title}>VERIFY EMAIL</Text>
-          <Text style={styles.subtitle}>
+          <Text style={[authStyles.title, styles.titleWithSubtitle]}>VERIFY EMAIL</Text>
+          <Text style={authStyles.subtitle}>
             We have sent an OTP code to your email.{'\n'}
             Please check your email
           </Text>
@@ -193,21 +195,21 @@ const ClientOTPScreen: React.FC = () => {
 
         {/* Resend Code */}
         <View style={styles.resendContainer}>
-          <Text style={styles.resendText}>
-            Did not receive code? 
+          <View style={styles.resendRow}>
+            <Text style={styles.resendText}>Did not receive code? </Text>
             <TouchableOpacity 
               onPress={handleResendOtp} 
               disabled={!canResend}
-              style={styles.resendButton}
+              activeOpacity={!canResend ? 1 : 0.7}
             >
               <Text style={[
                 styles.resendLink, 
                 !canResend && styles.resendLinkDisabled
               ]}>
-                {canResend ? ' Resend Code' : ` Resend Code (${resendTimer}s)`}
+                {canResend ? 'Resend Code' : `Resend Code (${resendTimer}s)`}
               </Text>
             </TouchableOpacity>
-          </Text>
+          </View>
         </View>
 
         {/* Verify Button */}
@@ -246,26 +248,10 @@ const styles = StyleSheet.create({
   },
   titleContainer: {
     alignItems: 'center',
-    marginBottom: 60,
+    marginBottom: AUTH_HEADING_TO_FORM,
   },
-  title: {
-    fontFamily: 'Montserrat',
-    fontWeight: '700',
-    fontSize: 24,
-    lineHeight: 29,
-    textAlign: 'center',
-    letterSpacing: 1,
-    color: '#000000',
-    marginBottom: 16,
-  },
-  subtitle: {
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: 'center',
-    color: '#6B7280',
-    paddingHorizontal: 20,
+  titleWithSubtitle: {
+    marginBottom: SPACING.sm, // Reduced gap between title and subtitle (8px)
   },
   otpContainer: {
     marginBottom: 40,
@@ -296,14 +282,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 60,
   },
+  resendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'nowrap',
+  },
   resendText: {
     fontFamily: 'Inter',
     fontWeight: '400',
     fontSize: 14,
     color: '#6B7280',
-  },
-  resendButton: {
-    marginLeft: 4,
   },
   resendLink: {
     fontFamily: 'Inter',

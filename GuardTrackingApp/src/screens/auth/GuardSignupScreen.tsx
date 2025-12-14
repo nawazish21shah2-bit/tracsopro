@@ -31,6 +31,7 @@ interface FormErrors {
   phoneNumber?: string;
   password?: string;
   confirmPassword?: string;
+  invitationCode?: string;
 }
 
 const GuardSignupScreen: React.FC = () => {
@@ -193,84 +194,98 @@ const GuardSignupScreen: React.FC = () => {
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.backgroundPrimary} />
       
       <ScrollView 
-        contentContainerStyle={authStyles.scrollContainer}
+        contentContainerStyle={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
         <AuthHeader title="SIGN UP" />
 
         <View style={authStyles.form}>
-          <AuthInput
-            icon="person-outline"
-            placeholder="Full Name"
-            value={formData.fullName}
-            onChangeText={(text) => updateField('fullName', text)}
-            error={errors.fullName}
-            autoCapitalize="words"
-          />
+          <View style={authStyles.inputContainer}>
+            <AuthInput
+              icon="person-outline"
+              placeholder="Full Name"
+              value={formData.fullName}
+              onChangeText={(text) => updateField('fullName', text)}
+              error={errors.fullName}
+              autoCapitalize="words"
+            />
+          </View>
 
-          <AuthInput
-            icon="mail-outline"
-            placeholder="Email Address"
-            value={formData.email}
-            onChangeText={(text) => updateField('email', text)}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            error={errors.email}
-          />
+          <View style={authStyles.inputContainer}>
+            <AuthInput
+              icon="mail-outline"
+              placeholder="Email Address"
+              value={formData.email}
+              onChangeText={(text) => updateField('email', text)}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              error={errors.email}
+            />
+          </View>
 
-          <AuthInput
-            icon="ticket-outline"
-            placeholder="Invitation Code *"
-            value={invitationCode}
-            onChangeText={(text) => {
-              setInvitationCode(text);
-              if (errors.invitationCode) setErrors(prev => ({ ...prev, invitationCode: '' }));
-            }}
-            autoCapitalize="characters"
-            error={errors.invitationCode}
-            style={{ marginBottom: 16 }} // This will be handled by AuthInput component spacing
-          />
+          <View style={authStyles.inputContainer}>
+            <AuthInput
+              icon="help-outline"
+              placeholder="Invitation Code *"
+              value={invitationCode}
+              onChangeText={(text) => {
+                setInvitationCode(text);
+                if (errors.invitationCode) setErrors(prev => ({ ...prev, invitationCode: '' }));
+              }}
+              autoCapitalize="characters"
+              error={errors.invitationCode}
+            />
+          </View>
 
-          <PhoneInput
-            value={formData.phoneNumber}
-            onChangeText={(text) => updateField('phoneNumber', text)}
-            onCountryChange={(country) => setSelectedCountry(country)}
-            selectedCountry={selectedCountry}
-            error={errors.phoneNumber}
-          />
+          <View style={authStyles.inputContainer}>
+            <PhoneInput
+              placeholder="Phone Number"
+              value={formData.phoneNumber}
+              onChangeText={(text) => updateField('phoneNumber', text)}
+              onCountryChange={(country) => setSelectedCountry(country)}
+              selectedCountry={selectedCountry}
+              error={errors.phoneNumber}
+            />
+          </View>
 
-          <AuthInput
-            icon="lock-outline"
-            placeholder="Password"
-            value={formData.password}
-            onChangeText={(text) => updateField('password', text)}
-            secureTextEntry={true}
-            showPassword={showPassword}
-            onTogglePassword={() => setShowPassword(!showPassword)}
-            error={errors.password}
-          />
+          <View style={authStyles.inputContainer}>
+            <AuthInput
+              icon="lock-outline"
+              placeholder="Password"
+              value={formData.password}
+              onChangeText={(text) => updateField('password', text)}
+              secureTextEntry={true}
+              showPassword={showPassword}
+              onTogglePassword={() => setShowPassword(!showPassword)}
+              error={errors.password}
+            />
+          </View>
 
-          <AuthInput
-            icon="lock-outline"
-            placeholder="Confirm Password"
-            value={formData.confirmPassword}
-            onChangeText={(text) => updateField('confirmPassword', text)}
-            error={errors.confirmPassword}
-            secureTextEntry
-            showPassword={showConfirmPassword}
-            onTogglePassword={() => setShowConfirmPassword(!showConfirmPassword)}
-          />
+          <View style={authStyles.inputContainer}>
+            <AuthInput
+              icon="lock-outline"
+              placeholder="Confirm Password"
+              value={formData.confirmPassword}
+              onChangeText={(text) => updateField('confirmPassword', text)}
+              error={errors.confirmPassword}
+              secureTextEntry
+              showPassword={showConfirmPassword}
+              onTogglePassword={() => setShowConfirmPassword(!showConfirmPassword)}
+            />
+          </View>
         </View>
 
-        <Button
-          title="Continue"
-          onPress={handleSignup}
-          fullWidth
-          size="large"
-          loading={isLoading}
-          style={authStyles.submitButton}
-        />
+        <View style={styles.buttonContainer}>
+          <Button
+            title="Continue"
+            onPress={handleSignup}
+            fullWidth
+            size="large"
+            loading={isLoading}
+            style={styles.submitButton}
+          />
+        </View>
 
         <AuthFooter
           text="Already have an account?"
@@ -282,5 +297,19 @@ const GuardSignupScreen: React.FC = () => {
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  scrollContainer: {
+    flexGrow: 1,
+    paddingBottom: SPACING.xxxxl,
+  },
+  buttonContainer: {
+    paddingHorizontal: SPACING.lg, // Same padding as form
+    marginTop: SPACING.xxxxl, // 40px spacing above button
+  },
+  submitButton: {
+    // Button styles handled by Button component
+  },
+});
 
 export default GuardSignupScreen;

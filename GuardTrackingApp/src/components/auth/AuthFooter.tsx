@@ -16,16 +16,16 @@ const AuthFooter: React.FC<AuthFooterProps> = ({
 }) => {
   return (
     <View style={styles.footer}>
-      <Text style={styles.footerText}>
-        {text} 
+      <View style={styles.footerRow}>
+        <Text style={styles.footerText}>{text} </Text>
         <TouchableOpacity 
           onPress={onLinkPress} 
           disabled={disabled}
           activeOpacity={disabled ? 1 : 0.7}
         >
-          <Text style={[styles.linkText, disabled && styles.disabledLink]}> {linkText}</Text>
+          <Text style={[styles.linkText, disabled && styles.disabledLink]}>{linkText}</Text>
         </TouchableOpacity>
-      </Text>
+      </View>
     </View>
   );
 };
@@ -34,6 +34,12 @@ const styles = StyleSheet.create({
   footer: {
     alignItems: 'center',
     marginBottom: 20,
+  },
+  footerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'nowrap',
   },
   footerText: {
     fontFamily: 'Inter',
@@ -46,7 +52,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
     color: '#1C6CA9',
-    marginTop: 4,
   },
   disabledLink: {
     opacity: 0.5,

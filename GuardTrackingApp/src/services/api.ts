@@ -1557,6 +1557,7 @@ class ApiService {
       address?: string;
     };
     message?: string;
+    shiftId?: string; // Optional: include shiftId to notify correct client/admin
   }): Promise<ApiResponse<any>> {
     try {
       const response = await this.api.post('/emergency/alert', data);
@@ -1569,7 +1570,7 @@ class ApiService {
       return {
         success: false,
         data: null,
-        message: error.response?.data?.message || 'Failed to send emergency alert'
+        message: error.response?.data?.message || error.response?.data?.error || 'Failed to send emergency alert'
       };
     }
   }
@@ -1881,10 +1882,10 @@ class ApiService {
     }
   }
 
-  // Client report response
+  // Client/Admin report response
   async respondToReport(reportId: string, status: string, responseNotes?: string): Promise<ApiResponse<any>> {
     try {
-      const response = await this.api.put(`/clients/reports/${reportId}/respond`, {
+      const response = await this.api.put(`/incident-reports/${reportId}/respond`, {
         status,
         responseNotes,
       });
@@ -1897,7 +1898,7 @@ class ApiService {
       return {
         success: false,
         data: null,
-        message: error.response?.data?.message || 'Failed to respond to report'
+        message: error.response?.data?.message || error.response?.data?.error || 'Failed to respond to report'
       };
     }
   }

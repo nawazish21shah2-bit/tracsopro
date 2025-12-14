@@ -58,10 +58,15 @@ class NotificationService {
     if (fcmToken) {
       console.log('FCM Token:', fcmToken);
       await AsyncStorage.setItem('fcmToken', fcmToken);
-      
-      // Send token to server
       await this.sendTokenToServer(fcmToken);
     }
+
+    // Listen for token refresh
+    messaging().onTokenRefresh(async (newToken: string) => {
+      console.log('FCM Token refreshed:', newToken);
+      await AsyncStorage.setItem('fcmToken', newToken);
+      await this.sendTokenToServer(newToken);
+    });
 
     // Configure local notifications
     PushNotification.configure({
@@ -142,20 +147,39 @@ class NotificationService {
     }
   }
 
-  private handleLocalNotification(notification: any) {
-    const { data, message } = notification;
-    
-    // Add to Redux store
+  /**
+   * Add notification to Redux store (consolidated)
+   */
+  private addToStore(notification: {
+    id?: string;
+    userId?: string;
+    title: string;
+    message: string;
+    type?: string;
+    data?: any;
+  }) {
     store.dispatch(addNotification({
-      id: Date.now().toString(),
-      userId: data?.userId || 'system',
-      title: message || 'Notification',
-      message: data?.body || '',
-      type: data?.type || 'system',
-      data: data,
+      id: notification.id || Date.now().toString(),
+      userId: notification.userId || 'system',
+      title: notification.title,
+      message: notification.message,
+      type: notification.type || 'system',
+      data: notification.data,
       isRead: false,
       createdAt: new Date(),
     }));
+  }
+
+  private handleLocalNotification(notification: any) {
+    const { data, message } = notification;
+    
+    this.addToStore({
+      title: message || 'Notification',
+      message: data?.body || '',
+      type: data?.type || 'system',
+      data,
+      userId: data?.userId,
+    });
 
     // Show alert for important notifications
     if (data?.priority === 'high' || data?.type === 'emergency') {
@@ -164,7 +188,7 @@ class NotificationService {
         data?.body || '',
         [
           { text: 'OK' },
-          { text: 'View', onPress: () => this.handleNotificationAction(notification) }
+          { text: 'View', onPress: () => this.handleNotificationAction(notification) },
         ]
       );
     }
@@ -173,17 +197,13 @@ class NotificationService {
   private handleBackgroundMessage(remoteMessage: any) {
     const { data, notification } = remoteMessage;
     
-    // Add to Redux store
-    store.dispatch(addNotification({
-      id: Date.now().toString(),
-      userId: data?.userId || 'system',
+    this.addToStore({
       title: notification?.title || 'Background Notification',
       message: notification?.body || data?.body || '',
       type: data?.type || 'system',
-      data: data,
-      isRead: false,
-      createdAt: new Date(),
-    }));
+      data,
+      userId: data?.userId,
+    });
   }
 
   private handleNotificationOpened(remoteMessage: any) {
@@ -206,21 +226,37 @@ class NotificationService {
   }
 
   private navigateToScreen(screen: string, params?: any) {
-    // In a real app, you'd use navigation service
-    console.log('Navigate to screen:', screen, params);
+    try {
+      const { navigationRef } = require('../navigation/AppNavigator');
+      if (!navigationRef.current) {
+        setTimeout(() => this.navigateToScreen(screen, params), 500);
+        return;
+      }
+
+      if (navigationRef.current.isReady()) {
+        navigationRef.current.navigate(screen as never, params as never);
+      }
+    } catch (error) {
+      console.error('Navigation error:', error);
+    }
   }
 
-  // Send local notification
+  /**
+   * Send local notification (main method)
+   */
   sendLocalNotification(title: string, message: string, data?: any) {
     PushNotification.localNotification({
       title,
       message,
-      data,
+      userInfo: data, // Use userInfo instead of data for better compatibility
       playSound: true,
       soundName: 'default',
       importance: 'high',
       priority: 'high',
     });
+
+    // Also add to store for consistency
+    this.addToStore({ title, message, type: data?.type, data });
   }
 
   // Send scheduled notification
@@ -245,91 +281,13 @@ class NotificationService {
     PushNotification.cancelAllLocalNotifications();
   }
 
-  // Send emergency alert
-  sendEmergencyAlert(alert: {
-    title: string;
-    message: string;
-    location?: string;
-    guardId?: string;
-    incidentId?: string;
-  }) {
-    const { title, message, location, guardId, incidentId } = alert;
-    
-    // Send local notification
-    this.sendLocalNotification(title, message, {
-      type: 'emergency',
-      priority: 'high',
-      location,
-      guardId,
-      incidentId,
-    });
 
-    // Show immediate alert
-    Alert.alert(
-      '🚨 EMERGENCY ALERT',
-      `${title}\n\n${message}${location ? `\n\nLocation: ${location}` : ''}`,
-      [
-        { text: 'Acknowledge', style: 'default' },
-        { text: 'View Details', onPress: () => this.navigateToScreen('IncidentDetail', { incidentId }) }
-      ],
-      { cancelable: false }
-    );
-  }
-
-  // Send shift reminder
-  sendShiftReminder(guardName: string, shiftTime: string, location: string) {
-    this.sendLocalNotification(
-      'Shift Reminder',
-      `Hi ${guardName}, your shift starts at ${shiftTime} at ${location}`,
-      {
-        type: 'shift_reminder',
-        guardName,
-        shiftTime,
-        location,
-      }
-    );
-  }
-
-  // Send incident alert
-  sendIncidentAlert(incident: {
-    id: string;
-    type: string;
-    severity: string;
-    location: string;
-    description: string;
-  }) {
-    const { id, type, severity, location, description } = incident;
-    
-    this.sendLocalNotification(
-      `New ${severity.toUpperCase()} Incident`,
-      `${type} at ${location}: ${description}`,
-      {
-        type: 'incident_alert',
-        incidentId: id,
-        severity,
-        location,
-      }
-    );
-  }
-
-  // Send message notification
-  sendMessageNotification(senderName: string, message: string, conversationId: string) {
-    this.sendLocalNotification(
-      `Message from ${senderName}`,
-      message,
-      {
-        type: 'message',
-        conversationId,
-        senderName,
-      }
-    );
-  }
-
-  // Get notification settings
+  // Get notification settings (syncs with backend - use backend as source of truth)
   async getNotificationSettings() {
     try {
-      const settings = await AsyncStorage.getItem('notificationSettings');
-      return settings ? JSON.parse(settings) : {
+      // Backend settings are source of truth, but cache locally for offline access
+      const cached = await AsyncStorage.getItem('notificationSettings');
+      const defaultSettings = {
         pushNotifications: true,
         emailNotifications: false,
         smsNotifications: false,
@@ -338,18 +296,10 @@ class NotificationService {
         incidentAlerts: true,
         messageNotifications: true,
       };
+      return cached ? JSON.parse(cached) : defaultSettings;
     } catch (error) {
       console.error('Error getting notification settings:', error);
       return {};
-    }
-  }
-
-  // Update notification settings
-  async updateNotificationSettings(settings: any) {
-    try {
-      await AsyncStorage.setItem('notificationSettings', JSON.stringify(settings));
-    } catch (error) {
-      console.error('Error updating notification settings:', error);
     }
   }
 
@@ -492,26 +442,39 @@ class NotificationService {
   }
 
   /**
-   * Send emergency alert
+   * Send emergency alert (consolidated method)
    */
-  async sendEmergencyAlert(message: string, location?: { latitude: number; longitude: number }) {
+  async sendEmergencyAlert(
+    message: string,
+    location?: { latitude: number; longitude: number },
+    incidentId?: string
+  ) {
     try {
       const settings = await this.getNotificationSettings();
       if (!settings.emergencyAlerts) return;
 
-      PushNotification.localNotification({
-        id: 'emergency_alert',
-        title: '🚨 EMERGENCY ALERT',
-        message,
-        soundName: 'default',
-        priority: 'max',
-        importance: 'max',
-        userInfo: {
-          type: 'emergency_alert',
-          location,
-          timestamp: new Date().toISOString(),
-        },
+      // Send local notification
+      this.sendLocalNotification('🚨 EMERGENCY ALERT', message, {
+        type: 'emergency',
+        priority: 'high',
+        location,
+        incidentId,
+        timestamp: new Date().toISOString(),
       });
+
+      // Show immediate alert for critical emergencies
+      Alert.alert(
+        '🚨 EMERGENCY ALERT',
+        message + (location ? `\n\nLocation: ${location.latitude}, ${location.longitude}` : ''),
+        [
+          { text: 'Acknowledge', style: 'default' },
+          {
+            text: 'View Details',
+            onPress: () => incidentId && this.navigateToScreen('IncidentDetail', { incidentId }),
+          },
+        ],
+        { cancelable: false }
+      );
     } catch (error) {
       ErrorHandler.handleError(error, 'send_emergency_alert');
     }

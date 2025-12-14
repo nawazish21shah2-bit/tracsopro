@@ -1,120 +1,115 @@
+// Shared Auth Screen Styles for Consistent Design
 import { StyleSheet } from 'react-native';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from './globalStyles';
 
+// Standardized spacing and positioning for all auth screens
+export const AUTH_LOGO_TOP = SPACING.xxxxl * 2; // 80px - Same top position for all logos
+export const AUTH_LOGO_TO_HEADING = SPACING.xl; // 20px - Space between logo and heading
+export const AUTH_HEADING_TO_FORM = SPACING.xxxxl + SPACING.lg; // 56px - Space between heading and form
+export const AUTH_INPUT_GAP = SPACING.lg; // 16px - Space between input fields
+export const AUTH_FOOTER_BOTTOM = 32; // 32px from bottom
+
 export const authStyles = StyleSheet.create({
+  // Container
   container: {
     flex: 1,
     backgroundColor: COLORS.backgroundPrimary,
   },
-  scrollContainer: {
-    flexGrow: 1,
-    paddingHorizontal: SPACING.xxl,
-    paddingVertical: SPACING.xxxxl,
+  
+  // Logo - Same position across all screens
+  logoContainer: {
+    alignItems: 'center',
+    marginTop: AUTH_LOGO_TOP,
+    marginBottom: AUTH_LOGO_TO_HEADING,
   },
-  form: {
-    marginBottom: SPACING.xxxxl,
+  logoImage: {
+    width: 160,
+    height: 140,
   },
-  sectionContainer: {
-    marginTop: SPACING.lg,
-  },
-  sectionTitle: {
+  
+  // Heading - Same position and styling across all screens
+  title: {
     fontFamily: TYPOGRAPHY.fontPrimary,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
-    fontSize: TYPOGRAPHY.fontSize.lg,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold, // Semibold, not bold
+    fontSize: TYPOGRAPHY.fontSize.xxl,
+    lineHeight: 29,
+    textAlign: 'center',
+    letterSpacing: -0.408,
     color: COLORS.textPrimary,
-    marginBottom: SPACING.lg,
+    textTransform: 'uppercase',
+    marginBottom: AUTH_HEADING_TO_FORM,
   },
-  rowContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: SPACING.md,
+  
+  // Subtitle (for role selection)
+  subtitle: {
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.regular,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    lineHeight: 20,
+    textAlign: 'center',
+    color: COLORS.textSecondary,
+    marginTop: 0, // No margin - directly below heading
+    paddingHorizontal: SPACING.xl,
   },
-  halfWidth: {
+  
+  // Form container
+  form: {
+    paddingHorizontal: SPACING.lg,
     flex: 1,
   },
-  submitButton: {
-    marginBottom: SPACING.lg,
+  
+  // Input container
+  inputContainer: {
+    marginBottom: AUTH_INPUT_GAP,
   },
-  // Selection Cards
+  
+  // Options container (Remember Me, Forgot Password)
   optionsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: SPACING.xxxxl * 2,
-    gap: SPACING.lg,
-  },
-  optionCard: {
-    flex: 1,
-    backgroundColor: COLORS.backgroundSecondary,
-    borderWidth: 2,
-    borderColor: COLORS.borderLight,
-    borderRadius: BORDER_RADIUS.lg,
-    paddingVertical: SPACING.xxl,
-    paddingHorizontal: SPACING.lg,
     alignItems: 'center',
-    minHeight: 140,
+    marginTop: SPACING.xl, // 20px
   },
-  optionCardSelected: {
+  
+  // Checkbox
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderWidth: 1.5,
     borderColor: COLORS.primary,
-    backgroundColor: COLORS.primaryLight,
+    borderRadius: BORDER_RADIUS.xs,
+    marginRight: SPACING.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
   },
-  optionTitle: {
+  checkboxChecked: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  
+  // Footer
+  footer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 'auto',
+    marginBottom: AUTH_FOOTER_BOTTOM,
+  },
+  footerText: {
     fontFamily: TYPOGRAPHY.fontPrimary,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
-    fontSize: TYPOGRAPHY.fontSize.md,
-    lineHeight: 20,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    lineHeight: 17,
     textAlign: 'center',
-    color: COLORS.textPrimary,
+    letterSpacing: -0.408,
+    color: COLORS.textSecondary,
   },
-  optionTitleSelected: {
+  linkText: {
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    lineHeight: 17,
+    letterSpacing: -0.408,
     color: COLORS.primary,
   },
-  iconContainer: {
-    marginBottom: SPACING.lg,
-  },
 });
-
-export const colors = {
-  primary: '#1C6CA9',
-  primaryLight: '#EBF4FF',
-  white: '#FFFFFF',
-  black: '#000000',
-  gray: {
-    50: '#F9FAFB',
-    100: '#F3F4F6',
-    200: '#E5E7EB',
-    300: '#D1D5DB',
-    400: '#9CA3AF',
-    500: '#6B7280',
-    600: '#4B5563',
-    700: '#374151',
-    800: '#1F2937',
-    900: '#111827',
-  },
-  red: {
-    500: '#EF4444',
-  },
-  green: {
-    500: '#10B981',
-  },
-};
-
-export const typography = {
-  fontFamily: {
-    primary: 'Inter',
-    heading: 'Montserrat',
-  },
-  fontSize: {
-    xs: 12,
-    sm: 14,
-    base: 16,
-    lg: 18,
-    xl: 20,
-    '2xl': 24,
-  },
-  fontWeight: {
-    normal: '400' as const,
-    medium: '500' as const,
-    semibold: '600' as const,
-    bold: '700' as const,
-  },
-};

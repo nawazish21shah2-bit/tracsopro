@@ -25,7 +25,7 @@ const PRODUCTION_WS_URL = 'http://143.110.198.38:3000';
 // Your local IP address for development
 // Find it with: ipconfig (Windows) or ifconfig (Mac/Linux)
 // const LOCAL_IP = '192.168.1.12'; // ⚠️ CHANGE THIS TO YOUR ACTUAL IP ADDRESS
-const LOCAL_IP = '192.168.1.9'; // ⚠️ CHANGE THIS TO YOUR ACTUAL IP ADDRESS
+const LOCAL_IP = '192.168.1.6'; // ⚠️ CHANGE THIS TO YOUR ACTUAL IP ADDRESS
 
 // Development URLs
 const DEV_API_URL_ANDROID = `http://${LOCAL_IP}:3000/api`;

@@ -14,6 +14,8 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import Button from '../../components/common/Button';
 import { AuthStackParamList } from '../../types';
 import Logo from '../../assets/images/tracSOpro-logo.png';
+import { authStyles, AUTH_HEADING_TO_FORM } from '../../styles/authStyles';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../styles/globalStyles';
 
 type RoleSelectionScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'RoleSelection'>;
 
@@ -46,14 +48,14 @@ const RoleSelectionScreen: React.FC = () => {
         showsVerticalScrollIndicator={false}
       >
         {/* Logo */}
-        <View style={styles.logoContainer}>
-          <Image source={Logo} style={styles.logoImage} resizeMode="contain" />
+        <View style={authStyles.logoContainer}>
+          <Image source={Logo} style={authStyles.logoImage} resizeMode="contain" />
         </View>
 
         {/* Title */}
         <View style={styles.titleContainer}>
-          <Text style={styles.title}>SELECT YOUR ROLE</Text>
-          <Text style={styles.subtitle}>
+          <Text style={[authStyles.title, styles.titleWithSubtitle]}>SELECT YOUR ROLE</Text>
+          <Text style={authStyles.subtitle}>
             Please select your role to continue with the registration process.
           </Text>
         </View>
@@ -125,13 +127,13 @@ const RoleSelectionScreen: React.FC = () => {
         />
 
         {/* Footer */}
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            Already have an account? 
-            <TouchableOpacity onPress={handleAlreadyHaveAccount}>
-              <Text style={styles.loginLink}> Login</Text>
+        <View style={authStyles.footer}>
+          <View style={styles.footerRow}>
+            <Text style={authStyles.footerText}>Already have an account? </Text>
+            <TouchableOpacity onPress={handleAlreadyHaveAccount} activeOpacity={0.7}>
+              <Text style={authStyles.linkText}>Login</Text>
             </TouchableOpacity>
-          </Text>
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -148,37 +150,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 40,
   },
-  logoContainer: {
-    alignItems: 'center',
-    marginTop: 40,
-    marginBottom: 60,
-  },
-  logoImage: {
-    width: 160,
-    height: 140,
-  },
+  // Logo, title styles moved to authStyles.ts
   titleContainer: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: AUTH_HEADING_TO_FORM, // Same spacing as other screens
   },
-  title: {
-    fontFamily: 'Montserrat',
-    fontWeight: '700',
-    fontSize: 24,
-    lineHeight: 29,
-    textAlign: 'center',
-    letterSpacing: 1,
-    color: '#000000',
-    marginBottom: 16,
-  },
-  subtitle: {
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: 'center',
-    color: '#6B7280',
-    paddingHorizontal: 20,
+  // Override title marginBottom for role selection to reduce space before subtitle
+  titleWithSubtitle: {
+    marginBottom: SPACING.sm, // Reduced space between title and subtitle (8px)
   },
   optionsContainer: {
     marginBottom: 40,
@@ -188,8 +167,8 @@ const styles = StyleSheet.create({
   firstRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
-    gap: 16,
+    marginBottom: SPACING.lg, // Reduced gap between rows (16px instead of 56px)
+    gap: SPACING.lg,
   },
   secondRow: {
     flexDirection: 'row',
@@ -198,64 +177,51 @@ const styles = StyleSheet.create({
   },
   optionCard: {
     height: 160,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.backgroundSecondary,
     borderWidth: 2,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
+    borderColor: COLORS.borderLight,
+    borderRadius: BORDER_RADIUS.md,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: SPACING.xl,
     width: '48%',
     minWidth: 140,
   },
   optionCardSelected: {
-    borderColor: '#1C6CA9',
-    backgroundColor: '#EBF5FF',
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primaryLight + '20', // 20% opacity
   },
   iconContainer: {
     marginBottom: 12,
   },
   optionTitle: {
-    fontFamily: 'Inter',
-    fontWeight: '600',
-    fontSize: 16,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    fontSize: TYPOGRAPHY.fontSize.md,
     lineHeight: 19,
     textAlign: 'center',
-    color: '#000000',
-    marginBottom: 8,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.sm,
   },
   optionDescription: {
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    fontSize: 12,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.regular,
+    fontSize: TYPOGRAPHY.fontSize.xs,
     lineHeight: 16,
     textAlign: 'center',
-    color: '#6B7280',
+    color: COLORS.textSecondary,
   },
   continueButton: {
     marginTop: 'auto',
     marginBottom: 20,
   },
-  footer: {
-    justifyContent: 'center',
+  footerRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    justifyContent: 'center',
+    flexWrap: 'nowrap',
   },
-  footerText: {
-    fontFamily: 'Inter',
-    fontWeight: '500',
-    fontSize: 14,
-    lineHeight: 17,
-    color: '#6B7280',
-  },
-  loginLink: {
-    fontFamily: 'Inter',
-    fontWeight: '600',
-    fontSize: 14,
-    lineHeight: 17,
-    color: '#1C6CA9',
-    marginTop: 4,
-  },
+  // Footer styles moved to authStyles.ts
 });
 
 export default RoleSelectionScreen;

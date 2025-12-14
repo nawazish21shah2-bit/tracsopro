@@ -26,7 +26,10 @@ import Input from '../../components/common/Input';
 import AuthInput from '../../components/auth/AuthInput';
 import Button from '../../components/common/Button';
 import { globalStyles, COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
+import { authStyles, AUTH_INPUT_GAP } from '../../styles/authStyles';
 import Logo from '../../assets/images/tracSOpro-logo.png';
+import PhoneInput from '../../components/auth/PhoneInput';
+import { Country } from '../../utils/countries';
 
 type RegisterScreenNavigationProp = StackNavigationProp<any, any>;
 type RegisterScreenRouteProp = RouteProp<any, any>;
@@ -43,10 +46,13 @@ const RegisterScreen: React.FC = () => {
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
+    phone: '',
     password: '',
     confirmPassword: '',
     role: UserRole.GUARD,
   });
+  
+  const [selectedCountry, setSelectedCountry] = useState<Country | null>(null);
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -76,6 +82,14 @@ const RegisterScreen: React.FC = () => {
       newErrors.email = 'Email is required';
     } else if (!isValidEmail(formData.email.trim())) {
       newErrors.email = 'Please enter a valid email address';
+    }
+
+    // Phone validation (optional but validate format if provided)
+    if (formData.phone && formData.phone.trim().length > 0) {
+      const phoneDigits = formData.phone.replace(/\D/g, '');
+      if (phoneDigits.length < 10) {
+        newErrors.phone = 'Please enter a valid phone number';
+      }
     }
 
     // Password validation
@@ -118,7 +132,7 @@ const RegisterScreen: React.FC = () => {
         email: formData.email.toLowerCase().trim(),
         password: formData.password,
         confirmPassword: formData.confirmPassword,
-        phone: '', // Will be collected in profile setup
+        phone: formData.phone || '', // Phone number from input
         role: formData.role,
       };
       
@@ -217,18 +231,17 @@ const RegisterScreen: React.FC = () => {
         showsVerticalScrollIndicator={false}
       >
         {/* Logo */}
-        <View style={styles.logoContainer}>
-          <Image source={Logo} style={styles.logoImage} resizeMode="contain" />
+        <View style={authStyles.logoContainer}>
+          <Image source={Logo} style={authStyles.logoImage} resizeMode="contain" />
         </View>
 
         {/* Title */}
-        <Text style={styles.title}>SIGN UP</Text>
+        <Text style={authStyles.title}>SIGN UP</Text>
 
         {/* Form */}
-        <View style={styles.form}>
-          <View style={styles.inputContainer}>
+        <View style={authStyles.form}>
+          <View style={authStyles.inputContainer}>
             <AuthInput
-              label="Full Name"
               icon="person-outline"
               placeholder="Full Name"
               value={formData.fullName}
@@ -242,10 +255,9 @@ const RegisterScreen: React.FC = () => {
             />
           </View>
 
-          <View style={styles.inputContainer}>
+          <View style={authStyles.inputContainer}>
             <AuthInput
-              label="Email Address"
-              icon="email-outline"
+              icon="mail-outline"
               placeholder="Email Address"
               value={formData.email}
               onChangeText={(v) => {
@@ -259,9 +271,22 @@ const RegisterScreen: React.FC = () => {
             />
           </View>
 
-          <View style={styles.inputContainer}>
+          <View style={authStyles.inputContainer}>
+            <PhoneInput
+              placeholder="Phone Number"
+              value={formData.phone}
+              onChangeText={(v) => {
+                handleInputChange('phone', v);
+                if (errors.phone) setErrors(prev => ({ ...prev, phone: '' }));
+              }}
+              onCountryChange={(country) => setSelectedCountry(country)}
+              selectedCountry={selectedCountry || undefined}
+              error={errors.phone}
+            />
+          </View>
+
+          <View style={authStyles.inputContainer}>
             <AuthInput
-              label="Password"
               icon="lock-outline"
               placeholder="Password"
               value={formData.password}
@@ -278,9 +303,8 @@ const RegisterScreen: React.FC = () => {
             />
           </View>
 
-          <View style={styles.inputContainer}>
+          <View style={authStyles.inputContainer}>
             <AuthInput
-              label="Confirm Password"
               icon="lock-outline"
               placeholder="Confirm Password"
               value={formData.confirmPassword}
@@ -309,17 +333,17 @@ const RegisterScreen: React.FC = () => {
         </View>
 
         {/* Footer */}
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            Already have an account? 
+        <View style={authStyles.footer}>
+          <View style={styles.footerRow}>
+            <Text style={authStyles.footerText}>Already have an account? </Text>
             <TouchableOpacity 
               onPress={navigateToLogin} 
               disabled={isLoading}
               activeOpacity={isLoading ? 1 : 0.7}
             >
-              <Text style={[styles.registerText, isLoading && styles.disabledLink]}> Login</Text>
+              <Text style={[authStyles.linkText, isLoading && styles.disabledLink]}>Login</Text>
             </TouchableOpacity>
-          </Text>
+          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -331,33 +355,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingBottom: SPACING.xxxxl,
   },
-  logoContainer: {
-    alignItems: 'center',
-    marginTop: SPACING.xxxxl + SPACING.lg,
-    marginBottom: SPACING.xxl,
-  },
-  logoImage: {
-    width: 160,
-    height: 140,
-  },
-  title: {
-    fontFamily: TYPOGRAPHY.fontPrimary,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
-    fontSize: TYPOGRAPHY.fontSize.xxl,
-    lineHeight: 29,
-    textAlign: 'center',
-    letterSpacing: -0.408,
-    color: COLORS.textPrimary,
-    textTransform: 'uppercase',
-    marginBottom: SPACING.xxxxl,
-  },
-  form: {
-    paddingHorizontal: SPACING.lg,
-    flex: 1,
-  },
-  inputContainer: {
-    marginBottom: SPACING.fieldGap || SPACING.lg,
-  },
+  // Logo, title, form, inputContainer styles moved to authStyles.ts
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -392,31 +390,15 @@ const styles = StyleSheet.create({
     letterSpacing: -0.408,
     color: COLORS.textPrimary,
   },
-  footer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 'auto',
-    marginBottom: SPACING.xxxxl,
-  },
-  footerText: {
-    fontFamily: 'Inter',
-    fontWeight: '500',
-    fontSize: 14,
-    lineHeight: 17,
-    textAlign: 'center',
-    letterSpacing: -0.408,
-    color: '#828282',
-  },
-  registerText: {
-    fontFamily: 'Inter',
-    fontWeight: '500',
-    fontSize: 14,
-    lineHeight: 17,
-    letterSpacing: -0.408,
-    color: '#1C6CA9',
-  },
+  // Footer styles moved to authStyles.ts
   disabledLink: {
     opacity: 0.5,
+  },
+  footerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'nowrap',
   },
 });
 

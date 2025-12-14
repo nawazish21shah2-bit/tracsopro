@@ -178,11 +178,18 @@ class ShiftService {
       }
 
       // Multi-tenant: Verify site belongs to company if securityCompanyId provided
+      // Sites can be linked to companies in two ways:
+      // 1. Directly via CompanySite
+      // 2. Indirectly via Client -> CompanyClient
       if (securityCompanyId) {
-        const siteCompany = site.companySites.find(
+        const hasDirectLink = site.companySites.some(
           cs => cs.securityCompanyId === securityCompanyId
         );
-        if (!siteCompany) {
+        const hasIndirectLink = site.client?.companyClients?.some(
+          cc => cc.securityCompanyId === securityCompanyId && cc.isActive
+        );
+        
+        if (!hasDirectLink && !hasIndirectLink) {
           throw new ValidationError('Site does not belong to your company');
         }
       }

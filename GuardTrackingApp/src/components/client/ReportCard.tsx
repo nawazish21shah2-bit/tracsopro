@@ -16,6 +16,7 @@ interface ReportCardProps {
     status: 'Respond' | 'New' | 'Reviewed';
     checkInTime?: string;
     guardId?: string;
+  guardUserId?: string;
   };
   onPress?: () => void;
   onRespond?: () => void;
@@ -91,10 +92,10 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, onPress, onRespond, onC
               <Text style={styles.checkInTime}>Checked In at {report.checkInTime}</Text>
             )}
           </View>
-          {onChatWithGuard && report.guardId && (
+          {onChatWithGuard && (report.guardId || report.guardUserId) && (
             <TouchableOpacity 
               style={styles.chatButton}
-              onPress={() => onChatWithGuard(report.guardId!, report.guardName)}
+              onPress={() => onChatWithGuard(report.guardUserId || report.guardId!, report.guardName)}
             >
               <Text style={styles.chatButtonText}>💬</Text>
             </TouchableOpacity>

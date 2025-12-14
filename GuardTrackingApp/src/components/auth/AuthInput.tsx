@@ -73,7 +73,7 @@ const AuthInput = forwardRef<TextInput, AuthInputProps> (({
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 20,
+    // Margin handled by parent inputContainer
   },
   label: {
     fontFamily: 'Inter',
@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8F9FA', // Light gray background as per design
     borderWidth: 1,
     borderColor: '#ACD3F1',
     borderRadius: 12,
@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
   },
   inputFocused: {
     borderColor: '#1C6CA9',
-    borderWidth: 2,
+    borderWidth: 1, // Keep border width consistent
   },
   inputError: {
     borderColor: '#EF4444',

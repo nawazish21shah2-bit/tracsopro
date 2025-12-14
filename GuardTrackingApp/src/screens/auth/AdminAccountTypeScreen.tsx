@@ -13,6 +13,8 @@ import { CompanyIcon } from '../../components/ui/AppIcons';
 import Button from '../../components/common/Button';
 import { AuthStackParamList } from '../../types';
 import Logo from '../../assets/images/tracSOpro-logo.png';
+import { authStyles, AUTH_HEADING_TO_FORM } from '../../styles/authStyles';
+import { COLORS } from '../../styles/globalStyles';
 
 type AdminAccountTypeScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'AdminAccountType'>;
 
@@ -35,8 +37,8 @@ const AdminAccountTypeScreen: React.FC = () => {
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       
       {/* Logo */}
-      <View style={styles.logoContainer}>
-        <Image source={Logo} style={styles.logoImage} resizeMode="contain" />
+      <View style={authStyles.logoContainer}>
+        <Image source={Logo} style={authStyles.logoImage} resizeMode="contain" />
       </View>
 
       {/* Title */}
@@ -89,12 +91,12 @@ const AdminAccountTypeScreen: React.FC = () => {
 
       {/* Footer */}
       <View style={styles.footer}>
-        <Text style={styles.footerText}>
-          Already have an account? 
-          <TouchableOpacity onPress={navigateToLogin}>
-            <Text style={styles.loginText}> Login</Text>
+        <View style={styles.footerRow}>
+          <Text style={styles.footerText}>Already have an account? </Text>
+          <TouchableOpacity onPress={navigateToLogin} activeOpacity={0.7}>
+            <Text style={styles.loginText}>Login</Text>
           </TouchableOpacity>
-        </Text>
+        </View>
       </View>
     </View>
   );
@@ -106,36 +108,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 24,
   },
-  logoContainer: {
-    alignItems: 'center',
-    marginTop: 60,
-    marginBottom: 40,
-  },
-  logoImage: {
-    width: 160,
-    height: 40,
-  },
   titleContainer: {
     alignItems: 'center',
-    marginBottom: 60,
-  },
-  title: {
-    fontFamily: 'Montserrat',
-    fontWeight: '700',
-    fontSize: 24,
-    lineHeight: 29,
-    textAlign: 'center',
-    letterSpacing: 1,
-    color: '#000000',
-    marginBottom: 16,
-  },
-  subtitle: {
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: 'center',
-    color: '#6B7280',
+    marginBottom: AUTH_HEADING_TO_FORM,
   },
   optionsContainer: {
     flexDirection: 'row',
@@ -202,6 +177,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
     color: '#1C6CA9',
+  },
+  footerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'nowrap',
   },
 });
 

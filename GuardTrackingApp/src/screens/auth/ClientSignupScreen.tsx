@@ -23,6 +23,7 @@ import { AuthStackParamList, UserRole } from '../../types';
 import Logo from '../../assets/images/tracSOpro-logo.png';
 import { Country, defaultCountry } from '../../utils/countries';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
+import { authStyles, AUTH_HEADING_TO_FORM } from '../../styles/authStyles';
 
 type ClientSignupScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'ClientSignup'>;
 type ClientSignupScreenRouteProp = RouteProp<AuthStackParamList, 'ClientSignup'>;
@@ -210,7 +211,7 @@ const ClientSignupScreen: React.FC = () => {
 
         {/* Title */}
         <View style={styles.titleContainer}>
-          <Text style={styles.title}>SIGN UP</Text>
+          <Text style={authStyles.title}>SIGN UP</Text>
         </View>
 
         {/* Form */}
@@ -358,16 +359,16 @@ const ClientSignupScreen: React.FC = () => {
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            Already have an account? 
+          <View style={styles.footerRow}>
+            <Text style={styles.footerText}>Already have an account? </Text>
             <TouchableOpacity 
               onPress={navigateToLogin}
               disabled={isLoading}
               activeOpacity={isLoading ? 1 : 0.7}
             >
-              <Text style={[styles.loginText, isLoading && styles.disabledLink]}> Login</Text>
+              <Text style={[styles.loginText, isLoading && styles.disabledLink]}>Login</Text>
             </TouchableOpacity>
-          </Text>
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -395,16 +396,7 @@ const styles = StyleSheet.create({
   },
   titleContainer: {
     alignItems: 'center',
-    marginBottom: SPACING.xxxxl,
-  },
-  title: {
-    fontFamily: TYPOGRAPHY.fontPrimary,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
-    fontSize: TYPOGRAPHY.fontSize.xxl,
-    lineHeight: 29,
-    textAlign: 'center',
-    letterSpacing: 1,
-    color: COLORS.textPrimary,
+    marginBottom: AUTH_HEADING_TO_FORM,
   },
   form: {
     marginBottom: SPACING.xxxxl,
@@ -468,6 +460,12 @@ const styles = StyleSheet.create({
   },
   disabledLink: {
     opacity: 0.5,
+  },
+  footerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'nowrap',
   },
 });
 

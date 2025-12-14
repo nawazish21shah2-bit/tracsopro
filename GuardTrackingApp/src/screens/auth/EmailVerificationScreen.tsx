@@ -18,6 +18,8 @@ import { AuthStackParamList } from '../../types';
 import Button from '../../components/common/Button';
 import { AppIcon } from '../../components/ui/AppIcons';
 import Logo from '../../assets/images/tracSOpro-logo.png';
+import { authStyles, AUTH_LOGO_TOP, AUTH_LOGO_TO_HEADING, AUTH_HEADING_TO_FORM } from '../../styles/authStyles';
+import { COLORS, SPACING } from '../../styles/globalStyles';
 
 // Note: This screen is deprecated - replaced by GuardOTPScreen, ClientOTPScreen, AdminOTPScreen
 // Keeping for backward compatibility but not registered in navigation
@@ -137,16 +139,16 @@ const EmailVerificationScreen: React.FC = () => {
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       
       {/* Logo */}
-      <View style={styles.logoContainer}>
-        <Image source={Logo} style={styles.logoImage} resizeMode="contain" />
+      <View style={authStyles.logoContainer}>
+        <Image source={Logo} style={authStyles.logoImage} resizeMode="contain" />
       </View>
 
       {/* Title */}
       <View style={styles.titleContainer}>
-        <Text style={styles.title}>
+        <Text style={[authStyles.title, styles.titleWithSubtitle]}>
           {isPasswordReset ? 'RESET PASSWORD' : 'VERIFY EMAIL'}
         </Text>
-        <Text style={styles.subtitle}>
+        <Text style={authStyles.subtitle}>
           We have sent an OTP code to your email.{'\n'}Please check your email
         </Text>
       </View>
@@ -173,10 +175,16 @@ const EmailVerificationScreen: React.FC = () => {
 
         {/* Resend Code Link */}
         <View style={styles.resendContainer}>
-          <Text style={styles.resendLabel}>Did not receive code? </Text>
-          <TouchableOpacity onPress={handleResendCode} disabled={!canResend || isLoading}>
-            <Text style={styles.resendLink}>Resend Code</Text>
-          </TouchableOpacity>
+          <View style={styles.resendRow}>
+            <Text style={styles.resendLabel}>Did not receive code? </Text>
+            <TouchableOpacity 
+              onPress={handleResendCode} 
+              disabled={!canResend || isLoading}
+              activeOpacity={(!canResend || isLoading) ? 1 : 0.7}
+            >
+              <Text style={styles.resendLink}>Resend Code</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Verify Button */}
@@ -211,20 +219,10 @@ const styles = StyleSheet.create({
   },
   titleContainer: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: AUTH_HEADING_TO_FORM,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    letterSpacing: 1,
-    marginBottom: 12,
-    color: '#000000',
-  },
-  subtitle: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-    color: '#6B7280',
+  titleWithSubtitle: {
+    marginBottom: SPACING.sm, // Reduced gap between title and subtitle (8px)
   },
   form: {
     flex: 1,

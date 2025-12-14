@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -72,96 +72,100 @@ const NotificationListScreen: React.FC<{ variant?: 'client' | 'guard' | 'admin' 
   };
 
   const handleNotificationPress = async (notification: NotificationItem) => {
-    // Mark as read if unread
+    // Mark as read if unread (optimized - only dispatch, API call handled by thunk)
     if (!notification.isRead) {
       try {
         await dispatch(markNotificationAsRead(notification.id)).unwrap();
-        await apiService.markNotificationAsRead(notification.id);
       } catch (error) {
         console.error('Error marking notification as read:', error);
       }
     }
 
     // Navigate based on notification type and data
-    if (notification.data) {
-      const data = typeof notification.data === 'string' 
-        ? JSON.parse(notification.data) 
-        : notification.data;
+    const data = notification.data 
+      ? (typeof notification.data === 'string' ? JSON.parse(notification.data) : notification.data)
+      : {};
 
-      if (data.shiftId) {
-        // Navigate to shift details
-        navigation.navigate('ShiftDetails' as never, { shiftId: data.shiftId } as never);
-      } else if (data.incidentId) {
-        // Navigate to incident details
-        navigation.navigate('IncidentDetail' as never, { incidentId: data.incidentId } as never);
-      } else if (data.alertId) {
-        // Navigate to emergency alert
-        navigation.navigate('EmergencyAlert' as never, { alertId: data.alertId } as never);
-      } else if (data.conversationId) {
-        // Navigate to chat
-        navigation.navigate('IndividualChatScreen' as never, {
-          chatId: data.conversationId,
-          chatName: notification.title,
-        } as never);
-      }
+    // Navigation map for cleaner routing
+    const navigationTargets: Array<{ screen: string; params: any }> = [];
+    
+    if (data.shiftId) {
+      navigationTargets.push({ screen: 'ShiftDetails', params: { shiftId: data.shiftId } });
+    } else if (data.incidentId) {
+      navigationTargets.push({ screen: 'IncidentDetail', params: { incidentId: data.incidentId } });
+    } else if (data.alertId) {
+      navigationTargets.push({ screen: 'EmergencyAlert', params: { alertId: data.alertId } });
+    } else if (data.conversationId) {
+      navigationTargets.push({ 
+        screen: 'IndividualChatScreen', 
+        params: { chatId: data.conversationId, chatName: notification.title } 
+      });
+    }
+
+    // Navigate to first valid target
+    if (navigationTargets.length > 0) {
+      const navTarget = navigationTargets[0];
+      (navigation as any).navigate(navTarget.screen, navTarget.params);
     }
   };
 
-  const handleMarkAllAsRead = async () => {
+  const handleMarkAllAsRead = useCallback(async () => {
     try {
-      await dispatch(markAllAsRead());
+      dispatch(markAllAsRead());
       await apiService.markAllNotificationsAsRead();
     } catch (error) {
       console.error('Error marking all as read:', error);
     }
-  };
+  }, [dispatch]);
 
-  const formatNotificationMessage = (notification: NotificationItem): { action: string; site: string } => {
-    // Parse the message to extract action and site
+  const formatNotificationMessage = useCallback((notification: NotificationItem): { action: string; site: string } => {
     const message = notification.message || '';
-    const title = notification.title || '';
-    
-    // Try to extract site name from message or data
-    let site = 'Site';
-    if (notification.data) {
-      const data = typeof notification.data === 'string' 
-        ? JSON.parse(notification.data) 
-        : notification.data;
-      site = data.siteName || data.site || 'Site';
-    }
+    const data = notification.data 
+      ? (typeof notification.data === 'string' ? JSON.parse(notification.data) : notification.data)
+      : {};
 
-    // Extract action from message
-    let action = message;
-    if (message.includes('Checked In')) {
-      const timeMatch = message.match(/at (\d{1,2}:\d{2} (am|pm))/i);
-      action = timeMatch ? `Checked In at ${timeMatch[1]}` : 'Checked In';
-    } else if (message.includes('incident report') || message.includes('Sent an incident report')) {
-      action = 'Sent an incident report';
-    } else if (message.includes('Checked Out')) {
-      const timeMatch = message.match(/at (\d{1,2}:\d{2} (am|pm))/i);
-      action = timeMatch ? `Checked Out at ${timeMatch[1]}` : 'Checked Out';
-    } else if (message.includes('EMERGENCY')) {
-      action = 'Triggered emergency alert';
-    }
+    // Extract site name
+    const site = data.siteName || data.site || data.locationName || 'Site';
 
-    return { action, site };
-  };
+    // Extract action from message or type
+    const actionPatterns: Array<{ pattern: RegExp | string; action: string }> = [
+      { pattern: /checked in/i, action: message.match(/at (\d{1,2}:\d{2} (am|pm))/i) 
+        ? `Checked In at ${message.match(/at (\d{1,2}:\d{2} (am|pm))/i)![1]}` 
+        : 'Checked In' },
+      { pattern: /checked out/i, action: message.match(/at (\d{1,2}:\d{2} (am|pm))/i) 
+        ? `Checked Out at ${message.match(/at (\d{1,2}:\d{2} (am|pm))/i)![1]}` 
+        : 'Checked Out' },
+      { pattern: /incident report/i, action: 'Sent an incident report' },
+      { pattern: /emergency/i, action: 'Triggered emergency alert' },
+      { pattern: /shift assigned/i, action: 'Shift assigned' },
+      { pattern: /shift cancelled/i, action: 'Shift cancelled' },
+    ];
 
-  const getUserName = (notification: NotificationItem): string => {
+    const matchedPattern = actionPatterns.find(({ pattern }) => 
+      typeof pattern === 'string' ? message.toLowerCase().includes(pattern) : pattern.test(message)
+    );
+
+    return { 
+      action: matchedPattern?.action || message || notification.title || 'Notification',
+      site 
+    };
+  }, []);
+
+  const getUserName = useCallback((notification: NotificationItem): string => {
     if (notification.user) {
-      return `${notification.user.firstName} ${notification.user.lastName}`;
+      return `${notification.user.firstName} ${notification.user.lastName}`.trim();
     }
     // Fallback: try to extract from message or use default
     const message = notification.message || '';
     const nameMatch = message.match(/([A-Z][a-z]+ [A-Z][a-z]+)/);
     return nameMatch ? nameMatch[1] : 'User';
-  };
+  }, []);
 
-  const getUserAvatar = (notification: NotificationItem): string | undefined => {
+  const getUserAvatar = useCallback((notification: NotificationItem): string | undefined => {
     return notification.user?.avatar;
-  };
+  }, []);
 
-  const renderNotificationItem = ({ item }: { item: NotificationItem }) => {
+  const renderNotificationItem = useCallback(({ item }: { item: NotificationItem }) => {
     const { action, site } = formatNotificationMessage(item);
     const userName = getUserName(item);
     const userAvatar = getUserAvatar(item);
@@ -196,15 +200,15 @@ const NotificationListScreen: React.FC<{ variant?: 'client' | 'guard' | 'admin' 
         </View>
       </TouchableOpacity>
     );
-  };
+  }, [formatNotificationMessage, getUserName, getUserAvatar, handleNotificationPress]);
 
-  const renderEmptyState = () => (
+  const renderEmptyState = useCallback(() => (
     <View style={styles.emptyContainer}>
       <NotificationIcon size={64} color={COLORS.textSecondary} />
       <Text style={styles.emptyTitle}>No Notifications</Text>
       <Text style={styles.emptyMessage}>You're all caught up!</Text>
     </View>
-  );
+  ), []);
 
   return (
     <SafeAreaWrapper>
@@ -220,7 +224,7 @@ const NotificationListScreen: React.FC<{ variant?: 'client' | 'guard' | 'admin' 
             <TouchableOpacity onPress={handleMarkAllAsRead} style={styles.markAllButton}>
               <Text style={styles.markAllText}>Mark all read</Text>
             </TouchableOpacity>
-          ) : undefined
+          ) : null
         }
       />
       {isLoading && notifications.length === 0 ? (
@@ -229,7 +233,10 @@ const NotificationListScreen: React.FC<{ variant?: 'client' | 'guard' | 'admin' 
         </View>
       ) : (
         <FlatList
-          data={notifications}
+          data={notifications.map(n => ({
+            ...n,
+            createdAt: typeof n.createdAt === 'string' ? n.createdAt : n.createdAt.toISOString(),
+          }))}
           renderItem={renderNotificationItem}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContainer}
@@ -242,6 +249,11 @@ const NotificationListScreen: React.FC<{ variant?: 'client' | 'guard' | 'admin' 
               tintColor={COLORS.primary}
             />
           }
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          updateCellsBatchingPeriod={50}
+          initialNumToRender={10}
+          windowSize={10}
         />
       )}
     </SafeAreaWrapper>
