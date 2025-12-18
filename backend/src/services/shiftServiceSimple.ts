@@ -2,7 +2,7 @@
 import prisma from '../config/database.js';
 import { NotFoundError, BadRequestError, ValidationError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
-import { Prisma } from '@prisma/client';
+import { ShiftStatus } from '@prisma/client';
 
 export interface CreateShiftData {
   guardId?: string; // Optional: Admin assigns directly, client can leave empty for admin to assign later
@@ -220,24 +220,51 @@ class ShiftServiceSimple {
       throw new BadRequestError('Shift does not belong to this guard');
     }
 
-    if (shift.status !== 'SCHEDULED') {
+    // Allow check-in if:
+    // 1. Status is SCHEDULED (normal case)
+    // 2. Status is IN_PROGRESS but actualStartTime is not set (shift was auto-started or seeded)
+    // 3. Status is IN_PROGRESS and actualStartTime exists (allow updating check-in location)
+    if (shift.status === 'COMPLETED' || shift.status === 'CANCELLED' || shift.status === 'NO_SHOW') {
       throw new BadRequestError(`Cannot check in to shift with status: ${shift.status}`);
     }
 
+    // If already checked in (IN_PROGRESS with actualStartTime), allow updating location but don't change status
+    if (shift.status === 'IN_PROGRESS' && shift.actualStartTime) {
+      // Update check-in location only
+      const updatedShift = await prisma.shift.update({
+        where: { id: data.shiftId },
+        data: {
+          checkInLocation: {
+            latitude: data.location.latitude,
+            longitude: data.location.longitude,
+            accuracy: data.location.accuracy,
+            address: data.location.address,
+            timestamp: data.timestamp.toISOString(),
+          },
+        } as any,
+      });
+
+      logger.info(`Guard ${data.guardId} updated check-in location for shift ${data.shiftId}`);
+      return updatedShift;
+    }
+
     // Update shift with check-in information
+    // If status is already IN_PROGRESS, keep it; otherwise set to IN_PROGRESS
+    const updateData: any = {
+      status: 'IN_PROGRESS',
+      actualStartTime: shift.actualStartTime || data.timestamp, // Use existing if set, otherwise use new
+      checkInLocation: {
+        latitude: data.location.latitude,
+        longitude: data.location.longitude,
+        accuracy: data.location.accuracy,
+        address: data.location.address,
+        timestamp: data.timestamp.toISOString(),
+      },
+    };
+
     const updatedShift = await prisma.shift.update({
       where: { id: data.shiftId },
-      data: {
-        status: 'IN_PROGRESS',
-        actualStartTime: data.timestamp,
-        checkInLocation: {
-          latitude: data.location.latitude,
-          longitude: data.location.longitude,
-          accuracy: data.location.accuracy,
-          address: data.location.address,
-          timestamp: data.timestamp.toISOString(),
-        },
-      } as any,
+      data: updateData,
     });
 
     logger.info(`Guard ${data.guardId} checked in to shift ${data.shiftId}`);
@@ -408,9 +435,9 @@ class ShiftServiceSimple {
       },
     });
 
-    const completedShifts = shifts.filter(s => s.status === Prisma.ShiftStatus.COMPLETED).length;
+    const completedShifts = shifts.filter(s => s.status === ShiftStatus.COMPLETED).length;
     const missedShifts = shifts.filter(s => 
-      s.status === Prisma.ShiftStatus.CANCELLED || s.status === Prisma.ShiftStatus.NO_SHOW
+      s.status === ShiftStatus.CANCELLED || s.status === ShiftStatus.NO_SHOW
     ).length;
     
     // Get unique sites from shifts
@@ -426,7 +453,7 @@ class ShiftServiceSimple {
 
     // Calculate total hours
     const completedShiftsWithTimes = shifts.filter(s => 
-      s.status === Prisma.ShiftStatus.COMPLETED && 
+      s.status === ShiftStatus.COMPLETED && 
       s.actualStartTime && 
       s.actualEndTime
     );
@@ -499,7 +526,7 @@ class ShiftServiceSimple {
     const shift = await prisma.shift.findFirst({
       where: {
         guardId,
-        status: Prisma.ShiftStatus.IN_PROGRESS,
+        status: ShiftStatus.IN_PROGRESS,
       },
       include: {
         site: true,
@@ -707,7 +734,7 @@ class ShiftServiceSimple {
     const shifts = await prisma.shift.findMany({
       where: {
         guardId,
-        status: { in: [Prisma.ShiftStatus.COMPLETED, Prisma.ShiftStatus.CANCELLED, Prisma.ShiftStatus.NO_SHOW] },
+        status: { in: [ShiftStatus.COMPLETED, ShiftStatus.CANCELLED, ShiftStatus.NO_SHOW] },
         scheduledEndTime: {
           lt: now,
         },

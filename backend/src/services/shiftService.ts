@@ -178,18 +178,11 @@ class ShiftService {
       }
 
       // Multi-tenant: Verify site belongs to company if securityCompanyId provided
-      // Sites can be linked to companies in two ways:
-      // 1. Directly via CompanySite
-      // 2. Indirectly via Client -> CompanyClient
       if (securityCompanyId) {
-        const hasDirectLink = site.companySites.some(
+        const siteCompany = site.companySites.find(
           cs => cs.securityCompanyId === securityCompanyId
         );
-        const hasIndirectLink = site.client?.companyClients?.some(
-          cc => cc.securityCompanyId === securityCompanyId && cc.isActive
-        );
-        
-        if (!hasDirectLink && !hasIndirectLink) {
+        if (!siteCompany) {
           throw new ValidationError('Site does not belong to your company');
         }
       }
@@ -727,8 +720,42 @@ class ShiftService {
       throw new BadRequestError('Shift does not belong to this guard');
     }
 
-    if (shift.status !== 'SCHEDULED') {
+    // Allow check-in if:
+    // 1. Status is SCHEDULED (normal case)
+    // 2. Status is IN_PROGRESS but actualStartTime is not set (shift was auto-started or seeded)
+    // 3. Status is IN_PROGRESS and actualStartTime exists (allow updating check-in location)
+    if (shift.status === 'COMPLETED' || shift.status === 'CANCELLED' || shift.status === 'NO_SHOW') {
       throw new BadRequestError(`Cannot check in to shift with status: ${shift.status}`);
+    }
+
+    // If already checked in (IN_PROGRESS with actualStartTime), allow updating location but don't change status
+    if (shift.status === 'IN_PROGRESS' && shift.actualStartTime) {
+      // Update check-in location only
+      const updatedShift = await prisma.shift.update({
+        where: { id: data.shiftId },
+        data: {
+          checkInLocation: {
+            latitude: data.location.latitude,
+            longitude: data.location.longitude,
+            accuracy: data.location.accuracy,
+            address: data.location.address,
+            timestamp: data.timestamp.toISOString(),
+          },
+        },
+        include: {
+          guard: {
+            include: {
+              user: true,
+            },
+          },
+          site: true,
+          shiftBreaks: true,
+          shiftIncidents: true,
+        },
+      });
+
+      logger.info(`Guard ${data.guardId} updated check-in location for shift ${data.shiftId}`);
+      return updatedShift;
     }
 
     // Update shift with check-in information
