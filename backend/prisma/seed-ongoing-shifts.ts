@@ -1,5 +1,10 @@
 import { PrismaClient, ShiftStatus } from '@prisma/client';
 import { addHours, subHours, setHours, setMinutes, startOfDay } from 'date-fns';
+import { config } from 'dotenv';
+import { resolve } from 'path';
+
+// Load environment variables from .env file
+config({ path: resolve(process.cwd(), '.env') });
 
 const prisma = new PrismaClient();
 
