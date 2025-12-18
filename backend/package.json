@@ -13,6 +13,7 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed-shifts": "tsx prisma/seed-shifts.ts",
+    "db:seed-ongoing-shifts": "tsx prisma/seed-ongoing-shifts.ts",
     "db:seed-reports": "node scripts/seed-reports.js",
     "db:seed-test-roles": "node scripts/seed-test-roles-client.js",
     "db:seed-notifications": "tsx prisma/seed-notifications.ts",
