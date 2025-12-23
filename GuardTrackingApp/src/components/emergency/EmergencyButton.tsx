@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Platform,
   PermissionsAndroid,
+  InteractionManager,
 } from 'react-native';
 import {
   Alert,
@@ -141,54 +142,94 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
         return null;
       }
 
+      // Wait for all interactions to complete before accessing native modules
+      await InteractionManager.runAfterInteractions();
+      
+      // Additional delay to ensure native module is ready
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 200));
+
       return new Promise((resolve) => {
-        try {
-          // Check if Geolocation is available
-          if (!Geolocation || typeof Geolocation.getCurrentPosition !== 'function') {
-            console.error('Geolocation service is not available');
-            resolve(null);
-            return;
-          }
-
-          Geolocation.getCurrentPosition(
-            (position) => {
-              try {
-                if (!position || !position.coords) {
-                  resolve(null);
-                  return;
-                }
-                
-                // Validate coordinates
-                if (typeof position.coords.latitude !== 'number' || typeof position.coords.longitude !== 'number') {
-                  resolve(null);
-                  return;
-                }
-
-                resolve({
-                  latitude: position.coords.latitude,
-                  longitude: position.coords.longitude,
-                  accuracy: position.coords.accuracy || 0,
-                  address: `${position.coords.latitude}, ${position.coords.longitude}`,
-                });
-              } catch (parseError) {
-                console.error('Error parsing location data:', parseError);
-                resolve(null);
-              }
-            },
-            (error) => {
-              console.error('Location error:', error);
+        // Use setTimeout to ensure this runs in the next event loop tick
+        // This helps prevent crashes in release builds
+        setTimeout(() => {
+          try {
+            // Comprehensive check if Geolocation module is available and ready
+            if (!Geolocation) {
+              console.error('Geolocation module is not available');
               resolve(null);
-            },
-            {
-              enableHighAccuracy: true,
-              timeout: 15000,
-              maximumAge: 10000,
+              return;
             }
-          );
-        } catch (error) {
-          console.error('Error calling getCurrentPosition:', error);
-          resolve(null);
-        }
+
+            if (typeof Geolocation.getCurrentPosition !== 'function') {
+              console.error('Geolocation.getCurrentPosition is not a function');
+              resolve(null);
+              return;
+            }
+
+            // Try to verify the module is actually initialized
+            try {
+              if (!Geolocation.getCurrentPosition) {
+                console.error('Geolocation module not properly initialized');
+                resolve(null);
+                return;
+              }
+            } catch (moduleCheckError) {
+              console.error('Geolocation module check failed:', moduleCheckError);
+              resolve(null);
+              return;
+            }
+
+            // Use simpler, safer options for Android release builds
+            const options: Geolocation.GeoOptions = {
+              enableHighAccuracy: true,
+              timeout: 12000, // 12 seconds - shorter timeout
+              maximumAge: 60000, // Accept location up to 1 minute old (more lenient)
+              forceRequestLocation: false, // Don't force if cached location is recent
+              showLocationDialog: true, // Show dialog if needed
+            };
+
+            // Wrap in additional try-catch for native errors
+            try {
+              Geolocation.getCurrentPosition(
+              (position) => {
+                try {
+                  if (!position || !position.coords) {
+                    resolve(null);
+                    return;
+                  }
+                  
+                  // Validate coordinates
+                  if (typeof position.coords.latitude !== 'number' || typeof position.coords.longitude !== 'number') {
+                    resolve(null);
+                    return;
+                  }
+
+                  resolve({
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude,
+                    accuracy: position.coords.accuracy || 0,
+                    address: `${position.coords.latitude}, ${position.coords.longitude}`,
+                  });
+                } catch (parseError) {
+                  console.error('Error parsing location data:', parseError);
+                  resolve(null);
+                }
+              },
+              (error) => {
+                console.error('Location error:', error);
+                resolve(null);
+              },
+              options
+            );
+            } catch (nativeError: any) {
+              console.error('Native error calling getCurrentPosition:', nativeError);
+              resolve(null);
+            }
+          } catch (error) {
+            console.error('Error in location request setup:', error);
+            resolve(null);
+          }
+        }, 100); // Increased delay to ensure UI and native module are ready
       });
     } catch (error) {
       console.error('Error in getCurrentLocation:', error);
@@ -235,7 +276,11 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
 
   const handleEmergencyPress = () => {
     // Vibrate to provide haptic feedback
-    Vibration.vibrate([0, 100, 50, 100]);
+    try {
+      Vibration.vibrate([0, 100, 50, 100]);
+    } catch (e) {
+      console.warn('Vibration not available:', e);
+    }
     
     // Show type selector
     setShowTypeSelector(true);

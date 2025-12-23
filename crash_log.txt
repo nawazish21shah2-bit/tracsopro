@@ -1,0 +1,457 @@
+﻿--------- beginning of system
+[TLOCChannel]"Can't receive message due to timeout"
+[TLOCChannel]"Can't receive message due to timeout"
+[TLOCDaemon ]"Couldn't receive command response"
+[ModemComm  ]"Could not start a session. Error status: 11"
+[main       ]"An error occurred. Re-initializing daemon"
+[TLOCChannel]"Can't receive message due to timeout"
+[TLOCDaemon ]"Couldn't receive command response"
+Negative user/sys time delta for UID=10159
+Prev times: u=793916503 s=358953592 Curr times: u=792268981 s=357950055
+Negative user/sys time delta for UID=10154
+Prev times: u=4031183978 s=1211441319 Curr times: u=4030941028 s=1211291398
+Negative user/sys time delta for UID=10159
+Prev times: u=793916503 s=358953592 Curr times: u=792268981 s=357950055
+Negative user/sys time delta for UID=10154
+Prev times: u=4031183978 s=1211441319 Curr times: u=4030941028 s=1211291398
+App trying to use insecure INPUT_FEATURE_NO_INPUT_CHANNEL flag. Ignoring
+--------- beginning of crash
+FATAL EXCEPTION: mqt_v_native
+Process: com.tracsopro, PID: 3360
+com.facebook.react.common.JavascriptException: TypeError: Invalid task of type: undefined, stack:
+anonymous@1:722702
+anonymous@1:278444
+
+	at com.facebook.react.modules.core.ExceptionsManagerModule.reportException(ExceptionsManagerModule.kt:52)
+	at com.facebook.jni.NativeRunnable.run(Native Method)
+	at android.os.Handler.handleCallback(Handler.java:883)
+	at android.os.Handler.dispatchMessage(Handler.java:100)
+	at com.facebook.react.bridge.queue.MessageQueueThreadHandler.dispatchMessage(MessageQueueThreadHandler.kt:21)
+	at android.os.Looper.loop(Looper.java:238)
+	at com.facebook.react.bridge.queue.MessageQueueThreadImpl$Companion.startNewBackgroundThread$lambda$0(MessageQueueThreadImpl.kt:152)
+	at com.facebook.react.bridge.queue.MessageQueueThreadImpl$Companion.$r8$lambda$YYXYCFexeoKtAeDpeNYkxZZlpbA(Unknown Source:0)
+	at com.facebook.react.bridge.queue.MessageQueueThreadImpl$Companion$$ExternalSyntheticLambda0.run(D8$$SyntheticClass:0)
+	at java.lang.Thread.run(Thread.java:919)
+--------- beginning of main
+same package name, skip
+packageSwitch pkg com.oppo.launcher, enter
+current package is com.oppo.launcher
+Average freq 1342474 for 1s.
+Average freq 1276294 for 1s.
+client  not found, skipped
+App trying to use insecure INPUT_FEATURE_NO_INPUT_CHANNEL flag. Ignoring
+checkWeatherServiceLocationPermission
+getLocationCityInfo
+getTimeZoneOfAttendCity
+getOneAttentCityWeatherInfoList
+isTempShowAsCelsius
+0: -5.95, +(462), 1
+HANS printMessageBody: RCVed message body: type = 0, port = 86870, caller_pid = 1856, target_uid = 10228, pkg_cmd = -1
+HANS printMessageBody: RCVed message body: type = 0, port = 86870, caller_pid = 1856, target_uid = 10272, pkg_cmd = -1
+GL_OOM reserved vma failed, errno:22
+Unknown bits set in runtime_flags: 0x20000
+Not starting debugger since process cannot load the jdwp agent.
+java.lang.reflect.InvocationTargetException
+[1578] < OEM_HOOK_RAW error: org.codeaurora.telephony.utils.CommandException: GENERIC_FAILURE
+[1579] < OEM_HOOK_RAW error: org.codeaurora.telephony.utils.CommandException: GENERIC_FAILURE
+[DropboxRealtime] null InputStream [CONTEXT service_id=254 ]
+java.io.IOException: null InputStream
+	at dyqh.c(:com.google.android.gms@254730013@25.47.30 (100400-833691957):176)
+	at dyqh.d(:com.google.android.gms@254730013@25.47.30 (100400-833691957):9)
+	at dyop.j(:com.google.android.gms@254730013@25.47.30 (100400-833691957):335)
+	at dyml.d(:com.google.android.gms@254730013@25.47.30 (100400-833691957):1)
+	at dyoi.a(:com.google.android.gms@254730013@25.47.30 (100400-833691957):200)
+	at com.google.android.gms.stats.service.DropBoxEntryAddedChimeraService.a(:com.google.android.gms@254730013@25.47.30 (100400-833691957):157)
+	at com.google.android.gms.framework.tracing.wrapper.TracingIntentService.onHandleIntent(:com.google.android.gms@254730013@25.47.30 (100400-833691957):13)
+	at wzf.handleMessage(:com.google.android.gms@254730013@25.47.30 (100400-833691957):7)
+	at android.os.Handler.dispatchMessage(Handler.java:107)
+	at android.os.Looper.loop(Looper.java:238)
+	at android.os.HandlerThread.run(HandlerThread.java:67)
+[DropboxRealtime] null InputStream [CONTEXT service_id=254 ]
+java.io.IOException: null InputStream
+	at dyqh.c(:com.google.android.gms@254730013@25.47.30 (100400-833691957):176)
+	at dyqh.d(:com.google.android.gms@254730013@25.47.30 (100400-833691957):9)
+	at dyop.j(:com.google.android.gms@254730013@25.47.30 (100400-833691957):335)
+	at dyml.d(:com.google.android.gms@254730013@25.47.30 (100400-833691957):1)
+	at dyoi.a(:com.google.android.gms@254730013@25.47.30 (100400-833691957):200)
+	at com.google.android.gms.stats.service.DropBoxEntryAddedChimeraService.a(:com.google.android.gms@254730013@25.47.30 (100400-833691957):157)
+	at com.google.android.gms.framework.tracing.wrapper.TracingIntentService.onHandleIntent(:com.google.android.gms@254730013@25.47.30 (100400-833691957):13)
+	at wzf.handleMessage(:com.google.android.gms@254730013@25.47.30 (100400-833691957):7)
+	at android.os.Handler.dispatchMessage(Handler.java:107)
+	at android.os.Looper.loop(Looper.java:238)
+	at android.os.HandlerThread.run(HandlerThread.java:67)
+0: -5.45, +(86), 1
+Failed to reset optimization [3, 0]
+GL_OOM reserved vma failed, errno:22
+Unknown bits set in runtime_flags: 0x20000
+Not starting debugger since process cannot load the jdwp agent.
+failed to get ColorAntiviruManagerService
+java.lang.reflect.InvocationTargetException
+configHypnusGov mSugovConfigs is null!!!
+packageSwitch pkg com.tracsopro, enter
+current package is com.tracsopro
+Average freq 1367907 for 3s.
+Average freq 1507173 for 3s.
+client  not found, skipped
+[Surface(name=AppWindowToken{7a526f6 token=Token{729d791 ActivityRecord{ea4cdb8 u0 com.tracsopro/.MainActivity t61961}}})/@0x2cf33cf - animation-leash#0] No local sync point found
+[Surface(name=AppWindowToken{7a526f6 token=Token{729d791 ActivityRecord{ea4cdb8 u0 com.tracsopro/.MainActivity t61961}}})/@0x2cf33cf - animation-leash#0] No local sync point found
+[Surface(name=AppWindowToken{d6dee84 token=Token{82dec97 ActivityRecord{9e39b16 u0 com.oppo.launcher/.Launcher t61824}}})/@0x57fe7ad - animation-leash#0] No local sync point found
+[Surface(name=AppWindowToken{d6dee84 token=Token{82dec97 ActivityRecord{9e39b16 u0 com.oppo.launcher/.Launcher t61824}}})/@0x57fe7ad - animation-leash#0] No local sync point found
+App trying to use insecure INPUT_FEATURE_NO_INPUT_CHANNEL flag. Ignoring
+App trying to use insecure INPUT_FEATURE_NO_INPUT_CHANNEL flag. Ignoring
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+0: -4.91, +(-260), 1
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+HANS printMessageBody: RCVed message body: type = 0, port = 86870, caller_pid = 1856, target_uid = 10272, pkg_cmd = -1
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+HANS printMessageBody: RCVed message body: type = 0, port = 86870, caller_pid = 1856, target_uid = 10272, pkg_cmd = -1
+HANS printMessageBody: RCVed message body: type = 0, port = 86870, caller_pid = 1856, target_uid = 10272, pkg_cmd = -1
+HANS printMessageBody: RCVed message body: type = 0, port = 86870, caller_pid = 1856, target_uid = 10272, pkg_cmd = -1
+HANS printMessageBody: RCVed message body: type = 0, port = 86870, caller_pid = 1856, target_uid = 10272, pkg_cmd = -1
+HANS printMessageBody: RCVed message body: type = 0, port = 86870, caller_pid = 1856, target_uid = 10272, pkg_cmd = -1
+HANS printMessageBody: RCVed message body: type = 0, port = 86870, caller_pid = 1856, target_uid = 10272, pkg_cmd = -1
+HANS printMessageBody: RCVed message body: type = 0, port = 86870, caller_pid = 1856, target_uid = 10228, pkg_cmd = -1
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+checkWeatherServiceLocationPermission
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+GL_OOM reserved vma failed, errno:22
+Unknown bits set in runtime_flags: 0x20000
+Not starting debugger since process cannot load the jdwp agent.
+failed to get ColorAntiviruManagerService
+java.lang.reflect.InvocationTargetException
+failed to get ColorAntiviruManagerService
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+GL_OOM reserved vma failed, errno:22
+Unknown bits set in runtime_flags: 0x20000
+Not starting debugger since process cannot load the jdwp agent.
+failed to get ColorAntiviruManagerService
+java.lang.reflect.InvocationTargetException
+No valid NAT64 prefix (147, <unspecified>/0)
+failed to get ColorAntiviruManagerService
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+GL_OOM reserved vma failed, errno:22
+Unknown bits set in runtime_flags: 0x20000
+Not starting debugger since process cannot load the jdwp agent.
+failed to get ColorAntiviruManagerService
+java.lang.reflect.InvocationTargetException
+Attempt to read from protected data in Parcel 0x7c28d5fc00
+Attempt to read from protected data in Parcel 0x7c28d5fc00
+Attempt to read from protected data in Parcel 0x7c28417380
+Attempt to read from protected data in Parcel 0x7c28417380
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+failed to get ColorAntiviruManagerService
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+0: -5.53, +(229), 1
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Returning default for firstRunInfo
+Returning default for firstRunInfo
+could not find package com.google.android.art android.content.pm.PackageManager$NameNotFoundException: com.google.android.art
+QuickPerformanceLogger instance wasn't installed in provider, returning noop. Please call QuickPerformanceLoggerProvider.setQuickPerformanceLogger() before getting the instance.
+java.lang.IllegalStateException: No QPL instance provided
+	at com.facebook.quicklog.QuickPerformanceLoggerProvider.getQPLInstance(:8)
+	at X.3Z4.AsS(:10)
+	at X.1JN.A01(:18)
+	at X.1Gv.run(:149)
+QuickPerformanceLogger instance wasn't installed in provider, returning noop. Please call QuickPerformanceLoggerProvider.setQuickPerformanceLogger() before getting the instance.
+java.lang.IllegalStateException: No QPL instance provided
+	at com.facebook.quicklog.QuickPerformanceLoggerProvider.getQPLInstance(:8)
+	at X.3Z4.AsS(:22)
+	at X.1JN.A01(:18)
+	at X.1Gv.run(:149)
+QuickPerformanceLogger instance wasn't installed in provider, returning noop. Please call QuickPerformanceLoggerProvider.setQuickPerformanceLogger() before getting the instance.
+java.lang.IllegalStateException: No QPL instance provided
+	at com.facebook.quicklog.QuickPerformanceLoggerProvider.getQPLInstance(:8)
+	at X.3Z4.AsS(:34)
+	at X.1JN.A01(:18)
+	at X.1Gv.run(:149)
+QuickPerformanceLogger instance wasn't installed in provider, returning noop. Please call QuickPerformanceLoggerProvider.setQuickPerformanceLogger() before getting the instance.
+java.lang.IllegalStateException: No QPL instance provided
+	at com.facebook.quicklog.QuickPerformanceLoggerProvider.getQPLInstance(:8)
+	at X.3Yt.AsS(:12)
+	at X.3Z4.AsS(:46)
+	at X.1JN.A01(:18)
+	at X.1Gv.run(:149)
+QuickPerformanceLogger instance wasn't installed in provider, returning noop. Please call QuickPerformanceLoggerProvider.setQuickPerformanceLogger() before getting the instance.
+java.lang.IllegalStateException: No QPL instance provided
+	at com.facebook.quicklog.QuickPerformanceLoggerProvider.getQPLInstance(:8)
+	at X.3Yt.AsS(:24)
+	at X.3Z4.AsS(:46)
+	at X.1JN.A01(:18)
+	at X.1Gv.run(:149)
+QuickPerformanceLogger instance wasn't installed in provider, returning noop. Please call QuickPerformanceLoggerProvider.setQuickPerformanceLogger() before getting the instance.
+java.lang.IllegalStateException: No QPL instance provided
+	at com.facebook.quicklog.QuickPerformanceLoggerProvider.getQPLInstance(:8)
+	at X.3Yt.AsS(:36)
+	at X.3Z4.AsS(:46)
+	at X.1JN.A01(:18)
+	at X.1Gv.run(:149)
+QuickPerformanceLogger instance wasn't installed in provider, returning noop. Please call QuickPerformanceLoggerProvider.setQuickPerformanceLogger() before getting the instance.
+java.lang.IllegalStateException: No QPL instance provided
+	at com.facebook.quicklog.QuickPerformanceLoggerProvider.getQPLInstance(:8)
+	at X.3Yt.AsS(:52)
+	at X.3Z4.AsS(:46)
+	at X.1JN.A01(:18)
+	at X.1Gv.run(:149)
+QuickPerformanceLogger instance wasn't installed in provider, returning noop. Please call QuickPerformanceLoggerProvider.setQuickPerformanceLogger() before getting the instance.
+java.lang.IllegalStateException: No QPL instance provided
+	at com.facebook.quicklog.QuickPerformanceLoggerProvider.getQPLInstance(:8)
+	at X.3Yt.AsS(:64)
+	at X.3Z4.AsS(:46)
+	at X.1JN.A01(:18)
+	at X.1Gv.run(:149)
+QuickPerformanceLogger instance wasn't installed in provider, returning noop. Please call QuickPerformanceLoggerProvider.setQuickPerformanceLogger() before getting the instance.
+java.lang.IllegalStateException: No QPL instance provided
+	at com.facebook.quicklog.QuickPerformanceLoggerProvider.getQPLInstance(:8)
+	at X.3Yt.AsS(:96)
+	at X.3Z4.AsS(:46)
+	at X.1JN.A01(:18)
+	at X.1Gv.run(:149)
+QuickPerformanceLogger instance wasn't installed in provider, returning noop. Please call QuickPerformanceLoggerProvider.setQuickPerformanceLogger() before getting the instance.
+java.lang.IllegalStateException: No QPL instance provided
+	at com.facebook.quicklog.QuickPerformanceLoggerProvider.getQPLInstance(:8)
+	at X.3Yt.AsS(:115)
+	at X.3Z4.AsS(:46)
+	at X.1JN.A01(:18)
+	at X.1Gv.run(:149)
+QuickPerformanceLogger instance wasn't installed in provider, returning noop. Please call QuickPerformanceLoggerProvider.setQuickPerformanceLogger() before getting the instance.
+java.lang.IllegalStateException: No QPL instance provided
+	at com.facebook.quicklog.QuickPerformanceLoggerProvider.getQPLInstance(:8)
+	at X.3Yt.AsS(:130)
+	at X.3Z4.AsS(:46)
+	at X.1JN.A01(:18)
+	at X.1Gv.run(:149)
+QuickPerformanceLogger instance wasn't installed in provider, returning noop. Please call QuickPerformanceLoggerProvider.setQuickPerformanceLogger() before getting the instance.
+java.lang.IllegalStateException: No QPL instance provided
+	at com.facebook.quicklog.QuickPerformanceLoggerProvider.getQPLInstance(:8)
+	at X.3Yt.AsS(:155)
+	at X.3Z4.AsS(:46)
+	at X.1JN.A01(:18)
+	at X.1Gv.run(:149)
+QuickPerformanceLogger instance wasn't installed in provider, returning noop. Please call QuickPerformanceLoggerProvider.setQuickPerformanceLogger() before getting the instance.
+java.lang.IllegalStateException: No QPL instance provided
+	at com.facebook.quicklog.QuickPerformanceLoggerProvider.getQPLInstance(:8)
+	at X.3Z4.AsS(:50)
+	at X.1JN.A01(:18)
+	at X.1Gv.run(:149)
+QuickPerformanceLogger instance wasn't installed in provider, returning noop. Please call QuickPerformanceLoggerProvider.setQuickPerformanceLogger() before getting the instance.
+java.lang.IllegalStateException: No QPL instance provided
+	at com.facebook.quicklog.QuickPerformanceLoggerProvider.getQPLInstance(:8)
+	at X.3Z4.AsS(:62)
+	at X.1JN.A01(:18)
+	at X.1Gv.run(:149)
+QuickPerformanceLogger instance wasn't installed in provider, returning noop. Please call QuickPerformanceLoggerProvider.setQuickPerformanceLogger() before getting the instance.
+java.lang.IllegalStateException: No QPL instance provided
+	at com.facebook.quicklog.QuickPerformanceLoggerProvider.getQPLInstance(:8)
+	at X.3Z4.AsS(:94)
+	at X.1JN.A01(:18)
+	at X.1Gv.run(:149)
+QuickPerformanceLogger instance wasn't installed in provider, returning noop. Please call QuickPerformanceLoggerProvider.setQuickPerformanceLogger() before getting the instance.
+java.lang.IllegalStateException: No QPL instance provided
+	at com.facebook.quicklog.QuickPerformanceLoggerProvider.getQPLInstance(:8)
+	at X.3Z4.AsS(:106)
+	at X.1JN.A01(:18)
+	at X.1Gv.run(:149)
+QuickPerformanceLogger instance wasn't installed in provider, returning noop. Please call QuickPerformanceLoggerProvider.setQuickPerformanceLogger() before getting the instance.
+java.lang.IllegalStateException: No QPL instance provided
+	at com.facebook.quicklog.QuickPerformanceLoggerProvider.getQPLInstance(:8)
+	at X.3Z4.AsS(:132)
+	at X.1JN.A01(:18)
+	at X.1Gv.run(:149)
+QuickPerformanceLogger instance wasn't installed in provider, returning noop. Please call QuickPerformanceLoggerProvider.setQuickPerformanceLogger() before getting the instance.
+java.lang.IllegalStateException: No QPL instance provided
+	at com.facebook.quicklog.QuickPerformanceLoggerProvider.getQPLInstance(:8)
+	at X.3Z4.AsS(:144)
+	at X.1JN.A01(:18)
+	at X.1Gv.run(:149)
+Returning default for firstRunInfo
+Returning default for firstRunInfo
+Returning default for firstRunInfo
+0ms: FacebookApplication instantiatingΓÇª
+16ms: FirebaseInitCustomProvider instantiatingΓÇª
+17ms: SecureMessagingKeyContentProvider instantiatingΓÇª
+17ms: LastUsedTimestampProvider instantiatingΓÇª
+17ms: FirstPartyUserValuesLiteProvider instantiatingΓÇª
+17ms: FbContactsContentProvider instantiatingΓÇª
+17ms: FileProvider instantiatingΓÇª
+17ms: FirstPartyUserValuesProvider instantiatingΓÇª
+17ms: MessagesDbContentProvider instantiatingΓÇª
+17ms: UsdidValuesProvider instantiatingΓÇª
+17ms: InstallReferrerProvider instantiatingΓÇª
+17ms: AppManagerSsoProvider instantiatingΓÇª
+17ms: ThreadsDbPropertiesContentProvider instantiatingΓÇª
+17ms: ClientMessagePushDedupInfoProvider instantiatingΓÇª
+17ms: PlatformProviderBase instantiatingΓÇª
+17ms: DeferredDeeplinkProvider instantiatingΓÇª
+17ms: ContactsConnectionsProvider instantiatingΓÇª
+17ms: FeO2InAppContentProvider instantiatingΓÇª
+18ms: UserValuesProvider instantiatingΓÇª
+18ms: SecureFileProvider instantiatingΓÇª
+26ms: FoaBackupTokenProvider instantiatingΓÇª
+26ms: InitializationProvider instantiatingΓÇª
+45ms: PhotosProvider instantiatingΓÇª
+46ms: AttributionIdProvider instantiatingΓÇª
+45ms: QuickExperimentContentProvider instantiatingΓÇª
+45ms: TamAttachmentProvider instantiatingΓÇª
+45ms: CacheProvider instantiatingΓÇª
+74ms: LollipopUploadService instantiatingΓÇª
+Main thread was blocked for 421ms in the background starting with FacebookApplication
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+0: -4.95, +(-256), 1
+Skipping batch of MountItems; no SurfaceMountingManager found for [0].
+configHypnusGov mSugovConfigs is null!!!
+same package name, skip
+packageSwitch pkg com.oppo.launcher, enter
+current package is com.oppo.launcher
+Average freq 1612412 for 41s.
+Average freq 989587 for 41s.
+GL_OOM reserved vma failed, errno:22
+client  not found, skipped
+Unknown bits set in runtime_flags: 0x20000
+[Surface(name=AppWindowToken{7a526f6 token=Token{729d791 ActivityRecord{ea4cdb8 u0 com.tracsopro/.MainActivity t61961}}})/@0x2cf33cf - animation-leash#0] No local sync point found
+[Surface(name=AppWindowToken{d6dee84 token=Token{82dec97 ActivityRecord{9e39b16 u0 com.oppo.launcher/.Launcher t61824}}})/@0x57fe7ad - animation-leash#0] No local sync point found
+Not starting debugger since process cannot load the jdwp agent.
+[Surface(name=AppWindowToken{7a526f6 token=Token{729d791 ActivityRecord{ea4cdb8 u0 com.tracsopro/.MainActivity t61961}}})/@0x2cf33cf - animation-leash#0] No local sync point found
+[Surface(name=AppWindowToken{7a526f6 token=Token{729d791 ActivityRecord{ea4cdb8 u0 com.tracsopro/.MainActivity t61961}}})/@0x2cf33cf - animation-leash#0] No local sync point found
+[Surface(name=AppWindowToken{d6dee84 token=Token{82dec97 ActivityRecord{9e39b16 u0 com.oppo.launcher/.Launcher t61824}}})/@0x57fe7ad - animation-leash#0] No local sync point found
+[Surface(name=AppWindowToken{d6dee84 token=Token{82dec97 ActivityRecord{9e39b16 u0 com.oppo.launcher/.Launcher t61824}}})/@0x57fe7ad - animation-leash#0] No local sync point found
+failed to get ColorAntiviruManagerService
+java.lang.reflect.InvocationTargetException
+[Surface(name=AppWindowToken{7a526f6 token=Token{729d791 ActivityRecord{ea4cdb8 u0 com.tracsopro/.MainActivity t61961}}})/@0x2cf33cf - animation-leash#0] No local sync point found
+[Surface(name=AppWindowToken{7a526f6 token=Token{729d791 ActivityRecord{ea4cdb8 u0 com.tracsopro/.MainActivity t61961}}})/@0x2cf33cf - animation-leash#0] No local sync point found
+[Surface(name=AppWindowToken{d6dee84 token=Token{82dec97 ActivityRecord{9e39b16 u0 com.oppo.launcher/.Launcher t61824}}})/@0x57fe7ad - animation-leash#0] No local sync point found
+[Surface(name=AppWindowToken{d6dee84 token=Token{82dec97 ActivityRecord{9e39b16 u0 com.oppo.launcher/.Launcher t61824}}})/@0x57fe7ad - animation-leash#0] No local sync point found
+set_timerslack_ns write failed: Operation not permitted
+Failed to reset optimization [3, 0]
+checkWeatherServiceLocationPermission
+getLocationCityInfo
+getTimeZoneOfAttendCity
+getOneAttentCityWeatherInfoList
+App trying to use insecure INPUT_FEATURE_NO_INPUT_CHANNEL flag. Ignoring
+isTempShowAsCelsius
+set_timerslack_ns write failed: Operation not permitted
+set_timerslack_ns write failed: Operation not permitted
+Failed to reset optimization [3, 0]
+Found dropped events: 1 error -19 last atom tag 83 from uid 10159
+GL_OOM reserved vma failed, errno:22
+Unknown bits set in runtime_flags: 0x20000
+Not starting debugger since process cannot load the jdwp agent.
+failed to get ColorAntiviruManagerService
+java.lang.reflect.InvocationTargetException
+failed to get ColorAntiviruManagerService
+Failed to reset optimization [3, 0]
+(14) cannot open file at line 36683 of [68b898381a]
+(14) os_unix.c:36683: (2) open(/data/user/0/com.facebook.appmanager/databases/androidx.work.workdb) - 
+Failed to open database '/data/user/0/com.facebook.appmanager/databases/androidx.work.workdb'.
+android.database.sqlite.SQLiteCantOpenDatabaseException: unknown error (code 14 SQLITE_CANTOPEN): Could not open database
+	at android.database.sqlite.SQLiteConnection.nativeOpen(Native Method)
+	at android.database.sqlite.SQLiteConnection.open(SQLiteConnection.java:215)
+	at android.database.sqlite.SQLiteConnection.open(SQLiteConnection.java:197)
+	at android.database.sqlite.SQLiteConnectionPool.openConnectionLocked(SQLiteConnectionPool.java:505)
+	at android.database.sqlite.SQLiteConnectionPool.open(SQLiteConnectionPool.java:206)
+	at android.database.sqlite.SQLiteConnectionPool.open(SQLiteConnectionPool.java:198)
+	at android.database.sqlite.SQLiteDatabase.openInner(SQLiteDatabase.java:915)
+	at android.database.sqlite.SQLiteDatabase.open(SQLiteDatabase.java:895)
+	at android.database.sqlite.SQLiteDatabase.openDatabase(SQLiteDatabase.java:786)
+	at android.database.sqlite.SQLiteDatabase.openDatabase(SQLiteDatabase.java:733)
+	at com.facebook.oxygen.common.androidx.workmanager.initializer.b.a(WorkManagerDatabase.java:22)
+	at com.facebook.oxygen.appmanager.app.c.a(AppManagerApplicationImpl.java:21)
+	at com.facebook.oxygen.common.component.b.d.onCreate(OxpDelegatingApplication.java:84)
+	at com.facebook.oxygen.appmanager.app.AppManagerApplication.onCreate(AppManagerApplication.java:24)
+	at android.app.Instrumentation.callApplicationOnCreate(Instrumentation.java:1190)
+	at android.app.ActivityThread.handleBindApplication(ActivityThread.java:6846)
+	at android.app.ActivityThread.access$1500(ActivityThread.java:249)
+	at android.app.ActivityThread$H.handleMessage(ActivityThread.java:2044)
+	at android.os.Handler.dispatchMessage(Handler.java:107)
+	at android.os.Looper.loop(Looper.java:238)
+	at android.app.ActivityThread.main(ActivityThread.java:7829)
+	at java.lang.reflect.Method.invoke(Native Method)
+	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:512)
+	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:986)
+Service not available yet
+Failed to reset optimization [3, 0]
+Service not available yet
+GL_OOM reserved vma failed, errno:22
+Unknown bits set in runtime_flags: 0x20000
+Not starting debugger since process cannot load the jdwp agent.
+failed to get ColorAntiviruManagerService
+java.lang.reflect.InvocationTargetException
+Failed to find provider info for com.facebook.appmanager.nekodirect
+GL_OOM reserved vma failed, errno:22
+Unknown bits set in runtime_flags: 0x20000
+Not starting debugger since process cannot load the jdwp agent.
+failed to get ColorAntiviruManagerService
+java.lang.reflect.InvocationTargetException
+Failed to reset optimization [3, 0]
+GL_OOM reserved vma failed, errno:22
+Unknown bits set in runtime_flags: 0x20000
+Not starting debugger since process cannot load the jdwp agent.
+java.lang.reflect.InvocationTargetException
+o-kill [13362] com.android.vending:background
+o-kill [13139] com.qualcomm.qti.modemtestmode
+o-kill [13764] com.facebook.system
+o-kill [13798] com.coloros.gamespaceui
+>>> msg's executing time is too long
+Blocked msg = { when=-1s939ms what=0 target=android.app.ActivityThread$H callback=android.app.-$$Lambda$LoadedApk$ReceiverDispatcher$Args$_BumDX2UKsnxLVrE6UJsJZkotuA } , cost  = 1938 ms
+>>>Current msg List is:
+Current msg <1> = { when=-1s939ms what=0 target=android.app.ActivityThread$H callback=android.app.-$$Lambda$LoadedApk$ReceiverDispatcher$Args$_BumDX2UKsnxLVrE6UJsJZkotuA }
+Current msg <2> = { when=-1s939ms what=0 target=android.os.Handler callback=android.app.-$$Lambda$LoadedApk$ReceiverDispatcher$Args$_BumDX2UKsnxLVrE6UJsJZkotuA }
+Current msg <3> = { when=-1s939ms what=0 target=android.app.ActivityThread$H callback=android.app.-$$Lambda$LoadedApk$ReceiverDispatcher$Args$_BumDX2UKsnxLVrE6UJsJZkotuA }
+Current msg <4> = { when=-1s939ms what=0 target=android.app.ActivityThread$H callback=android.app.-$$Lambda$LoadedApk$ReceiverDispatcher$Args$_BumDX2UKsnxLVrE6UJsJZkotuA }
+Current msg <5> = { when=-1s939ms what=0 target=android.app.ActivityThread$H callback=android.app.-$$Lambda$LoadedApk$ReceiverDispatcher$Args$_BumDX2UKsnxLVrE6UJsJZkotuA }
+Current msg <6> = { when=-1s939ms what=0 target=android.os.Handler callback=android.app.-$$Lambda$LoadedApk$ReceiverDispatcher$Args$_BumDX2UKsnxLVrE6UJsJZkotuA }
+Current msg <7> = { when=-1s938ms what=0 target=android.app.ActivityThread$H callback=android.app.-$$Lambda$LoadedApk$ReceiverDispatcher$Args$_BumDX2UKsnxLVrE6UJsJZkotuA }
+Current msg <8> = { when=-1s936ms what=0 target=android.app.ActivityThread$H callback=android.app.-$$Lambda$LoadedApk$ReceiverDispatcher$Args$_BumDX2UKsnxLVrE6UJsJZkotuA }
+Current msg <9> = { when=-1s936ms what=0 target=com.android.server.media.MediaRouterService$UserHandler callback=android.app.-$$Lambda$LoadedApk$ReceiverDispatcher$Args$_BumDX2UKsnxLVrE6UJsJZkotuA }
+Current msg <10> = { when=-1s934ms what=0 target=android.app.ActivityThread$H callback=android.app.-$$Lambda$LoadedApk$ReceiverDispatcher$Args$_BumDX2UKsnxLVrE6UJsJZkotuA }
+>>>CURRENT MSG DUMP OVER<<<
+HANS printMessageBody: RCVed message body: type = 0, port = 86870, caller_pid = 1856, target_uid = 10228, pkg_cmd = -1
+GL_OOM reserved vma failed, errno:22
+Unknown bits set in runtime_flags: 0x20000
+Not starting debugger since process cannot load the jdwp agent.
+java.lang.reflect.InvocationTargetException
+0: -5.49, +(843), 1
+[1584] < OEM_HOOK_RAW error: org.codeaurora.telephony.utils.CommandException: GENERIC_FAILURE
+[1585] < OEM_HOOK_RAW error: org.codeaurora.telephony.utils.CommandException: GENERIC_FAILURE
+E[N mns]_CacheRefreshTimerCallback(454)=>Start active cache refresh DNS resolution
+E[N mns]_CacheRefreshTimerCallback(454)=>Start active cache refresh DNS resolution
+E[N mns]_OnSystemDNSSuccessCallback(340)=>Cache refresh succeeded with system DNS resolver. IP count: 2
+E[N mns]_OnSystemDNSSuccessCallback(340)=>Cache refresh succeeded with system DNS resolver. IP count: 2
+Couldn't load memtrack module
+Couldn't load memtrack module
+No valid NAT64 prefix (147, <unspecified>/0)
+0: -6.07, +(1105), 1
+checkWeatherServiceLocationPermission
+0: -6.61, +(989), 1
+HANS printMessageBody: RCVed message body: type = 2, port = 86870, caller_pid = -1, target_uid = 10272, pkg_cmd = -1

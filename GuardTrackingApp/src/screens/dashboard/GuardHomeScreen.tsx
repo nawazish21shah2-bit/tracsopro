@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Platform,
   PermissionsAndroid,
+  InteractionManager,
 } from 'react-native';
 import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -32,7 +33,6 @@ import SharedHeader from '../../components/ui/SharedHeader';
 import GuardProfileDrawer from '../../components/guard/GuardProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 import { LoadingOverlay, ErrorState, NetworkError, InlineLoading } from '../../components/ui/LoadingStates';
-import { ErrorHandler, withRetry } from '../../utils/errorHandler';
 import {
   MapPinIcon,
   ClockIcon,
@@ -146,7 +146,7 @@ const GuardHomeScreen: React.FC = () => {
         dispatch(fetchUpcomingShifts()),
         ]);
     } catch (error) {
-      ErrorHandler.handleError(error, 'initialize_dashboard_data');
+      console.error('Error initializing dashboard data:', error);
     }
   };
 
@@ -155,7 +155,7 @@ const GuardHomeScreen: React.FC = () => {
     try {
       await dispatch(refreshDashboardData());
     } catch (error) {
-      ErrorHandler.handleError(error, 'refresh_dashboard_data', false);
+      console.error('Error refreshing dashboard data:', error);
     } finally {
       setRefreshing(false);
     }
@@ -205,84 +205,130 @@ const GuardHomeScreen: React.FC = () => {
       throw new Error('Location permission denied. Please enable location access in settings.');
     }
 
+    // Add a delay to ensure native module is ready
+    await new Promise<void>(resolve => setTimeout(() => resolve(), 200));
+
     const attemptGetLocation = (useHighAccuracy: boolean): Promise<{ latitude: number; longitude: number; accuracy: number; address?: string }> => {
       return new Promise((resolve, reject) => {
-        try {
-          // Check if Geolocation is available
-          if (!Geolocation || typeof Geolocation.getCurrentPosition !== 'function') {
-            reject(new Error('Location service is not available. Please restart the app.'));
-            return;
-          }
-
-          Geolocation.getCurrentPosition(
-            (position: Geolocation.GeoPosition) => {
-              try {
-                // Validate location data
-                if (!position || !position.coords || 
-                    typeof position.coords.latitude !== 'number' || 
-                    typeof position.coords.longitude !== 'number' ||
-                    isNaN(position.coords.latitude) ||
-                    isNaN(position.coords.longitude)) {
-                  reject(new Error('Invalid location data received. Please try again.'));
-                  return;
-                }
-
-                resolve({
-                  latitude: position.coords.latitude,
-                  longitude: position.coords.longitude,
-                  accuracy: position.coords.accuracy || 0,
-                  address: `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`,
-                });
-              } catch (parseError) {
-                console.error('Error parsing location data:', parseError);
-                reject(new Error('Failed to process location data. Please try again.'));
-              }
-            },
-            (error: Geolocation.GeoError) => {
-              try {
-                console.error('Location error:', error);
-                
-                // Provide specific error messages based on error code
-                let errorMessage = 'Unable to get your location.';
-                let shouldRetry = true;
-                
-                if (error && typeof error.code === 'number') {
-                  switch (error.code) {
-                    case 1: // PERMISSION_DENIED
-                      errorMessage = 'Location permission denied. Please enable location access in settings.';
-                      shouldRetry = false; // Don't retry permission errors
-                      break;
-                    case 2: // POSITION_UNAVAILABLE
-                      errorMessage = 'Location unavailable. Please ensure GPS is enabled and try again.';
-                      break;
-                    case 3: // TIMEOUT
-                      errorMessage = 'Location request timed out. Please try again.';
-                      break;
-                    default:
-                      errorMessage = 'Unable to get your location. Please ensure GPS is enabled and try again.';
-                  }
-                }
-                
-                const locationError = new Error(errorMessage) as any;
-                locationError.code = error?.code;
-                locationError.shouldRetry = shouldRetry;
-                reject(locationError);
-              } catch (err) {
-                console.error('Error handling location error:', err);
-                reject(new Error('Failed to get location. Please try again.'));
-              }
-            },
-            {
-              enableHighAccuracy: useHighAccuracy,
-              timeout: 20000, // Increased timeout to 20 seconds
-              maximumAge: 30000, // Accept location up to 30 seconds old
+        // Use setTimeout to ensure this runs in the next event loop tick
+        // This helps prevent crashes in release builds
+        setTimeout(() => {
+          try {
+            // Comprehensive check if Geolocation module is available and ready
+            if (!Geolocation) {
+              console.error('Geolocation module is not available');
+              reject(new Error('Location service is not available. Please restart the app.'));
+              return;
             }
-          );
-        } catch (error: any) {
-          console.error('Error calling getCurrentPosition:', error);
-          const errorMessage = error?.message || 'Failed to get location. Please try again.';
-          reject(new Error(errorMessage));
-        }
+
+            if (typeof Geolocation.getCurrentPosition !== 'function') {
+              console.error('Geolocation.getCurrentPosition is not a function');
+              reject(new Error('Location service is not available. Please restart the app.'));
+              return;
+            }
+
+            // Try to verify the module is actually initialized by checking if it has properties
+            try {
+              // This will throw if the native module isn't properly linked
+              if (!Geolocation.getCurrentPosition) {
+                reject(new Error('Location service is not initialized. Please restart the app.'));
+                return;
+              }
+            } catch (moduleCheckError) {
+              console.error('Geolocation module check failed:', moduleCheckError);
+              reject(new Error('Location service is not available. Please restart the app.'));
+              return;
+            }
+
+            // Use simpler, safer options for Android release builds
+            // Set forceRequestLocation to true for better compatibility
+            const options: Geolocation.GeoOptions = {
+              enableHighAccuracy: useHighAccuracy,
+              timeout: 12000, // 12 seconds - shorter timeout
+              maximumAge: 60000, // Accept location up to 1 minute old (more lenient)
+              forceRequestLocation: false, // Don't force if cached location is recent
+              showLocationDialog: true, // Show dialog if needed
+            };
+
+            // Wrap in additional try-catch for native errors
+            try {
+              Geolocation.getCurrentPosition(
+              (position: Geolocation.GeoPosition) => {
+                try {
+                  // Validate position exists
+                  if (!position) {
+                    reject(new Error('No position data received. Please try again.'));
+                    return;
+                  }
+
+                  // Validate location data
+                  if (!position.coords || 
+                      typeof position.coords.latitude !== 'number' || 
+                      typeof position.coords.longitude !== 'number' ||
+                      isNaN(position.coords.latitude) ||
+                      isNaN(position.coords.longitude)) {
+                    reject(new Error('Invalid location data received. Please try again.'));
+                    return;
+                  }
+
+                  resolve({
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude,
+                    accuracy: position.coords.accuracy || 0,
+                    address: `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`,
+                  });
+                } catch (parseError) {
+                  console.error('Error parsing location data:', parseError);
+                  reject(new Error('Failed to process location data. Please try again.'));
+                }
+              },
+              (error: Geolocation.GeoError) => {
+                try {
+                  console.error('Location error:', error);
+                  
+                  // Provide specific error messages based on error code
+                  let errorMessage = 'Unable to get your location.';
+                  let shouldRetry = true;
+                  
+                  if (error && typeof error.code === 'number') {
+                    switch (error.code) {
+                      case 1: // PERMISSION_DENIED
+                        errorMessage = 'Location permission denied. Please enable location access in settings.';
+                        shouldRetry = false; // Don't retry permission errors
+                        break;
+                      case 2: // POSITION_UNAVAILABLE
+                        errorMessage = 'Location unavailable. Please ensure GPS is enabled and try again.';
+                        break;
+                      case 3: // TIMEOUT
+                        errorMessage = 'Location request timed out. Please try again.';
+                        break;
+                      default:
+                        errorMessage = 'Unable to get your location. Please ensure GPS is enabled and try again.';
+                    }
+                  }
+                  
+                  const locationError = new Error(errorMessage) as any;
+                  locationError.code = error?.code;
+                  locationError.shouldRetry = shouldRetry;
+                  reject(locationError);
+                } catch (err) {
+                  console.error('Error handling location error:', err);
+                  reject(new Error('Failed to get location. Please try again.'));
+                }
+              },
+                options
+              );
+            } catch (nativeError: any) {
+              console.error('Native error calling getCurrentPosition:', nativeError);
+              // If it's a native crash, provide a safe fallback
+              reject(new Error('Location service encountered an error. Please try again.'));
+            }
+          } catch (error: any) {
+            console.error('Error in location request setup:', error);
+            const errorMessage = error?.message || 'Failed to get location. Please try again.';
+            reject(new Error(errorMessage));
+          }
+        }, 100); // Increased delay to ensure UI and native module are ready
       });
     };
 
@@ -311,7 +357,7 @@ const GuardHomeScreen: React.FC = () => {
         
         // Otherwise, wait a bit before retrying
         console.log(`Location attempt ${attempt + 1} failed, retrying in 2 seconds...`);
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise<void>(resolve => setTimeout(() => resolve(), 2000));
       }
     }
 
@@ -353,6 +399,13 @@ const GuardHomeScreen: React.FC = () => {
 
     try {
       setGettingLocation(true);
+      
+      // Wait for all interactions to complete before accessing native modules
+      // This prevents crashes in release builds
+      await InteractionManager.runAfterInteractions();
+      
+      // Additional delay to ensure native module is ready
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 300));
       
       // Get GPS location with retry logic
       let location;
@@ -447,6 +500,12 @@ const GuardHomeScreen: React.FC = () => {
           onPress: async () => {
             try {
               setGettingLocation(true);
+              
+              // Wait for all interactions to complete before accessing native modules
+              await InteractionManager.runAfterInteractions();
+              
+              // Additional delay to ensure native module is ready
+              await new Promise<void>(resolve => setTimeout(() => resolve(), 300));
               
               // Get GPS location with retry logic
               let location;
@@ -546,7 +605,13 @@ const GuardHomeScreen: React.FC = () => {
             try {
               setGettingLocation(true);
               
-              // Get current location with retry logic
+              // Wait for all interactions to complete before accessing native modules
+              await InteractionManager.runAfterInteractions();
+              
+              // Additional delay to ensure native module is ready
+              await new Promise<void>(resolve => setTimeout(() => resolve(), 300));
+              
+              // Get current location with retry logic - wrapped in try-catch
               let location;
               try {
                 location = await getCurrentLocation(1); // Quick retry for emergency

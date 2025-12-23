@@ -1669,6 +1669,7 @@ class ApiService {
       address?: string;
     };
     message?: string;
+    shiftId?: string; // Optional: pass current shift ID for site-specific notifications
   }): Promise<ApiResponse<any>> {
     try {
       const response = await this.api.post('/emergency/alert', data);

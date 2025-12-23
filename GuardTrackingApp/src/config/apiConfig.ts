@@ -25,7 +25,7 @@ const PRODUCTION_WS_URL = 'http://143.110.198.38:3000';
 // Your local IP address for development
 // Find it with: ipconfig (Windows) or ifconfig (Mac/Linux)
 // const LOCAL_IP = '192.168.1.12'; // ⚠️ CHANGE THIS TO YOUR ACTUAL IP ADDRESS
-const LOCAL_IP = '192.168.1.12'; // ⚠️ CHANGE THIS TO YOUR ACTUAL IP ADDRESS
+const LOCAL_IP = '192.168.1.9'; // ⚠️ CHANGE THIS TO YOUR ACTUAL IP ADDRESS
 
 // Development URLs
 const DEV_API_URL_ANDROID = `http://${LOCAL_IP}:3000/api`;
@@ -45,42 +45,40 @@ const isDev = typeof __DEV__ !== 'undefined' ? __DEV__ : false;
  * Get the API base URL based on environment
  */
 export const getApiBaseUrl = (): string => {
-  if (!isDev) {
-    // Production mode
-    return PRODUCTION_API_URL;
-  }
+  // TEMPORARY: Always use production URL for testing
+  // TODO: Revert this after fixing the crash issue
+  return PRODUCTION_API_URL;
 
-  // Development mode
-  if (Platform.OS === 'android') {
-    // For Android emulator, you can use 10.0.2.2
-    // For physical Android device, use LOCAL_IP
-    // Uncomment the line below if using Android emulator:
-    // return DEV_API_URL_ANDROID_EMULATOR;
-    return DEV_API_URL_ANDROID;
-  } else {
-    // iOS (simulator or physical device)
-    return DEV_API_URL_IOS;
-  }
+  // Original logic (commented out for testing):
+  // if (!isDev) {
+  //   // Production mode
+  //   return PRODUCTION_API_URL;
+  // }
+  //
+  // // Development mode
+  // if (Platform.OS === 'android') {
+  //   return DEV_API_URL_ANDROID;
+  // } else {
+  //   return DEV_API_URL_IOS;
+  // }
 };
 
 /**
  * Get the WebSocket base URL based on environment
  */
 export const getWebSocketUrl = (): string => {
-  if (!isDev) {
-    // Production mode
-    return PRODUCTION_WS_URL;
-  }
+  // TEMPORARY: Always use production URL for testing
+  return PRODUCTION_WS_URL;
 
-  // Development mode
-  if (Platform.OS === 'android') {
-    // Uncomment the line below if using Android emulator:
-    // return DEV_WS_URL_ANDROID_EMULATOR;
-    return DEV_WS_URL;
-  } else {
-    // iOS
-    return DEV_WS_URL;
-  }
+  // Original logic (commented out for testing):
+  // if (!isDev) {
+  //   return PRODUCTION_WS_URL;
+  // }
+  // if (Platform.OS === 'android') {
+  //   return DEV_WS_URL;
+  // } else {
+  //   return DEV_WS_URL;
+  // }
 };
 
 /**

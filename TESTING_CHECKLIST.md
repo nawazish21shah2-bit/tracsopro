@@ -1,258 +1,374 @@
-# Testing Checklist - Option B Implementation
+# Shift Flow Testing Checklist
 
-## 🧪 COMPREHENSIVE TESTING GUIDE
+Use this checklist to verify the streamlined shift creation and assignment flow works correctly.
+
+## Prerequisites
+- [ ] Backend server stopped
+- [ ] Prisma Client regenerated (`npx prisma generate`)
+- [ ] Backend server restarted
+- [ ] Database schema updated (guardId is nullable)
 
 ---
 
-## ✅ TEST 1: Client Creates Shift Without Guard
+## 1. Client Creates Shift (No Guard)
 
-**Steps:**
-1. Login as CLIENT
-2. Navigate to Sites
+### Test Steps:
+1. Login as **Client**
+2. Navigate to create shift screen
 3. Select a site
-4. Click "Create Shift"
-5. Fill form:
-   - Description: "Night security shift"
-   - Start Date: Tomorrow
-   - Start Time: "6:00 PM"
-   - End Date: Tomorrow
-   - End Time: "6:00 AM"
-   - Guard: Leave empty (select "No Guard")
-   - Notes: "Regular night shift"
-6. Click "Create Shift"
+4. Create shift **without selecting a guard**
+5. Fill in dates/times
+6. Submit
 
-**Expected:**
-- ✅ Shift created successfully
-- ✅ Shift has no guardId (null)
-- ✅ Shift linked to client and site
-- ✅ Success message shown
-- ✅ Shift appears in site details
+### Expected Results:
+- [ ] Shift created successfully
+- [ ] Shift has `guardId: null`
+- [ ] Shift status is `SCHEDULED`
+- [ ] Shift appears in client's shift list
+- [ ] No errors in console/backend logs
 
-**API:** `POST /api/clients/shifts`
-
----
-
-## ✅ TEST 2: Client Creates Shift With Guard
-
-**Steps:**
-1. Login as CLIENT
-2. Navigate to Sites
-3. Select a site
-4. Click "Create Shift"
-5. Fill form:
-   - Description: "Day shift"
-   - Start Date: Tomorrow
-   - Start Time: "8:00 AM"
-   - End Date: Tomorrow
-   - End Time: "4:00 PM"
-   - Guard: Select a guard from dropdown
-   - Notes: "Day security shift"
-6. Click "Create Shift"
-
-**Expected:**
-- ✅ Shift created successfully
-- ✅ Shift has guardId assigned
-- ✅ Shift linked to client, site, and guard
-- ✅ Guard can see the shift
-
-**API:** `POST /api/clients/shifts`
-
----
-
-## ✅ TEST 3: Admin Creates Shift
-
-**Steps:**
-1. Login as ADMIN
-2. Navigate to Shift Scheduling
-3. Click "+" to create shift
-4. Fill form:
-   - Guard: Select guard (required)
-   - Site: Select site (optional)
-   - Start Date/Time: Tomorrow 8:00 AM
-   - End Date/Time: Tomorrow 4:00 PM
-   - Description: "Admin assigned shift"
-5. Click "Create Shift"
-
-**Expected:**
-- ✅ Shift created successfully
-- ✅ Shift has guardId (required)
-- ✅ Shift linked to site/client if site selected
-- ✅ Appears in shift list
-- ✅ Guard can see the shift
-
-**API:** `POST /api/admin/shifts`
-
----
-
-## ✅ TEST 4: Admin Assigns Guard to Client-Created Shift
-
-**Steps:**
-1. Login as ADMIN
-2. View shifts list
-3. Find a shift created by client (no guardId)
-4. Click to edit/assign guard
-5. Select guard from dropdown
-6. Save
-
-**Expected:**
-- ✅ Shift updated with guardId
-- ✅ Guard can now see the shift
-- ✅ Shift appears in guard's shift list
-
-**API:** `PUT /api/admin/shifts/:id`
-
----
-
-## ✅ TEST 5: Guard Views Assigned Shifts
-
-**Steps:**
-1. Login as GUARD
-2. Navigate to "My Shifts"
-3. View shifts list
-
-**Expected:**
-- ✅ Sees shifts assigned by admin
-- ✅ Sees shifts assigned by client (if guard was selected)
-- ✅ Can check in/out to shifts
-
-**API:** `GET /api/shifts/upcoming`
-
----
-
-## ✅ TEST 6: Guard Check-In/Out
-
-**Steps:**
-1. Login as GUARD
-2. Navigate to active shift
-3. Click "Check In"
-4. Verify location captured
-5. Complete shift
-6. Click "Check Out"
-
-**Expected:**
-- ✅ Check-in successful
-- ✅ Location recorded
-- ✅ Shift status: IN_PROGRESS
-- ✅ Check-out successful
-- ✅ Shift status: COMPLETED
-
-**API:** 
-- `POST /api/shifts/:id/check-in`
-- `POST /api/shifts/:id/check-out`
-
----
-
-## ✅ TEST 7: Site Creation (Both Admin and Client)
-
-**Client Creates Site:**
-1. Login as CLIENT
-2. Navigate to Sites
-3. Create new site
-4. Verify site created
-
-**Admin Creates Site:**
-1. Login as ADMIN
-2. Navigate to Site Management
-3. Create new site (for a client)
-4. Verify site created and linked to client
-
-**Expected:**
-- ✅ Both can create sites
-- ✅ Sites properly linked to clients
-- ✅ Sites appear in respective lists
-
----
-
-## ✅ TEST 8: Reports Functionality
-
-**Steps:**
-1. Guard submits shift report
-2. Client views reports
-3. Client responds to report
-
-**Expected:**
-- ✅ Reports created from ShiftReport model
-- ✅ Client can view reports
-- ✅ Client can respond to reports
-
-**API:**
-- `GET /api/clients/reports`
-- `PUT /api/clients/reports/:id/respond`
-
----
-
-## 🔍 VERIFICATION POINTS
-
-### Database Checks:
-```sql
--- Check shifts created
-SELECT id, "guardId", "clientId", "siteId", "scheduledStartTime", "scheduledEndTime", status
-FROM "Shift"
-ORDER BY "createdAt" DESC
-LIMIT 10;
-
--- Check client-created shifts (no guard)
-SELECT id, "guardId", "clientId", "siteId"
-FROM "Shift"
-WHERE "guardId" IS NULL
-AND "clientId" IS NOT NULL;
-
--- Verify job board tables are gone
-SELECT table_name 
-FROM information_schema.tables 
-WHERE table_schema = 'public' 
-AND table_name IN ('ShiftPosting', 'ShiftApplication', 'ShiftAssignment', 'AssignmentReport');
--- Should return 0 rows
+### API Test:
+```bash
+POST /api/clients/shifts
+{
+  "siteId": "site-id",
+  "scheduledStartTime": "2025-01-15T09:00:00Z",
+  "scheduledEndTime": "2025-01-15T17:00:00Z"
+}
+# Should return 201 with shift object (guardId: null)
 ```
 
-### API Response Checks:
-- ✅ Response has `success: true`
-- ✅ Response has `data` with shift object
-- ✅ Shift object has correct `guardId`, `clientId`, `siteId`
-- ✅ Dates are properly formatted
+---
+
+## 2. Client Creates Shift (With Guard)
+
+### Test Steps:
+1. Login as **Client**
+2. Create shift **with guard selected**
+3. Submit
+
+### Expected Results:
+- [ ] Shift created successfully
+- [ ] Shift has `guardId: "guard-id"`
+- [ ] Guard can see the shift in their upcoming shifts
+- [ ] No errors
+
+### API Test:
+```bash
+POST /api/clients/shifts
+{
+  "siteId": "site-id",
+  "guardId": "guard-id",  # Optional
+  "scheduledStartTime": "2025-01-15T09:00:00Z",
+  "scheduledEndTime": "2025-01-15T17:00:00Z"
+}
+# Should return 201 with shift object (guardId: "guard-id")
+```
 
 ---
 
-## 🐛 COMMON ISSUES TO CHECK
+## 3. Admin Creates Shift (No Guard)
 
-1. **Guard Dropdown Empty:**
-   - Check if `getClientGuards` API works
-   - Verify guards are linked to client's company
-   - Check API response format
+### Test Steps:
+1. Login as **Admin**
+2. Create shift **without guard**
+3. Submit
 
-2. **Shift Creation Fails:**
-   - Check siteId is valid
-   - Verify site belongs to client
-   - Check date/time format
-   - Verify authentication token
+### Expected Results:
+- [ ] Shift created successfully
+- [ ] Shift has `guardId: null`
+- [ ] Shift appears in unassigned shifts list
+- [ ] No errors
 
-3. **Guard Not Appearing:**
-   - Check guard is linked to same SecurityCompany
-   - Verify CompanyGuard relationship exists
-   - Check guard's user role is GUARD
-
-4. **Admin Can't See Client Shifts:**
-   - Check shift queries include clientId
-   - Verify admin has access to all shifts
-   - Check filtering logic
-
----
-
-## ✅ TESTING COMPLETE WHEN:
-
-- [x] Client can create shift without guard
-- [x] Client can create shift with guard
-- [x] Admin can create shift with guard
-- [x] Admin can assign guard to client shift
-- [x] Guard can see assigned shifts
-- [x] Guard can check in/out
-- [x] Both admin and client can create sites
-- [x] All shifts appear in correct lists
-- [x] No errors in console
-- [x] Database records correct
-- [x] Reports functionality works
+### API Test:
+```bash
+POST /api/admin/shifts
+{
+  "siteId": "site-id",  # Optional
+  "locationName": "Location Name",
+  "locationAddress": "Address",
+  "scheduledStartTime": "2025-01-15T09:00:00Z",
+  "scheduledEndTime": "2025-01-15T17:00:00Z"
+}
+# Should return 201 (guardId not required)
+```
 
 ---
 
-**Ready to start testing!** 🚀
+## 4. Admin Creates Shift (With Guard)
 
+### Test Steps:
+1. Login as **Admin**
+2. Create shift **with guard selected**
+3. Submit
+
+### Expected Results:
+- [ ] Shift created successfully
+- [ ] Shift has `guardId: "guard-id"`
+- [ ] Guard can see the shift
+- [ ] No errors
+
+### API Test:
+```bash
+POST /api/admin/shifts
+{
+  "guardId": "guard-id",  # Optional
+  "siteId": "site-id",
+  "scheduledStartTime": "2025-01-15T09:00:00Z",
+  "scheduledEndTime": "2025-01-15T17:00:00Z"
+}
+# Should return 201 with shift object
+```
+
+---
+
+## 5. Get Unassigned Shifts (Admin)
+
+### Test Steps:
+1. Login as **Admin**
+2. Navigate to unassigned shifts list
+3. Verify shifts without guards appear
+
+### Expected Results:
+- [ ] Only shifts with `guardId: null` are returned
+- [ ] Only `SCHEDULED` shifts are included
+- [ ] Shifts with guards are NOT included
+- [ ] List updates correctly
+
+### API Test:
+```bash
+GET /api/admin/shifts/unassigned?date=2025-01-15
+# Should return array of shifts where guardId is null
+```
+
+---
+
+## 6. Assign Guard to Shift (Admin)
+
+### Test Steps:
+1. Login as **Admin**
+2. View unassigned shifts
+3. Select a shift
+4. Click "Assign Guard"
+5. Select a guard
+6. Submit
+
+### Expected Results:
+- [ ] Guard assigned successfully
+- [ ] Shift now has `guardId`
+- [ ] Shift removed from unassigned list
+- [ ] Guard can see the shift
+- [ ] No overlapping shift conflicts
+
+### API Test:
+```bash
+PATCH /api/admin/shifts/{shiftId}/assign-guard
+{
+  "guardId": "guard-id"
+}
+# Should return 200 with updated shift object
+```
+
+---
+
+## 7. Assign Guard Conflict Detection
+
+### Test Steps:
+1. Create two overlapping shifts for same guard
+2. Try to assign guard to second shift
+3. Should detect conflict
+
+### Expected Results:
+- [ ] Error returned: "Guard has overlapping shifts"
+- [ ] Guard NOT assigned
+- [ ] Shift remains unassigned
+
+### API Test:
+```bash
+# Create shift 1: 09:00-17:00
+POST /api/admin/shifts { guardId: "guard-1", ... }
+
+# Try to assign same guard to overlapping shift 2: 10:00-18:00
+PATCH /api/admin/shifts/{shift2Id}/assign-guard { guardId: "guard-1" }
+# Should return 400 with conflict error
+```
+
+---
+
+## 8. Guard Cannot Create Shift
+
+### Test Steps:
+1. Login as **Guard**
+2. Try to create a shift (if UI allows)
+3. Should be blocked or return error
+
+### Expected Results:
+- [ ] Endpoint returns 403/404 or method not allowed
+- [ ] Error message indicates guards cannot create shifts
+- [ ] No shift created
+
+### API Test:
+```bash
+POST /api/shifts
+# Should return error (endpoint removed or blocked)
+```
+
+---
+
+## 9. Guard Checks In to Assigned Shift
+
+### Test Steps:
+1. Assign guard to shift
+2. Login as **Guard**
+3. Navigate to shift
+4. Check in
+
+### Expected Results:
+- [ ] Check-in successful
+- [ ] Shift status changes to `IN_PROGRESS`
+- [ ] `actualStartTime` is set
+- [ ] Check-in location recorded
+- [ ] No errors
+
+### API Test:
+```bash
+POST /api/shifts/{shiftId}/check-in
+{
+  "location": {
+    "latitude": 40.7128,
+    "longitude": -74.0060,
+    "accuracy": 10,
+    "address": "123 Main St"
+  }
+}
+# Should return 200 with updated shift
+```
+
+---
+
+## 10. Guard Cannot Check In to Unassigned Shift
+
+### Test Steps:
+1. Create shift without guard
+2. Login as **Guard**
+3. Try to check in (if they can see it)
+
+### Expected Results:
+- [ ] Check-in fails
+- [ ] Error: "Shift does not belong to this guard" or similar
+- [ ] Shift remains `SCHEDULED`
+
+---
+
+## 11. Client Views Assigned Guard
+
+### Test Steps:
+1. Assign guard to shift
+2. Login as **Client**
+3. View shift details
+4. Verify guard information displayed
+
+### Expected Results:
+- [ ] Guard name displayed
+- [ ] Guard contact info visible (if allowed)
+- [ ] Can communicate with guard
+- [ ] Guard info updates when guard is assigned
+
+### API Test:
+```bash
+GET /api/clients/shifts/{shiftId}
+# Should return shift with guard object included
+```
+
+---
+
+## 12. Guard Views Shift Details
+
+### Test Steps:
+1. Assign guard to shift
+2. Login as **Guard**
+3. View shift details
+
+### Expected Results:
+- [ ] Shift details visible
+- [ ] Site information displayed
+- [ ] Client information visible (if allowed)
+- [ ] Can communicate with client
+- [ ] Check-in button enabled
+
+---
+
+## 13. Query Tests
+
+### Test: Get shifts by date (includes assigned and unassigned)
+```bash
+GET /api/admin/shifts?date=2025-01-15
+# Should return all shifts for date (both assigned and unassigned)
+```
+
+### Test: Get shifts filtered by guard
+```bash
+GET /api/admin/shifts?date=2025-01-15&guardId=guard-id
+# Should return only shifts for that guard
+```
+
+### Test: Get client shifts
+```bash
+GET /api/clients/shifts
+# Should return client's shifts (with guard info if assigned)
+```
+
+---
+
+## Error Cases
+
+### Test: Assign guard to already assigned shift
+- [ ] Error: "Shift already has a guard assigned"
+
+### Test: Assign guard to non-scheduled shift
+- [ ] Error: "Can only assign guard to scheduled shifts"
+
+### Test: Assign invalid guard
+- [ ] Error: "Guard not found"
+
+### Test: Client creates shift for wrong site
+- [ ] Error: "Site does not belong to this client"
+
+---
+
+## Performance Tests
+
+- [ ] Unassigned shifts query is fast (< 500ms)
+- [ ] Guard assignment is fast (< 500ms)
+- [ ] Large number of shifts (100+) handled correctly
+- [ ] Pagination works for shift lists
+
+---
+
+## Integration Tests
+
+- [ ] Client creates → Admin assigns → Guard checks in (full flow)
+- [ ] Admin creates with guard → Guard checks in (direct flow)
+- [ ] Communication enabled after guard assignment
+- [ ] Notifications sent when guard assigned
+- [ ] Shift status updates propagate correctly
+
+---
+
+## Notes
+
+- All tests should be run in development/staging environment first
+- Test with real data if possible
+- Check backend logs for any errors
+- Verify database state after each operation
+- Test edge cases (past dates, overlapping times, etc.)
+
+---
+
+## Status
+
+Update this section as you test:
+
+- [ ] All tests passing
+- [ ] Issues found: (list any issues)
+- [ ] Ready for production: Yes/No

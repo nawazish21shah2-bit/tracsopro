@@ -112,3 +112,15 @@ junit.xml
 
 # Misc
 .DS_Store
+
+# Large log files
+*.log
+**/logs/
+backend/logs/
+# Explicitly ignore heavy directories to fix IDE watcher issues
+GuardTrackingApp/android/app/build/
+GuardTrackingApp/ios/build/
+GuardTrackingApp/node_modules/
+backend/node_modules/
+backend/dist/
+backend/build/
