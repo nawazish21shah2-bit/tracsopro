@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { StyleProp, TextStyle, View } from 'react-native';
+import React from 'react';
+import { View } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -33,7 +33,7 @@ interface IconProps {
   name: string;
   size?: number;
   color?: string;
-  style?: any; // Using any to avoid TypeScript errors between different versions of TextStyle
+  style?: any;
 }
 
 // Main Icon component that renders the appropriate icon based on type
@@ -44,7 +44,6 @@ export const AppIcon: React.FC<IconProps> = ({
   color = '#000000',
   style,
 }) => {
-  // Convert style to any to avoid TypeScript errors between different versions of TextStyle
   const iconStyle = style as any;
   
   switch (type) {
@@ -55,51 +54,26 @@ export const AppIcon: React.FC<IconProps> = ({
     case 'ionicons':
       return <Ionicons name={name} size={size} color={color} style={iconStyle} />;
     case 'fontawesome':
-      return <FontAwesome name={name} size={size} color={color} style={iconStyle}  />;
+      return <FontAwesome name={name} size={size} color={color} style={iconStyle} />;
     default:
       return <MaterialIcons name="error" size={size} color={color} style={iconStyle} />;
   }
 };
 
-// Generic SVG icon wrapper for our Figma-exported assets
-// This ensures colors are properly applied to SVG icons even when they have hardcoded colors
-type SvgIconProps = { size?: number; color?: string; style?: any; strokeWidth?: number };
-const SvgIcon = ({ Svg, size = 24, color, style, strokeWidth }: SvgIconProps & { Svg: any }) => {
-  // Explicitly use the passed color, or fall back to default
-  // This ensures the color prop is always respected
+// Generic SVG icon wrapper - simple and consistent
+// Uses native SVG stroke widths for uniform appearance
+type SvgIconProps = { size?: number; color?: string; style?: any };
+const SvgIcon = ({ Svg, size = 24, color, style }: SvgIconProps & { Svg: any }) => {
   const iconColor = color || '#000000';
   
-  // Calculate stroke width: use provided value, or default to size/20 (1.2px for 24px icon)
-  // For very thin outline: use size/24 (1px for 24px icon)
-  // For thin outline: use size/20 (1.2px for 24px icon) - current default
-  // For medium outline: use size/12 (2px for 24px icon)
-  // For thicker outline: use size/8 (3px for 24px icon)
-  const outlineWidth = strokeWidth !== undefined ? strokeWidth : size / 20;
-  
-  // Use tintColor in style to override hardcoded colors in SVG paths
-  // This is the most reliable way to change SVG colors in React Native
-  // tintColor works by applying a color filter to the entire SVG
-  // For react-native-svg, we also pass fill and stroke directly
-  const iconStyle = useMemo(() => {
-    return [
-      { 
-        tintColor: iconColor,
-      }, 
-      style
-    ];
-  }, [iconColor, style]);
-  
-  // Pass color-related props to override hardcoded colors in SVG
-  // The SVG transformer should handle these props
   return (
     <Svg 
       width={size} 
       height={size} 
       fill={iconColor}
       stroke={iconColor}
-      strokeWidth={outlineWidth}
       color={iconColor}
-      style={iconStyle}
+      style={style}
     />
   );
 };
@@ -108,34 +82,32 @@ const SvgIcon = ({ Svg, size = 24, color, style, strokeWidth }: SvgIconProps & {
 interface CommonIconProps {
   size?: number;
   color?: string;
-  style?: any; // Using any to avoid TypeScript errors between different versions of TextStyle
-  strokeWidth?: number; // Optional: override default stroke width for outline icons
+  style?: any;
 }
 
-// Navigation icons - matching UI design exactly
-// These icons properly respect the color prop for active/inactive states
-export const HomeIcon: React.FC<CommonIconProps> = ({ size = 24, color, style, strokeWidth }) => (
-  <SvgIcon Svg={HomeSvg} size={size} color={color} style={style} strokeWidth={strokeWidth} />
+// Navigation icons - consistent styling with native SVG strokes
+export const HomeIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
+  <SvgIcon Svg={HomeSvg} size={size} color={color} style={style} />
 );
 
-export const DashboardIcon: React.FC<CommonIconProps> = ({ size = 24, color, style, strokeWidth }) => (
-  <SvgIcon Svg={MenuSvg} size={size} color={color} style={style} strokeWidth={strokeWidth} />
+export const DashboardIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
+  <SvgIcon Svg={MenuSvg} size={size} color={color} style={style} />
 );
 
-export const ShiftsIcon: React.FC<CommonIconProps> = ({ size = 24, color, style, strokeWidth }) => (
-  <SvgIcon Svg={CalendarSvg} size={size} color={color} style={style} strokeWidth={strokeWidth} />
+export const ShiftsIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
+  <SvgIcon Svg={CalendarSvg} size={size} color={color} style={style} />
 );
 
-export const ReportsIcon: React.FC<CommonIconProps> = ({ size = 24, color, style, strokeWidth }) => (
-  <SvgIcon Svg={ReportsSvg} size={size} color={color} style={style} strokeWidth={strokeWidth} />
+export const ReportsIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
+  <SvgIcon Svg={ReportsSvg} size={size} color={color} style={style} />
 );
 
-export const JobsIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
+export const JobsIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
   <SvgIcon Svg={JobsSvg} size={size} color={color} style={style} />
 );
 
-export const SettingsIcon: React.FC<CommonIconProps> = ({ size = 24, color, style, strokeWidth }) => (
-  <SvgIcon Svg={SettingsSvg} size={size} color={color} style={style} strokeWidth={strokeWidth} />
+export const SettingsIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
+  <SvgIcon Svg={SettingsSvg} size={size} color={color} style={style} />
 );
 
 // Action icons
@@ -176,43 +148,43 @@ export const MenuIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#00000
   );
 };
 
-export const NotificationIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
+export const NotificationIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
   <SvgIcon Svg={BellSvg} size={size} color={color} style={style} />
 );
 
-export const LocationIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
+export const LocationIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
   <SvgIcon Svg={MapPinSvg} size={size} color={color} style={style} />
 );
 
-export const ClockIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
+export const ClockIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
   <SvgIcon Svg={ClockSvg} size={size} color={color} style={style} />
 );
 
-export const CheckInIcon: React.FC<CommonIconProps> = ({ size = 24, color, style, strokeWidth }) => (
-  <SvgIcon Svg={ClockSvg} size={size} color={color} style={style} strokeWidth={strokeWidth} />
+export const CheckInIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
+  <SvgIcon Svg={ClockSvg} size={size} color={color} style={style} />
 );
 
-export const IncidentIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
+export const IncidentIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
   <SvgIcon Svg={ReportsSvg} size={size} color={color} style={style} />
 );
 
-export const EmergencyIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
+export const EmergencyIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
   <SvgIcon Svg={WarningSvg} size={size} color={color} style={style} />
 );
 
-export const UserIcon: React.FC<CommonIconProps> = ({ size = 24, color, style, strokeWidth }) => (
-  <SvgIcon Svg={UserSvg} size={size} color={color} style={style} strokeWidth={strokeWidth} />
+export const UserIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
+  <SvgIcon Svg={UserSvg} size={size} color={color} style={style} />
 );
 
-export const ArrowRightIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
+export const ArrowRightIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
   <SvgIcon Svg={ArrowSquareOutSvg} size={size} color={color} style={style} />
 );
 
-export const ArrowUpOutlineIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
+export const ArrowUpOutlineIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
   <SolarArrowUpOutlineSvg width={size} height={size} color={color} stroke={color} fill="none" style={style} />
 );
 
-export const ExternalLinkIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
+export const ExternalLinkIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
   <SvgIcon Svg={ArrowSquareOutSvg} size={size} color={color} style={style} />
 );
 
@@ -234,20 +206,20 @@ export const EmailIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#0000
   <AppIcon type="material" name="mail-outline" size={size} color={color} style={style} />
 );
 
-export const PasswordIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
+export const PasswordIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
   <SvgIcon Svg={PasswordSvg} size={size} color={color} style={style} />
 );
 
-export const PersonIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
+export const PersonIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
   <SvgIcon Svg={PersonSvg} size={size} color={color} style={style} />
 );
 
 // Visibility icons for password fields
-export const EyeIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
+export const EyeIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
   <SvgIcon Svg={EyeSvg} size={size} color={color} style={style} />
 );
 
-export const EyeSlashIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
+export const EyeSlashIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
   <SvgIcon Svg={EyeSlashSvg} size={size} color={color} style={style} />
 );
 
@@ -255,7 +227,7 @@ export const CameraIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000
   <AppIcon type="material" name="photo-camera" size={size} color={color} style={style} />
 );
 
-export const DocumentIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
+export const DocumentIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
   <SvgIcon Svg={ReportsSvg} size={size} color={color} style={style} />
 );
 

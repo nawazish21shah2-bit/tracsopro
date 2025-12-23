@@ -28,52 +28,174 @@ export const getOperationsMetrics = async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
+    const securityCompanyId = req.securityCompanyId;
+
+    // Multi-tenant: Build company filters
+    const guardWhere = securityCompanyId ? {
+      companyGuards: {
+        some: {
+          securityCompanyId,
+          isActive: true,
+        },
+      },
+    } : {};
+
+    const siteWhere = securityCompanyId ? {
+      companySites: {
+        some: {
+          securityCompanyId,
+        },
+      },
+    } : {};
+
+    const shiftWhere = securityCompanyId ? {
+      guard: {
+        companyGuards: {
+          some: {
+            securityCompanyId,
+            isActive: true,
+          },
+        },
+      },
+    } : {};
+
+    // Get company guard IDs if filtering by company (needed for breaks and incidents)
+    let companyGuardIds: string[] | undefined;
+    if (securityCompanyId) {
+      const companyGuards = await prisma.companyGuard.findMany({
+        where: {
+          securityCompanyId,
+          isActive: true,
+        },
+        select: { guardId: true },
+      });
+      companyGuardIds = companyGuards.map(cg => cg.guardId).filter(Boolean) as string[];
+      
+      // If no guards in company, return empty metrics
+      if (companyGuardIds.length === 0) {
+        return res.json({
+          success: true,
+          data: {
+            totalGuards: 0,
+            activeGuards: 0,
+            guardsOnBreak: 0,
+            offlineGuards: 0,
+            emergencyAlerts: 0,
+            siteCoverage: 0,
+            averageResponseTime: 0,
+            incidentsToday: 0,
+          },
+        });
+      }
+    }
+
     // Guard Statistics
     const [totalGuards, activeGuards, offlineGuards, activeBreaks] = await Promise.all([
-      prisma.guard.count(),
+      prisma.guard.count({ where: guardWhere }),
       prisma.guard.count({
-        where: { status: { in: [GuardStatus.ON_DUTY, GuardStatus.ACTIVE] } },
+        where: {
+          ...guardWhere,
+          status: { in: [GuardStatus.ON_DUTY, GuardStatus.ACTIVE] },
+        },
       }),
-      prisma.guard.count({ where: { status: GuardStatus.OFF_DUTY } }),
-      prisma.shiftBreak.findMany({
-        where: { endTime: null, shift: { status: 'IN_PROGRESS' } },
-        select: { shift: { select: { guardId: true } } },
-        distinct: ['shiftId'],
-      }),
+      prisma.guard.count({ where: { ...guardWhere, status: GuardStatus.OFF_DUTY } }),
+      companyGuardIds
+        ? prisma.shiftBreak.findMany({
+            where: {
+              endTime: null,
+              shift: {
+                status: 'IN_PROGRESS',
+                guardId: { in: companyGuardIds },
+              },
+            },
+            select: { shift: { select: { guardId: true } } },
+            distinct: ['shiftId'],
+          })
+        : prisma.shiftBreak.findMany({
+            where: {
+              endTime: null,
+              shift: {
+                status: 'IN_PROGRESS',
+              },
+            },
+            select: { shift: { select: { guardId: true } } },
+            distinct: ['shiftId'],
+          }),
     ]);
 
     const guardsOnBreak = activeBreaks.length;
 
-    // Emergency Alerts
-    const activeAlerts = await emergencyService.getActiveEmergencyAlerts();
+    // Emergency Alerts (filtered by company)
+    const activeAlerts = await emergencyService.getActiveEmergencyAlerts(securityCompanyId);
     const emergencyAlerts = activeAlerts.length;
 
-    // Site Coverage
+    // Site Coverage - Use Site model with CompanySite relationship
+    const siteCoverageWhere: any = {
+      ...siteWhere,
+      isActive: true,
+    };
+
+    const shiftsForSiteCoverageWhere: any = {
+      status: ShiftStatus.IN_PROGRESS,
+      site: siteCoverageWhere,
+    };
+
+    // Also filter shifts by company guards if filtering by company
+    if (companyGuardIds) {
+      shiftsForSiteCoverageWhere.guardId = { in: companyGuardIds };
+    }
+
     const [activeSites, sitesWithGuardsResult] = await Promise.all([
-      prisma.location.count({ where: { isActive: true } }),
-      prisma.locationAssignment.findMany({
-        where: { status: 'ACTIVE', location: { isActive: true } },
-        select: { locationId: true },
-        distinct: ['locationId'],
+      prisma.site.count({
+        where: siteCoverageWhere,
+      }),
+      prisma.shift.findMany({
+        where: shiftsForSiteCoverageWhere,
+        select: { siteId: true },
+        distinct: ['siteId'],
       }),
     ]);
     const sitesWithGuards = sitesWithGuardsResult.length;
     const siteCoverage = activeSites > 0 ? (sitesWithGuards / activeSites) * 100 : 0;
 
-    // Response Time & Incidents
+    // Response Time & Incidents - Filter by company guards
     const last24Hours = new Date(Date.now() - ONE_DAY_MS);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    // Convert guardIds to userIds since Incident uses reportedBy (userId)
+    let companyUserIds: string[] | undefined;
+    if (companyGuardIds && companyGuardIds.length > 0) {
+      const guards = await prisma.guard.findMany({
+        where: {
+          id: { in: companyGuardIds },
+        },
+        select: { userId: true },
+      });
+      companyUserIds = guards.map(g => g.userId).filter(Boolean) as string[];
+    }
+
+    const incidentWhere: any = companyUserIds && companyUserIds.length > 0
+      ? {
+          reportedBy: { in: companyUserIds },
+        }
+      : {};
+
     const [recentIncidents, incidentsToday] = await Promise.all([
       prisma.incident.findMany({
         where: {
+          ...incidentWhere,
           createdAt: { gte: last24Hours },
           resolvedAt: { isNot: null },
         },
         select: { createdAt: true, resolvedAt: true },
       }),
-      prisma.incident.count({ where: { createdAt: { gte: today } } }),
+      prisma.incident.count({
+        where: {
+          ...incidentWhere,
+          createdAt: { gte: today },
+        },
+      }),
     ]);
 
     // Calculate average response time
@@ -123,8 +245,21 @@ export const getGuardStatuses = async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
-    // Fetch all guards with user info
+    const securityCompanyId = req.securityCompanyId;
+
+    // Multi-tenant: Build company filter for guards
+    const guardWhere = securityCompanyId ? {
+      companyGuards: {
+        some: {
+          securityCompanyId,
+          isActive: true,
+        },
+      },
+    } : {};
+
+    // Fetch guards with user info (filtered by company)
     const guards = await prisma.guard.findMany({
+      where: guardWhere,
       include: {
         user: {
           select: { id: true, firstName: true, lastName: true },
@@ -132,8 +267,8 @@ export const getGuardStatuses = async (req: AuthRequest, res: Response) => {
       },
     });
 
-    // Get active emergency alerts once (shared across all guards)
-    const activeAlerts = await emergencyService.getActiveEmergencyAlerts();
+    // Get active emergency alerts once (shared across all guards, filtered by company)
+    const activeAlerts = await emergencyService.getActiveEmergencyAlerts(securityCompanyId);
 
     // Process each guard's status
     const guardStatuses = await Promise.all(

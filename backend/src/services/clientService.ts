@@ -366,7 +366,7 @@ export class ClientService {
         prisma.shift.findMany({
           where: {
             clientId,
-            guardId: { isNot: null }, // Only shifts with assigned guards
+            guardId: { not: null }, // Only shifts with assigned guards
             OR: [
               {
                 // Active shifts
@@ -442,7 +442,7 @@ export class ClientService {
         prisma.shift.count({
           where: {
             clientId,
-            guardId: { isNot: null },
+            guardId: { not: null },
             OR: [
               {
                 status: 'IN_PROGRESS',
@@ -606,17 +606,23 @@ export class ClientService {
                 guard: {
                   include: {
                     user: {
-                      select: { firstName: true, lastName: true, email: true }
+                      select: { 
+                        id: true,
+                        firstName: true, 
+                        lastName: true, 
+                        email: true 
+                      }
                     }
                   }
                 }
               }
             },
             guard: {
-              include: {
-                user: {
-                  select: { firstName: true, lastName: true, email: true }
-                }
+              select: { 
+                id: true,
+                firstName: true, 
+                lastName: true, 
+                email: true 
               }
             }
           },
@@ -663,102 +669,140 @@ export class ClientService {
 
       // Transform shift reports to match frontend format
       const transformedShiftReports = shiftReports.map((report) => {
-        const guardUser = report.guard?.user || report.shift?.guard?.user;
-        const guardName = guardUser 
-          ? `${guardUser.firstName} ${guardUser.lastName}`
-          : 'Unknown Guard';
-        
-        // Map report type from ReportTypeEnum
-        let type: 'Medical Emergency' | 'Incident' | 'Violation' | 'Maintenance' = 'Incident';
-        switch (report.reportType) {
-          case 'EMERGENCY':
-            type = 'Medical Emergency';
-            break;
-          case 'INCIDENT':
-            type = 'Incident';
-            break;
-          case 'SHIFT':
-          default:
-            type = 'Incident';
+        try {
+          // ShiftReport.guard is a User directly, Shift.guard is a Guard with user relation
+          const guardUser = report.guard || report.shift?.guard?.user;
+          const guardName = guardUser 
+            ? `${guardUser.firstName || ''} ${guardUser.lastName || ''}`.trim() || 'Unknown Guard'
+            : 'Unknown Guard';
+          
+          // Map report type from ReportTypeEnum
+          let type: 'Medical Emergency' | 'Incident' | 'Violation' | 'Maintenance' = 'Incident';
+          switch (report.reportType) {
+            case 'EMERGENCY':
+              type = 'Medical Emergency';
+              break;
+            case 'INCIDENT':
+              type = 'Incident';
+              break;
+            case 'SHIFT':
+            default:
+              type = 'Incident';
+          }
+
+          // ShiftReport doesn't have status field, default to 'New'
+          let status: 'Respond' | 'New' | 'Reviewed' = 'New';
+
+          const siteName = report.shift?.site?.name || 'Unknown Site';
+          const checkInTime = report.shift?.checkInTime;
+
+          return {
+            id: report.id,
+            type,
+            guardName,
+            site: siteName,
+            time: report.submittedAt 
+              ? new Date(report.submittedAt).toLocaleTimeString('en-US', { 
+                  hour: '2-digit', 
+                  minute: '2-digit',
+                  hour12: true 
+                })
+              : 'Unknown Time',
+            description: report.content || 'No description',
+            status,
+            checkInTime: checkInTime
+              ? new Date(checkInTime).toLocaleTimeString('en-US', { 
+                  hour: '2-digit', 
+                  minute: '2-digit',
+                  hour12: true 
+                })
+              : undefined,
+            guardId: report.shift?.guard?.id,
+            guardUserId: report.guard?.id || report.shift?.guard?.userId,
+          };
+        } catch (error) {
+          logger.error(`Error transforming shift report ${report.id}:`, error);
+          // Return a minimal valid report object
+          return {
+            id: report.id,
+            type: 'Incident' as const,
+            guardName: 'Unknown Guard',
+            site: 'Unknown Site',
+            time: 'Unknown Time',
+            description: report.content || 'No description',
+            status: 'New' as const,
+            guardId: report.shift?.guard?.id,
+            guardUserId: report.guard?.id,
+          };
         }
-
-        // ShiftReport doesn't have status field, default to 'Respond' to show Respond button
-        let status: 'Respond' | 'New' | 'Reviewed' = 'Respond';
-
-        const siteName = report.shift?.site?.name || 'Unknown Site';
-        const checkInTime = report.shift?.checkInTime;
-
-        return {
-          id: report.id,
-          type,
-          guardName,
-          site: siteName,
-          time: new Date(report.submittedAt).toLocaleTimeString('en-US', { 
-            hour: '2-digit', 
-            minute: '2-digit',
-            hour12: true 
-          }),
-          description: report.content,
-          status,
-          checkInTime: checkInTime
-            ? new Date(checkInTime).toLocaleTimeString('en-US', { 
-                hour: '2-digit', 
-                minute: '2-digit',
-                hour12: true 
-              })
-            : undefined,
-          guardId: report.guard?.id || report.shift?.guard?.id,
-        };
       });
 
       // Transform incident reports to match frontend format
       const transformedIncidentReports = incidentReports.map((report) => {
-        const guardUser = report.guard?.user;
-        const guardName = guardUser 
-          ? `${guardUser.firstName} ${guardUser.lastName}`
-          : 'Unknown Guard';
-        
-        // Map report type from reportType string
-        let type: 'Medical Emergency' | 'Incident' | 'Violation' | 'Maintenance' = 'Incident';
-        const reportTypeUpper = (report.reportType || '').toUpperCase();
-        if (reportTypeUpper.includes('EMERGENCY') || reportTypeUpper.includes('MEDICAL')) {
-          type = 'Medical Emergency';
-        } else if (reportTypeUpper.includes('VIOLATION')) {
-          type = 'Violation';
-        } else if (reportTypeUpper.includes('MAINTENANCE')) {
-          type = 'Maintenance';
+        try {
+          const guardUser = report.guard?.user;
+          const guardName = guardUser 
+            ? `${guardUser.firstName || ''} ${guardUser.lastName || ''}`.trim() || 'Unknown Guard'
+            : 'Unknown Guard';
+          
+          // Map report type from reportType string
+          let type: 'Medical Emergency' | 'Incident' | 'Violation' | 'Maintenance' = 'Incident';
+          const reportTypeUpper = (report.reportType || '').toUpperCase();
+          if (reportTypeUpper.includes('EMERGENCY') || reportTypeUpper.includes('MEDICAL')) {
+            type = 'Medical Emergency';
+          } else if (reportTypeUpper.includes('VIOLATION')) {
+            type = 'Violation';
+          } else if (reportTypeUpper.includes('MAINTENANCE')) {
+            type = 'Maintenance';
+          }
+
+          // Map status from IncidentReport status
+          let status: 'Respond' | 'New' | 'Reviewed' = 'Respond';
+          const statusUpper = (report.status || '').toUpperCase();
+          if (statusUpper === 'REVIEWED' || statusUpper === 'RESOLVED') {
+            status = 'Reviewed';
+          } else if (statusUpper === 'PENDING' || statusUpper === 'SUBMITTED') {
+            status = 'Respond'; // Show "Respond" button for new reports
+          } else {
+            status = 'Respond'; // Default to Respond for any other status
+          }
+
+          const siteName = report.locationName || 'Unknown Site';
+
+          return {
+            id: report.id,
+            type,
+            guardName,
+            site: siteName,
+            time: report.submittedAt 
+              ? new Date(report.submittedAt).toLocaleTimeString('en-US', { 
+                  hour: '2-digit', 
+                  minute: '2-digit',
+                  hour12: true 
+                })
+              : 'Unknown Time',
+            description: report.description || 'No description',
+            status,
+            checkInTime: undefined,
+            guardId: report.guard?.id,
+            guardUserId: guardUser?.id || report.guard?.userId,
+          };
+        } catch (error) {
+          logger.error(`Error transforming incident report ${report.id}:`, error);
+          // Return a minimal valid report object
+          return {
+            id: report.id,
+            type: 'Incident' as const,
+            guardName: 'Unknown Guard',
+            site: report.locationName || 'Unknown Site',
+            time: 'Unknown Time',
+            description: report.description || 'No description',
+            status: 'Respond' as const,
+            checkInTime: undefined,
+            guardId: report.guard?.id,
+            guardUserId: undefined,
+          };
         }
-
-        // Map status from IncidentReport status
-        // 'SUBMITTED' or 'PENDING' = 'Respond' (show Respond button)
-        // 'REVIEWED' or 'RESOLVED' = 'Reviewed' (already responded)
-        let status: 'Respond' | 'New' | 'Reviewed' = 'Respond';
-        const statusUpper = (report.status || '').toUpperCase();
-        if (statusUpper === 'REVIEWED' || statusUpper === 'RESOLVED') {
-          status = 'Reviewed';
-        } else if (statusUpper === 'SUBMITTED' || statusUpper === 'PENDING') {
-          status = 'Respond'; // New reports - show "Respond" button
-        } else {
-          status = 'Respond'; // Default to Respond for any other status
-        }
-
-        const siteName = report.locationName || 'Unknown Site';
-
-        return {
-          id: report.id,
-          type,
-          guardName,
-          site: siteName,
-          time: new Date(report.submittedAt).toLocaleTimeString('en-US', { 
-            hour: '2-digit', 
-            minute: '2-digit',
-            hour12: true 
-          }),
-          description: report.description,
-          status,
-          checkInTime: undefined,
-          guardId: report.guard?.id,
-        };
       });
 
       // Combine and sort by time (most recent first)

@@ -4,6 +4,8 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
+  Platform,
+  PermissionsAndroid,
 } from 'react-native';
 import {
   Alert,
@@ -40,6 +42,7 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
   const dispatch = useDispatch();
   const { user } = useSelector((state: RootState) => state.auth);
   const { loading } = useSelector((state: RootState) => state.emergency);
+  const { activeShift } = useSelector((state: RootState) => state.shifts);
   
   const [showTypeSelector, setShowTypeSelector] = useState(false);
   const [isPressed, setIsPressed] = useState(false);
@@ -92,29 +95,105 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
 
   const currentSize = buttonSizes[size];
 
-  // Get current location helper function
-  const getCurrentLocation = (): Promise<any> => {
-    return new Promise((resolve, reject) => {
-      Geolocation.getCurrentPosition(
-        (position) => {
-          resolve({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            accuracy: position.coords.accuracy,
-            address: `${position.coords.latitude}, ${position.coords.longitude}`,
-          });
-        },
-        (error) => {
-          console.error('Location error:', error);
-          resolve(null);
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 10000,
+  // Request location permission (Android)
+  const requestLocationPermission = async (): Promise<boolean> => {
+    if (Platform.OS === 'android') {
+      try {
+        // Check if permission is already granted
+        const checkResult = await PermissionsAndroid.check(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+        );
+        
+        if (checkResult) {
+          return true;
         }
-      );
-    });
+
+        // Request permission
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          {
+            title: 'Location Permission',
+            message: 'This app needs access to your location for emergency alerts.',
+            buttonNeutral: 'Ask Me Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
+          }
+        );
+
+        return granted === PermissionsAndroid.RESULTS.GRANTED;
+      } catch (err) {
+        console.error('Error requesting location permission:', err);
+        return false;
+      }
+    }
+    
+    // iOS permissions are handled automatically by react-native-geolocation-service
+    return true;
+  };
+
+  // Get current location helper function
+  const getCurrentLocation = async (): Promise<any> => {
+    try {
+      // First, request permission if needed
+      const hasPermission = await requestLocationPermission();
+      if (!hasPermission) {
+        console.warn('Location permission denied for emergency alert');
+        return null;
+      }
+
+      return new Promise((resolve) => {
+        try {
+          // Check if Geolocation is available
+          if (!Geolocation || typeof Geolocation.getCurrentPosition !== 'function') {
+            console.error('Geolocation service is not available');
+            resolve(null);
+            return;
+          }
+
+          Geolocation.getCurrentPosition(
+            (position) => {
+              try {
+                if (!position || !position.coords) {
+                  resolve(null);
+                  return;
+                }
+                
+                // Validate coordinates
+                if (typeof position.coords.latitude !== 'number' || typeof position.coords.longitude !== 'number') {
+                  resolve(null);
+                  return;
+                }
+
+                resolve({
+                  latitude: position.coords.latitude,
+                  longitude: position.coords.longitude,
+                  accuracy: position.coords.accuracy || 0,
+                  address: `${position.coords.latitude}, ${position.coords.longitude}`,
+                });
+              } catch (parseError) {
+                console.error('Error parsing location data:', parseError);
+                resolve(null);
+              }
+            },
+            (error) => {
+              console.error('Location error:', error);
+              resolve(null);
+            },
+            {
+              enableHighAccuracy: true,
+              timeout: 15000,
+              maximumAge: 10000,
+            }
+          );
+        } catch (error) {
+          console.error('Error calling getCurrentPosition:', error);
+          resolve(null);
+        }
+      });
+    } catch (error) {
+      console.error('Error in getCurrentLocation:', error);
+      return null;
+    }
   };
 
   // Start pulsing animation
@@ -167,7 +246,18 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
       setShowTypeSelector(false);
       
       // Get current location
-      const location = await getCurrentLocation();
+      let location = null;
+      try {
+        location = await getCurrentLocation();
+        
+        // Validate location data if received
+        if (location && (typeof location.latitude !== 'number' || typeof location.longitude !== 'number')) {
+          location = null;
+        }
+      } catch (error) {
+        console.error('Error getting location for emergency:', error);
+        location = null;
+      }
       
       if (!location) {
         Alert.alert(
@@ -202,24 +292,41 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
 
   const sendEmergencyAlert = async (emergencyType: EmergencyType, location: any) => {
     try {
+      // Validate and sanitize location data
+      const locationData = location && 
+                           typeof location.latitude === 'number' && 
+                           typeof location.longitude === 'number'
+        ? {
+            latitude: location.latitude,
+            longitude: location.longitude,
+            accuracy: location.accuracy || 0,
+            address: location.address || 'Location unavailable',
+          }
+        : {
+            latitude: 0,
+            longitude: 0,
+            accuracy: 0,
+            address: 'Location unavailable',
+          };
+
       const alertData = {
         type: emergencyType.id,
         severity: emergencyType.severity,
-        location: location || {
-          latitude: 0,
-          longitude: 0,
-          accuracy: 0,
-          address: 'Location unavailable',
-        },
-        message: `${emergencyType.label} triggered by ${user?.firstName} ${user?.lastName}`,
+        location: locationData,
+        message: `${emergencyType.label} triggered by ${user?.firstName || 'User'} ${user?.lastName || ''}`,
+        shiftId: activeShift?.id, // Pass active shift ID for site-specific notifications
       };
 
       // Dispatch emergency alert
       const result = await dispatch(triggerEmergencyAlert(alertData) as any);
       
-      if (result.type === 'emergency/triggerAlert/fulfilled') {
+      if (result && result.type === 'emergency/triggerAlert/fulfilled') {
         // Success feedback
-        Vibration.vibrate([0, 200, 100, 200, 100, 200]);
+        try {
+          Vibration.vibrate([0, 200, 100, 200, 100, 200]);
+        } catch (vibrationError) {
+          console.warn('Vibration error:', vibrationError);
+        }
         
         Alert.alert(
           'Emergency Alert Sent',
@@ -228,7 +335,7 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
         );
 
         // Call callback if provided
-        if (onEmergencyTriggered) {
+        if (onEmergencyTriggered && result.payload?.id) {
           onEmergencyTriggered(result.payload.id);
         }
       } else {

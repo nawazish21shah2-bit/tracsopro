@@ -21,6 +21,7 @@ import adminRoutes from './admin.js';
 import operationsRoutes from './operations.js';
 import invitationRoutes from './invitations.js';
 import notificationRoutes from './notifications.js';
+import userRoutes from './users.js';
 
 const router = Router();
 
@@ -38,6 +39,7 @@ router.get('/health', (req, res) => {
 
 // API routes
 router.use('/auth', authRoutes);
+router.use('/users', userRoutes);
 router.use('/guards', guardRoutes);
 router.use('/clients', clientRoutes);
 router.use('/tracking', trackingRoutes);

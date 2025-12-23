@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
 import { RootState, AppDispatch } from '../../store';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SharedHeader from '../../components/ui/SharedHeader';
@@ -17,6 +19,9 @@ import * as theme from '../../styles/globalStyles';
 import { settingsService, ProfileSettings } from '../../services/settingsService';
 import { updateUserProfile } from '../../store/slices/authSlice';
 import { User } from 'react-native-feather';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import GuardProfileDrawer from '../../components/guard/GuardProfileDrawer';
+import { SettingsStackParamList } from '../../navigation/DashboardNavigator';
 
 // Safely access design tokens for StyleSheet.create
 const COLORS = theme.COLORS || {
@@ -50,7 +55,9 @@ const ProfileEditScreen: React.FC<ProfileEditScreenProps> = ({
   onSave,
 }) => {
   const dispatch = useDispatch<AppDispatch>();
+  const navigation = useNavigation<StackNavigationProp<SettingsStackParamList>>();
   const { user } = useSelector((state: RootState) => state.auth);
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
@@ -60,6 +67,34 @@ const ProfileEditScreen: React.FC<ProfileEditScreenProps> = ({
     timezone: '',
     language: 'en',
   });
+
+  // Create drawer for guard variant if not provided
+  const renderProfileDrawer = () => {
+    if (profileDrawer) return profileDrawer;
+    
+    if (variant === 'guard') {
+      return (
+        <GuardProfileDrawer
+          visible={isDrawerVisible}
+          onClose={closeDrawer}
+          onNavigateToProfile={() => {
+            closeDrawer();
+            // Already on profile edit
+          }}
+          onNavigateToNotifications={() => {
+            closeDrawer();
+            navigation.navigate('GuardNotificationSettings');
+          }}
+          onNavigateToSupport={() => {
+            closeDrawer();
+            navigation.navigate('GuardSupportContact');
+          }}
+        />
+      );
+    }
+    
+    return null;
+  };
 
   useEffect(() => {
     loadProfile();
@@ -149,7 +184,7 @@ const ProfileEditScreen: React.FC<ProfileEditScreenProps> = ({
   if (loading) {
     return (
       <SafeAreaWrapper>
-        <SharedHeader variant={variant} title="Edit Profile" profileDrawer={profileDrawer} />
+        <SharedHeader variant={variant} title="Edit Profile" profileDrawer={renderProfileDrawer()} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
         </View>

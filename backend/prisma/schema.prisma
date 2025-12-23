@@ -17,6 +17,7 @@ model User {
   phone                   String?
   role                    Role         @default(GUARD)
   accountType             AccountType?
+  profilePictureUrl       String?
   isActive                Boolean      @default(true)
   isEmailVerified         Boolean      @default(false)
   emailVerificationToken  String?
@@ -325,7 +326,7 @@ enum NotificationType {
 
 model Shift {
   id                 String      @id @default(uuid())
-  guardId            String
+  guardId            String?     // Nullable - can be assigned later by admin
   siteId             String?
   clientId           String?
   locationId         String?
@@ -346,7 +347,7 @@ model Shift {
   updatedAt          DateTime    @updatedAt
 
   // Relations
-  guard          Guard             @relation(fields: [guardId], references: [id], onDelete: Cascade)
+  guard          Guard?            @relation(fields: [guardId], references: [id], onDelete: SetNull)
   site           Site?             @relation(fields: [siteId], references: [id], onDelete: SetNull)
   client         Client?           @relation(fields: [clientId], references: [id], onDelete: SetNull)
   location       Location?         @relation(fields: [locationId], references: [id], onDelete: SetNull)

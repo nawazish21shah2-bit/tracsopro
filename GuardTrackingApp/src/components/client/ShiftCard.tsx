@@ -22,8 +22,8 @@ const { width: screenWidth } = Dimensions.get('window');
 interface ShiftCardProps {
   shift: {
     id: string;
-    guardId: string;
-    guardName: string;
+    guardId?: string | null; // Optional - can be unassigned
+    guardName?: string; // Optional - shows "Unassigned" if null
     guardAvatar?: string;
     siteName: string;
     siteAddress: string;
@@ -201,36 +201,50 @@ const ShiftCard: React.FC<ShiftCardProps> = ({
         </View>
 
         {/* Guard Info */}
-        {shift.guardName && (
-          <TouchableOpacity
-            style={styles.guardInfo}
-            onPress={() => onGuardPress?.(shift.guardId)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.guardAvatar}>
-              {shift.guardAvatar ? (
-                <Image
-                  source={{ uri: shift.guardAvatar }}
-                  style={styles.avatarImage}
-                />
-              ) : (
-                <View style={styles.avatarPlaceholder}>
-                  <Text style={styles.avatarText}>
-                    {shift.guardName.charAt(0).toUpperCase()}
+        <View style={styles.guardInfo}>
+          {shift.guardId && shift.guardName ? (
+            <TouchableOpacity
+              style={styles.guardInfoTouchable}
+              onPress={() => onGuardPress?.(shift.guardId!)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.guardAvatar}>
+                {shift.guardAvatar ? (
+                  <Image
+                    source={{ uri: shift.guardAvatar }}
+                    style={styles.avatarImage}
+                  />
+                ) : (
+                  <View style={styles.avatarPlaceholder}>
+                    <Text style={styles.avatarText}>
+                      {shift.guardName.charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <View style={styles.guardDetails}>
+                <Text style={styles.guardName}>{shift.guardName}</Text>
+                {shift.checkInTime && (
+                  <Text style={styles.checkInTime}>
+                    Checked in at {formatTime(shift.checkInTime)}
                   </Text>
+                )}
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.unassignedGuardInfo}>
+              <View style={styles.guardAvatar}>
+                <View style={styles.avatarPlaceholder}>
+                  <Text style={styles.avatarText}>?</Text>
                 </View>
-              )}
+              </View>
+              <View style={styles.guardDetails}>
+                <Text style={styles.unassignedText}>Guard Not Assigned</Text>
+                <Text style={styles.unassignedSubtext}>Admin will assign a guard soon</Text>
+              </View>
             </View>
-            <View style={styles.guardDetails}>
-              <Text style={styles.guardName}>{shift.guardName}</Text>
-              {shift.checkInTime && (
-                <Text style={styles.checkInTime}>
-                  Checked in at {formatTime(shift.checkInTime)}
-                </Text>
-              )}
-            </View>
-          </TouchableOpacity>
-        )}
+          )}
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -404,11 +418,33 @@ const styles = StyleSheet.create({
     letterSpacing: -0.41,
   },
   guardInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: '#F0F0F0',
+  },
+  guardInfoTouchable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  unassignedGuardInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  unassignedText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#828282',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
+    marginBottom: 2,
+  },
+  unassignedSubtext: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#828282',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
+    fontStyle: 'italic',
   },
   guardAvatar: {
     width: 32,

@@ -25,6 +25,7 @@ import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 import { fetchMySites } from '../../store/slices/clientSlice';
 import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
+import apiService from '../../services/api';
 
 interface SiteData {
   id: string;
@@ -91,8 +92,58 @@ const ClientSites: React.FC = () => {
     navigation.navigate('SiteDetails', { siteId });
   };
 
-  const handleMoreOptions = (siteId: string) => {
-    console.log('More options for site:', siteId);
+  const handleViewSite = (siteId: string) => {
+    navigation.navigate('SiteDetails', { siteId });
+  };
+
+  const handleEditSite = (siteId: string) => {
+    // Navigate to site details where editing can be done
+    // Or navigate to a dedicated edit screen if available
+    navigation.navigate('SiteDetails', { siteId, editMode: true });
+  };
+
+  const handleDeleteSite = async (siteId: string) => {
+    const site = sites.find((s: any) => s.id === siteId);
+    const siteName = site?.name || 'this site';
+
+    Alert.alert(
+      'Delete Site',
+      `Are you sure you want to delete "${siteName}"? This action cannot be undone.`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const response = await apiService.deleteClientSite(siteId);
+              if (response.success) {
+                Alert.alert('Success', response.message || 'Site deleted successfully', [
+                  {
+                    text: 'OK',
+                    onPress: () => {
+                      // Reload sites after deletion
+                      loadSites();
+                    },
+                  },
+                ]);
+              } else {
+                Alert.alert('Error', response.message || 'Failed to delete site');
+              }
+            } catch (error: any) {
+              console.error('Delete site error:', error);
+              Alert.alert(
+                'Error',
+                error.message || error.response?.data?.message || 'Failed to delete site. Please try again.'
+              );
+            }
+          },
+        },
+      ],
+    );
   };
 
   const handleChatWithGuard = async (guardId: string, guardName: string) => {
@@ -169,11 +220,16 @@ const ClientSites: React.FC = () => {
 
       <ScrollView 
         style={styles.content} 
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={
+          sites && sites.length > 0 
+            ? styles.scrollContent 
+            : [styles.scrollContent, { flexGrow: 1, justifyContent: 'center' }]
+        }
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
+        removeClippedSubviews={false}
       >
         {sitesLoading && sites.length > 0 ? (
           <View style={styles.loadingContainer}>
@@ -183,7 +239,11 @@ const ClientSites: React.FC = () => {
         ) : null}
 
         {sites && sites.length > 0 ? (
-          sites.map((site: any) => {
+          sites.map((site: any, index: number) => {
+            if (!site || !site.id) {
+              return null;
+            }
+
             // Get active shift from site data (Option B)
             const activeShift = site.shifts?.[0];
             const guard = activeShift?.guard;
@@ -219,8 +279,8 @@ const ClientSites: React.FC = () => {
             // Transform Site to SiteData for SiteCard compatibility
             const siteData: SiteData = {
               id: site.id,
-              name: site.name,
-              address: site.address,
+              name: site.name || 'Unnamed Site',
+              address: site.address || 'No address',
               guardName: guardName,
               status: status,
               guardId: guard?.id || undefined,
@@ -234,14 +294,16 @@ const ClientSites: React.FC = () => {
             
             return (
               <SiteCard
-                key={site.id}
+                key={`site-${site.id}-${index}`}
                 site={siteData}
                 onPress={() => handleSitePress(site.id)}
-                onMoreOptions={() => handleMoreOptions(site.id)}
+                onView={handleViewSite}
+                onEdit={handleEditSite}
+                onDelete={handleDeleteSite}
                 onChatWithGuard={handleChatWithGuard}
               />
             );
-          })
+          }).filter(Boolean)
         ) : !sitesLoading && !sitesError ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>No sites found</Text>

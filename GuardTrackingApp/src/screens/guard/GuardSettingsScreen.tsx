@@ -13,6 +13,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { ChevronRight, User, Bell, HelpCircle, LogOut, Lock } from 'react-native-feather';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { GuardStackParamList } from '../../navigation/GuardStackNavigator';
+import { SettingsStackParamList } from '../../navigation/DashboardNavigator';
 import { RootState, AppDispatch } from '../../store';
 import { logoutUser } from '../../store/slices/authSlice';
 import SharedHeader from '../../components/ui/SharedHeader';
@@ -31,7 +32,7 @@ interface SettingItem {
 }
 
 const GuardSettingsScreen: React.FC = () => {
-  const navigation = useNavigation<StackNavigationProp<GuardStackParamList>>();
+  const navigation = useNavigation<StackNavigationProp<SettingsStackParamList>>();
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();

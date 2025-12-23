@@ -14,7 +14,7 @@ import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
-import { logoutUser } from '../../store/slices/authSlice';
+import { logoutUser, updateUserProfile } from '../../store/slices/authSlice';
 import { 
   CheckCircleIcon,
   UserIcon,
@@ -23,11 +23,13 @@ import {
   NotificationIcon,
   LogoutIcon,
   ReportsIcon,
-  DollarIcon,
+  SettingsIcon,
 } from '../ui/AppIcons';
 import { FeatherIcon } from '../ui/FeatherIcons';
 import { GuardStackParamList } from '../../navigation/GuardStackNavigator';
 import { COLORS, SPACING, TYPOGRAPHY } from '../../styles/globalStyles';
+import { ProfileAvatar } from '../common/ProfileAvatar';
+import apiService from '../../services/api';
 
 interface GuardProfileDrawerProps {
   visible: boolean;
@@ -38,7 +40,6 @@ interface GuardProfileDrawerProps {
   onNavigateToAttendance?: () => void;
   onNavigateToNotifications?: () => void;
   onNavigateToSupport?: () => void;
-  onNavigateToEarnings?: () => void;
 }
 
 interface MenuItem {
@@ -60,18 +61,20 @@ export const GuardProfileDrawer: React.FC<GuardProfileDrawerProps> = ({
   onNavigateToAttendance,
   onNavigateToNotifications,
   onNavigateToSupport,
-  onNavigateToEarnings,
 }) => {
   const navigation = useNavigation<GuardProfileDrawerNavigationProp>();
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isUploadingPicture, setIsUploadingPicture] = useState(false);
   
   // Animation for slide from left
   const slideAnim = useRef(new Animated.Value(-Dimensions.get('window').width)).current;
   
   useEffect(() => {
     if (visible) {
+      // Reset animation value before sliding in
+      slideAnim.setValue(-Dimensions.get('window').width);
       // Slide in from left
       Animated.timing(slideAnim, {
         toValue: 0,
@@ -90,92 +93,79 @@ export const GuardProfileDrawer: React.FC<GuardProfileDrawerProps> = ({
 
   const handleMyProfile = () => {
     onClose();
+    // Navigate to Settings tab, then to Profile Edit to keep bottom menu visible
+    navigation.navigate('GuardTabs', { 
+      screen: 'Settings',
+      params: { screen: 'GuardProfileEdit' }
+    });
     onNavigateToProfile?.();
-    // Navigate to profile/settings screen when available
   };
 
   const handlePastJobs = () => {
     onClose();
-    // Navigate to My Shifts tab with past filter
-    try {
-      // Navigate to GuardTabs (which contains the tab navigator)
-      const parent = navigation.getParent();
-      if (parent) {
-        parent.navigate('GuardTabs', { screen: 'My Shifts' });
-      } else {
-        navigation.navigate('GuardTabs');
-      }
-    } catch (error) {
-      // Fallback: navigate to GuardTabs and let user switch manually
-      navigation.navigate('GuardTabs');
-    }
+    // Navigate to My Shifts tab to keep bottom menu visible
+    navigation.navigate('GuardTabs', { screen: 'My Shifts' });
     onNavigateToPastJobs?.();
   };
 
   const handleAssignedSites = () => {
     onClose();
-    // Navigate to Jobs tab to see assigned sites
-    try {
-      const parent = navigation.getParent();
-      if (parent) {
-        parent.navigate('GuardTabs', { screen: 'Jobs' });
-      } else {
-        navigation.navigate('GuardTabs');
-      }
-    } catch (error) {
-      navigation.navigate('GuardTabs');
-    }
+    // Navigate to My Shifts tab to see assigned sites/shifts (Jobs tab was removed)
+    navigation.navigate('GuardTabs', { screen: 'My Shifts' });
     onNavigateToAssignedSites?.();
   };
 
   const handleAttendanceRecord = () => {
     onClose();
-    // Navigate to My Shifts tab
-    try {
-      const parent = navigation.getParent();
-      if (parent) {
-        parent.navigate('GuardTabs', { screen: 'My Shifts' });
-      } else {
-        navigation.navigate('GuardTabs');
-      }
-    } catch (error) {
-      navigation.navigate('GuardTabs');
-    }
+    // Navigate to My Shifts tab to keep bottom menu visible
+    navigation.navigate('GuardTabs', { screen: 'My Shifts' });
     onNavigateToAttendance?.();
-  };
-
-  const handleEarnings = () => {
-    onClose();
-    // Navigate to Reports tab for earnings
-    try {
-      const parent = navigation.getParent();
-      if (parent) {
-        parent.navigate('GuardTabs', { screen: 'Reports' });
-      } else {
-        navigation.navigate('GuardTabs');
-      }
-    } catch (error) {
-      navigation.navigate('GuardTabs');
-    }
-    onNavigateToEarnings?.();
   };
 
   const handleNotificationSettings = () => {
     onClose();
-    // Navigate to notification settings screen
-    try {
-      navigation.navigate('GuardNotificationSettings');
-    } catch (error) {
-      console.error('Navigation error:', error);
-      onNavigateToNotifications?.();
-    }
+    // Navigate to Settings tab, then to Notification Settings to keep bottom menu visible
+    navigation.navigate('GuardTabs', { 
+      screen: 'Settings',
+      params: { screen: 'GuardNotificationSettings' }
+    });
+    onNavigateToNotifications?.();
   };
 
   const handleContactSupport = () => {
     onClose();
-    // Navigate to support/chat
-    navigation.navigate('ChatListScreen');
+    // Navigate to Chat tab to keep bottom menu visible
+    navigation.navigate('GuardTabs', { screen: 'Chat' });
     onNavigateToSupport?.();
+  };
+
+  const handleProfilePictureSelected = async (imageUri: string) => {
+    try {
+      setIsUploadingPicture(true);
+      
+      // Upload the image
+      const uploadResponse = await apiService.uploadProfilePicture(imageUri);
+      
+      if (uploadResponse.success && uploadResponse.data?.url) {
+        // For guards, also update the guard profile
+        await apiService.updateGuardProfile({ 
+          profilePictureUrl: uploadResponse.data.url 
+        });
+        
+        // Update user profile with new picture URL
+        await dispatch(updateUserProfile({ 
+          profilePictureUrl: uploadResponse.data.url 
+        } as any)).unwrap();
+        
+        Alert.alert('Success', 'Profile picture updated successfully');
+      } else {
+        Alert.alert('Error', uploadResponse.message || 'Failed to upload profile picture');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to update profile picture');
+    } finally {
+      setIsUploadingPicture(false);
+    }
   };
 
   const handleLogout = () => {
@@ -228,10 +218,14 @@ export const GuardProfileDrawer: React.FC<GuardProfileDrawerProps> = ({
       onPress: handleAttendanceRecord,
     },
     {
-      id: 'earnings',
-      label: 'Earnings',
-      icon: <DollarIcon size={20} color={COLORS.textPrimary} />,
-      onPress: handleEarnings,
+      id: 'settings',
+      label: 'Settings',
+      icon: <SettingsIcon size={20} color={COLORS.textPrimary} />,
+      onPress: () => {
+        onClose();
+        // Navigate to Settings tab to keep bottom menu visible
+        navigation.navigate('GuardTabs', { screen: 'Settings' });
+      },
     },
     {
       id: 'notifications',
@@ -253,11 +247,12 @@ export const GuardProfileDrawer: React.FC<GuardProfileDrawerProps> = ({
     },
   ];
 
-  const fullName = user ? `${user.firstName} ${user.lastName}`.trim() : 'Mark Husdon';
+  const fullName = user ? `${user.firstName} ${user.lastName}`.trim() : 'Guard';
   const isVerified = user?.isActive ?? true;
 
   return (
     <Modal
+      key={`guard-drawer-${visible}`}
       visible={visible}
       animationType="none"
       transparent={true}
@@ -280,16 +275,15 @@ export const GuardProfileDrawer: React.FC<GuardProfileDrawerProps> = ({
           {/* Profile Section */}
           <View style={styles.profileSection}>
             <View style={styles.avatarContainer}>
-              <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarText}>
-                  {fullName
-                    .split(' ')
-                    .map(n => n[0])
-                    .join('')
-                    .toUpperCase()
-                    .slice(0, 2)}
-                </Text>
-              </View>
+              <ProfileAvatar
+                firstName={user?.firstName}
+                lastName={user?.lastName}
+                profilePictureUrl={user?.profilePictureUrl}
+                size={80}
+                editable={true}
+                isLoading={isUploadingPicture}
+                onImageSelected={handleProfilePictureSelected}
+              />
             </View>
             <Text style={styles.userName}>{fullName}</Text>
             {isVerified && (
@@ -362,19 +356,6 @@ const styles = StyleSheet.create({
   },
   avatarContainer: {
     marginBottom: SPACING.md,
-  },
-  avatarPlaceholder: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: COLORS.primaryLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    fontSize: TYPOGRAPHY.fontSize.xxxl,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
-    color: COLORS.primary,
   },
   userName: {
     fontSize: TYPOGRAPHY.fontSize.lg,

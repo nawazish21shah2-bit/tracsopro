@@ -9,10 +9,15 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SharedHeader from '../../components/ui/SharedHeader';
 import { settingsService, SupportTicketData } from '../../services/settingsService';
 import { HelpCircle } from 'react-native-feather';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import GuardProfileDrawer from '../../components/guard/GuardProfileDrawer';
+import { SettingsStackParamList } from '../../navigation/DashboardNavigator';
 
 interface SupportContactScreenProps {
   variant?: 'client' | 'guard' | 'admin';
@@ -32,12 +37,42 @@ const SupportContactScreen: React.FC<SupportContactScreenProps> = ({
   profileDrawer,
   onSuccess,
 }) => {
+  const navigation = useNavigation<StackNavigationProp<SettingsStackParamList>>();
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
   const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState<SupportTicketData>({
     subject: '',
     message: '',
     category: 'general',
   });
+
+  // Create drawer for guard variant if not provided
+  const renderProfileDrawer = () => {
+    if (profileDrawer) return profileDrawer;
+    
+    if (variant === 'guard') {
+      return (
+        <GuardProfileDrawer
+          visible={isDrawerVisible}
+          onClose={closeDrawer}
+          onNavigateToProfile={() => {
+            closeDrawer();
+            navigation.navigate('GuardProfileEdit');
+          }}
+          onNavigateToNotifications={() => {
+            closeDrawer();
+            navigation.navigate('GuardNotificationSettings');
+          }}
+          onNavigateToSupport={() => {
+            closeDrawer();
+            // Already on support contact
+          }}
+        />
+      );
+    }
+    
+    return null;
+  };
 
   const handleSubmit = async () => {
     // Validation
@@ -95,7 +130,7 @@ const SupportContactScreen: React.FC<SupportContactScreenProps> = ({
 
   return (
     <SafeAreaWrapper>
-      <SharedHeader variant={variant} title="Contact Support" profileDrawer={profileDrawer} />
+      <SharedHeader variant={variant} title="Contact Support" profileDrawer={renderProfileDrawer()} />
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.card}>
           <View style={styles.header}>

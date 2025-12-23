@@ -13,7 +13,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
-import { logoutUser } from '../../store/slices/authSlice';
+import { logoutUser, updateUserProfile } from '../../store/slices/authSlice';
 import { 
   UserIcon,
   LocationIcon,
@@ -28,6 +28,8 @@ import {
 } from '../ui/AppIcons';
 import { FeatherIcon } from '../ui/FeatherIcons';
 import { COLORS, SPACING, TYPOGRAPHY } from '../../styles/globalStyles';
+import { ProfileAvatar } from '../common/ProfileAvatar';
+import apiService from '../../services/api';
 
 interface AdminProfileDrawerProps {
   visible: boolean;
@@ -68,12 +70,15 @@ export const AdminProfileDrawer: React.FC<AdminProfileDrawerProps> = ({
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isUploadingPicture, setIsUploadingPicture] = useState(false);
   
   // Animation for slide from left
   const slideAnim = useRef(new Animated.Value(-Dimensions.get('window').width)).current;
   
   useEffect(() => {
     if (visible) {
+      // Reset animation value before sliding in
+      slideAnim.setValue(-Dimensions.get('window').width);
       Animated.timing(slideAnim, {
         toValue: 0,
         duration: 300,
@@ -121,6 +126,30 @@ export const AdminProfileDrawer: React.FC<AdminProfileDrawerProps> = ({
     navigation.navigate('ChatListScreen');
   };
 
+  const handleProfilePictureSelected = async (imageUri: string) => {
+    try {
+      setIsUploadingPicture(true);
+      
+      // Upload the image
+      const uploadResponse = await apiService.uploadProfilePicture(imageUri);
+      
+      if (uploadResponse.success && uploadResponse.data?.url) {
+        // Update user profile with new picture URL
+        await dispatch(updateUserProfile({ 
+          profilePictureUrl: uploadResponse.data.url 
+        } as any)).unwrap();
+        
+        Alert.alert('Success', 'Profile picture updated successfully');
+      } else {
+        Alert.alert('Error', uploadResponse.message || 'Failed to upload profile picture');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to update profile picture');
+    } finally {
+      setIsUploadingPicture(false);
+    }
+  };
+
   const menuItems: MenuItem[] = [
     {
       id: 'operations',
@@ -128,7 +157,8 @@ export const AdminProfileDrawer: React.FC<AdminProfileDrawerProps> = ({
       icon: <DashboardIcon size={20} color={COLORS.textPrimary} />,
       onPress: () => {
         onClose();
-        navigation.navigate('AdminOperationsCenter');
+        // Navigate to Operations tab to keep bottom menu visible
+        navigation.navigate('AdminTabs', { screen: 'Operations' });
         onNavigateToOperations?.();
       },
     },
@@ -138,7 +168,11 @@ export const AdminProfileDrawer: React.FC<AdminProfileDrawerProps> = ({
       icon: <ReportsIcon size={20} color={COLORS.textPrimary} />,
       onPress: () => {
         onClose();
-        navigation.navigate('ShiftScheduling');
+        // Navigate to Management tab, then to ShiftScheduling screen
+        navigation.navigate('AdminTabs', { 
+          screen: 'Management',
+          params: { screen: 'ShiftScheduling' }
+        });
         onNavigateToScheduling?.();
       },
     },
@@ -148,7 +182,11 @@ export const AdminProfileDrawer: React.FC<AdminProfileDrawerProps> = ({
       icon: <UsersIcon size={20} color={COLORS.textPrimary} />,
       onPress: () => {
         onClose();
-        navigation.navigate('UserManagement');
+        // Navigate to Management tab, then to UserManagement screen
+        navigation.navigate('AdminTabs', { 
+          screen: 'Management',
+          params: { screen: 'UserManagement' }
+        });
         onNavigateToUserManagement?.();
       },
     },
@@ -158,7 +196,11 @@ export const AdminProfileDrawer: React.FC<AdminProfileDrawerProps> = ({
       icon: <LocationIcon size={20} color={COLORS.textPrimary} />,
       onPress: () => {
         onClose();
-        navigation.navigate('SiteManagement');
+        // Navigate to Management tab, then to SiteManagement screen
+        navigation.navigate('AdminTabs', { 
+          screen: 'Management',
+          params: { screen: 'SiteManagement' }
+        });
         onNavigateToSiteManagement?.();
       },
     },
@@ -168,7 +210,11 @@ export const AdminProfileDrawer: React.FC<AdminProfileDrawerProps> = ({
       icon: <EmergencyIcon size={20} color={COLORS.textPrimary} />,
       onPress: () => {
         onClose();
-        navigation.navigate('IncidentReview');
+        // Navigate to Reports tab, then to IncidentReview screen
+        navigation.navigate('AdminTabs', { 
+          screen: 'Reports',
+          params: { screen: 'IncidentReview' }
+        });
         onNavigateToIncidentReview?.();
       },
     },
@@ -178,7 +224,11 @@ export const AdminProfileDrawer: React.FC<AdminProfileDrawerProps> = ({
       icon: <ReportsIcon size={20} color={COLORS.textPrimary} />,
       onPress: () => {
         onClose();
-        navigation.navigate('AdminAnalytics');
+        // Navigate to Reports tab, then to AdminAnalytics screen
+        navigation.navigate('AdminTabs', { 
+          screen: 'Reports',
+          params: { screen: 'AdminAnalytics' }
+        });
         onNavigateToAnalytics?.();
       },
     },
@@ -206,16 +256,11 @@ export const AdminProfileDrawer: React.FC<AdminProfileDrawerProps> = ({
   ];
 
   const userName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email : 'Admin';
-  const userInitials = userName
-    .split(' ')
-    .map(n => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2) || 'AD';
   const isVerified = user?.isActive ?? true;
 
   return (
     <Modal
+      key={`admin-drawer-${visible}`}
       visible={visible}
       transparent={true}
       animationType="none"
@@ -239,9 +284,15 @@ export const AdminProfileDrawer: React.FC<AdminProfileDrawerProps> = ({
             {/* Profile Header */}
             <View style={styles.profileHeader}>
               <View style={styles.avatarContainer}>
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>{userInitials}</Text>
-                </View>
+                <ProfileAvatar
+                  firstName={user?.firstName}
+                  lastName={user?.lastName}
+                  profilePictureUrl={user?.profilePictureUrl}
+                  size={80}
+                  editable={true}
+                  isLoading={isUploadingPicture}
+                  onImageSelected={handleProfilePictureSelected}
+                />
               </View>
               <Text style={styles.userName}>{userName}</Text>
               {isVerified && (
@@ -318,19 +369,6 @@ const styles = StyleSheet.create({
   },
   avatarContainer: {
     marginBottom: SPACING.md,
-  },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: COLORS.primaryLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    fontSize: TYPOGRAPHY.fontSize.xxxl,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
-    color: COLORS.primary,
   },
   userName: {
     fontSize: TYPOGRAPHY.fontSize.lg,

@@ -64,8 +64,8 @@ router.post('/:shiftId/end-break/:breakId', endBreak);
 // Phase 2: Incident reporting (placeholder)
 router.post('/:id/report-incident', reportIncident);
 
-// Create shift (Guard self-creation - for guards to create their own shifts)
-// Note: Admin/Client should use /api/admin/shifts or /api/clients/shifts
-router.post('/', createShift);
+// Guard self-creation removed - guards cannot create shifts
+// Admin creates shifts via /api/admin/shifts
+// Client creates shifts via /api/clients/shifts
 
 export default router;

@@ -18,6 +18,7 @@ import {
 } from '../types';
 import { securityManager } from '../utils/security';
 import { getApiBaseUrl, getConfigInfo } from '../config/apiConfig';
+import { formatErrorForUser } from '../utils/errorHandler';
 
 class ApiService {
   private api: AxiosInstance;
@@ -418,7 +419,7 @@ class ApiService {
 
   // Admin Shift Management (simple create for scheduling screen)
   async createAdminShift(data: {
-    guardId: string;
+    guardId?: string; // Optional - can assign guard later
     siteId?: string; // Optional: if provided, will link shift to site and client
     locationName?: string; // Optional if siteId provided
     locationAddress?: string; // Optional if siteId provided
@@ -464,6 +465,41 @@ class ApiService {
         success: false,
         data: null,
         message: error.response?.data?.error || error.response?.data?.message || 'Failed to create shift',
+      };
+    }
+  }
+
+  async assignGuardToShift(shiftId: string, guardId: string): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.patch(`/admin/shifts/${shiftId}/assign-guard`, { guardId });
+      return {
+        success: true,
+        data: response.data.data,
+        message: response.data.message || 'Guard assigned successfully',
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.error || error.response?.data?.message || 'Failed to assign guard',
+      };
+    }
+  }
+
+  async getUnassignedShifts(date?: string): Promise<ApiResponse<any>> {
+    try {
+      const params = date ? { date } : {};
+      const response = await this.api.get('/admin/shifts/unassigned', { params });
+      return {
+        success: true,
+        data: response.data.data,
+        message: response.data.message || 'Unassigned shifts fetched successfully',
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.error || error.response?.data?.message || 'Failed to fetch unassigned shifts',
       };
     }
   }
@@ -629,52 +665,14 @@ class ApiService {
         });
       }
       
-      // Handle network errors (no response from server)
-      if (!error.response) {
-        const errorCode = error.code;
-        const errorMessage = error.message || '';
-        
-        let userFriendlyMessage = 'Registration failed. ';
-        
-        if (errorCode === 'ECONNREFUSED') {
-          userFriendlyMessage += `Cannot connect to backend server at ${this.baseURL}. Please ensure the backend server is running.`;
-        } else if (errorCode === 'ETIMEDOUT' || errorCode === 'ECONNABORTED') {
-          userFriendlyMessage += 'Request timed out. The server may be slow or unresponsive. Please try again.';
-        } else if (errorMessage.includes('Network Error') || errorMessage.includes('network')) {
-          userFriendlyMessage += 'Network error. Please check your internet connection and ensure the backend server is running.';
-        } else {
-          userFriendlyMessage += 'No response from server. Please check if the backend server is running and accessible.';
-        }
-        
-        return {
-          success: false,
-          data: null,
-          message: userFriendlyMessage,
-          errors: []
-        };
-      }
-      
-      // Extract detailed error information from response
-      const errorData = error.response?.data;
-      const statusCode = error.response?.status;
-      
-      let errorMessage = errorData?.message || 
-                        errorData?.error || 
-                        error.message || 
-                        'Registration failed';
-      
-      // Add status code context for 500 errors
-      if (statusCode === 500) {
-        errorMessage += ' (Server Error). Please check backend logs for details.';
-      }
-      
-      const errors = errorData?.errors || [];
+      // Use centralized error handler for consistent error formatting
+      const formattedError = formatErrorForUser(error, this.baseURL);
       
       return {
         success: false,
         data: null,
-        message: errorMessage,
-        errors: errors
+        message: formattedError.message,
+        errors: formattedError.errors || []
       };
     }
   }
@@ -1114,6 +1112,23 @@ class ApiService {
     }
   }
 
+  // Client Management Methods (for admin)
+  async getClients(page = 1, limit = 10): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.get(`/admin/clients?page=${page}&limit=${limit}`);
+      return {
+        success: true,
+        data: response.data.data
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to fetch clients'
+      };
+    }
+  }
+
   // Location Management Methods
   async getLocations(): Promise<ApiResponse<Location[]>> {
     try {
@@ -1459,6 +1474,42 @@ class ApiService {
     }
   }
 
+  async updateClientSite(siteId: string, data: any): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.put(`/sites/${siteId}`, data);
+      return {
+        success: true,
+        data: response.data.data,
+        message: response.data.message || 'Site updated successfully'
+      };
+    } catch (error: any) {
+      console.error('updateClientSite API error:', error);
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || error.message || 'Failed to update site'
+      };
+    }
+  }
+
+  async deleteClientSite(siteId: string): Promise<ApiResponse<null>> {
+    try {
+      const response = await this.api.delete(`/sites/${siteId}`);
+      return {
+        success: true,
+        data: null,
+        message: response.data?.message || 'Site deleted successfully'
+      };
+    } catch (error: any) {
+      console.error('deleteClientSite API error:', error);
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || error.message || 'Failed to delete site'
+      };
+    }
+  }
+
   async getClientNotifications(page: number = 1, limit: number = 50): Promise<ApiResponse<any>> {
     try {
       const response = await this.api.get(`/clients/my-notifications?page=${page}&limit=${limit}`);
@@ -1530,6 +1581,67 @@ class ApiService {
     }
   }
 
+  /**
+   * Upload profile picture for any user type
+   * @param imageUri - Local URI of the image to upload
+   * @returns The uploaded image URL
+   */
+  async uploadProfilePicture(imageUri: string): Promise<ApiResponse<{ url: string }>> {
+    try {
+      const formData = new FormData();
+      
+      // Extract filename from URI
+      const filename = imageUri.split('/').pop() || `profile_${Date.now()}.jpg`;
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : 'image/jpeg';
+
+      formData.append('profilePicture', {
+        uri: imageUri,
+        name: filename,
+        type,
+      } as any);
+
+      const response = await this.api.post('/users/profile-picture', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      return {
+        success: true,
+        data: { url: response.data.data?.url || response.data.url },
+        message: 'Profile picture uploaded successfully'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: { url: '' },
+        message: error.response?.data?.message || 'Failed to upload profile picture'
+      };
+    }
+  }
+
+  /**
+   * Update user's profile picture URL directly
+   * @param profilePictureUrl - URL of the profile picture
+   */
+  async updateUserProfilePicture(profilePictureUrl: string | null): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.patch('/users/profile-picture', { profilePictureUrl });
+      return {
+        success: true,
+        data: response.data.data,
+        message: 'Profile picture updated successfully'
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to update profile picture'
+      };
+    }
+  }
+
   async getUpcomingShifts(): Promise<ApiResponse<any>> {
     try {
       const response = await this.api.get('/shifts/upcoming');
@@ -1557,7 +1669,6 @@ class ApiService {
       address?: string;
     };
     message?: string;
-    shiftId?: string; // Optional: include shiftId to notify correct client/admin
   }): Promise<ApiResponse<any>> {
     try {
       const response = await this.api.post('/emergency/alert', data);
@@ -1570,7 +1681,7 @@ class ApiService {
       return {
         success: false,
         data: null,
-        message: error.response?.data?.message || error.response?.data?.error || 'Failed to send emergency alert'
+        message: error.response?.data?.message || 'Failed to send emergency alert'
       };
     }
   }
@@ -1907,16 +2018,44 @@ class ApiService {
   async getChatRooms(): Promise<ApiResponse<any>> {
     try {
       const response = await this.api.get('/chat');
+      
+      // Handle different response structures
+      const chatData = response.data?.data || response.data || [];
+      
+      // Ensure we return an array
+      if (!Array.isArray(chatData)) {
+        console.warn('Chat rooms response is not an array:', chatData);
+        return {
+          success: true,
+          data: [],
+          message: 'Chat rooms fetched successfully (empty)'
+        };
+      }
+      
       return {
         success: true,
-        data: response.data.data,
+        data: chatData,
         message: 'Chat rooms fetched successfully'
       };
     } catch (error: any) {
+      // Enhanced error handling
+      const errorMessage = error.response?.data?.message || 
+                          error.message || 
+                          'Failed to fetch chat rooms';
+      
+      if (__DEV__) {
+        console.error('getChatRooms error:', {
+          message: errorMessage,
+          status: error.response?.status,
+          data: error.response?.data,
+          networkError: !error.response,
+        });
+      }
+      
       return {
         success: false,
         data: [],
-        message: error.response?.data?.message || 'Failed to fetch chat rooms'
+        message: errorMessage
       };
     }
   }
@@ -1924,16 +2063,45 @@ class ApiService {
   async getChatMessages(chatId: string, page: number = 1, limit: number = 50): Promise<ApiResponse<any>> {
     try {
       const response = await this.api.get(`/chat/${chatId}/messages?page=${page}&limit=${limit}`);
+      
+      // Handle different response structures
+      const messageData = response.data?.data || response.data || [];
+      
+      // Ensure we return an array
+      if (!Array.isArray(messageData)) {
+        console.warn('Messages response is not an array:', messageData);
+        return {
+          success: true,
+          data: [],
+          message: 'Messages fetched successfully (empty)'
+        };
+      }
+      
       return {
         success: true,
-        data: response.data.data,
+        data: messageData,
         message: 'Messages fetched successfully'
       };
     } catch (error: any) {
+      // Enhanced error handling
+      const errorMessage = error.response?.data?.message || 
+                          error.message || 
+                          'Failed to fetch messages';
+      
+      if (__DEV__) {
+        console.error('getChatMessages error:', {
+          chatId,
+          message: errorMessage,
+          status: error.response?.status,
+          data: error.response?.data,
+          networkError: !error.response,
+        });
+      }
+      
       return {
         success: false,
         data: [],
-        message: error.response?.data?.message || 'Failed to fetch messages'
+        message: errorMessage
       };
     }
   }
@@ -1944,16 +2112,35 @@ class ApiService {
         content,
         messageType,
       });
+      
+      // Handle different response structures
+      const messageData = response.data?.data || response.data;
+      
       return {
         success: true,
-        data: response.data.data,
+        data: messageData,
         message: 'Message sent successfully'
       };
     } catch (error: any) {
+      // Enhanced error handling
+      const errorMessage = error.response?.data?.message || 
+                          error.message || 
+                          'Failed to send message';
+      
+      if (__DEV__) {
+        console.error('sendChatMessage error:', {
+          chatId,
+          message: errorMessage,
+          status: error.response?.status,
+          data: error.response?.data,
+          networkError: !error.response,
+        });
+      }
+      
       return {
         success: false,
         data: null,
-        message: error.response?.data?.message || 'Failed to send message'
+        message: errorMessage
       };
     }
   }
@@ -1963,16 +2150,31 @@ class ApiService {
       const response = await this.api.post(`/chat/${chatId}/read`, {
         messageIds,
       });
+      
       return {
         success: true,
-        data: response.data.data,
-        message: 'Messages marked as read'
+        data: response.data?.data || null,
+        message: response.data?.message || 'Messages marked as read'
       };
     } catch (error: any) {
+      // Enhanced error handling - don't fail silently
+      const errorMessage = error.response?.data?.message || 
+                          error.message || 
+                          'Failed to mark messages as read';
+      
+      if (__DEV__) {
+        console.error('markChatMessagesAsRead error:', {
+          chatId,
+          messageIds,
+          message: errorMessage,
+          status: error.response?.status,
+        });
+      }
+      
       return {
         success: false,
         data: null,
-        message: error.response?.data?.message || 'Failed to mark messages as read'
+        message: errorMessage
       };
     }
   }

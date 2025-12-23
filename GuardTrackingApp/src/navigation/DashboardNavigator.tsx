@@ -2,26 +2,72 @@
 // Dashboard Navigator
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createStackNavigator } from '@react-navigation/stack';
 import { Text, View, StyleSheet } from 'react-native';
 import GuardHomeScreen from '../screens/dashboard/GuardHomeScreen';
 import MyShiftsScreen from '../screens/dashboard/MyShiftsScreen';
 import ReportsScreen from '../screens/dashboard/ReportsScreen';
 // REMOVED: AvailableShiftsScreen - Job board system removed (Option B)
-import ChatListScreen from '../screens/chat/ChatListScreen';
+// REMOVED: ChatListScreen - Chat tab removed from bottom navigation
 import CheckInScreen from '../screens/dashboard/CheckInScreen';
-import { HomeIcon, ShiftsIcon, ReportsIcon, CheckInIcon } from '../components/ui/AppIcons';
+import GuardSettingsScreen from '../screens/guard/GuardSettingsScreen';
+import NotificationSettingsScreen from '../screens/settings/NotificationSettingsScreen';
+import ProfileEditScreen from '../screens/settings/ProfileEditScreen';
+import ChangePasswordScreen from '../screens/settings/ChangePasswordScreen';
+import SupportContactScreen from '../screens/settings/SupportContactScreen';
+import NotificationListScreen from '../screens/notifications/NotificationListScreen';
+import { HomeIcon, ShiftsIcon, ReportsIcon, CheckInIcon, SettingsIcon } from '../components/ui/AppIcons';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../styles/globalStyles';
 
 export type DashboardTabParamList = {
   Home: undefined;
-  Chat: undefined;
-  'My Shifts': undefined;
   'Check In/Out': undefined;
+  'My Shifts': undefined;
   Reports: undefined;
+  Settings: undefined;
   Jobs: undefined;
 };
 
+export type SettingsStackParamList = {
+  GuardSettings: undefined;
+  GuardNotificationSettings: undefined;
+  GuardProfileEdit: undefined;
+  GuardChangePassword: undefined;
+  GuardSupportContact: undefined;
+  Notifications: undefined;
+};
+
 const Tab = createBottomTabNavigator<DashboardTabParamList>();
+const SettingsStack = createStackNavigator<SettingsStackParamList>();
+
+// Settings Stack Navigator
+const SettingsStackNavigator: React.FC = () => {
+  return (
+    <SettingsStack.Navigator screenOptions={{ headerShown: false }}>
+      <SettingsStack.Screen name="GuardSettings" component={GuardSettingsScreen} />
+      <SettingsStack.Screen 
+        name="GuardNotificationSettings" 
+        component={() => <NotificationSettingsScreen variant="guard" />} 
+      />
+      <SettingsStack.Screen 
+        name="GuardProfileEdit" 
+        component={() => <ProfileEditScreen variant="guard" />} 
+      />
+      <SettingsStack.Screen 
+        name="GuardChangePassword" 
+        component={() => <ChangePasswordScreen variant="guard" />} 
+      />
+      <SettingsStack.Screen 
+        name="GuardSupportContact" 
+        component={() => <SupportContactScreen variant="guard" />} 
+      />
+      <SettingsStack.Screen 
+        name="Notifications" 
+        component={() => <NotificationListScreen variant="guard" />} 
+      />
+    </SettingsStack.Navigator>
+  );
+};
 
 const DashboardNavigator: React.FC = () => {
   return (
@@ -43,6 +89,9 @@ const DashboardNavigator: React.FC = () => {
           fontWeight: TYPOGRAPHY.fontWeight.medium,
           marginTop: SPACING.xs,
         },
+        tabBarItemStyle: {
+          flexShrink: 0,
+        },
         tabBarIconStyle: {
           marginBottom: 2,
         },
@@ -58,40 +107,11 @@ const DashboardNavigator: React.FC = () => {
             </View>
           ),
           tabBarLabel: ({ focused }) => (
-            <Text style={[styles.tabLabel, { color: focused ? COLORS.primary : COLORS.textSecondary }]}>
+            <Text 
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              style={[styles.tabLabel, { color: focused ? COLORS.primary : COLORS.textSecondary }]}>
               Home
-            </Text>
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Chat"
-        component={ChatListScreen}
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
-              <ReportsIcon size={20} color={focused ? COLORS.primary : COLORS.textSecondary} />
-            </View>
-          ),
-          tabBarLabel: ({ focused }) => (
-            <Text style={[styles.tabLabel, { color: focused ? COLORS.primary : COLORS.textSecondary }]}>
-              Chat
-            </Text>
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="My Shifts"
-        component={MyShiftsScreen}
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
-              <ShiftsIcon size={20} color={focused ? COLORS.primary : COLORS.textSecondary} />
-            </View>
-          ),
-          tabBarLabel: ({ focused }) => (
-            <Text style={[styles.tabLabel, { color: focused ? COLORS.primary : COLORS.textSecondary }]}>
-              My Shifts
             </Text>
           ),
         }}
@@ -106,8 +126,30 @@ const DashboardNavigator: React.FC = () => {
             </View>
           ),
           tabBarLabel: ({ focused }) => (
-            <Text style={[styles.tabLabel, { color: focused ? COLORS.primary : COLORS.textSecondary }]}>
+            <Text 
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              style={[styles.tabLabel, { color: focused ? COLORS.primary : COLORS.textSecondary }]}>
               Check In/Out
+            </Text>
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="My Shifts"
+        component={MyShiftsScreen}
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
+              <ShiftsIcon size={20} color={focused ? COLORS.primary : COLORS.textSecondary} />
+            </View>
+          ),
+          tabBarLabel: ({ focused }) => (
+            <Text 
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              style={[styles.tabLabel, { color: focused ? COLORS.primary : COLORS.textSecondary }]}>
+              My Shifts
             </Text>
           ),
         }}
@@ -122,8 +164,30 @@ const DashboardNavigator: React.FC = () => {
             </View>
           ),
           tabBarLabel: ({ focused }) => (
-            <Text style={[styles.tabLabel, { color: focused ? COLORS.primary : COLORS.textSecondary }]}>
+            <Text 
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              style={[styles.tabLabel, { color: focused ? COLORS.primary : COLORS.textSecondary }]}>
               Reports
+            </Text>
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Settings"
+        component={SettingsStackNavigator}
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
+              <SettingsIcon size={20} color={focused ? COLORS.primary : COLORS.textSecondary} />
+            </View>
+          ),
+          tabBarLabel: ({ focused }) => (
+            <Text 
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              style={[styles.tabLabel, { color: focused ? COLORS.primary : COLORS.textSecondary }]}>
+              Settings
             </Text>
           ),
         }}
@@ -153,6 +217,8 @@ const styles = StyleSheet.create({
     fontWeight: TYPOGRAPHY.fontWeight.medium,
     marginTop: SPACING.xs,
     textAlign: 'center',
+    flexShrink: 0,
+    flexWrap: 'nowrap',
   },
 });
 

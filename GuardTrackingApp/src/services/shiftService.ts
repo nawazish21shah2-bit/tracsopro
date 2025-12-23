@@ -342,12 +342,22 @@ class ShiftService {
     accuracy: number;
     address?: string;
   }, notes?: string): Promise<Shift> {
-    const api = await createAuthAxios();
-    const response = await api.post<{ success: boolean; data: Shift }>(
-      `/shifts/${shiftId}/check-out`,
-      { location, notes }
-    );
-    return response.data.data;
+    try {
+      const api = await createAuthAxios();
+      const response = await api.post<{ success: boolean; data: Shift; message?: string }>(
+        `/shifts/${shiftId}/check-out`,
+        { location, notes }
+      );
+      
+      if (!response.data.success || !response.data.data) {
+        throw new Error(response.data.message || 'Check-out failed');
+      }
+      
+      return response.data.data;
+    } catch (error: any) {
+      console.error('Check-out error:', error);
+      throw new Error(error.response?.data?.error || error.message || 'Failed to check out from shift');
+    }
   }
 
   /**

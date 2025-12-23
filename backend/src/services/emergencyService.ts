@@ -191,42 +191,8 @@ export class EmergencyService {
         siteName,
       });
 
-      // Broadcast to site-specific admin/client sockets via WebSocket for real-time updates
-      try {
-        const WebSocketService = (await import('./websocketService.js')).default;
-        if (WebSocketService && typeof WebSocketService.broadcastToAdmins === 'function') {
-          const emergencyData = {
-            alertId: emergencyAlert.id,
-            guardId: emergencyAlert.guardId,
-            type: emergencyAlert.type,
-            severity: emergencyAlert.severity,
-            location: emergencyAlert.location,
-            message: emergencyAlert.message,
-            siteId: siteId,
-            siteName: siteName,
-            clientId: clientId,
-            timestamp: Date.now(),
-          };
-
-          // Broadcast to all admins in the company
-          WebSocketService.broadcastToAdmins('emergency_alert', emergencyData);
-
-          // Also broadcast to specific client if available
-          if (clientId) {
-            const client = await prisma.client.findUnique({
-              where: { id: clientId },
-              select: { userId: true },
-            });
-            if (client) {
-              WebSocketService.broadcastToClients('emergency_alert', emergencyData, client.userId);
-            }
-          }
-        }
-      } catch (wsError) {
-        // WebSocket is optional - don't fail if it's not available
-        console.warn('WebSocket broadcasting failed (non-critical):', wsError);
-      }
-      
+      // Broadcast to site-specific admin/client sockets
+      // Note: WebSocket broadcasting will be implemented when websocketService is properly configured
       console.log(`Broadcasting emergency alert for site: ${siteName || 'Unknown'} (Site ID: ${siteId || 'N/A'})`);
 
       // Log emergency event

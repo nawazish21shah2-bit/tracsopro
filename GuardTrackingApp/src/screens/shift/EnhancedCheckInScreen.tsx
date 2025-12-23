@@ -267,8 +267,21 @@ const EnhancedCheckInScreen: React.FC<EnhancedCheckInScreenProps> = ({ navigatio
         'You have successfully completed your shift.',
         [
           {
-            text: 'View Summary',
-            onPress: () => navigation.navigate('ShiftSummary', { shiftId }),
+            text: 'OK',
+            onPress: () => {
+              // Navigate back or to shift details if available
+              if (navigation.canGoBack()) {
+                navigation.goBack();
+              } else {
+                // Navigate to home or shift details
+                try {
+                  navigation.navigate('ShiftDetails' as never, { shiftId } as never);
+                } catch (e) {
+                  // If ShiftDetails doesn't exist, just go back to home
+                  console.log('Navigation error:', e);
+                }
+              }
+            },
           },
         ]
       );

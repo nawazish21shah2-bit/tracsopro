@@ -291,6 +291,36 @@ export class AuthController {
       next(error);
     }
   }
+
+  async updateProfile(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = req.userId;
+      const { firstName, lastName, phone, profilePictureUrl } = req.body;
+
+      if (!userId) {
+        res.status(401).json({
+          success: false,
+          message: 'Unauthorized',
+        });
+        return;
+      }
+
+      const result = await authService.updateProfile(userId, {
+        firstName,
+        lastName,
+        phone,
+        profilePictureUrl,
+      });
+
+      res.json({
+        success: true,
+        data: result,
+        message: 'Profile updated successfully',
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export default new AuthController();

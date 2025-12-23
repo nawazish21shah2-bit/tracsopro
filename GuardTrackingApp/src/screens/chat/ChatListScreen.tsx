@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,13 +8,16 @@ import {
   TextInput,
   Image,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../store';
 import { useNavigation } from '@react-navigation/native';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
-import { Search, Bell, Menu } from 'react-native-feather';
+import { Search, Bell, Menu, MoreVertical, MessageCircle, Users, Settings } from 'react-native-feather';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
+import NewChatModal from '../../components/chat/NewChatModal';
+import DropdownMenu, { DropdownMenuItem } from '../../components/ui/DropdownMenu';
 
 interface ChatItem {
   id: string;
@@ -24,6 +27,7 @@ interface ChatItem {
   avatar?: string;
   unreadCount: number;
   isOnline?: boolean;
+  isAssignedGuard?: boolean; // Flag for guards assigned to client's sites
 }
 
 const ChatListScreen: React.FC = () => {
@@ -34,6 +38,56 @@ const ChatListScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [chats, setChats] = useState<ChatItem[]>([]);
+  const [rawChats, setRawChats] = useState<any[]>([]); // Store raw chat data for creating new chats
+  const [newChatModalVisible, setNewChatModalVisible] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [menuAnchor, setMenuAnchor] = useState({ x: 0, y: 0 });
+  const menuButtonRef = useRef<TouchableOpacity>(null);
+
+  // Build menu items based on user role
+  const getMenuItems = (): DropdownMenuItem[] => {
+    const baseItems: DropdownMenuItem[] = [
+      {
+        id: 'new-chat',
+        label: 'New Chat',
+        icon: <MessageCircle width={20} height={20} color={COLORS.primary} />,
+        onPress: () => setNewChatModalVisible(true),
+      },
+    ];
+
+    // Admin can create group chats
+    if (user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') {
+      baseItems.push({
+        id: 'new-group',
+        label: 'New Group Chat',
+        icon: <Users width={20} height={20} color={COLORS.primary} />,
+        onPress: () => {
+          // TODO: Implement group chat creation
+          Alert.alert('Coming Soon', 'Group chat feature will be available soon!');
+        },
+      });
+    }
+
+    baseItems.push({
+      id: 'settings',
+      label: 'Chat Settings',
+      icon: <Settings width={20} height={20} color={COLORS.textSecondary} />,
+      onPress: () => {
+        // TODO: Navigate to chat settings
+        Alert.alert('Chat Settings', 'Notification and privacy settings for chats');
+      },
+    });
+
+    return baseItems;
+  };
+
+  const handleMenuPress = () => {
+    // Measure the menu button position
+    menuButtonRef.current?.measureInWindow((x, y, width, height) => {
+      setMenuAnchor({ x: x + width, y: y + height });
+      setMenuVisible(true);
+    });
+  };
 
   useEffect(() => {
     loadChats();
@@ -44,14 +98,25 @@ const ChatListScreen: React.FC = () => {
       const apiService = (await import('../../services/api')).default;
       const response = await apiService.getChatRooms();
       
-      if (!response.success || !response.data) {
-        console.error('Failed to load chats:', response.message);
+      if (!response.success) {
+        console.error('Failed to load chats:', response.message || 'Unknown error');
+        // Don't set empty array on error - keep previous chats if available
+        if (chats.length === 0) {
+          setChats([]);
+        }
+        return;
+      }
+
+      // Handle case where data might be undefined or null
+      const chatData = response.data || [];
+      if (!Array.isArray(chatData)) {
+        console.warn('Chat data is not an array:', chatData);
         setChats([]);
         return;
       }
 
       // Transform backend chat data to ChatItem format
-      const transformedChats: ChatItem[] = (response.data || []).map((chat: any) => {
+      const transformedChats: ChatItem[] = chatData.map((chat: any) => {
         // Get other participant's info for direct chats
         let chatName = chat.name || 'Chat';
         let avatar: string | undefined;
@@ -65,6 +130,24 @@ const ChatListScreen: React.FC = () => {
             chatName = `${otherParticipant.user.firstName} ${otherParticipant.user.lastName}`.trim();
             avatar = otherParticipant.user.avatar;
             isOnline = otherParticipant.user.isOnline || false;
+          }
+        }
+
+        // Handle assigned guards (guards assigned to client's sites)
+        const isAssignedGuard = (chat as any).metadata?.isAssignedGuard;
+        if (isAssignedGuard && chat.participants) {
+          const guardParticipant = chat.participants.find((p: any) => 
+            p.userId !== user?.id && p.user?.role === 'GUARD'
+          );
+          if (guardParticipant?.user) {
+            chatName = `${guardParticipant.user.firstName} ${guardParticipant.user.lastName}`.trim();
+            avatar = guardParticipant.user.avatar;
+            // Show site name if available
+            const siteName = (chat as any).metadata?.siteName;
+            if (siteName && !chat.lastMessage) {
+              // For assigned guards without messages, show site info
+              chatName = `${chatName} (${siteName})`;
+            }
           }
         }
 
@@ -92,15 +175,22 @@ const ChatListScreen: React.FC = () => {
             timestamp = lastMsgTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
           }
         }
+        const lastMessage = chat.lastMessage?.content || chat.lastMessage?.message || '';
+        
+        // For assigned guards without messages, show a helpful placeholder
+        const displayMessage = isAssignedGuard && !lastMessage 
+          ? 'Tap to start conversation' 
+          : lastMessage;
 
         return {
           id: chat.id,
           name: chatName,
-          lastMessage: chat.lastMessage?.content || chat.lastMessage?.message || '',
-          timestamp,
+          lastMessage: displayMessage,
+          timestamp: isAssignedGuard && !lastMessage ? '' : timestamp,
           avatar,
           unreadCount: chat.unreadCount || 0,
           isOnline,
+          isAssignedGuard, // Add flag for UI styling
         };
       });
 
@@ -111,10 +201,35 @@ const ChatListScreen: React.FC = () => {
         return timeA - timeB;
       });
 
-      setChats(transformedChats);
-    } catch (error) {
+      // Deduplicate chats by name (to prevent the same person appearing multiple times)
+      // Since we sorted first, we keep the most recent chat
+      const seenNames = new Set<string>();
+      const uniqueChats = transformedChats.filter(chat => {
+        const normalizedName = chat.name.toLowerCase().trim().split(' (')[0]; // Remove site info for comparison
+        if (seenNames.has(normalizedName)) {
+          return false;
+        }
+        seenNames.add(normalizedName);
+        return true;
+      });
+
+      setChats(uniqueChats);
+      setRawChats(chatData); // Store raw chat data
+    } catch (error: any) {
       console.error('Error loading chats:', error);
-      setChats([]);
+      // Only clear chats if we don't have any cached ones
+      // This prevents flickering when network temporarily fails
+      if (chats.length === 0) {
+        setChats([]);
+      }
+      // Log detailed error for debugging
+      if (__DEV__) {
+        console.error('Chat loading error details:', {
+          message: error?.message,
+          response: error?.response?.data,
+          status: error?.response?.status,
+        });
+      }
     }
   };
 
@@ -124,7 +239,40 @@ const ChatListScreen: React.FC = () => {
     setRefreshing(false);
   };
 
-  const handleChatPress = (chat: ChatItem) => {
+  const handleChatPress = async (chat: ChatItem) => {
+    // If this is an assigned guard without a chat, create the chat first
+    if (chat.isAssignedGuard && !chat.lastMessage) {
+      try {
+        const apiService = (await import('../../services/api')).default;
+        // Find the raw chat data to get participants
+        const rawChatData = rawChats.find((c: any) => c.id === chat.id);
+        const guardParticipant = rawChatData?.participants?.find((p: any) => 
+          p.userId !== user?.id && p.user?.role === 'GUARD'
+        );
+        
+        if (guardParticipant?.userId) {
+          // Create a direct chat with the guard
+          const createResponse = await apiService.createChat('direct', [guardParticipant.userId]);
+          
+          if (createResponse.success && createResponse.data) {
+            // Reload chats to get the updated list
+            await loadChats();
+            // Navigate to the newly created chat
+            (navigation as any).navigate('IndividualChatScreen', {
+              chatId: createResponse.data.id || chat.id,
+              chatName: chat.name,
+              avatar: chat.avatar
+            });
+            return;
+          }
+        }
+      } catch (error) {
+        console.error('Error creating chat with guard:', error);
+        // Fall through to navigate with existing chat ID
+      }
+    }
+    
+    // Navigate to existing chat
     (navigation as any).navigate('IndividualChatScreen', { 
       chatId: chat.id, 
       chatName: chat.name,
@@ -132,49 +280,75 @@ const ChatListScreen: React.FC = () => {
     });
   };
 
-  const filteredChats = chats.filter(chat =>
-    chat.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    chat.lastMessage.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredChats = chats.filter(chat => {
+    if (!chat || !chat.name) return false;
+    const query = searchQuery.toLowerCase();
+    const nameMatch = chat.name.toLowerCase().includes(query);
+    const messageMatch = chat.lastMessage ? chat.lastMessage.toLowerCase().includes(query) : false;
+    return nameMatch || messageMatch;
+  });
 
-  const renderChatItem = ({ item }: { item: ChatItem }) => (
-    <TouchableOpacity
-      style={styles.chatItem}
-      onPress={() => handleChatPress(item)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.avatarContainer}>
-        <Image
-          source={item.avatar ? { uri: item.avatar } : { uri: 'https://via.placeholder.com/150x150/E5E7EB/9CA3AF?text=?' }}
-          style={styles.avatar}
-        />
-        {item.isOnline && <View style={styles.onlineIndicator} />}
-      </View>
-      
-      <View style={styles.chatContent}>
-        <View style={styles.chatHeader}>
-          <Text style={styles.chatName} numberOfLines={1}>
-            {item.name}
-          </Text>
-          <Text style={styles.timestamp}>
-            {item.timestamp}
+  const renderChatItem = ({ item, index }: { item: ChatItem; index: number }) => {
+    if (!item || !item.id) {
+      return null;
+    }
+
+    return (
+      <TouchableOpacity
+        style={[
+          styles.chatItem,
+          item.isAssignedGuard && !item.lastMessage && styles.assignedGuardItem
+        ]}
+        onPress={() => handleChatPress(item)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.avatarContainer}>
+          <Image
+            source={item.avatar ? { uri: item.avatar } : { uri: 'https://via.placeholder.com/150x150/E5E7EB/9CA3AF?text=?' }}
+            style={styles.avatar}
+            defaultSource={{ uri: 'https://via.placeholder.com/150x150/E5E7EB/9CA3AF?text=?' }}
+          />
+          {item.isOnline && <View style={styles.onlineIndicator} />}
+          {item.isAssignedGuard && (
+            <View style={styles.assignedBadge}>
+              <Text style={styles.assignedBadgeText}>Site</Text>
+            </View>
+          )}
+        </View>
+        
+        <View style={styles.chatContent}>
+          <View style={styles.chatHeader}>
+            <Text style={styles.chatName} numberOfLines={1}>
+              {item.name || 'Chat'}
+            </Text>
+            {item.timestamp ? (
+              <Text style={styles.timestamp}>
+                {item.timestamp}
+              </Text>
+            ) : null}
+          </View>
+          
+          <Text 
+            style={[
+              styles.lastMessage,
+              item.isAssignedGuard && !item.lastMessage && styles.assignedGuardMessage
+            ]} 
+            numberOfLines={1}
+          >
+            {item.lastMessage || ''}
           </Text>
         </View>
         
-        <Text style={styles.lastMessage} numberOfLines={1}>
-          {item.lastMessage}
-        </Text>
-      </View>
-      
-      {item.unreadCount > 0 && (
-        <View style={styles.unreadBadge}>
-          <Text style={styles.unreadCount}>
-            {item.unreadCount > 99 ? '99+' : item.unreadCount}
-          </Text>
-        </View>
-      )}
-    </TouchableOpacity>
-  );
+        {item.unreadCount > 0 ? (
+          <View style={styles.unreadBadge}>
+            <Text style={styles.unreadCount}>
+              {item.unreadCount > 99 ? '99+' : item.unreadCount}
+            </Text>
+          </View>
+        ) : null}
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaWrapper>
@@ -190,15 +364,22 @@ const ChatListScreen: React.FC = () => {
         <Text style={styles.headerTitle}>Chats</Text>
         
         <TouchableOpacity 
+          ref={menuButtonRef}
           style={styles.notificationButton}
-          onPress={() => {
-            // Navigate to create new chat or show options
-            // For now, just show placeholder
-          }}
+          onPress={handleMenuPress}
         >
-          <Text style={styles.newChatButton}>+</Text>
+          <MoreVertical width={24} height={24} color={COLORS.textPrimary} />
         </TouchableOpacity>
       </View>
+
+      {/* Dropdown Menu */}
+      <DropdownMenu
+        visible={menuVisible}
+        onClose={() => setMenuVisible(false)}
+        items={getMenuItems()}
+        anchorPosition={menuAnchor}
+        alignment="right"
+      />
 
       {/* Search Bar */}
       <View style={styles.searchContainer}>
@@ -218,14 +399,72 @@ const ChatListScreen: React.FC = () => {
       <FlatList
         data={filteredChats}
         renderItem={renderChatItem}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item, index) => item.id || `chat-${index}`}
         style={styles.chatList}
-        contentContainerStyle={styles.chatListContent}
+        contentContainerStyle={
+          filteredChats.length === 0 
+            ? [styles.chatListContent, { flexGrow: 1, justifyContent: 'center' }]
+            : styles.chatListContent
+        }
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        ItemSeparatorComponent={filteredChats.length > 0 ? () => <View style={styles.separator} /> : null}
+        ListEmptyComponent={
+          refreshing ? (
+            <View style={styles.loadingContainer}>
+              <Text style={styles.loadingText}>Loading chats...</Text>
+            </View>
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No chats yet</Text>
+              <Text style={styles.emptySubtext}>
+                {searchQuery ? 'No chats match your search' : 'Start a conversation to see chats here'}
+              </Text>
+            </View>
+          )
+        }
+        removeClippedSubviews={false}
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={10}
+      />
+
+      {/* New Chat Modal */}
+      <NewChatModal
+        visible={newChatModalVisible}
+        onClose={() => setNewChatModalVisible(false)}
+        onSelectUser={async (userId, userName, userRole) => {
+          try {
+            if (!user) {
+              Alert.alert('Error', 'User not logged in');
+              return;
+            }
+
+            const apiService = (await import('../../services/api')).default;
+            
+            // Create chat with selected user
+            const createResponse = await apiService.createChat('direct', [userId]);
+            
+            if (createResponse.success && createResponse.data) {
+              // Reload chats to get the new one
+              await loadChats();
+              
+              // Navigate to the new chat
+              (navigation as any).navigate('IndividualChatScreen', {
+                chatId: createResponse.data.id,
+                chatName: userName,
+              });
+            } else {
+              Alert.alert('Error', createResponse.message || 'Failed to create chat');
+            }
+          } catch (error: any) {
+            console.error('Error creating chat:', error);
+            Alert.alert('Error', error.message || 'Failed to create chat. Please try again.');
+          }
+        }}
+        currentUserRole={user?.role}
       />
     </SafeAreaWrapper>
   );
@@ -360,10 +599,58 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.backgroundSecondary,
     marginLeft: 84, // Align with chat content
   },
-  newChatButton: {
-    fontSize: 24,
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: SPACING.xxxxl,
+    paddingHorizontal: SPACING.lg,
+  },
+  emptyText: {
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.xs,
+    textAlign: 'center',
+  },
+  emptySubtext: {
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+  },
+  loadingContainer: {
+    paddingVertical: SPACING.lg,
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
+  },
+  assignedGuardItem: {
+    backgroundColor: COLORS.backgroundSecondary,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.primary,
+  },
+  assignedBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.xs,
+    paddingHorizontal: SPACING.xs,
+    paddingVertical: 2,
+    minWidth: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  assignedBadgeText: {
+    fontSize: 8,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    color: COLORS.textInverse,
+  },
+  assignedGuardMessage: {
+    fontStyle: 'italic',
     color: COLORS.primary,
-    fontWeight: 'bold',
   },
 });
 

@@ -252,10 +252,14 @@ const styles = StyleSheet.create({
     color: '#000000',
   },
   resendContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+    paddingHorizontal: 16,
     marginBottom: 40,
+  },
+  resendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    flexWrap: 'nowrap',
   },
   resendLabel: {
     fontFamily: 'Inter',

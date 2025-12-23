@@ -16,6 +16,9 @@ import {
   Clipboard,
 } from 'react-native';
 import { useSelector } from 'react-redux';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { AdminStackParamList } from '../../navigation/AdminNavigator';
 import { RootState } from '../../store';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { UserIcon, UsersIcon, SettingsIcon, EmergencyIcon, PlusIcon, CopyIcon, TrashIcon } from '../../components/ui/AppIcons';
@@ -51,8 +54,10 @@ interface Invitation {
   };
 }
 
+type InvitationManagementScreenNavigationProp = StackNavigationProp<AdminStackParamList, 'InvitationManagement'>;
+
 const InvitationManagementScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<InvitationManagementScreenNavigationProp>();
   const { user } = useSelector((state: RootState) => state.auth);
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
   
@@ -372,19 +377,7 @@ const InvitationManagementScreen: React.FC = () => {
       <View style={styles.invitationCard}>
         <View style={styles.invitationHeader}>
           <View style={styles.invitationInfo}>
-            <View style={styles.codeContainer}>
-              <Text style={styles.invitationCode}>{item.invitationCode}</Text>
-              <TouchableOpacity
-                style={styles.copyButton}
-                onPress={() => handleCopyCode(item.invitationCode)}
-                activeOpacity={0.7}
-              >
-                <Copy width={14} height={14} stroke={COLORS.primary} />
-                <Text style={styles.copyButtonText}>
-                  {copiedCode === item.invitationCode ? 'Copied' : 'Copy'}
-                </Text>
-              </TouchableOpacity>
-            </View>
+            <Text style={styles.invitationCode}>{item.invitationCode}</Text>
             {item.email && (
               <Text style={styles.invitationEmail}>For: {item.email}</Text>
             )}
@@ -429,6 +422,17 @@ const InvitationManagementScreen: React.FC = () => {
         </View>
         
         <View style={styles.invitationActions}>
+          <TouchableOpacity 
+            style={[styles.actionButton, styles.copyActionButton]}
+            onPress={() => handleCopyCode(item.invitationCode)}
+            activeOpacity={0.7}
+          >
+            <Copy width={16} height={16} stroke={COLORS.primary} />
+            <Text style={[styles.actionText, { color: COLORS.primary }]}>
+              {copiedCode === item.invitationCode ? 'Copied' : 'Copy'}
+            </Text>
+          </TouchableOpacity>
+          
           {isActive && (
             <TouchableOpacity 
               style={styles.actionButton}
@@ -810,32 +814,13 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0, // Allow flex shrinking
   },
-  codeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: SPACING.xs,
-    gap: SPACING.sm,
-  },
   invitationCode: {
     fontSize: TYPOGRAPHY.fontSize.lg,
     fontWeight: TYPOGRAPHY.fontWeight.bold,
     color: COLORS.textPrimary,
     fontFamily: 'monospace',
     letterSpacing: 1,
-  },
-  copyButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    backgroundColor: COLORS.primaryLight,
-    borderRadius: BORDER_RADIUS.sm,
-    gap: SPACING.xs,
-  },
-  copyButtonText: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
-    color: COLORS.primary,
+    marginBottom: SPACING.xs,
   },
   invitationEmail: {
     fontSize: TYPOGRAPHY.fontSize.sm,
@@ -848,8 +833,8 @@ const styles = StyleSheet.create({
     gap: SPACING.xs,
     alignItems: 'flex-start',
     justifyContent: 'flex-end',
-    maxWidth: 120, // Limit width to force wrapping after 2 badges
     flexShrink: 0,
+    marginLeft: SPACING.sm,
   },
   roleBadge: {
     paddingHorizontal: SPACING.sm,
@@ -889,6 +874,7 @@ const styles = StyleSheet.create({
     paddingTop: SPACING.md,
     borderTopWidth: 1,
     borderTopColor: COLORS.borderLight,
+    flexWrap: 'wrap',
   },
   actionButton: {
     flexDirection: 'row',
@@ -898,7 +884,13 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.sm,
     backgroundColor: COLORS.backgroundSecondary,
     gap: SPACING.xs,
+    flex: 1,
+    minWidth: 100,
+    justifyContent: 'center',
     ...SHADOWS.small,
+  },
+  copyActionButton: {
+    backgroundColor: COLORS.backgroundSecondary,
   },
   actionText: {
     fontSize: TYPOGRAPHY.fontSize.sm,

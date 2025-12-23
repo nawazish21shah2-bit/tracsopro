@@ -16,6 +16,9 @@ import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { LocationIcon, ClockIcon, CheckCircleIcon } from '../../components/ui/AppIcons';
 import { MapPinIcon, CalendarIcon } from '../../components/ui/FeatherIcons';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import GuardProfileDrawer from '../../components/guard/GuardProfileDrawer';
+import apiService from '../../services/api';
 
 interface SiteDetails {
   id: string;
@@ -49,6 +52,7 @@ const GuardSiteDetailsScreen: React.FC = () => {
   const navigation = useNavigation<GuardSiteDetailsScreenNavigationProp>();
   const route = useRoute();
   const { siteId } = (route.params as { siteId: string }) || {};
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
   
   const [loading, setLoading] = useState(true);
   const [site, setSite] = useState<SiteDetails | null>(null);
@@ -62,29 +66,89 @@ const GuardSiteDetailsScreen: React.FC = () => {
 
   const loadSiteDetails = async () => {
     try {
-      // TODO: Replace with actual API call
-      await new Promise<void>(resolve => setTimeout(resolve, 1000));
+      setLoading(true);
       
-      // Mock data
-      setSite({
-        id: siteId || '1',
-        name: 'Ocean View Vila',
-        address: '1321 Baker Street, NY',
-        city: 'New York',
-        state: 'NY',
-        zipCode: '10001',
-        description: 'Luxury residential complex with 24/7 security coverage. Modern facilities requiring professional security services.',
-        requirements: 'Licensed security guard with 2+ years experience. Professional appearance mandatory. Residential security experience preferred.',
-        latitude: 40.7128,
-        longitude: -74.0060,
-        status: 'Active'
-      });
+      // Validate siteId exists
+      if (!siteId || typeof siteId !== 'string' || siteId.trim() === '') {
+        Alert.alert(
+          'Error',
+          'Invalid site ID. Please go back and try selecting the site again.',
+          [
+            {
+              text: 'Go Back',
+              onPress: () => navigation.goBack(),
+              style: 'default'
+            }
+          ]
+        );
+        setLoading(false);
+        return;
+      }
+      
+      // Load site details from API
+      const siteResult = await apiService.getSiteById(siteId);
+      
+      if (siteResult.success && siteResult.data) {
+        const siteData = siteResult.data;
+        setSite({
+          id: siteId,
+          name: siteData.name || 'Site',
+          address: siteData.address || '',
+          city: siteData.city || '',
+          state: siteData.state || '',
+          zipCode: siteData.zipCode || '',
+          description: siteData.description || '',
+          requirements: siteData.requirements || '',
+          latitude: siteData.latitude || undefined,
+          longitude: siteData.longitude || undefined,
+          status: siteData.isActive ? 'Active' : 'Inactive'
+        });
 
-      // TODO: Replace with actual API call to get shifts for this site
-      // For now, using empty array - shifts are assigned directly by admin/client
-      setShifts([]);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to load site details');
+        // Load shifts for this site
+        try {
+          // Get shifts assigned to the current guard for this site
+          const shiftsResult = await apiService.getUpcomingShifts();
+          if (shiftsResult.success && shiftsResult.data) {
+            const allShifts = Array.isArray(shiftsResult.data) ? shiftsResult.data : [];
+            const siteShifts = allShifts.filter((shift: any) => shift.siteId === siteId);
+            setShifts(siteShifts.map((shift: any) => ({
+              id: shift.id,
+              scheduledStartTime: shift.scheduledStartTime,
+              scheduledEndTime: shift.scheduledEndTime,
+              status: shift.status,
+              guard: shift.guard
+            })));
+          } else {
+            setShifts([]);
+          }
+        } catch (shiftError) {
+          // Non-critical - shifts will just be empty
+          console.warn('Failed to load shifts:', shiftError);
+          setShifts([]);
+        }
+      } else {
+        const errorMessage = siteResult.message || 'Failed to load site details';
+        Alert.alert('Error', errorMessage, [
+          {
+            text: 'Go Back',
+            onPress: () => navigation.goBack(),
+            style: 'default'
+          }
+        ]);
+      }
+    } catch (error: any) {
+      console.error('Error loading site details:', error);
+      Alert.alert(
+        'Error',
+        error?.message || 'Failed to load site details. Please try again.',
+        [
+          {
+            text: 'Go Back',
+            onPress: () => navigation.goBack(),
+            style: 'default'
+          }
+        ]
+      );
     } finally {
       setLoading(false);
     }
@@ -131,6 +195,30 @@ const GuardSiteDetailsScreen: React.FC = () => {
           variant="guard"
           title="Site Details"
           showLogo={false}
+          profileDrawer={
+            <GuardProfileDrawer
+              visible={isDrawerVisible}
+              onClose={closeDrawer}
+              onNavigateToProfile={() => {
+                closeDrawer();
+                navigation.navigate('GuardTabs', { 
+                  screen: 'Settings',
+                  params: { screen: 'GuardProfileEdit' }
+                });
+              }}
+              onNavigateToNotifications={() => {
+                closeDrawer();
+                navigation.navigate('GuardTabs', { 
+                  screen: 'Settings',
+                  params: { screen: 'GuardNotificationSettings' }
+                });
+              }}
+              onNavigateToSupport={() => {
+                closeDrawer();
+                navigation.navigate('GuardTabs', { screen: 'Chat' });
+              }}
+            />
+          }
         />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
@@ -147,6 +235,31 @@ const GuardSiteDetailsScreen: React.FC = () => {
           variant="guard"
           title="Site Details"
           showLogo={false}
+          profileDrawer={
+            <GuardProfileDrawer
+              visible={isDrawerVisible}
+              onClose={closeDrawer}
+              onNavigateToProfile={() => {
+                closeDrawer();
+                navigation.navigate('GuardTabs', { 
+                  screen: 'Settings',
+                  params: { screen: 'GuardProfileEdit' }
+                });
+              }}
+              onNavigateToNotifications={() => {
+                closeDrawer();
+                navigation.navigate('GuardTabs', { 
+                  screen: 'Settings',
+                  params: { screen: 'GuardNotificationSettings' }
+                });
+              }}
+              onNavigateToSupport={() => {
+                closeDrawer();
+                navigation.navigate('GuardTabs', { screen: 'Chat' });
+              }}
+            />
+          }
+        />
         />
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>Site not found</Text>
@@ -167,6 +280,30 @@ const GuardSiteDetailsScreen: React.FC = () => {
         variant="guard"
         title="Site Details"
         showLogo={false}
+        profileDrawer={
+          <GuardProfileDrawer
+            visible={isDrawerVisible}
+            onClose={closeDrawer}
+            onNavigateToProfile={() => {
+              closeDrawer();
+              navigation.navigate('GuardTabs', { 
+                screen: 'Settings',
+                params: { screen: 'GuardProfileEdit' }
+              });
+            }}
+            onNavigateToNotifications={() => {
+              closeDrawer();
+              navigation.navigate('GuardTabs', { 
+                screen: 'Settings',
+                params: { screen: 'GuardNotificationSettings' }
+              });
+            }}
+            onNavigateToSupport={() => {
+              closeDrawer();
+              navigation.navigate('GuardTabs', { screen: 'Chat' });
+            }}
+          />
+        }
       />
 
       <ScrollView 

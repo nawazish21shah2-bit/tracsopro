@@ -12,7 +12,6 @@ interface GuardAppHeaderProps {
   onNavigateToPastJobs?: () => void;
   onNavigateToAssignedSites?: () => void;
   onNavigateToAttendance?: () => void;
-  onNavigateToEarnings?: () => void;
   onNavigateToNotifications?: () => void;
   onNavigateToSupport?: () => void;
   leftIcon?: React.ReactNode;
@@ -34,7 +33,6 @@ export const GuardAppHeader: React.FC<GuardAppHeaderProps> = ({
   onNavigateToPastJobs,
   onNavigateToAssignedSites,
   onNavigateToAttendance,
-  onNavigateToEarnings,
   onNavigateToNotifications,
   onNavigateToSupport,
   leftIcon,
@@ -71,7 +69,6 @@ export const GuardAppHeader: React.FC<GuardAppHeaderProps> = ({
             onNavigateToPastJobs={onNavigateToPastJobs}
             onNavigateToAssignedSites={onNavigateToAssignedSites}
             onNavigateToAttendance={onNavigateToAttendance}
-            onNavigateToEarnings={onNavigateToEarnings}
             onNavigateToNotifications={onNavigateToNotifications}
             onNavigateToSupport={onNavigateToSupport}
           />

@@ -21,10 +21,15 @@ import {
   Mic, 
   Smile, 
   Send,
-  MoreHorizontal 
+  MoreVertical,
+  User,
+  BellOff,
+  Trash2,
+  Phone,
 } from 'react-native-feather';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import WebSocketService from '../../services/WebSocketService';
+import DropdownMenu, { DropdownMenuItem } from '../../components/ui/DropdownMenu';
 
 interface Message {
   id: string;
@@ -54,7 +59,71 @@ const IndividualChatScreen: React.FC = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [menuAnchor, setMenuAnchor] = useState({ x: 0, y: 0 });
   const flatListRef = useRef<FlatList>(null);
+  const menuButtonRef = useRef<TouchableOpacity>(null);
+
+  // Build menu items for chat options
+  const getChatMenuItems = (): DropdownMenuItem[] => {
+    return [
+      {
+        id: 'view-profile',
+        label: 'View Profile',
+        icon: <User width={20} height={20} color={COLORS.primary} />,
+        onPress: () => {
+          // TODO: Navigate to profile
+          Alert.alert('Profile', `View ${chatName}'s profile`);
+        },
+      },
+      {
+        id: 'call',
+        label: 'Voice Call',
+        icon: <Phone width={20} height={20} color={COLORS.success} />,
+        onPress: () => {
+          Alert.alert('Coming Soon', 'Voice calling feature will be available soon!');
+        },
+      },
+      {
+        id: 'mute',
+        label: 'Mute Notifications',
+        icon: <BellOff width={20} height={20} color={COLORS.textSecondary} />,
+        onPress: () => {
+          Alert.alert('Notifications Muted', `Notifications for ${chatName} have been muted`);
+        },
+      },
+      {
+        id: 'delete',
+        label: 'Delete Chat',
+        icon: <Trash2 width={20} height={20} color={COLORS.error} />,
+        destructive: true,
+        onPress: () => {
+          Alert.alert(
+            'Delete Chat',
+            `Are you sure you want to delete this conversation with ${chatName}?`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { 
+                text: 'Delete', 
+                style: 'destructive',
+                onPress: () => {
+                  // TODO: Implement delete chat
+                  navigation.goBack();
+                }
+              },
+            ]
+          );
+        },
+      },
+    ];
+  };
+
+  const handleMenuPress = () => {
+    menuButtonRef.current?.measureInWindow((x, y, width, height) => {
+      setMenuAnchor({ x: x + width, y: y + height });
+      setMenuVisible(true);
+    });
+  };
 
   // Load messages when chatId changes
   useEffect(() => {
@@ -127,29 +196,45 @@ const IndividualChatScreen: React.FC = () => {
       const response = await apiService.getChatMessages(chatId, 1, 50);
       
       // Handle empty chat room gracefully - this is normal for new chats
-      if (!response.success || !response.data) {
+      if (!response.success) {
         // If chat doesn't exist yet, that's okay - user can still send first message
-        if (response.message?.toLowerCase().includes('not found') || 
-            response.message?.toLowerCase().includes('404')) {
-          console.log('Chat room does not exist yet - will be created with first message');
+        const errorMsg = response.message?.toLowerCase() || '';
+        if (errorMsg.includes('not found') || 
+            errorMsg.includes('404') ||
+            errorMsg.includes('chat not found')) {
+          if (__DEV__) {
+            console.log('Chat room does not exist yet - will be created with first message');
+          }
           setMessages([]);
           return;
         }
         
         // For other errors, log but allow user to continue
         console.error('Failed to load messages:', response.message);
+        // Keep existing messages if available, otherwise set empty
+        if (messages.length === 0) {
+          setMessages([]);
+        }
+        return;
+      }
+      
+      // Handle case where data might be undefined or null
+      const messageData = response.data || [];
+      
+      // Handle empty messages array (new chat)
+      if (!Array.isArray(messageData)) {
+        console.warn('Messages data is not an array:', messageData);
         setMessages([]);
         return;
       }
       
-      // Handle empty messages array (new chat)
-      if (!Array.isArray(response.data) || response.data.length === 0) {
+      if (messageData.length === 0) {
         setMessages([]);
         return;
       }
       
       // Transform API messages to match Message interface
-      const transformedMessages: Message[] = response.data.map((msg: any) => ({
+      const transformedMessages: Message[] = messageData.map((msg: any) => ({
         id: msg.id,
         content: msg.content || msg.message,
         senderId: msg.senderId,
@@ -173,12 +258,29 @@ const IndividualChatScreen: React.FC = () => {
     } catch (error: any) {
       // Handle errors gracefully - allow user to still send messages
       console.error('Error loading messages:', error);
+      
       // Don't show error alert for 404 (chat doesn't exist yet)
-      if (error?.response?.status !== 404 && error?.message && !error.message.includes('not found')) {
-        // Only log, don't block user from sending first message
-        console.log('Chat may not exist yet - first message will create it');
+      const isNotFound = error?.response?.status === 404 || 
+                        error?.message?.toLowerCase().includes('not found');
+      
+      if (isNotFound) {
+        if (__DEV__) {
+          console.log('Chat may not exist yet - first message will create it');
+        }
+        setMessages([]);
+      } else {
+        // For other errors, keep existing messages if available
+        if (messages.length === 0) {
+          setMessages([]);
+        }
+        if (__DEV__) {
+          console.error('Message loading error details:', {
+            message: error?.message,
+            response: error?.response?.data,
+            status: error?.response?.status,
+          });
+        }
       }
-      setMessages([]);
     } finally {
       setLoading(false);
     }
@@ -340,10 +442,23 @@ const IndividualChatScreen: React.FC = () => {
             </View>
           </View>
           
-          <TouchableOpacity style={styles.moreButton}>
-            <MoreHorizontal width={24} height={24} color={COLORS.textInverse} />
+          <TouchableOpacity 
+            ref={menuButtonRef}
+            style={styles.moreButton}
+            onPress={handleMenuPress}
+          >
+            <MoreVertical width={24} height={24} color={COLORS.textInverse} />
           </TouchableOpacity>
         </View>
+
+        {/* Dropdown Menu */}
+        <DropdownMenu
+          visible={menuVisible}
+          onClose={() => setMenuVisible(false)}
+          items={getChatMenuItems()}
+          anchorPosition={menuAnchor}
+          alignment="right"
+        />
 
         {loading && (
           <View style={styles.loadingContainer}>

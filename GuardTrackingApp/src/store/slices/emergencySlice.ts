@@ -50,24 +50,15 @@ export const triggerEmergencyAlert = createAsyncThunk(
     severity: EmergencyAlert['severity'];
     location: EmergencyAlert['location'];
     message?: string;
+    shiftId?: string; // Optional: pass current shift ID for site-specific notifications
   }) => {
-    // For now, simulate the API call since emergency endpoints aren't fully integrated
-    // TODO: Replace with actual API call when backend is ready
-    const mockAlert: EmergencyAlert = {
-      id: `alert-${Date.now()}`,
-      guardId: 'current-guard-id', // This should come from auth state
-      type: alertData.type,
-      severity: alertData.severity,
-      location: alertData.location,
-      message: alertData.message,
-      status: 'ACTIVE',
-      createdAt: new Date().toISOString(),
-    };
+    const response = await api.triggerEmergencyAlert(alertData);
     
-    // Simulate API delay
-    await new Promise<void>(resolve => setTimeout(resolve, 1000));
+    if (!response.success) {
+      throw new Error(response.message || 'Failed to trigger emergency alert');
+    }
     
-    return mockAlert;
+    return response.data;
   }
 );
 

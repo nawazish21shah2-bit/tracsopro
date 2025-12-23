@@ -1,22 +1,26 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 
 export const useProfileDrawer = () => {
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
 
-  const openDrawer = () => {
+  const openDrawer = useCallback(() => {
     console.log('Opening drawer...');
     setIsDrawerVisible(true);
-  };
+  }, []);
   
-  const closeDrawer = () => {
+  const closeDrawer = useCallback(() => {
     console.log('Closing drawer...');
     setIsDrawerVisible(false);
-  };
+  }, []);
   
-  const toggleDrawer = () => {
-    console.log('Toggling drawer...');
-    setIsDrawerVisible(!isDrawerVisible);
-  };
+  const toggleDrawer = useCallback(() => {
+    console.log('Toggling drawer, current state:', isDrawerVisible);
+    setIsDrawerVisible(prev => {
+      const newState = !prev;
+      console.log('Toggling drawer to:', newState);
+      return newState;
+    });
+  }, [isDrawerVisible]);
 
   return {
     isDrawerVisible,

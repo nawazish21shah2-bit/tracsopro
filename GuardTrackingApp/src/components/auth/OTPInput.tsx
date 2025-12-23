@@ -56,21 +56,21 @@ const OTPInput: React.FC<OTPInputProps> = ({
 
       {/* Resend Code */}
       <View style={styles.resendContainer}>
-        <Text style={styles.resendText}>
-          Did not receive code? 
+        <View style={styles.resendRow}>
+          <Text style={styles.resendText}>Did not receive code? </Text>
           <TouchableOpacity 
             onPress={onResend} 
             disabled={!canResend}
-            style={styles.resendButton}
+            activeOpacity={!canResend ? 1 : 0.7}
           >
             <Text style={[
               styles.resendLink, 
               !canResend && styles.resendLinkDisabled
             ]}>
-              {canResend ? ' Resend Code' : ` Resend Code (${resendTimer}s)`}
+              {canResend ? 'Resend Code' : `Resend Code (${resendTimer}s)`}
             </Text>
           </TouchableOpacity>
-        </Text>
+        </View>
       </View>
     </View>
   );
@@ -104,16 +104,19 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   resendContainer: {
+    paddingHorizontal: 16,
+  },
+  resendRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-start',
+    flexWrap: 'nowrap',
   },
   resendText: {
     fontFamily: 'Inter',
     fontWeight: '400',
     fontSize: 14,
     color: '#6B7280',
-  },
-  resendButton: {
-    marginLeft: 4,
   },
   resendLink: {
     fontFamily: 'Inter',

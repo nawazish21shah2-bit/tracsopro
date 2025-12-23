@@ -14,7 +14,7 @@ import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
-import { logoutUser } from '../../store/slices/authSlice';
+import { logoutUser, updateUserProfile } from '../../store/slices/authSlice';
 import { 
   CheckCircleIcon,
   UserIcon,
@@ -28,6 +28,8 @@ import {
 import { FeatherIcon } from '../ui/FeatherIcons';
 import { ClientStackParamList } from '../../navigation/ClientStackNavigator';
 import { COLORS, SPACING, TYPOGRAPHY } from '../../styles/globalStyles';
+import { ProfileAvatar } from '../common/ProfileAvatar';
+import apiService from '../../services/api';
 
 interface ClientProfileDrawerProps {
   visible: boolean;
@@ -66,12 +68,15 @@ export const ClientProfileDrawer: React.FC<ClientProfileDrawerProps> = ({
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isUploadingPicture, setIsUploadingPicture] = useState(false);
   
   // Animation for slide from left
   const slideAnim = useRef(new Animated.Value(-Dimensions.get('window').width)).current;
   
   useEffect(() => {
     if (visible) {
+      // Reset animation value before sliding in
+      slideAnim.setValue(-Dimensions.get('window').width);
       // Slide in from left
       Animated.timing(slideAnim, {
         toValue: 0,
@@ -90,106 +95,76 @@ export const ClientProfileDrawer: React.FC<ClientProfileDrawerProps> = ({
 
   const handleMyProfile = () => {
     onClose();
-    // Navigate to Settings tab for profile
-    try {
-      const parent = navigation.getParent();
-      if (parent) {
-        parent.navigate('ClientTabs', { screen: 'Settings' });
-      } else {
-        navigation.navigate('ClientTabs');
-      }
-    } catch (error) {
-      // Fallback: navigate to ClientTabs and let user switch manually
-      navigation.navigate('ClientTabs');
-    }
+    // Navigate to Settings tab to keep bottom menu visible
+    navigation.navigate('ClientTabs', { screen: 'Settings' });
     onNavigateToProfile?.();
   };
 
   const handleManageSites = () => {
     onClose();
-    // Navigate to Sites & Shifts tab
-    try {
-      const parent = navigation.getParent();
-      if (parent) {
-        parent.navigate('ClientTabs', { screen: 'Sites & Shifts' });
-      } else {
-        navigation.navigate('ClientTabs');
-      }
-    } catch (error) {
-      navigation.navigate('ClientTabs');
-    }
+    // Navigate to Sites & Shifts tab to keep bottom menu visible
+    navigation.navigate('ClientTabs', { screen: 'Sites & Shifts' });
     onNavigateToSites?.();
   };
 
   const handleManageGuards = () => {
     onClose();
-    // Navigate to Guards tab
-    try {
-      const parent = navigation.getParent();
-      if (parent) {
-        parent.navigate('ClientTabs', { screen: 'Guards' });
-      } else {
-        navigation.navigate('ClientTabs');
-      }
-    } catch (error) {
-      navigation.navigate('ClientTabs');
-    }
+    // Navigate to Guards tab to keep bottom menu visible
+    navigation.navigate('ClientTabs', { screen: 'Guards' });
     onNavigateToGuards?.();
   };
 
   const handleViewReports = () => {
     onClose();
-    // Navigate to Reports tab
-    try {
-      const parent = navigation.getParent();
-      if (parent) {
-        parent.navigate('ClientTabs', { screen: 'Reports' });
-      } else {
-        navigation.navigate('ClientTabs');
-      }
-    } catch (error) {
-      navigation.navigate('ClientTabs');
-    }
+    // Navigate to Reports tab to keep bottom menu visible
+    navigation.navigate('ClientTabs', { screen: 'Reports' });
     onNavigateToReports?.();
   };
 
   const handleAnalytics = () => {
     onClose();
-    // Navigate to Reports tab (analytics can be part of reports)
-    try {
-      const parent = navigation.getParent();
-      if (parent) {
-        parent.navigate('ClientTabs', { screen: 'Reports' });
-      } else {
-        navigation.navigate('ClientTabs');
-      }
-    } catch (error) {
-      navigation.navigate('ClientTabs');
-    }
+    // Navigate to Reports tab (analytics can be part of reports) to keep bottom menu visible
+    navigation.navigate('ClientTabs', { screen: 'Reports' });
     onNavigateToAnalytics?.();
   };
 
   const handleNotificationSettings = () => {
     onClose();
-    // Navigate to Settings tab
-    try {
-      const parent = navigation.getParent();
-      if (parent) {
-        parent.navigate('ClientTabs', { screen: 'Settings' });
-      } else {
-        navigation.navigate('ClientTabs');
-      }
-    } catch (error) {
-      navigation.navigate('ClientTabs');
-    }
+    // Navigate to Settings tab to keep bottom menu visible
+    navigation.navigate('ClientTabs', { screen: 'Settings' });
     onNavigateToNotifications?.();
   };
 
   const handleContactSupport = () => {
     onClose();
-    // Navigate to chat/support
+    // Navigate to chat/support - this is a stack screen, but we'll navigate to it
+    // Note: This will hide bottom menu as it's outside the tab navigator
     navigation.navigate('ChatListScreen');
     onNavigateToSupport?.();
+  };
+
+  const handleProfilePictureSelected = async (imageUri: string) => {
+    try {
+      setIsUploadingPicture(true);
+      
+      // Upload the image
+      const uploadResponse = await apiService.uploadProfilePicture(imageUri);
+      
+      if (uploadResponse.success && uploadResponse.data?.url) {
+        // Update user profile with new picture URL
+        await dispatch(updateUserProfile({ 
+          profilePictureUrl: uploadResponse.data.url 
+        } as any)).unwrap();
+        
+        Alert.alert('Success', 'Profile picture updated successfully');
+      } else {
+        Alert.alert('Error', uploadResponse.message || 'Failed to upload profile picture');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to update profile picture');
+    } finally {
+      setIsUploadingPicture(false);
+    }
   };
 
   const handleLogout = () => {
@@ -272,6 +247,7 @@ export const ClientProfileDrawer: React.FC<ClientProfileDrawerProps> = ({
 
   return (
     <Modal
+      key={`client-drawer-${visible}`}
       visible={visible}
       animationType="none"
       transparent={true}
@@ -294,16 +270,15 @@ export const ClientProfileDrawer: React.FC<ClientProfileDrawerProps> = ({
           {/* Profile Section */}
           <View style={styles.profileSection}>
             <View style={styles.avatarContainer}>
-              <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarText}>
-                  {fullName
-                    .split(' ')
-                    .map(n => n[0])
-                    .join('')
-                    .toUpperCase()
-                    .slice(0, 2)}
-                </Text>
-              </View>
+              <ProfileAvatar
+                firstName={user?.firstName}
+                lastName={user?.lastName}
+                profilePictureUrl={user?.profilePictureUrl}
+                size={80}
+                editable={true}
+                isLoading={isUploadingPicture}
+                onImageSelected={handleProfilePictureSelected}
+              />
             </View>
             <Text style={styles.userName}>{fullName}</Text>
             {isVerified && (
@@ -376,19 +351,6 @@ const styles = StyleSheet.create({
   },
   avatarContainer: {
     marginBottom: SPACING.md,
-  },
-  avatarPlaceholder: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: COLORS.primaryLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    fontSize: TYPOGRAPHY.fontSize.xxxl,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
-    color: COLORS.primary,
   },
   userName: {
     fontSize: TYPOGRAPHY.fontSize.lg,

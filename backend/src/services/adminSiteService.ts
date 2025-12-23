@@ -33,32 +33,12 @@ export class AdminSiteService {
     const where: any = {};
 
     // Multi-tenant: Filter by company
-    // Sites can be linked to companies in two ways:
-    // 1. Directly via CompanySite (if site was assigned to company)
-    // 2. Indirectly via Client -> CompanyClient (site's client belongs to company)
     if (securityCompanyId) {
-      where.OR = [
-        // Direct link via CompanySite
-        {
-          companySites: {
-            some: {
-              securityCompanyId,
-              isActive: true,
-            },
-          },
+      where.companySites = {
+        some: {
+          securityCompanyId,
         },
-        // Indirect link via Client -> CompanyClient
-        {
-          client: {
-            companyClients: {
-              some: {
-                securityCompanyId,
-                isActive: true,
-              },
-            },
-          },
-        },
-      ];
+      };
     }
 
     if (clientId) {

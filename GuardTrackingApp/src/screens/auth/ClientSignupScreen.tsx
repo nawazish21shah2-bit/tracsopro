@@ -24,6 +24,7 @@ import Logo from '../../assets/images/tracSOpro-logo.png';
 import { Country, defaultCountry } from '../../utils/countries';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { authStyles, AUTH_HEADING_TO_FORM } from '../../styles/authStyles';
+import { showRegistrationError } from '../../utils/registrationErrorHandler';
 
 type ClientSignupScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'ClientSignup'>;
 type ClientSignupScreenRouteProp = RouteProp<AuthStackParamList, 'ClientSignup'>;
@@ -158,33 +159,17 @@ const ClientSignupScreen: React.FC = () => {
           });
         }
       } else {
-        // Registration failed
-        const errorMessage = result.payload as string;
-        
-        // Handle specific error cases
-        if (errorMessage.includes('already registered')) {
-          Alert.alert(
-            'Email Already Registered',
-            errorMessage.includes('login') 
-              ? errorMessage 
-              : 'This email is already registered. If you haven\'t verified your email, a new verification code has been sent. Otherwise, please login.',
-            [
-              { text: 'Login', onPress: () => navigation.navigate('Login') },
-              { text: 'OK', style: 'cancel' }
-            ]
-          );
-        } else if (errorMessage.includes('rate limit') || errorMessage.includes('Too many')) {
-          Alert.alert(
-            'Rate Limit Exceeded',
-            'Too many registration attempts. Please wait a few minutes before trying again.',
-            [{ text: 'OK' }]
-          );
-        } else {
-          Alert.alert('Registration Failed', errorMessage || 'Failed to create account. Please try again.');
-        }
+        // Use streamlined error handler for consistent UX
+        showRegistrationError({
+          error: result.payload,
+          navigation,
+        });
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to create account. Please try again.');
+      showRegistrationError({
+        error,
+        navigation,
+      });
     } finally {
       setIsLoading(false);
     }

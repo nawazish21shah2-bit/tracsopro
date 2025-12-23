@@ -2,6 +2,7 @@ import { PrismaClient, ShiftStatus, Shift, BreakType, IncidentType, IncidentSeve
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, differenceInMinutes, addDays } from 'date-fns';
 import { NotFoundError, BadRequestError, ValidationError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
+import shiftConflictService, { ConflictInfo } from './shiftConflictService.js';
 import websocketService from './websocketService.js';
 
 const prisma = new PrismaClient();
@@ -35,7 +36,7 @@ function transformShiftForFrontend(shift: any): any {
 }
 
 export interface CreateShiftData {
-  guardId: string;
+  guardId?: string; // Optional - can be assigned later by admin
   siteId?: string;
   clientId?: string;
   locationId?: string;
@@ -124,30 +125,33 @@ export interface ShiftStats {
 class ShiftService {
   /**
    * Create a new shift
+   * Guard can be assigned later via assignGuardToShift method
    */
   async createShift(data: CreateShiftData, securityCompanyId?: string): Promise<any> {
-    // Validate guard exists
-    const guard = await prisma.guard.findUnique({
-      where: { id: data.guardId },
-      include: {
-        companyGuards: {
-          where: { isActive: true },
-          select: { securityCompanyId: true },
+    // Validate guard exists if guardId is provided
+    if (data.guardId) {
+      const guard = await prisma.guard.findUnique({
+        where: { id: data.guardId },
+        include: {
+          companyGuards: {
+            where: { isActive: true },
+            select: { securityCompanyId: true },
+          },
         },
-      },
-    });
+      });
 
-    if (!guard) {
-      throw new NotFoundError('Guard not found');
-    }
+      if (!guard) {
+        throw new NotFoundError('Guard not found');
+      }
 
-    // Multi-tenant: Verify guard belongs to company if securityCompanyId provided
-    if (securityCompanyId) {
-      const guardCompany = guard.companyGuards.find(
-        cg => cg.securityCompanyId === securityCompanyId
-      );
-      if (!guardCompany) {
-        throw new ValidationError('Guard does not belong to your company');
+      // Multi-tenant: Verify guard belongs to company if securityCompanyId provided
+      if (securityCompanyId) {
+        const guardCompany = guard.companyGuards.find(
+          cg => cg.securityCompanyId === securityCompanyId
+        );
+        if (!guardCompany) {
+          throw new ValidationError('Guard does not belong to your company');
+        }
       }
     }
 
@@ -199,18 +203,179 @@ class ShiftService {
       }
     }
 
-    const shift = await prisma.shift.create({
-      data: {
+    // Check for conflicts if guard is provided
+    if (data.guardId) {
+      const conflicts = await shiftConflictService.detectConflicts({
         guardId: data.guardId,
-        siteId: siteId,
-        clientId: clientId,
-        locationId: data.locationId,
-        locationName: data.locationName,
-        locationAddress: data.locationAddress,
+        siteId: siteId || undefined,
         scheduledStartTime: data.scheduledStartTime,
         scheduledEndTime: data.scheduledEndTime,
-        description: data.description,
-        notes: data.notes,
+      });
+
+      // Block creation if there are error-level conflicts
+      const blockingConflicts = conflicts.filter((c: ConflictInfo) => c.severity === 'error');
+      if (blockingConflicts.length > 0) {
+        const errorMessages = blockingConflicts.map((c: ConflictInfo) => c.message).join('; ');
+        throw new ValidationError(`Cannot create shift: ${errorMessages}`);
+      }
+
+      // Log warnings but allow creation
+      const warnings = conflicts.filter((c: ConflictInfo) => c.severity === 'warning');
+      if (warnings.length > 0) {
+        logger.warn(`Shift creation warnings: ${warnings.map((c: ConflictInfo) => c.message).join('; ')}`);
+      }
+    }
+
+    const shiftData: any = {
+      siteId: siteId,
+      clientId: clientId,
+      locationId: data.locationId,
+      locationName: data.locationName,
+      locationAddress: data.locationAddress,
+      scheduledStartTime: data.scheduledStartTime,
+      scheduledEndTime: data.scheduledEndTime,
+      description: data.description,
+      notes: data.notes,
+    };
+
+    // Only include guardId if provided (nullable field)
+    if (data.guardId) {
+      shiftData.guardId = data.guardId;
+    }
+
+    const shift = await prisma.shift.create({
+      data: shiftData,
+      include: {
+        guard: data.guardId ? {
+          include: {
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
+            },
+          },
+        } : undefined,
+        site: {
+          include: {
+            client: {
+              include: {
+                user: {
+                  select: { firstName: true, lastName: true, email: true }
+                }
+              }
+            }
+          }
+        },
+        client: {
+          include: {
+            user: {
+              select: { firstName: true, lastName: true, email: true }
+            }
+          }
+        },
+        location: true,
+      },
+    });
+
+    logger.info(`Shift created${data.guardId ? ` for guard ${data.guardId}` : ' (unassigned)'}${siteId ? ` at site ${siteId}` : ''}: ${shift.id}`, {
+      shiftId: shift.id,
+      guardId: shift.guardId,
+      scheduledStartTime: shift.scheduledStartTime,
+      scheduledEndTime: shift.scheduledEndTime,
+      status: shift.status,
+    });
+
+    return shift;
+  }
+
+  /**
+   * Assign a guard to an existing shift
+   */
+  async assignGuardToShift(shiftId: string, guardId: string, securityCompanyId?: string): Promise<any> {
+    // Validate shift exists and is unassigned
+    const shift = await prisma.shift.findUnique({
+      where: { id: shiftId },
+      include: {
+        site: true,
+        client: true,
+      },
+    });
+
+    if (!shift) {
+      throw new NotFoundError('Shift not found');
+    }
+
+    if (shift.guardId) {
+      throw new ValidationError('Shift already has a guard assigned');
+    }
+
+    if (shift.status !== 'SCHEDULED') {
+      throw new ValidationError('Can only assign guard to scheduled shifts');
+    }
+
+    // Validate guard exists and belongs to company
+    const guard = await prisma.guard.findUnique({
+      where: { id: guardId },
+      include: {
+        companyGuards: {
+          where: { isActive: true },
+          select: { securityCompanyId: true },
+        },
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    if (!guard) {
+      throw new NotFoundError('Guard not found');
+    }
+
+    // Multi-tenant: Verify guard belongs to company if securityCompanyId provided
+    if (securityCompanyId) {
+      const guardCompany = guard.companyGuards.find(
+        cg => cg.securityCompanyId === securityCompanyId
+      );
+      if (!guardCompany) {
+        throw new ValidationError('Guard does not belong to your company');
+      }
+    }
+
+    // Check for conflicts using conflict service
+    const conflicts = await shiftConflictService.detectConflicts({
+      guardId: guardId,
+      siteId: shift.siteId || undefined,
+      scheduledStartTime: shift.scheduledStartTime,
+      scheduledEndTime: shift.scheduledEndTime,
+      excludeShiftId: shiftId, // Exclude current shift from conflict checks
+    });
+
+    // Block assignment if there are error-level conflicts
+    const blockingConflicts = conflicts.filter((c: ConflictInfo) => c.severity === 'error');
+    if (blockingConflicts.length > 0) {
+      const errorMessages = blockingConflicts.map((c: ConflictInfo) => c.message).join('; ');
+      throw new ValidationError(`Cannot assign guard: ${errorMessages}`);
+    }
+
+    // Log warnings but allow assignment
+    const warnings = conflicts.filter((c: ConflictInfo) => c.severity === 'warning');
+    if (warnings.length > 0) {
+      logger.warn(`Guard assignment warnings: ${warnings.map((c: ConflictInfo) => c.message).join('; ')}`);
+    }
+
+    // Assign guard to shift
+    const updatedShift = await prisma.shift.update({
+      where: { id: shiftId },
+      data: {
+        guardId: guardId,
       },
       include: {
         guard: {
@@ -247,15 +412,9 @@ class ShiftService {
       },
     });
 
-    logger.info(`Shift created for guard ${data.guardId}${siteId ? ` at site ${siteId}` : ''}: ${shift.id}`, {
-      shiftId: shift.id,
-      guardId: shift.guardId,
-      scheduledStartTime: shift.scheduledStartTime,
-      scheduledEndTime: shift.scheduledEndTime,
-      status: shift.status,
-    });
+    logger.info(`Guard ${guardId} assigned to shift ${shiftId}`);
 
-    return shift;
+    return updatedShift;
   }
 
   /**
@@ -566,21 +725,15 @@ class ShiftService {
     });
 
     // Create tracking record if location provided
-    if (data.location && data.location.latitude && data.location.longitude) {
-      const guard = await prisma.guard.findUnique({
-        where: { id: data.guardId },
+    if (data.location && data.location.latitude && data.location.longitude && data.guardId) {
+      await prisma.trackingRecord.create({
+        data: {
+          guardId: data.guardId,
+          latitude: data.location.latitude,
+          longitude: data.location.longitude,
+          timestamp: data.timestamp,
+        },
       });
-
-      if (guard) {
-        await prisma.trackingRecord.create({
-          data: {
-            guardId: guard.id,
-            latitude: data.location.latitude,
-            longitude: data.location.longitude,
-            timestamp: data.timestamp,
-          },
-        });
-      }
     }
 
     return updatedShift;
@@ -638,21 +791,15 @@ class ShiftService {
     });
 
     // Create tracking record if location provided
-    if (data.location) {
-      const guard = await prisma.guard.findUnique({
-        where: { userId: data.guardId },
+    if (data.location && data.guardId) {
+      await prisma.trackingRecord.create({
+        data: {
+          guardId: data.guardId,
+          latitude: data.location.latitude,
+          longitude: data.location.longitude,
+          timestamp: data.timestamp,
+        },
       });
-
-      if (guard) {
-        await prisma.trackingRecord.create({
-          data: {
-            guardId: guard.id,
-            latitude: data.location.latitude,
-            longitude: data.location.longitude,
-            timestamp: data.timestamp,
-          },
-        });
-      }
     }
 
     return updatedShift;

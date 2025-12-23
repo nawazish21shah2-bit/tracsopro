@@ -21,7 +21,9 @@ import InteractiveMapView from '../../components/client/InteractiveMapView';
 import LiveActivityFeed from '../../components/client/LiveActivityFeed';
 import { ErrorHandler } from '../../utils/errorHandler';
 import { ReportsIcon, UserIcon, EmergencyIcon, SettingsIcon } from '../../components/ui/AppIcons';
-import { MapPinIcon, ClockIcon, AlertCircleIcon } from '../../components/ui/FeatherIcons';
+import { MapPinIcon, ClockIcon, AlertCircleIcon, BellIcon, SearchIcon, AlertTriangleIcon, FeatherIcon } from '../../components/ui/FeatherIcons';
+import { UsersIcon } from '../../components/ui/AppIcons';
+import StatsCard from '../../components/ui/StatsCard';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
@@ -178,37 +180,47 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
       <View style={styles.overviewContainer}>
         {/* Metrics Cards - Exact Figma Specs */}
         <View style={styles.metricsGrid}>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricValue}>{operationsMetrics?.activeGuards || 0}</Text>
-            <Text style={styles.metricLabel}>Active Guards</Text>
-            <View style={[styles.statusIndicator, { backgroundColor: COLORS.success }]} />
-          </View>
+          <StatsCard
+            label="Active Guards"
+            value={operationsMetrics?.activeGuards || 8}
+            variant="info"
+            style={styles.metricCard}
+            twoLineLabel={true}
+          />
           
-          <View style={styles.metricCard}>
-            <Text style={[styles.metricValue, { color: COLORS.error }]}>
-              {operationsMetrics?.emergencyAlerts || 0}
-            </Text>
-            <Text style={styles.metricLabel}>Emergency Alerts</Text>
-            <View style={[styles.statusIndicator, { backgroundColor: COLORS.error }]} />
-          </View>
+          <StatsCard
+            label="Emergency Alerts"
+            value={operationsMetrics?.emergencyAlerts || 1}
+            variant="danger"
+            style={styles.metricCard}
+            twoLineLabel={true}
+          />
           
-          <View style={styles.metricCard}>
-            <Text style={styles.metricValue}>{operationsMetrics?.siteCoverage?.toFixed(1) || 0}%</Text>
-            <Text style={styles.metricLabel}>Site Coverage</Text>
-            <View style={[styles.statusIndicator, { backgroundColor: COLORS.info }]} />
-          </View>
+          <StatsCard
+            label="Site Coverage"
+            value={`${operationsMetrics?.siteCoverage?.toFixed(1) || 94.2}%`}
+            variant="info"
+            style={styles.metricCard}
+            twoLineLabel={true}
+          />
           
-          <View style={styles.metricCard}>
-            <Text style={styles.metricValue}>{operationsMetrics?.averageResponseTime?.toFixed(1) || 0}min</Text>
-            <Text style={styles.metricLabel}>Avg Response</Text>
-            <View style={[styles.statusIndicator, { backgroundColor: COLORS.warning }]} />
-          </View>
+          <StatsCard
+            label="Average Response"
+            value={`${operationsMetrics?.averageResponseTime?.toFixed(1) || 8.5} min`}
+            variant="info"
+            style={styles.metricCard}
+            twoLineLabel={true}
+          />
         </View>
 
         {/* Emergency Alerts - Exact Figma Specs */}
         {emergencyAlerts.length > 0 && (
           <View style={styles.emergencySection}>
             <View style={styles.emergencySectionHeader}>
+              <View style={styles.emergencyIconContainer}>
+                <BellIcon size={20} color="#323232" />
+                <FeatherIcon name="zap" size={16} color="#323232" style={styles.lightningIcon} />
+              </View>
               <Text style={styles.emergencyTitle}>Active Emergency Alert</Text>
             </View>
             {emergencyAlerts.map((alert) => (
@@ -216,6 +228,7 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
                 key={alert.id}
                 style={styles.emergencyAlert}
                 onPress={() => handleEmergencyAlert(alert.id)}
+                activeOpacity={0.8}
               >
                 <View style={styles.emergencyContent}>
                   <Text style={styles.emergencyGuard}>{alert.guardName}</Text>
@@ -224,11 +237,6 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
                     {formatTimeAgo(alert.timestamp)}
                   </Text>
                 </View>
-                {!alert.acknowledged && (
-                  <View style={styles.emergencyStatusBadge}>
-                    <Text style={styles.emergencyStatusText}>NEW</Text>
-                  </View>
-                )}
               </TouchableOpacity>
             ))}
           </View>
@@ -254,7 +262,7 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
             />
           </View>
           
-          {/* Guard Detail Card - Shows when guard is selected */}
+          {/* Guard Detail Card - Shows when guard is selected - Bottom overlay with rounded top corners */}
           {selectedGuardData && (
             <View style={styles.guardDetailCard}>
               <TouchableOpacity 
@@ -267,7 +275,7 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
               <Text style={styles.guardDetailSite}>{selectedGuardData.currentSite}</Text>
               <View style={styles.guardDetailStatus}>
                 <View style={[styles.guardDetailStatusDot, { backgroundColor: getGuardStatusColor(selectedGuardData.status) }]} />
-                <Text style={styles.guardDetailStatusText}>
+                <Text style={[styles.guardDetailStatusText, { color: getGuardStatusColor(selectedGuardData.status) }]}>
                   {selectedGuardData.status === 'active' ? 'Active' : selectedGuardData.status.toUpperCase()}
                 </Text>
               </View>
@@ -358,16 +366,15 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
   const renderViewSelector = () => (
     <View style={styles.viewSelector}>
       {[
-        { key: 'overview', label: 'Overview', icon: ReportsIcon },
-        { key: 'guards', label: 'Guards', icon: UserIcon },
-        { key: 'alerts', label: 'Alerts', icon: EmergencyIcon },
-        { key: 'analytics', label: 'Analytics', icon: SettingsIcon },
+        { key: 'overview', label: 'Overview', iconName: 'search' },
+        { key: 'guards', label: 'Guards', iconName: 'user' },
+        { key: 'alerts', label: 'Alerts', iconName: 'alertTriangle' },
+        { key: 'analytics', label: 'Analytics', iconName: 'barChart' },
       ].map((view) => {
         const isActive = selectedView === (view.key as any);
-        const IconComponent = view.icon;
         // Icon color: white when active, #7A7A7A when inactive
-        const iconColor = isActive ? COLORS.textInverse : '#7A7A7A';
-        const textColor = isActive ? COLORS.textInverse : '#7A7A7A';
+        const iconColor = isActive ? '#FFFFFF' : '#7A7A7A';
+        const textColor = isActive ? '#FFFFFF' : '#7A7A7A';
         return (
           <TouchableOpacity
             key={view.key}
@@ -379,7 +386,7 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
             activeOpacity={0.7}
           >
             <View style={styles.viewIcon}>
-              <IconComponent size={20} color={iconColor} />
+              <FeatherIcon name={view.iconName as any} size={20} color={iconColor} />
             </View>
             <Text style={[
               styles.viewLabel,
@@ -426,7 +433,7 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
     <SafeAreaWrapper>
       <SharedHeader
         variant="admin"
-        title="Operations Center"
+        showLogo={true}
         onMenuPress={openDrawer}
         onNotificationPress={() => {
           navigation.navigate('AdminNotifications' as never);
@@ -466,18 +473,9 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
         }
       />
       <View style={styles.container}>
-        {/* LIVE Indicator */}
-        <View style={styles.liveIndicatorContainer}>
-          <View style={styles.liveIndicator}>
-            <View style={[styles.liveDot, { backgroundColor: isLiveMode ? COLORS.success : COLORS.error }]} />
-            <Text style={styles.liveText}>{isLiveMode ? 'LIVE' : 'PAUSED'}</Text>
-          </View>
-          <TouchableOpacity
-            style={styles.liveToggle}
-            onPress={() => setIsLiveMode(!isLiveMode)}
-          >
-            <Text style={styles.liveToggleText}>{isLiveMode ? 'Pause' : 'Resume'}</Text>
-          </TouchableOpacity>
+        {/* Operation Center Title */}
+        <View style={styles.titleContainer}>
+          <Text style={styles.titleText}>Operation Center</Text>
         </View>
 
         {renderViewSelector()}
@@ -505,45 +503,19 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.backgroundPrimary,
-  },
-  liveIndicatorContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    backgroundColor: COLORS.backgroundPrimary,
-  },
-  liveIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: COLORS.backgroundSecondary,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: BORDER_RADIUS.lg,
   },
-  liveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginRight: SPACING.xs,
-  },
-  liveText: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
-    color: COLORS.textPrimary,
-  },
-  liveToggle: {
-    backgroundColor: COLORS.backgroundPrimary,
+  titleContainer: {
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.xs,
-    borderRadius: BORDER_RADIUS.xl,
+    paddingTop: SPACING.lg,
+    paddingBottom: SPACING.md,
   },
-  liveToggleText: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
-    color: COLORS.primary,
+  titleText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#323232',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
   },
   // View Selector - Tab navigation for Overview, Guards, Alerts, Analytics
   viewSelector: {
@@ -552,19 +524,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.xs,
     gap: SPACING.xs,
+    marginBottom: SPACING.md,
   },
   viewButton: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10, // Exact: 10px vertical
-    paddingHorizontal: 16, // Exact: 16px horizontal
-    borderRadius: 11, // Exact: 11px corner radius
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 11,
     backgroundColor: '#ECECEC', // Inactive tab background
-    minHeight: 59, // Ensure consistent height
+    minHeight: 59,
   },
   viewButtonActive: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#1C6CA9', // Primary blue
   },
   viewIcon: {
     marginBottom: SPACING.xs / 2,
@@ -573,54 +546,34 @@ const styles = StyleSheet.create({
     height: 20,
   },
   viewLabel: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    fontWeight: TYPOGRAPHY.fontWeight.regular,
+    fontSize: 12,
+    fontWeight: '400',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
     textAlign: 'center',
   },
   viewLabelActive: {
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    fontWeight: '600',
   },
   content: {
     flex: 1,
   },
   overviewContainer: {
-    padding: SPACING.md,
+    padding: SPACING.lg,
   },
-  // Metrics Grid - Overview statistics cards
+  // Metrics Grid - Overview statistics cards (2x2 grid)
   metricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: SPACING.sm,
+    gap: SPACING.md,
     marginBottom: SPACING.lg,
   },
   metricCard: {
     flex: 1,
     minWidth: '45%',
-    backgroundColor: COLORS.cardBackground,
-    borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.lg,
-    position: 'relative',
-    borderWidth: 1,
-    borderColor: COLORS.borderCard,
-    // Border only, no shadow for minimal style
-  },
-  metricValue: {
-    fontSize: TYPOGRAPHY.fontSize.xl,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
-    color: COLORS.primary,
-    marginBottom: SPACING.xs,
-  },
-  metricLabel: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.textSecondary,
-  },
-  statusIndicator: {
-    position: 'absolute',
-    top: SPACING.sm,
-    right: SPACING.sm,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    maxWidth: '48%',
+    // Ensure all cards have the same width for value alignment
+    width: '48%',
   },
   // Emergency Section - Exact Figma Specs
   emergencySection: {
@@ -629,82 +582,122 @@ const styles = StyleSheet.create({
   emergencySectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  emergencyIconContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: SPACING.sm,
+    position: 'relative',
+    width: 24,
+    height: 24,
+  },
+  lightningIcon: {
+    position: 'absolute',
+    top: -4,
+    right: -6,
   },
   emergencyTitle: {
-    fontSize: TYPOGRAPHY.fontSize.md,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
-    color: COLORS.textPrimary,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#323232',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
   },
   emergencyAlert: {
     flexDirection: 'row',
-    backgroundColor: COLORS.error + '10',
-    borderWidth: 2,
-    borderColor: COLORS.error,
-    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: '#FFEBEE', // Light pink background
+    borderRadius: 12,
     padding: SPACING.lg,
     marginBottom: SPACING.sm,
-    // Border only, no shadow for minimal style
+    borderLeftWidth: 4,
+    borderLeftColor: '#DC2626', // Red left border
+    // Drop shadow: X 0, Y 4, Blur 4, Spread 0, Color #DCDCDC at 25% opacity
+    shadowColor: '#DCDCDC',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
   },
   emergencyContent: {
     flex: 1,
   },
   emergencyGuard: {
-    fontSize: TYPOGRAPHY.fontSize.md,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
-    color: COLORS.textPrimary,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#323232',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
     marginBottom: SPACING.xs,
   },
   emergencyMessage: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.textPrimary,
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#323232',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
     marginBottom: SPACING.xs,
+    lineHeight: 16,
   },
   emergencyTime: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    color: COLORS.textSecondary,
-  },
-  emergencyStatusBadge: {
-    backgroundColor: COLORS.error,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: BORDER_RADIUS.md,
-    alignSelf: 'flex-start',
-    height: 20,
-    justifyContent: 'center',
-  },
-  emergencyStatusText: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
-    color: COLORS.textInverse,
+    fontSize: 10,
+    fontWeight: '400',
+    color: '#828282',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
   },
   // Map Section - Exact Figma Specs
   mapSection: {
     marginBottom: SPACING.lg,
   },
   sectionTitle: {
-    fontSize: TYPOGRAPHY.fontSize.md,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.sm,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#323232',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
+    marginBottom: SPACING.md,
   },
   mapContainer: {
-    borderRadius: BORDER_RADIUS.md,
+    borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: COLORS.borderCard,
+    borderColor: '#DCDCDC',
     backgroundColor: COLORS.backgroundPrimary,
-    // Border only, no shadow for minimal style
+    // Drop shadow: X 0, Y 4, Blur 4, Spread 0, Color #DCDCDC at 25% opacity
+    shadowColor: '#DCDCDC',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
   },
-  // Guard Detail Card - Shows selected guard details
+  // Guard Detail Card - Shows selected guard details (Bottom overlay with rounded top corners)
   guardDetailCard: {
-    backgroundColor: COLORS.cardBackground,
-    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
     padding: SPACING.lg,
     marginTop: SPACING.sm,
     borderWidth: 1,
-    borderColor: COLORS.borderCard,
-    // Border only, no shadow for minimal style
+    borderColor: '#DCDCDC',
+    borderBottomWidth: 0,
+    // Drop shadow: X 0, Y 4, Blur 4, Spread 0, Color #DCDCDC at 25% opacity
+    shadowColor: '#DCDCDC',
+    shadowOffset: {
+      width: 0,
+      height: -4,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
   },
   closeButton: {
     position: 'absolute',
@@ -716,18 +709,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   closeButtonText: {
-    fontSize: TYPOGRAPHY.fontSize.lg,
-    color: COLORS.textSecondary,
+    fontSize: 18,
+    fontWeight: '400',
+    color: '#828282',
+    fontFamily: 'Inter',
   },
   guardDetailName: {
-    fontSize: TYPOGRAPHY.fontSize.md,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
-    color: COLORS.textPrimary,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#323232',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
     marginBottom: SPACING.xs,
+    marginTop: SPACING.xs,
   },
   guardDetailSite: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#323232',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
     marginBottom: SPACING.xs,
   },
   guardDetailStatus: {
@@ -742,18 +743,25 @@ const styles = StyleSheet.create({
     marginRight: SPACING.xs,
   },
   guardDetailStatusText: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
-    color: COLORS.textPrimary,
+    fontSize: 12,
+    fontWeight: '400',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
   },
   guardDetailUpdate: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    color: COLORS.textSecondary,
+    fontSize: 10,
+    fontWeight: '400',
+    color: '#828282',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
     marginBottom: SPACING.xs,
   },
   guardDetailAccuracy: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    color: COLORS.textSecondary,
+    fontSize: 10,
+    fontWeight: '400',
+    color: '#828282',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
   },
   guardMonitoringContainer: {
     flex: 1,

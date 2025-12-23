@@ -30,8 +30,8 @@ import { ArrowLeftIcon, ArrowRightIcon, RefreshCwIcon, AlertTriangleIcon } from 
 
 interface ScheduledShift {
   id: string;
-  guardId: string;
-  guardName: string;
+  guardId?: string | null; // Optional - can be unassigned
+  guardName?: string; // Optional - shows "Unassigned" if null
   siteId: string;
   siteName: string;
   startTime: string;
@@ -41,6 +41,8 @@ interface ScheduledShift {
   shiftType: 'regular' | 'overtime' | 'emergency' | 'replacement';
   notes?: string;
   conflicts?: ConflictInfo[];
+  clientName?: string; // Client who created the shift (if created by client)
+  isClientCreated?: boolean; // Flag to identify client-created shifts
 }
 
 interface ConflictInfo {
@@ -115,8 +117,12 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
   const [sites, setSites] = useState<Site[]>([]);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [selectedView, setSelectedView] = useState<'calendar' | 'conflicts' | 'guards'>('calendar');
+  const [selectedView, setSelectedView] = useState<'calendar' | 'conflicts' | 'guards' | 'unassigned'>('calendar');
   const [loading, setLoading] = useState(false);
+  const [unassignedShifts, setUnassignedShifts] = useState<ScheduledShift[]>([]);
+  const [showAssignGuardModal, setShowAssignGuardModal] = useState(false);
+  const [selectedShiftForAssignment, setSelectedShiftForAssignment] = useState<ScheduledShift | null>(null);
+  const [selectedGuardIdForAssignment, setSelectedGuardIdForAssignment] = useState<string>('');
 
   const [newShift, setNewShift] = useState({
     guardId: '',
@@ -136,6 +142,7 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
     // Reload shifts when date changes
     if (selectedDate) {
       loadShifts();
+      loadUnassignedShifts();
     }
   }, [selectedDate]);
 
@@ -144,6 +151,7 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
       setLoading(true);
       await Promise.all([
         loadShifts(),
+        loadUnassignedShifts(),
         loadGuards(),
         loadSites(),
       ]);
@@ -153,6 +161,58 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
       ErrorHandler.handleError(error, 'initialize_scheduling');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadUnassignedShifts = async () => {
+    try {
+      const response = await apiService.getUnassignedShifts(selectedDate);
+      
+      if (response.success && response.data) {
+        const transformedShifts: ScheduledShift[] = (response.data as any[]).map((shift: any) => {
+          const site = shift.site;
+          const siteName = site?.name || shift.locationName || 'Unknown Site';
+          const siteId = site?.id || shift.siteId || '';
+
+          const startDate = new Date(shift.scheduledStartTime);
+          const endDate = new Date(shift.scheduledEndTime);
+          const startTime = `${String(startDate.getHours()).padStart(2, '0')}:${String(startDate.getMinutes()).padStart(2, '0')}`;
+          const endTime = `${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}`;
+          
+          let status: ScheduledShift['status'] = 'scheduled';
+          if (shift.status === 'IN_PROGRESS') status = 'in_progress';
+          else if (shift.status === 'COMPLETED') status = 'completed';
+          else if (shift.status === 'CANCELLED') status = 'cancelled';
+
+          // Determine if shift was created by client
+          const clientName = shift.client?.user 
+            ? `${shift.client.user.firstName || ''} ${shift.client.user.lastName || ''}`.trim() || shift.client.user.email
+            : null;
+
+          return {
+            id: shift.id,
+            guardId: null,
+            guardName: 'Unassigned',
+            siteId,
+            siteName,
+            startTime,
+            endTime,
+            date: selectedDate,
+            status,
+            shiftType: 'regular' as ScheduledShift['shiftType'],
+            notes: shift.notes,
+            clientName: clientName || undefined,
+            isClientCreated: !!shift.client,
+          };
+        });
+
+        setUnassignedShifts(transformedShifts);
+      } else {
+        setUnassignedShifts([]);
+      }
+    } catch (error) {
+      console.error('Error loading unassigned shifts:', error);
+      setUnassignedShifts([]);
     }
   };
 
@@ -167,7 +227,7 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
           const guard = shift.guard;
           const guardName = guard?.user 
             ? `${guard.user.firstName || ''} ${guard.user.lastName || ''}`.trim() || guard.user.email
-            : 'Unknown Guard';
+            : 'Unassigned';
           
           const site = shift.site;
           const siteName = site?.name || shift.locationName || 'Unknown Site';
@@ -186,10 +246,15 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
           else if (shift.status === 'CANCELLED') status = 'cancelled';
           else if (shift.status === 'CONFIRMED') status = 'confirmed';
 
+          // Determine if shift was created by client (has clientId but might not have guard initially)
+          const clientName = shift.client?.user 
+            ? `${shift.client.user.firstName || ''} ${shift.client.user.lastName || ''}`.trim() || shift.client.user.email
+            : null;
+
           return {
             id: shift.id,
-            guardId: shift.guardId,
-            guardName,
+            guardId: shift.guardId || null,
+            guardName: shift.guardId ? guardName : 'Unassigned',
             siteId,
             siteName,
             startTime,
@@ -199,6 +264,9 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
             shiftType: 'regular' as ScheduledShift['shiftType'],
             notes: shift.notes,
             conflicts: [], // Conflicts can be detected on the fly
+            // Add client info for display
+            clientName: clientName || undefined,
+            isClientCreated: !!shift.client, // Flag to identify client-created shifts
           };
         });
 
@@ -386,34 +454,22 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
         return;
       }
 
-      const guard = guards.find(g => g.id === newShift.guardId);
       const site = sites.find(s => s.id === newShift.siteId);
       
-      if (!guard || !site) {
-        Alert.alert('Error', 'Please select both guard and site');
+      if (!site) {
+        Alert.alert('Error', 'Please select a site');
         return;
       }
 
-      const shift: ScheduledShift = {
-        id: `shift_${Date.now()}`,
-        guardId: newShift.guardId,
-        guardName: guard.name,
-        siteId: newShift.siteId,
-        siteName: site.name,
-        startTime: newShift.startTime,
-        endTime: newShift.endTime,
-        date: newShift.date,
-        status: 'scheduled',
-        shiftType: newShift.shiftType,
-        notes: newShift.notes,
-        conflicts: conflicts.length > 0 ? conflicts : undefined,
-      };
-      // Persist to backend (admin shift create) using dummy-compatible payload
+      // Guard is optional - admin can assign later
+      const guard = newShift.guardId ? guards.find(g => g.id === newShift.guardId) : null;
+
+      // Persist to backend (admin shift create) - guardId is optional
       const scheduledStartTime = `${newShift.date}T${newShift.startTime}:00`;
       const scheduledEndTime = `${newShift.date}T${newShift.endTime}:00`;
 
       const apiResponse = await apiService.createAdminShift({
-        guardId: guard.id,
+        guardId: newShift.guardId || undefined, // Optional - can assign later
         siteId: site.id, // Link shift to site (will automatically link to client)
         locationName: site.name, // Fallback if siteId lookup fails
         locationAddress: site.address, // Fallback if siteId lookup fails
@@ -429,7 +485,7 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
       }
 
       // Reload shifts from backend to get the actual created shift
-      await loadShifts();
+      await Promise.all([loadShifts(), loadUnassignedShifts()]);
       
       setShowCreateModal(false);
       
@@ -446,14 +502,43 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
 
       Alert.alert(
         'Shift Created',
-        conflicts.length > 0 
-          ? `Shift created successfully with ${conflicts.length} warning(s)`
-          : 'Shift created successfully and saved to backend'
+        newShift.guardId
+          ? (conflicts.length > 0 
+              ? `Shift created successfully with ${conflicts.length} warning(s)`
+              : 'Shift created successfully and saved to backend')
+          : 'Shift created successfully. Assign a guard from the Unassigned tab.'
       );
     } catch (error) {
       ErrorHandler.handleError(error, 'create_shift');
       Alert.alert('Error', 'Failed to create shift');
     }
+  };
+
+  const handleAssignGuard = async (shiftId: string, guardId: string) => {
+    try {
+      setLoading(true);
+      const response = await apiService.assignGuardToShift(shiftId, guardId);
+
+      if (response.success) {
+        Alert.alert('Success', 'Guard assigned to shift successfully');
+        // Reload both lists
+        await Promise.all([loadShifts(), loadUnassignedShifts()]);
+        setShowAssignGuardModal(false);
+        setSelectedShiftForAssignment(null);
+      } else {
+        Alert.alert('Error', response.message || 'Failed to assign guard');
+      }
+    } catch (error) {
+      ErrorHandler.handleError(error, 'assign_guard');
+      Alert.alert('Error', 'Failed to assign guard to shift');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openAssignGuardModal = (shift: ScheduledShift) => {
+    setSelectedShiftForAssignment(shift);
+    setShowAssignGuardModal(true);
   };
 
   const getStatusColor = (status: ScheduledShift['status']) => {
@@ -514,11 +599,39 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
         renderItem={({ item }) => (
           <View style={styles.shiftCard}>
             <View style={styles.shiftHeader}>
-              <Text style={styles.shiftGuard}>{item.guardName}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.shiftGuard}>
+                  {item.guardName || 'Unassigned'}
+                </Text>
+                <View style={styles.badgeRow}>
+                  {!item.guardId && (
+                    <View style={styles.unassignedBadge}>
+                      <Text style={styles.unassignedBadgeText}>NEEDS GUARD</Text>
+                    </View>
+                  )}
+                  {item.isClientCreated && (
+                    <View style={styles.clientCreatedBadge}>
+                      <Text style={styles.clientCreatedBadgeText}>
+                        Created by {item.clientName || 'Client'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
               <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
                 <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
               </View>
             </View>
+            
+            {!item.guardId && (
+              <TouchableOpacity
+                style={styles.assignGuardButton}
+                onPress={() => openAssignGuardModal(item)}
+              >
+                <UserIcon size={16} color={COLORS.primary} style={{ marginRight: SPACING.xs }} />
+                <Text style={styles.assignGuardButtonText}>Assign Guard</Text>
+              </TouchableOpacity>
+            )}
             
             <View style={styles.shiftInfoRow}>
               <View style={styles.shiftInfoIconContainer}>
@@ -567,6 +680,180 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
     </View>
   );
 
+  const renderUnassignedView = () => (
+    <View style={styles.calendarContainer}>
+      <View style={styles.dateSelector}>
+        <View style={styles.dateTextContainer}>
+          {loading && (
+            <RefreshCwIcon size={16} color={COLORS.primary} style={{ marginRight: SPACING.xs }} />
+          )}
+          <Text style={styles.selectedDate}>
+            Unassigned Shifts - {new Date(selectedDate).toLocaleDateString('en-US', {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            })}
+          </Text>
+        </View>
+      </View>
+
+      <FlatList
+        data={unassignedShifts.filter(s => s.date === selectedDate)}
+        renderItem={({ item }) => (
+          <View style={styles.shiftCard}>
+            <View style={styles.shiftHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.shiftGuard}>Unassigned</Text>
+                <View style={styles.badgeRow}>
+                  <View style={styles.unassignedBadge}>
+                    <Text style={styles.unassignedBadgeText}>NEEDS GUARD</Text>
+                  </View>
+                  {item.isClientCreated && (
+                    <View style={styles.clientCreatedBadge}>
+                      <Text style={styles.clientCreatedBadgeText}>
+                        Created by {item.clientName || 'Client'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+              <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
+                <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
+              </View>
+            </View>
+            
+            <View style={styles.shiftInfoRow}>
+              <View style={styles.shiftInfoIconContainer}>
+                <LocationIcon size={16} color={COLORS.textSecondary} />
+              </View>
+              <Text style={styles.shiftSite}>{item.siteName}</Text>
+            </View>
+            <View style={styles.shiftInfoRow}>
+              <View style={styles.shiftInfoIconContainer}>
+                <ClockIcon size={16} color={COLORS.textSecondary} />
+              </View>
+              <Text style={styles.shiftTime}>
+                {item.startTime} - {item.endTime} ({calculateShiftHours(item.startTime, item.endTime)}h)
+              </Text>
+            </View>
+            
+            <TouchableOpacity
+              style={styles.assignGuardButton}
+              onPress={() => openAssignGuardModal(item)}
+            >
+              <UserIcon size={16} color={COLORS.primary} style={{ marginRight: SPACING.xs }} />
+              <Text style={styles.assignGuardButtonText}>Assign Guard</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        keyExtractor={(item) => item.id}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <CheckCircleIcon size={64} color={COLORS.success} style={{ marginBottom: SPACING.md }} />
+            <Text style={styles.emptyStateText}>No unassigned shifts</Text>
+            <Text style={styles.emptyStateSubtext}>All shifts have guards assigned</Text>
+          </View>
+        }
+        refreshing={loading}
+        onRefresh={() => loadUnassignedShifts()}
+      />
+    </View>
+  );
+
+  const renderAssignGuardModal = () => {
+    if (!selectedShiftForAssignment) return null;
+
+    return (
+      <Modal
+        visible={showAssignGuardModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Assign Guard to Shift</Text>
+            <TouchableOpacity onPress={() => {
+              setShowAssignGuardModal(false);
+              setSelectedShiftForAssignment(null);
+              setSelectedGuardIdForAssignment('');
+            }}>
+              <Text style={styles.closeButton}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView style={styles.modalContent}>
+            <View style={styles.formSection}>
+              <Text style={styles.sectionTitle}>Shift Details</Text>
+              <View style={styles.shiftInfoCard}>
+                <Text style={styles.shiftInfoLabel}>Site:</Text>
+                <Text style={styles.shiftInfoValue}>{selectedShiftForAssignment.siteName}</Text>
+                <Text style={styles.shiftInfoLabel}>Time:</Text>
+                <Text style={styles.shiftInfoValue}>
+                  {selectedShiftForAssignment.startTime} - {selectedShiftForAssignment.endTime}
+                </Text>
+                <Text style={styles.shiftInfoLabel}>Date:</Text>
+                <Text style={styles.shiftInfoValue}>
+                  {new Date(selectedShiftForAssignment.date).toLocaleDateString()}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.formSection}>
+              <View style={styles.formLabelContainer}>
+                <UserIcon size={18} color={COLORS.primary} style={{ marginRight: SPACING.xs }} />
+                <Text style={styles.formLabel}>Select Guard *</Text>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
+                {guards.map((item) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[
+                      styles.optionItem,
+                      selectedGuardIdForAssignment === item.id && styles.optionItemSelected,
+                    ]}
+                    onPress={() => setSelectedGuardIdForAssignment(item.id)}
+                  >
+                    <Text style={[
+                      styles.optionText,
+                      selectedGuardIdForAssignment === item.id && styles.optionTextSelected,
+                    ]}>{item.name}</Text>
+                    <Text style={[
+                      styles.optionSubtext,
+                      selectedGuardIdForAssignment === item.id && styles.optionSubtextSelected,
+                    ]}>
+                      {item.currentWeekHours}/{item.maxHoursPerWeek}h this week
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.createButton, (!selectedGuardIdForAssignment || loading) && styles.createButtonDisabled]}
+              onPress={() => {
+                if (selectedGuardIdForAssignment && selectedShiftForAssignment) {
+                  handleAssignGuard(selectedShiftForAssignment.id, selectedGuardIdForAssignment);
+                }
+              }}
+              disabled={!selectedGuardIdForAssignment || loading}
+            >
+              {loading ? (
+                <RefreshCwIcon size={20} color={COLORS.textInverse} style={{ marginRight: SPACING.xs }} />
+              ) : (
+                <CheckCircleIcon size={20} color={COLORS.textInverse} style={{ marginRight: SPACING.xs }} />
+              )}
+              <Text style={styles.createButtonText}>
+                {loading ? 'Assigning...' : 'Assign Guard'}
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </Modal>
+    );
+  };
+
   const renderCreateShiftModal = () => (
     <Modal
       visible={showCreateModal}
@@ -585,9 +872,25 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
           <View style={styles.formSection}>
             <View style={styles.formLabelContainer}>
               <UserIcon size={18} color={COLORS.primary} style={{ marginRight: SPACING.xs }} />
-              <Text style={styles.formLabel}>Select Guard</Text>
+              <Text style={styles.formLabel}>Select Guard (Optional)</Text>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
+              <TouchableOpacity
+                style={[
+                  styles.optionItem,
+                  !newShift.guardId && styles.optionItemSelected,
+                ]}
+                onPress={() => setNewShift(prev => ({ ...prev, guardId: '' }))}
+              >
+                <Text style={[
+                  styles.optionText,
+                  !newShift.guardId && styles.optionTextSelected,
+                ]}>No Guard</Text>
+                <Text style={[
+                  styles.optionSubtext,
+                  !newShift.guardId && styles.optionSubtextSelected,
+                ]}>Assign later</Text>
+              </TouchableOpacity>
               {guards.map((item) => (
                 <TouchableOpacity
                   key={item.id}
@@ -772,6 +1075,13 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
             iconBgColor: (isActive: boolean) => isActive ? 'rgba(255, 255, 255, 0.2)' : '#DCFCE7',
             iconColor: (isActive: boolean) => isActive ? COLORS.textInverse : COLORS.success,
           },
+          { 
+            key: 'unassigned', 
+            label: `Unassigned${unassignedShifts.length > 0 ? ` (${unassignedShifts.length})` : ''}`, 
+            icon: AlertTriangleIcon,
+            iconBgColor: (isActive: boolean) => isActive ? 'rgba(255, 255, 255, 0.2)' : '#FFF3CD',
+            iconColor: (isActive: boolean) => isActive ? COLORS.textInverse : COLORS.warning,
+          },
         ].map((view) => {
           const isActive = selectedView === view.key;
           const IconComponent = view.icon;
@@ -807,8 +1117,10 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
       </View>
 
         {selectedView === 'calendar' && renderCalendarView()}
+        {selectedView === 'unassigned' && renderUnassignedView()}
         
         {renderCreateShiftModal()}
+        {renderAssignGuardModal()}
       </View>
 
       {/* Sticky Action Button */}
@@ -1152,6 +1464,78 @@ const styles = StyleSheet.create({
     color: COLORS.textInverse,
     fontSize: TYPOGRAPHY.fontSize.md,
     fontWeight: TYPOGRAPHY.fontWeight.bold,
+  },
+  unassignedBadge: {
+    backgroundColor: COLORS.warning,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs / 2,
+    borderRadius: BORDER_RADIUS.sm,
+    alignSelf: 'flex-start',
+    marginTop: SPACING.xs,
+  },
+  unassignedBadgeText: {
+    color: COLORS.textInverse,
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
+  },
+  assignGuardButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.backgroundSecondary,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
+    marginTop: SPACING.sm,
+  },
+  assignGuardButtonText: {
+    color: COLORS.primary,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+  },
+  shiftInfoCard: {
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
+    marginTop: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+  },
+  shiftInfoLabel: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.xs,
+    marginBottom: SPACING.xs / 2,
+  },
+  shiftInfoValue: {
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+  },
+  sectionTitle: {
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.sm,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.xs,
+    marginTop: SPACING.xs,
+  },
+  clientCreatedBadge: {
+    backgroundColor: COLORS.info,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs / 2,
+    borderRadius: BORDER_RADIUS.sm,
+    alignSelf: 'flex-start',
+  },
+  clientCreatedBadgeText: {
+    color: COLORS.textInverse,
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
 });
 

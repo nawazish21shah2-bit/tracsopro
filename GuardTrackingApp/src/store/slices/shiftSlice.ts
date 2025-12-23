@@ -536,10 +536,12 @@ const shiftSlice = createSlice({
       .addCase(checkOutFromShiftWithLocation.fulfilled, (state, action) => {
         state.checkOutLoading = false;
         state.activeShift = null;
-        // Update shift in todayShifts array
-        const index = state.todayShifts.findIndex(s => s.id === action.payload.id);
-        if (index !== -1) {
-          state.todayShifts[index] = action.payload;
+        // Update shift in todayShifts array if payload exists and has id
+        if (action.payload && action.payload.id) {
+          const index = state.todayShifts.findIndex(s => s.id === action.payload.id);
+          if (index !== -1) {
+            state.todayShifts[index] = action.payload;
+          }
         }
       })
       .addCase(checkOutFromShiftWithLocation.rejected, (state, action) => {

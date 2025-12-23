@@ -18,7 +18,7 @@ interface OfflineAction {
 class OfflineService {
   private isOnline = true;
   private offlineActions: OfflineAction[] = [];
-  private syncInterval: NodeJS.Timeout | null = null;
+  private syncInterval: ReturnType<typeof setInterval> | null = null;
   private readonly OFFLINE_ACTIONS_KEY = 'offline_actions';
   private readonly SYNC_INTERVAL = 30000; // 30 seconds
 

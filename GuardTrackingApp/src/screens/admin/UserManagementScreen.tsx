@@ -15,9 +15,11 @@ import {
   TextInput,
 } from 'react-native';
 import { useSelector } from 'react-redux';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RootState } from '../../store';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { UserIcon, UsersIcon, SettingsIcon, EmergencyIcon } from '../../components/ui/AppIcons';
+import { MessageCircle } from 'react-native-feather';
 import apiService from '../../services/api';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
@@ -25,6 +27,7 @@ import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
 import { RefreshControl } from 'react-native';
+import { findOrCreateAdminGuardChat, findOrCreateClientAdminChat } from '../../utils/chatHelper';
 
 interface User {
   id: string;
@@ -44,6 +47,12 @@ interface UserManagementScreenProps {
 const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation }) => {
   const { user } = useSelector((state: RootState) => state.auth);
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+  const insets = useSafeAreaInsets();
+  
+  // Tab bar height is 70px, add safe area bottom inset and spacing
+  const TAB_BAR_HEIGHT = 70;
+  const BUTTON_SPACING = 16;
+  const buttonBottom = TAB_BAR_HEIGHT + insets.bottom + BUTTON_SPACING;
   
   const [users, setUsers] = useState<User[]>([]);
   const [selectedRole, setSelectedRole] = useState<'all' | 'admin' | 'guard' | 'client'>('all');
@@ -443,6 +452,52 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
       </View>
       
       <View style={styles.userActions}>
+        {/* Chat Button - Only show for guards and clients */}
+        {(item.role === 'guard' || item.role === 'client') && (
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={async () => {
+              try {
+                if (!user) {
+                  Alert.alert('Error', 'User not logged in');
+                  return;
+                }
+
+                let chatParams;
+                // item.id is already the User's ID (from User model)
+                if (item.role === 'guard') {
+                  // Use item.id directly - it's the guard's userId
+                  chatParams = await findOrCreateAdminGuardChat(
+                    user.id,
+                    item.id,
+                    item.name
+                  );
+                } else if (item.role === 'client') {
+                  // Use item.id directly - it's the client's userId
+                  chatParams = await findOrCreateClientAdminChat(
+                    item.id,
+                    user.id,
+                    item.name
+                  );
+                }
+
+                if (chatParams) {
+                  navigation.navigate('IndividualChatScreen', chatParams);
+                } else {
+                  Alert.alert('Error', 'Could not initiate chat');
+                }
+              } catch (error: any) {
+                console.error('Error initiating chat:', error);
+                Alert.alert('Error', 'Failed to start chat. Please try again.');
+              }
+            }}
+            activeOpacity={0.7}
+          >
+            <MessageCircle size={16} color={COLORS.primary} />
+            <Text style={styles.actionText}>Chat</Text>
+          </TouchableOpacity>
+        )}
+
         <TouchableOpacity 
           style={styles.actionButton}
           onPress={() => handleUserAction(item.id, 'edit')}
@@ -592,7 +647,11 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
 
       {/* Sticky Action Button */}
       <TouchableOpacity 
-        style={[styles.stickyAddButton, (creatingUser || updatingUser) && styles.stickyAddButtonDisabled]}
+        style={[
+          styles.stickyAddButton, 
+          { bottom: buttonBottom },
+          (creatingUser || updatingUser) && styles.stickyAddButtonDisabled
+        ]}
         onPress={() => setShowCreateModal(true)}
         disabled={creatingUser || updatingUser}
         activeOpacity={(creatingUser || updatingUser) ? 1 : 0.7}
@@ -813,7 +872,6 @@ const styles = StyleSheet.create({
   },
   stickyAddButton: {
     position: 'absolute',
-    bottom: 90, // Position above bottom navigator (70px height + 20px padding)
     left: SPACING.lg,
     right: SPACING.lg,
     backgroundColor: COLORS.primary,

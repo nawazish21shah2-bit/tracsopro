@@ -7,7 +7,6 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  Image,
   Switch,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
@@ -17,6 +16,8 @@ import { RootState, AppDispatch } from '../../store';
 import { logoutUser, updateUserProfile } from '../../store/slices/authSlice';
 import { User, UserRole } from '../../types';
 import { settingsService } from '../../services/settingsService';
+import { ProfileAvatar } from '../../components/common/ProfileAvatar';
+import apiService from '../../services/api';
 
 type ProfileScreenNavigationProp = StackNavigationProp<any, 'Profile'>;
 
@@ -29,6 +30,7 @@ const ProfileScreen: React.FC = () => {
   const [locationTrackingEnabled, setLocationTrackingEnabled] = useState(true);
   const [darkModeEnabled, setDarkModeEnabled] = useState(false);
   const [loadingSettings, setLoadingSettings] = useState(false);
+  const [isUploadingPicture, setIsUploadingPicture] = useState(false);
 
   useEffect(() => {
     loadUserPreferences();
@@ -64,6 +66,26 @@ const ProfileScreen: React.FC = () => {
   const handleEditProfile = () => {
     // Navigate to edit profile screen
     Alert.alert('Edit Profile', 'Profile editing functionality will be implemented');
+  };
+
+  const handleProfilePictureSelected = async (imageUri: string) => {
+    try {
+      setIsUploadingPicture(true);
+      const uploadResponse = await apiService.uploadProfilePicture(imageUri);
+      
+      if (uploadResponse.success && uploadResponse.data?.url) {
+        await dispatch(updateUserProfile({ 
+          profilePictureUrl: uploadResponse.data.url 
+        } as any)).unwrap();
+        Alert.alert('Success', 'Profile picture updated successfully');
+      } else {
+        Alert.alert('Error', uploadResponse.message || 'Failed to upload profile picture');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to update profile picture');
+    } finally {
+      setIsUploadingPicture(false);
+    }
   };
 
   const handleChangePassword = () => {
@@ -128,14 +150,15 @@ const ProfileScreen: React.FC = () => {
       {/* User Info Card */}
       <View style={styles.userCard}>
         <View style={styles.avatarContainer}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {user.firstName.charAt(0)}{user.lastName.charAt(0)}
-            </Text>
-          </View>
-          <TouchableOpacity style={styles.editAvatarButton}>
-            <Text style={styles.editAvatarText}>📷</Text>
-          </TouchableOpacity>
+          <ProfileAvatar
+            firstName={user.firstName}
+            lastName={user.lastName}
+            profilePictureUrl={user.profilePictureUrl}
+            size={80}
+            editable={true}
+            isLoading={isUploadingPicture}
+            onImageSelected={handleProfilePictureSelected}
+          />
         </View>
 
         <View style={styles.userInfo}>
@@ -343,40 +366,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   avatarContainer: {
-    position: 'relative',
     marginBottom: 16,
-  },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#007AFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
-  editAvatarButton: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    width: 32,
-    height: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  editAvatarText: {
-    fontSize: 16,
   },
   userInfo: {
     alignItems: 'center',

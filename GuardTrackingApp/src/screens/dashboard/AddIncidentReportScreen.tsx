@@ -11,14 +11,14 @@ import {
   Image,
   Platform,
   Modal,
-  PermissionsAndroid,
 } from 'react-native';
 import { useSelector } from 'react-redux';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { launchImageLibrary, launchCamera, ImagePickerResponse, MediaType } from 'react-native-image-picker';
-import Geolocation from 'react-native-geolocation-service';
 import { RootState } from '../../store';
+import Geolocation from 'react-native-geolocation-service';
+import { PermissionsAndroid } from 'react-native';
 import { COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
@@ -89,15 +89,22 @@ const AddIncidentReportScreen: React.FC = () => {
       }
 
       // Otherwise get GPS location
-      // Request permissions
+      // Request location permission
       let hasPermission = false;
       if (Platform.OS === 'android') {
         const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          {
+            title: 'Location Permission',
+            message: 'This app needs access to your location to add incident reports.',
+            buttonNeutral: 'Ask Me Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
+          }
         );
         hasPermission = granted === PermissionsAndroid.RESULTS.GRANTED;
       } else {
-        // iOS - Geolocation service handles permissions automatically
+        // iOS permission is handled automatically by react-native-geolocation-service
         hasPermission = true;
       }
 
@@ -112,38 +119,28 @@ const AddIncidentReportScreen: React.FC = () => {
       }
 
       // Get current position
-      Geolocation.getCurrentPosition(
-        (position) => {
-          const latitude = position.coords.latitude;
-          const longitude = position.coords.longitude;
-          
-          // Format address as coordinates (can be enhanced with geocoding API later)
-          const address = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+      const location = await new Promise<any>((resolve, reject) => {
+        Geolocation.getCurrentPosition(
+          (position) => resolve(position),
+          (error) => reject(error),
+          {
+            enableHighAccuracy: true,
+            timeout: 15000,
+            maximumAge: 10000,
+          }
+        );
+      });
 
-          setCurrentLocation({
-            name: 'Current Location',
-            address: address,
-            latitude: latitude,
-            longitude: longitude,
-            status: 'Active'
-          });
-          setLocationLoading(false);
-        },
-        (error) => {
-          console.error('Error getting location:', error);
-          setCurrentLocation({
-            name: 'Location Error',
-            address: 'Unable to get location',
-            status: 'Error'
-          });
-          setLocationLoading(false);
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 10000,
-        }
-      );
+      // Format address from coordinates (reverse geocoding can be added later with Google Maps API)
+      const address = `${location.coords.latitude.toFixed(6)}, ${location.coords.longitude.toFixed(6)}`;
+
+      setCurrentLocation({
+        name: 'Current Location',
+        address: address,
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        status: 'Active'
+      });
     } catch (error) {
       console.error('Error getting location:', error);
       setCurrentLocation({
@@ -225,26 +222,6 @@ const AddIncidentReportScreen: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      // Upload media files first if any
-      const uploadedMediaFiles = [];
-      if (mediaItems.length > 0) {
-        for (const mediaItem of mediaItems) {
-          try {
-            // For now, we'll send the local URI
-            // In production, you should upload to cloud storage first
-            // TODO: Implement proper file upload to cloud storage (S3, Cloudinary, etc.)
-            uploadedMediaFiles.push({
-              url: mediaItem.uri, // This should be a cloud URL in production
-              type: mediaItem.type,
-              name: mediaItem.name || `media_${Date.now()}.${mediaItem.type === 'video' ? 'mp4' : 'jpg'}`,
-            });
-          } catch (uploadError) {
-            console.warn('Failed to upload media file:', uploadError);
-            // Continue with other files
-          }
-        }
-      }
-
       // Prepare report data with location
       const reportData = {
         reportType,
@@ -255,13 +232,17 @@ const AddIncidentReportScreen: React.FC = () => {
           latitude: currentLocation.latitude,
           longitude: currentLocation.longitude,
         },
-        mediaFiles: uploadedMediaFiles
+        mediaFiles: mediaItems.map(item => ({
+          url: item.uri,
+          type: item.type,
+          name: item.name,
+        }))
       };
 
       // Submit to backend using API service
       const response = await apiService.post('/incident-reports', reportData);
 
-      if (response.data?.success || response.data) {
+      if (response.data.success) {
         Alert.alert(
           'Success',
           'Your incident report has been submitted successfully',
@@ -270,11 +251,11 @@ const AddIncidentReportScreen: React.FC = () => {
           ]
         );
       } else {
-        Alert.alert('Error', response.data?.message || 'Failed to submit report');
+        Alert.alert('Error', response.data.message || 'Failed to submit report');
       }
     } catch (error: any) {
       console.error('Submit error:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to submit report. Please try again.';
+      const errorMessage = error.message || 'Failed to submit report. Please try again.';
       Alert.alert('Error', errorMessage);
     } finally {
       setIsSubmitting(false);

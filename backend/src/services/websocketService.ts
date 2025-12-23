@@ -61,14 +61,10 @@ class WebSocketService {
             this.guardSockets.set(data.userId, socket.id);
             socket.join('guards');
             logger.info(`Guard ${data.userId} connected`);
-          } else if (data.role === 'ADMIN') {
+          } else if (data.role === 'ADMIN' || data.role === 'CLIENT') {
             this.adminSockets.add(socket.id);
             socket.join('admins');
-            logger.info(`Admin ${data.userId} connected`);
-          } else if (data.role === 'CLIENT') {
-            socket.join('clients');
-            socket.join(`client_${data.userId}`); // Also join user-specific room
-            logger.info(`Client ${data.userId} connected`);
+            logger.info(`Admin/Client ${data.userId} connected`);
           }
 
           socket.emit('authenticated', { success: true });
@@ -282,20 +278,6 @@ class WebSocketService {
 
     this.io.to('guards').emit(event, data);
     logger.debug(`Broadcasted ${event} to guards`);
-  }
-
-  broadcastToClients(event: string, data: any, specificClientId?: string): void {
-    if (!this.io) return;
-
-    if (specificClientId) {
-      // Send to specific client
-      this.io.to(`client_${specificClientId}`).emit(event, data);
-      logger.debug(`Broadcasted ${event} to client ${specificClientId}`);
-    } else {
-      // Broadcast to all clients
-      this.io.to('clients').emit(event, data);
-      logger.debug(`Broadcasted ${event} to all clients`);
-    }
   }
 
   sendToSpecificGuard(guardId: string, event: string, data: any): void {

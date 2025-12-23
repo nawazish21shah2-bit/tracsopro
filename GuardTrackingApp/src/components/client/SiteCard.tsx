@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { PersonIcon, LocationIcon } from '../ui/AppIcons';
+import { EyeIcon, EditIcon, TrashIcon } from '../ui/FeatherIcons';
 import StatusBadge from './StatusBadge';
+import SiteCardDropdown from './SiteCardDropdown';
 import { globalStyles, COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../styles/globalStyles';
 
 interface SiteCardProps {
@@ -17,61 +19,155 @@ interface SiteCardProps {
     guardId?: string;
   };
   onPress?: () => void;
-  onMoreOptions?: () => void;
+  onView?: (siteId: string) => void;
+  onEdit?: (siteId: string) => void;
+  onDelete?: (siteId: string) => void;
   onChatWithGuard?: (guardId: string, guardName: string) => void;
 }
 
-const SiteCard: React.FC<SiteCardProps> = ({ site, onPress, onMoreOptions, onChatWithGuard }) => {
+const SiteCard: React.FC<SiteCardProps> = ({ 
+  site, 
+  onPress, 
+  onView, 
+  onEdit, 
+  onDelete, 
+  onChatWithGuard 
+}) => {
+  const [dropdownVisible, setDropdownVisible] = useState(false);
+  const [anchorPosition, setAnchorPosition] = useState({ x: 0, y: 0 });
+  const moreButtonRef = useRef<TouchableOpacity>(null);
+
+  if (!site || !site.id) {
+    return null;
+  }
+
+  const handleMoreOptionsPress = () => {
+    if (moreButtonRef.current) {
+      moreButtonRef.current.measureInWindow((x, y, width, height) => {
+        setAnchorPosition({ x: x + width, y: y });
+        setDropdownVisible(true);
+      });
+    }
+  };
+
+  const handleCardPress = () => {
+    if (dropdownVisible) {
+      setDropdownVisible(false);
+    } else if (onPress) {
+      onPress();
+    }
+  };
+
+  const actions = [];
+  
+  if (onView) {
+    actions.push({
+      label: 'View Details',
+      icon: <EyeIcon size={18} color={COLORS.textPrimary} />,
+      onPress: () => onView(site.id),
+    });
+  }
+
+  if (onEdit) {
+    actions.push({
+      label: 'Edit Site',
+      icon: <EditIcon size={18} color={COLORS.textPrimary} />,
+      onPress: () => onEdit(site.id),
+    });
+  }
+
+  if (onDelete) {
+    actions.push({
+      label: 'Delete Site',
+      icon: <TrashIcon size={18} color={COLORS.error || '#DC2626'} />,
+      onPress: () => onDelete(site.id),
+      destructive: true,
+    });
+  }
+
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
-      <View style={styles.header}>
-        <View style={styles.siteInfo}>
-          <View style={styles.locationIcon}>
-            <LocationIcon size={20} color="#1976D2" />
+    <>
+      <TouchableOpacity style={styles.card} onPress={handleCardPress} activeOpacity={0.7}>
+        <View style={styles.header}>
+          <View style={styles.siteInfo}>
+            <View style={styles.locationIcon}>
+              <LocationIcon size={20} color="#1976D2" />
+            </View>
+            <View style={styles.siteDetails}>
+              <Text style={styles.siteName} numberOfLines={1}>
+                {site.name || 'Unnamed Site'}
+              </Text>
+              <Text style={styles.siteAddress} numberOfLines={2}>
+                {site.address || 'No address'}
+              </Text>
+            </View>
           </View>
-          <View style={styles.siteDetails}>
-            <Text style={styles.siteName}>{site.name}</Text>
-            <Text style={styles.siteAddress}>{site.address}</Text>
-          </View>
+          {actions.length > 0 && (
+            <TouchableOpacity 
+              ref={moreButtonRef}
+              style={styles.moreButton} 
+              onPress={handleMoreOptionsPress}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.moreButtonText}>•••</Text>
+            </TouchableOpacity>
+          )}
         </View>
-        <TouchableOpacity style={styles.moreButton} onPress={onMoreOptions}>
-          <Text style={styles.moreButtonText}>•••</Text>
-        </TouchableOpacity>
-      </View>
 
       <View style={styles.guardSection}>
         <Text style={styles.guardOnDutyLabel}>Guard On Duty</Text>
         <View style={styles.guardInfo}>
           <View style={styles.avatar}>
             {site.guardAvatar ? (
-              <Image source={{ uri: site.guardAvatar }} style={styles.avatarImage} />
+              <Image 
+                source={{ uri: site.guardAvatar }} 
+                style={styles.avatarImage}
+                defaultSource={{ uri: 'https://via.placeholder.com/32x32/E5E7EB/9CA3AF?text=?' }}
+              />
             ) : (
               <PersonIcon size={20} color="#666" />
             )}
           </View>
           <View style={styles.guardDetails}>
-            <Text style={styles.guardName}>{site.guardName}</Text>
-            {site.shiftTime && (
-              <Text style={styles.shiftTime}>{site.shiftTime}</Text>
-            )}
-            {site.status === 'Active' && site.checkInTime && (
-              <Text style={styles.checkInTime}>Checked in at {site.checkInTime}</Text>
-            )}
+            <Text style={styles.guardName} numberOfLines={1}>
+              {site.guardName || 'No guard assigned'}
+            </Text>
+            {site.shiftTime ? (
+              <Text style={styles.shiftTime} numberOfLines={1}>
+                {site.shiftTime}
+              </Text>
+            ) : null}
+            {site.status === 'Active' && site.checkInTime ? (
+              <Text style={styles.checkInTime} numberOfLines={1}>
+                Checked in at {site.checkInTime}
+              </Text>
+            ) : null}
           </View>
           <View style={styles.rightSection}>
-            {onChatWithGuard && site.guardId && site.status === 'Active' && (
+            {onChatWithGuard && site.guardId && site.status === 'Active' ? (
               <TouchableOpacity 
                 style={styles.chatButton}
-                onPress={() => onChatWithGuard(site.guardId!, site.guardName)}
+                onPress={() => {
+                  if (site.guardId && site.guardName) {
+                    onChatWithGuard(site.guardId, site.guardName);
+                  }
+                }}
               >
                 <Text style={styles.chatButtonText}>💬</Text>
               </TouchableOpacity>
-            )}
+            ) : null}
             <StatusBadge status={site.status} size="small" />
           </View>
         </View>
       </View>
     </TouchableOpacity>
+    <SiteCardDropdown
+      visible={dropdownVisible}
+      onClose={() => setDropdownVisible(false)}
+      actions={actions}
+      anchorPosition={anchorPosition}
+    />
+    </>
   );
 };
 

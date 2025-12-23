@@ -8,7 +8,9 @@ router.use(authenticate);
 router.use(requireAdmin);
 
 router.get('/schedule/30-days', adminShiftController.get30DaySchedule);
+router.get('/unassigned', adminShiftController.getUnassignedShifts);
 router.get('/', adminShiftController.getShifts);
 router.post('/', adminShiftController.createShift);
+router.patch('/:shiftId/assign-guard', adminShiftController.assignGuardToShift);
 
 export default router;

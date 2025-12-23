@@ -180,6 +180,10 @@ export const updateUserProfile = createAsyncThunk(
           ...response.data,
           name: `${response.data.firstName} ${response.data.lastName}`.trim()
         };
+        
+        // Update the stored user data in AsyncStorage so it persists across app restarts
+        await securityManager.storeUserData(userWithName);
+        
         return userWithName;
       } else {
         return rejectWithValue(response.message || 'Failed to update profile');

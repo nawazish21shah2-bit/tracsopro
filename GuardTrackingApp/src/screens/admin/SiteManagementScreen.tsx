@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { LocationIcon, SettingsIcon } from '../../components/ui/AppIcons';
 import AddressPicker from '../../components/common/AddressPicker';
@@ -21,10 +22,18 @@ interface Site {
   address: string;
   status: 'active' | 'inactive';
   clientName?: string;
+  clientId?: string; // Add clientId to track client relationship
 }
 
 const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+  const insets = useSafeAreaInsets();
+  
+  // Tab bar height is 70px, add safe area bottom inset and spacing
+  const TAB_BAR_HEIGHT = 70;
+  const BUTTON_SPACING = 16;
+  const buttonBottom = TAB_BAR_HEIGHT + insets.bottom + BUTTON_SPACING;
+  
   const [sites, setSites] = useState<Site[]>([]);
   const [loading, setLoading] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -61,6 +70,7 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
         name: s.name,
         address: s.address,
         status: s.isActive ? 'active' : 'inactive',
+        clientId: s.clientId || s.client?.id, // Store clientId for editing
         clientName: s.client?.user
           ? `${s.client.user.firstName} ${s.client.user.lastName}`.trim() || s.client.user.email
           : undefined,
@@ -101,6 +111,7 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
         name: s.name,
         address: s.address,
         status: s.isActive ? 'active' : 'inactive',
+        clientId: s.clientId || s.client?.id, // Store clientId
         clientName: s.client?.user
           ? `${s.client.user.firstName} ${s.client.user.lastName}`.trim() || s.client.user.email
           : undefined,
@@ -126,7 +137,7 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     setEditSite({
       name: s.name,
       address: s.address,
-      clientId: '',
+      clientId: s.clientId || '', // ✅ Use actual clientId from site
       isActive: s.status === 'active',
     });
     setShowEditModal(true);
@@ -164,6 +175,10 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
               name: s.name,
               address: s.address,
               status: s.isActive ? 'active' : 'inactive',
+              clientId: s.clientId || s.client?.id, // Update clientId after edit
+              clientName: s.client?.user
+                ? `${s.client.user.firstName} ${s.client.user.lastName}`.trim() || s.client.user.email
+                : undefined,
             }
           : site
       ));
@@ -278,7 +293,7 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
 
       {/* Sticky Action Button */}
       <TouchableOpacity 
-        style={styles.stickyAddButton}
+        style={[styles.stickyAddButton, { bottom: buttonBottom }]}
         onPress={() => setShowCreateModal(true)}
       >
         <Text style={styles.stickyAddButtonText}>+ Add Site</Text>
@@ -536,7 +551,6 @@ const styles = StyleSheet.create({
   },
   stickyAddButton: {
     position: 'absolute',
-    bottom: SPACING.lg,
     right: SPACING.lg,
     backgroundColor: COLORS.primary,
     borderRadius: BORDER_RADIUS.lg,

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
-import { logoutUser } from '../../store/slices/authSlice';
+import { logoutUser, updateUserProfile } from '../../store/slices/authSlice';
 import { 
   UserIcon,
   CheckCircleIcon,
@@ -22,6 +22,8 @@ import {
   ChevronRightIcon
 } from '../../components/ui/AppIcons';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
+import { ProfileAvatar } from '../../components/common/ProfileAvatar';
+import apiService from '../../services/api';
 
 interface MenuOption {
   id: string;
@@ -34,6 +36,33 @@ const ProfileScreen: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
   const isVerified = user?.isActive ?? false;
+  const [isUploadingPicture, setIsUploadingPicture] = useState(false);
+
+  const handleProfilePictureSelected = async (imageUri: string) => {
+    try {
+      setIsUploadingPicture(true);
+      const uploadResponse = await apiService.uploadProfilePicture(imageUri);
+      
+      if (uploadResponse.success && uploadResponse.data?.url) {
+        // For guards, also update the guard profile
+        if (user?.role === 'GUARD') {
+          await apiService.updateGuardProfile({ 
+            profilePictureUrl: uploadResponse.data.url 
+          });
+        }
+        await dispatch(updateUserProfile({ 
+          profilePictureUrl: uploadResponse.data.url 
+        } as any)).unwrap();
+        Alert.alert('Success', 'Profile picture updated successfully');
+      } else {
+        Alert.alert('Error', uploadResponse.message || 'Failed to upload profile picture');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to update profile picture');
+    } finally {
+      setIsUploadingPicture(false);
+    }
+  };
 
   const handlePastJobs = () => {
     Alert.alert('Past Jobs', 'View your completed assignments');
@@ -114,12 +143,18 @@ const ProfileScreen: React.FC = () => {
         {/* Profile Header */}
         <View style={styles.profileCard}>
           <View style={styles.profileHeader}>
-            <View style={styles.profileAvatar}>
-              <UserIcon size={24} color="#333333" />
-            </View>
+            <ProfileAvatar
+              firstName={user?.firstName}
+              lastName={user?.lastName}
+              profilePictureUrl={user?.profilePictureUrl}
+              size={60}
+              editable={true}
+              isLoading={isUploadingPicture}
+              onImageSelected={handleProfilePictureSelected}
+            />
             <View style={styles.profileInfo}>
               <Text style={styles.profileName}>
-                {user ? `${user.firstName} ${user.lastName}` : 'Mark Husdon'}
+                {user ? `${user.firstName} ${user.lastName}` : 'Guard'}
               </Text>
               <View style={styles.verifiedRow}>
                 <Text style={styles.verifiedText}>{isVerified ? 'Verified' : 'Inactive'}</Text>
@@ -198,12 +233,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   profileAvatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#F0F0F0',
-    alignItems: 'center',
-    justifyContent: 'center',
     marginRight: 16,
   },
   profileInfo: {

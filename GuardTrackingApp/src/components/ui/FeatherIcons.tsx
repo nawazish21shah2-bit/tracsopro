@@ -348,6 +348,10 @@ export const EditIcon: React.FC<Omit<FeatherIconProps, 'name'>> = (props) => (
   <FeatherIcon name="edit" {...props} />
 );
 
+export const TrashIcon: React.FC<Omit<FeatherIconProps, 'name'>> = (props) => (
+  <FeatherIcon name="trash2" {...props} />
+);
+
 export const ExternalLinkIcon: React.FC<Omit<FeatherIconProps, 'name'>> = (props) => (
   <FeatherIcon name="externalLink" {...props} />
 );

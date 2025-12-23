@@ -28,32 +28,62 @@ export class SiteService {
         throw new NotFoundError('Client not found');
       }
 
-      const site = await prisma.site.create({
-        data: {
+      // Get all companies this client belongs to
+      const companyClients = await prisma.companyClient.findMany({
+        where: {
           clientId,
-          name: data.name,
-          address: data.address,
-          latitude: data.latitude,
-          longitude: data.longitude,
-          description: data.description,
-          requirements: data.requirements,
+          isActive: true,
         },
-        include: {
-          client: {
-            include: {
-              user: {
-                select: {
-                  firstName: true,
-                  lastName: true,
-                  email: true
+        select: {
+          securityCompanyId: true,
+        },
+      });
+
+      // Create site and link to all companies the client belongs to
+      const site = await prisma.$transaction(async (tx) => {
+        const newSite = await tx.site.create({
+          data: {
+            clientId,
+            name: data.name,
+            address: data.address,
+            latitude: data.latitude,
+            longitude: data.longitude,
+            description: data.description,
+            requirements: data.requirements,
+          },
+          include: {
+            client: {
+              include: {
+                user: {
+                  select: {
+                    firstName: true,
+                    lastName: true,
+                    email: true
+                  }
                 }
               }
             }
           }
+        });
+
+        // Link site to all companies the client belongs to
+        if (companyClients.length > 0) {
+          await Promise.all(
+            companyClients.map((companyClient) =>
+              tx.companySite.create({
+                data: {
+                  securityCompanyId: companyClient.securityCompanyId,
+                  siteId: newSite.id,
+                },
+              })
+            )
+          );
         }
+
+        return newSite;
       });
 
-      logger.info(`Site created: ${site.name} for client ${clientId}`);
+      logger.info(`Site created: ${site.name} for client ${clientId}, linked to ${companyClients.length} company(ies)`);
       return site;
     } catch (error) {
       logger.error('Error creating site:', error);

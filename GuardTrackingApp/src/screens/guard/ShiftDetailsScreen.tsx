@@ -26,10 +26,13 @@ import { MapPinIcon, ClockIcon, CheckCircleIcon, AlertTriangleIcon, FileTextIcon
 import apiService from '../../services/api';
 import Geolocation from 'react-native-geolocation-service';
 import { ErrorHandler } from '../../utils/errorHandler';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import GuardProfileDrawer from '../../components/guard/GuardProfileDrawer';
+import { GuardStackParamList } from '../../navigation/GuardStackNavigator';
 
 const { width } = Dimensions.get('window');
 
-type ShiftDetailsScreenNavigationProp = StackNavigationProp<any, 'ShiftDetails'>;
+type ShiftDetailsScreenNavigationProp = StackNavigationProp<GuardStackParamList, 'ShiftDetails'>;
 
 interface ShiftDetails {
   id: string;
@@ -60,6 +63,7 @@ const ShiftDetailsScreen: React.FC = () => {
   const route = useRoute();
   const dispatch = useDispatch<AppDispatch>();
   const { shiftId } = route.params as { shiftId: string };
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
   
   const [loading, setLoading] = useState(true);
   const [shift, setShift] = useState<ShiftDetails | null>(null);
@@ -277,6 +281,30 @@ const ShiftDetailsScreen: React.FC = () => {
           variant="guard"
           title="Shift Details"
           showLogo={false}
+          profileDrawer={
+            <GuardProfileDrawer
+              visible={isDrawerVisible}
+              onClose={closeDrawer}
+              onNavigateToProfile={() => {
+                closeDrawer();
+                navigation.navigate('GuardTabs', { 
+                  screen: 'Settings',
+                  params: { screen: 'GuardProfileEdit' }
+                });
+              }}
+              onNavigateToNotifications={() => {
+                closeDrawer();
+                navigation.navigate('GuardTabs', { 
+                  screen: 'Settings',
+                  params: { screen: 'GuardNotificationSettings' }
+                });
+              }}
+              onNavigateToSupport={() => {
+                closeDrawer();
+                navigation.navigate('GuardTabs', { screen: 'Chat' });
+              }}
+            />
+          }
         />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
@@ -293,6 +321,30 @@ const ShiftDetailsScreen: React.FC = () => {
           variant="guard"
           title="Shift Details"
           showLogo={false}
+          profileDrawer={
+            <GuardProfileDrawer
+              visible={isDrawerVisible}
+              onClose={closeDrawer}
+              onNavigateToProfile={() => {
+                closeDrawer();
+                navigation.navigate('GuardTabs', { 
+                  screen: 'Settings',
+                  params: { screen: 'GuardProfileEdit' }
+                });
+              }}
+              onNavigateToNotifications={() => {
+                closeDrawer();
+                navigation.navigate('GuardTabs', { 
+                  screen: 'Settings',
+                  params: { screen: 'GuardNotificationSettings' }
+                });
+              }}
+              onNavigateToSupport={() => {
+                closeDrawer();
+                navigation.navigate('GuardTabs', { screen: 'Chat' });
+              }}
+            />
+          }
         />
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>Shift not found</Text>
@@ -314,6 +366,30 @@ const ShiftDetailsScreen: React.FC = () => {
         variant="guard"
         title="Shift Details"
         showLogo={false}
+        profileDrawer={
+          <GuardProfileDrawer
+            visible={isDrawerVisible}
+            onClose={closeDrawer}
+            onNavigateToProfile={() => {
+              closeDrawer();
+              navigation.navigate('GuardTabs', { 
+                screen: 'Settings',
+                params: { screen: 'GuardProfileEdit' }
+              });
+            }}
+            onNavigateToNotifications={() => {
+              closeDrawer();
+              navigation.navigate('GuardTabs', { 
+                screen: 'Settings',
+                params: { screen: 'GuardNotificationSettings' }
+              });
+            }}
+            onNavigateToSupport={() => {
+              closeDrawer();
+              navigation.navigate('GuardTabs', { screen: 'Chat' });
+            }}
+          />
+        }
       />
       <ScrollView 
         style={styles.container} 

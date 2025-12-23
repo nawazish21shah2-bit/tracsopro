@@ -185,21 +185,21 @@ const GuardOTPScreen: React.FC = () => {
 
         {/* Resend Code */}
         <View style={styles.resendContainer}>
-          <Text style={styles.resendText}>
-            Did not receive code? 
+          <View style={styles.resendRow}>
+            <Text style={styles.resendText}>Did not receive code? </Text>
             <TouchableOpacity 
               onPress={handleResendOtp} 
               disabled={!canResend}
-              style={styles.resendButton}
+              activeOpacity={!canResend ? 1 : 0.7}
             >
               <Text style={[
                 styles.resendLink, 
                 !canResend && styles.resendLinkDisabled
               ]}>
-                {canResend ? ' Resend Code' : ` Resend Code (${resendTimer}s)`}
+                {canResend ? 'Resend Code' : `Resend Code (${resendTimer}s)`}
               </Text>
             </TouchableOpacity>
-          </Text>
+          </View>
         </View>
 
         {/* Verify Button */}
@@ -269,13 +269,13 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   resendContainer: {
-    alignItems: 'center',
+    paddingHorizontal: 16,
     marginBottom: 60,
   },
   resendRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     flexWrap: 'nowrap',
   },
   resendText: {

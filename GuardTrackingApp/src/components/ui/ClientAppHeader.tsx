@@ -2,7 +2,6 @@ import React from 'react';
 import { ViewStyle } from 'react-native';
 import SharedHeader from './SharedHeader';
 import ClientProfileDrawer from '../client/ClientProfileDrawer';
-import SimpleTestDrawer from '../client/SimpleTestDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 
 interface ClientAppHeaderProps {
@@ -63,27 +62,17 @@ export const ClientAppHeader: React.FC<ClientAppHeaderProps> = ({
         onNavigateToNotifications={onNavigateToNotifications}
         onNavigateToSupport={onNavigateToSupport}
         profileDrawer={
-          <>
-            {/* Temporarily use SimpleTestDrawer for debugging */}
-            <SimpleTestDrawer
-              visible={isDrawerVisible}
-              onClose={closeDrawer}
-            />
-            
-            {/* Original drawer - commented out for debugging
-            <ClientProfileDrawer
-              visible={isDrawerVisible}
-              onClose={closeDrawer}
-              onNavigateToProfile={onNavigateToProfile}
-              onNavigateToSites={onNavigateToSites}
-              onNavigateToGuards={onNavigateToGuards}
-              onNavigateToReports={onNavigateToReports}
-              onNavigateToAnalytics={onNavigateToAnalytics}
-              onNavigateToNotifications={onNavigateToNotifications}
-              onNavigateToSupport={onNavigateToSupport}
-            />
-            */}
-          </>
+          <ClientProfileDrawer
+            visible={isDrawerVisible}
+            onClose={closeDrawer}
+            onNavigateToProfile={onNavigateToProfile}
+            onNavigateToSites={onNavigateToSites}
+            onNavigateToGuards={onNavigateToGuards}
+            onNavigateToReports={onNavigateToReports}
+            onNavigateToAnalytics={onNavigateToAnalytics}
+            onNavigateToNotifications={onNavigateToNotifications}
+            onNavigateToSupport={onNavigateToSupport}
+          />
         }
       />
     </>

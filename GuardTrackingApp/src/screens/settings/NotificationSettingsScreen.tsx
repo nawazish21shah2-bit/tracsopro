@@ -9,11 +9,16 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useSelector } from 'react-redux';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
 import { RootState } from '../../store';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SharedHeader from '../../components/ui/SharedHeader';
 import { settingsService, NotificationSettings } from '../../services/settingsService';
 import { Bell, Mail, MessageCircle, Clock, AlertTriangle } from 'react-native-feather';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import GuardProfileDrawer from '../../components/guard/GuardProfileDrawer';
+import { SettingsStackParamList } from '../../navigation/DashboardNavigator';
 
 interface NotificationSettingsScreenProps {
   variant?: 'client' | 'guard' | 'admin';
@@ -25,6 +30,8 @@ const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = ({
   profileDrawer,
 }) => {
   const { user } = useSelector((state: RootState) => state.auth);
+  const navigation = useNavigation<StackNavigationProp<SettingsStackParamList>>();
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState<NotificationSettings>({
@@ -34,6 +41,34 @@ const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = ({
     shiftReminders: true,
     incidentAlerts: true,
   });
+
+  // Create drawer for guard variant if not provided
+  const renderProfileDrawer = () => {
+    if (profileDrawer) return profileDrawer;
+    
+    if (variant === 'guard') {
+      return (
+        <GuardProfileDrawer
+          visible={isDrawerVisible}
+          onClose={closeDrawer}
+          onNavigateToProfile={() => {
+            closeDrawer();
+            navigation.navigate('GuardProfileEdit');
+          }}
+          onNavigateToNotifications={() => {
+            closeDrawer();
+            // Already on notification settings
+          }}
+          onNavigateToSupport={() => {
+            closeDrawer();
+            navigation.navigate('GuardSupportContact');
+          }}
+        />
+      );
+    }
+    
+    return null;
+  };
 
   useEffect(() => {
     loadSettings();
@@ -91,7 +126,7 @@ const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = ({
   if (loading) {
     return (
       <SafeAreaWrapper>
-        <SharedHeader variant={variant} title="Notification Settings" profileDrawer={profileDrawer} />
+        <SharedHeader variant={variant} title="Notification Settings" profileDrawer={renderProfileDrawer()} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#1C6CA9" />
         </View>
@@ -101,7 +136,7 @@ const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = ({
 
   return (
     <SafeAreaWrapper>
-      <SharedHeader variant={variant} title="Notification Settings" profileDrawer={profileDrawer} />
+      <SharedHeader variant={variant} title="Notification Settings" profileDrawer={renderProfileDrawer()} />
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {[
           {

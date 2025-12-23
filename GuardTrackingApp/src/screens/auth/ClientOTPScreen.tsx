@@ -279,13 +279,13 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   resendContainer: {
-    alignItems: 'center',
+    paddingHorizontal: 16,
     marginBottom: 60,
   },
   resendRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     flexWrap: 'nowrap',
   },
   resendText: {

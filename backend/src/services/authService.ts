@@ -382,11 +382,13 @@ export class AuthService {
         phone: user.phone,
         role: user.role,
         isActive: user.isActive,
+        profilePictureUrl: user.profilePictureUrl,
         createdAt: user.createdAt,
         guard: user.guard ? {
           id: user.guard.id,
           employeeId: user.guard.employeeId,
           status: user.guard.status,
+          profilePictureUrl: user.guard.profilePictureUrl,
         } : undefined,
         client: user.client ? {
           id: user.client.id,
@@ -435,6 +437,7 @@ export class AuthService {
         phone: true,
         role: true,
         isActive: true,
+        profilePictureUrl: true,
         createdAt: true,
         updatedAt: true,
         guard: {
@@ -443,6 +446,7 @@ export class AuthService {
             employeeId: true,
             department: true,
             status: true,
+            profilePictureUrl: true,
           },
         },
       },
@@ -453,6 +457,58 @@ export class AuthService {
     }
 
     return user;
+  }
+
+  async updateProfile(userId: string, data: {
+    firstName?: string;
+    lastName?: string;
+    phone?: string;
+    profilePictureUrl?: string | null;
+  }) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+
+    if (!user) {
+      throw new UnauthorizedError('User not found');
+    }
+
+    // Build update data object with only defined values
+    const updateData: any = {};
+    if (data.firstName !== undefined) updateData.firstName = data.firstName;
+    if (data.lastName !== undefined) updateData.lastName = data.lastName;
+    if (data.phone !== undefined) updateData.phone = data.phone;
+    if (data.profilePictureUrl !== undefined) updateData.profilePictureUrl = data.profilePictureUrl;
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: updateData,
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        role: true,
+        isActive: true,
+        profilePictureUrl: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    // If user is a guard, also update the guard profile picture
+    if (user.role === 'GUARD' && data.profilePictureUrl !== undefined) {
+      await prisma.guard.updateMany({
+        where: { userId },
+        data: { profilePictureUrl: data.profilePictureUrl },
+      });
+    }
+
+    logger.info(`Profile updated for user: ${updatedUser.email}`);
+
+    return updatedUser;
   }
 
   async changePassword(userId: string, currentPassword: string, newPassword: string) {
@@ -495,6 +551,7 @@ export class AuthService {
         accountType: true,
         isActive: true,
         isEmailVerified: true,
+        profilePictureUrl: true,
         createdAt: true,
       },
     });

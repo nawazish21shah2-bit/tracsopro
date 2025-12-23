@@ -11,6 +11,8 @@ export interface User {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  // Profile picture URL (optional)
+  profilePictureUrl?: string | null;
   // Computed property for full name
   name?: string;
 }

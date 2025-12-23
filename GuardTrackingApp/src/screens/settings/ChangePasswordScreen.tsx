@@ -9,10 +9,15 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SharedHeader from '../../components/ui/SharedHeader';
 import { settingsService } from '../../services/settingsService';
 import { Lock, Eye, EyeOff } from 'react-native-feather';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import GuardProfileDrawer from '../../components/guard/GuardProfileDrawer';
+import { SettingsStackParamList } from '../../navigation/DashboardNavigator';
 
 // Hardcoded colors to avoid module load issues
 const COLORS = {
@@ -38,6 +43,8 @@ const ChangePasswordScreen: React.FC<ChangePasswordScreenProps> = ({
   profileDrawer,
   onSuccess,
 }) => {
+  const navigation = useNavigation<StackNavigationProp<SettingsStackParamList>>();
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -45,6 +52,34 @@ const ChangePasswordScreen: React.FC<ChangePasswordScreenProps> = ({
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Create drawer for guard variant if not provided
+  const renderProfileDrawer = () => {
+    if (profileDrawer) return profileDrawer;
+    
+    if (variant === 'guard') {
+      return (
+        <GuardProfileDrawer
+          visible={isDrawerVisible}
+          onClose={closeDrawer}
+          onNavigateToProfile={() => {
+            closeDrawer();
+            navigation.navigate('GuardProfileEdit');
+          }}
+          onNavigateToNotifications={() => {
+            closeDrawer();
+            navigation.navigate('GuardNotificationSettings');
+          }}
+          onNavigateToSupport={() => {
+            closeDrawer();
+            navigation.navigate('GuardSupportContact');
+          }}
+        />
+      );
+    }
+    
+    return null;
+  };
 
   const validatePassword = (password: string): string | null => {
     if (password.length < 8) {
@@ -131,7 +166,7 @@ const ChangePasswordScreen: React.FC<ChangePasswordScreenProps> = ({
 
   return (
     <SafeAreaWrapper>
-      <SharedHeader variant={variant} title="Change Password" profileDrawer={profileDrawer} />
+      <SharedHeader variant={variant} title="Change Password" profileDrawer={renderProfileDrawer()} />
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.card}>
           <View style={styles.header}>

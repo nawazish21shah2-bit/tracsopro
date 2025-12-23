@@ -290,7 +290,365 @@ export class ChatService {
       );
 
       // Filter out null chats (conversations with participants from different companies)
-      return chats.filter((chat): chat is Chat => chat !== null) as Chat[];
+      let validChats = chats.filter((chat): chat is Chat => chat !== null) as Chat[];
+
+      // For CLIENT users: Also include guards assigned to their sites (even if no chat exists yet)
+      // For ADMIN users: Also include guards and clients in their company (even if no chat exists yet)
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          include: {
+            client: true,
+            companyUsers: { where: { isActive: true }, take: 1 },
+          },
+        });
+
+        if (user?.role === 'CLIENT' && user.client) {
+          // Get all guards assigned to client's sites through shifts
+          const clientSites = await prisma.site.findMany({
+            where: { clientId: user.client.id },
+            select: { id: true },
+          });
+
+          if (clientSites.length > 0) {
+            const siteIds = clientSites.map(s => s.id);
+            
+            // Get guards with active or recent shifts at client's sites
+            const shiftsRaw = await prisma.shift.findMany({
+              where: {
+                siteId: { in: siteIds },
+                // Include shifts from last 30 days or active shifts
+                OR: [
+                  {
+                    status: { in: ['SCHEDULED', 'IN_PROGRESS'] },
+                  },
+                  {
+                    scheduledStartTime: {
+                      gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Last 30 days
+                    },
+                  },
+                ],
+              },
+              include: {
+                guard: {
+                  include: {
+                    user: {
+                      select: {
+                        id: true,
+                        firstName: true,
+                        lastName: true,
+                        role: true,
+                      },
+                    },
+                  },
+                },
+                site: {
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                },
+              },
+              orderBy: {
+                scheduledStartTime: 'desc',
+              },
+            });
+
+            // Get unique guards (manually filter duplicates by guardId)
+            // Filter out shifts without guardId, guard, or guard.user and cast to proper type
+            const shifts = (shiftsRaw as any[]).filter((shift: any) => {
+              return shift.guardId && shift.guard && shift.guard.userId && shift.guard.user;
+            });
+
+            const uniqueGuardShifts = new Map<string, any>();
+            shifts.forEach((shift: any) => {
+              if (shift.guardId && !uniqueGuardShifts.has(shift.guardId)) {
+                uniqueGuardShifts.set(shift.guardId, shift);
+              }
+            });
+            const uniqueShifts = Array.from(uniqueGuardShifts.values());
+
+            // Create chat entries for guards assigned to sites (if chat doesn't exist)
+            const existingChatGuardIds = new Set(
+              validChats
+                .filter(chat => chat.type === 'direct')
+                .map(chat => {
+                  const otherParticipant = chat.participants.find(p => p.userId !== userId);
+                  return otherParticipant?.userId;
+                })
+                .filter(Boolean)
+            );
+
+            const guardChats: Chat[] = uniqueShifts
+              .filter((shift: any) => {
+                const guardUserId = shift.guard?.userId;
+                return guardUserId && !existingChatGuardIds.has(guardUserId);
+              })
+              .map((shift: any) => {
+                const guardUser = shift.guard.user;
+                const conversationId = `client_${userId}_guard_${guardUser.id}`;
+                const guardAvatar = shift.guard.profilePictureUrl || undefined;
+
+                return {
+                  id: conversationId,
+                  name: `${guardUser.firstName} ${guardUser.lastName}`.trim(),
+                  type: 'direct' as const,
+                  participants: [
+                    {
+                      id: `part_${userId}_${conversationId}`,
+                      chatId: conversationId,
+                      userId: userId,
+                      role: 'admin' as const,
+                      joinedAt: new Date(),
+                      lastReadAt: undefined,
+                      user: {
+                        id: userId,
+                        firstName: user.firstName || '',
+                        lastName: user.lastName || '',
+                        role: user.role,
+                      },
+                    },
+                    {
+                      id: `part_${guardUser.id}_${conversationId}`,
+                      chatId: conversationId,
+                      userId: guardUser.id,
+                      role: 'member' as const,
+                      joinedAt: new Date(),
+                      lastReadAt: undefined,
+                      user: {
+                        id: guardUser.id,
+                        firstName: guardUser.firstName,
+                        lastName: guardUser.lastName,
+                        avatar: guardAvatar,
+                        role: guardUser.role,
+                      },
+                    },
+                  ],
+                  lastMessage: undefined,
+                  lastMessageAt: undefined,
+                  unreadCount: 0,
+                  createdAt: new Date(),
+                  updatedAt: new Date(),
+                  // Add metadata for site assignment
+                  metadata: {
+                    siteId: shift.siteId,
+                    siteName: shift.site?.name,
+                    guardId: shift.guard.id,
+                    isAssignedGuard: true,
+                  },
+                } as Chat & { metadata?: any };
+              });
+
+            // Combine existing chats with guard chats
+            validChats = [...validChats, ...guardChats];
+          }
+        } else if (user?.role === 'ADMIN' && user.companyUsers.length > 0) {
+          // For ADMIN users: Include guards and clients in their company
+          const adminCompanyId = user.companyUsers[0].securityCompanyId;
+
+          // Get all guards in the company
+          const companyGuards = await prisma.companyGuard.findMany({
+            where: {
+              securityCompanyId: adminCompanyId,
+              isActive: true,
+            },
+            include: {
+              guard: {
+                include: {
+                  user: {
+                    select: {
+                      id: true,
+                      firstName: true,
+                      lastName: true,
+                      role: true,
+                    },
+                  },
+                },
+              },
+            },
+          });
+
+          // Get all clients in the company
+          const companyClients = await prisma.companyClient.findMany({
+            where: {
+              securityCompanyId: adminCompanyId,
+              isActive: true,
+            },
+            include: {
+              client: {
+                include: {
+                  user: {
+                    select: {
+                      id: true,
+                      firstName: true,
+                      lastName: true,
+                      role: true,
+                    },
+                  },
+                },
+              },
+            },
+          });
+
+          // Get existing chat participant IDs to avoid duplicates
+          const existingChatUserIds = new Set(
+            validChats
+              .filter(chat => chat.type === 'direct')
+              .map(chat => {
+                const otherParticipant = chat.participants.find(p => p.userId !== userId);
+                return otherParticipant?.userId;
+              })
+              .filter(Boolean)
+          );
+
+          // Create virtual chats for guards
+          const guardChats: Chat[] = companyGuards
+            .filter(cg => {
+              const guardUserId = cg.guard?.userId;
+              return guardUserId && !existingChatUserIds.has(guardUserId);
+            })
+            .map(cg => {
+              const guardUser = cg.guard!.user;
+              const conversationId = `admin_${userId}_guard_${guardUser.id}`;
+              const guardAvatar = cg.guard!.profilePictureUrl || undefined;
+
+              return {
+                id: conversationId,
+                name: `${guardUser.firstName} ${guardUser.lastName}`.trim(),
+                type: 'direct' as const,
+                participants: [
+                  {
+                    id: `part_${userId}_${conversationId}`,
+                    chatId: conversationId,
+                    userId: userId,
+                    role: 'admin' as const,
+                    joinedAt: new Date(),
+                    lastReadAt: undefined,
+                    user: {
+                      id: userId,
+                      firstName: user.firstName || '',
+                      lastName: user.lastName || '',
+                      role: user.role,
+                    },
+                  },
+                  {
+                    id: `part_${guardUser.id}_${conversationId}`,
+                    chatId: conversationId,
+                    userId: guardUser.id,
+                    role: 'member' as const,
+                    joinedAt: new Date(),
+                    lastReadAt: undefined,
+                    user: {
+                      id: guardUser.id,
+                      firstName: guardUser.firstName,
+                      lastName: guardUser.lastName,
+                      avatar: guardAvatar,
+                      role: guardUser.role,
+                    },
+                  },
+                ],
+                lastMessage: undefined,
+                lastMessageAt: undefined,
+                unreadCount: 0,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                metadata: {
+                  guardId: cg.guard!.id,
+                  isAssignedGuard: true,
+                },
+              } as Chat & { metadata?: any };
+            });
+
+          // Update existing chat user IDs to include guards
+          guardChats.forEach(chat => {
+            const otherParticipant = chat.participants.find(p => p.userId !== userId);
+            if (otherParticipant?.userId) {
+              existingChatUserIds.add(otherParticipant.userId);
+            }
+          });
+
+          // Create virtual chats for clients
+          const clientChats: Chat[] = companyClients
+            .filter(cc => {
+              const clientUserId = cc.client?.userId;
+              return clientUserId && !existingChatUserIds.has(clientUserId);
+            })
+            .map(cc => {
+              const clientUser = cc.client!.user;
+              const conversationId = `client_${clientUser.id}_admin_${userId}`;
+
+              return {
+                id: conversationId,
+                name: `${clientUser.firstName} ${clientUser.lastName}`.trim(),
+                type: 'direct' as const,
+                participants: [
+                  {
+                    id: `part_${userId}_${conversationId}`,
+                    chatId: conversationId,
+                    userId: userId,
+                    role: 'admin' as const,
+                    joinedAt: new Date(),
+                    lastReadAt: undefined,
+                    user: {
+                      id: userId,
+                      firstName: user.firstName || '',
+                      lastName: user.lastName || '',
+                      role: user.role,
+                    },
+                  },
+                  {
+                    id: `part_${clientUser.id}_${conversationId}`,
+                    chatId: conversationId,
+                    userId: clientUser.id,
+                    role: 'member' as const,
+                    joinedAt: new Date(),
+                    lastReadAt: undefined,
+                    user: {
+                      id: clientUser.id,
+                      firstName: clientUser.firstName,
+                      lastName: clientUser.lastName,
+                      role: clientUser.role,
+                    },
+                  },
+                ],
+                lastMessage: undefined,
+                lastMessageAt: undefined,
+                unreadCount: 0,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                metadata: {
+                  clientId: cc.client!.id,
+                  isAssignedClient: true,
+                },
+              } as Chat & { metadata?: any };
+            });
+
+          // Combine existing chats with guard and client chats
+          validChats = [...validChats, ...guardChats, ...clientChats];
+        }
+      } catch (siteGuardError) {
+        // Log error but don't fail - just return existing chats
+        logger.error('Error fetching users for chats:', siteGuardError);
+        // Continue with existing chats only
+      }
+
+      // Sort by last message time (most recent first), with assigned guards at the end
+      validChats.sort((a, b) => {
+        // Chats with messages come first
+        if (a.lastMessageAt && !b.lastMessageAt) return -1;
+        if (!a.lastMessageAt && b.lastMessageAt) return 1;
+        if (a.lastMessageAt && b.lastMessageAt) {
+          return b.lastMessageAt.getTime() - a.lastMessageAt.getTime();
+        }
+        // Both have no messages - assigned guards come after existing chats
+        const aIsAssigned = (a as any).metadata?.isAssignedGuard;
+        const bIsAssigned = (b as any).metadata?.isAssignedGuard;
+        if (aIsAssigned && !bIsAssigned) return 1;
+        if (!aIsAssigned && bIsAssigned) return -1;
+        return 0;
+      });
+
+      return validChats;
     } catch (error) {
       logger.error('Error getting user chats:', error);
       throw error;
@@ -347,90 +705,133 @@ export class ChatService {
       } else {
         // For new chats (no messages yet), validate access based on chatId format
         // Supported formats:
-        // - client_guard_<guardId>_<timestamp>
-        // - admin_guard_<guardId>_<timestamp>
-        // - client_admin_<adminId>_<timestamp>
+        // - client_<clientUserId>_guard_<guardUserId> (new format)
+        // - admin_<adminUserId>_guard_<guardUserId> (new format)
+        // - client_<clientUserId>_admin_<adminUserId> (new format)
+        // - client_guard_<guardId>_<timestamp> (old format - backward compatibility)
+        // - admin_guard_<guardId>_<timestamp> (old format - backward compatibility)
+        // - client_admin_<adminId>_<timestamp> (old format - backward compatibility)
         const chatIdParts = chatId.split('_');
         
-        if (chatIdParts.length >= 3) {
+        // Check for new format: role_userId_role_userId (4+ parts)
+        // New format: client_<userId>_guard_<userId> or admin_<userId>_guard_<userId>
+        // Old format: client_guard_<guardId>_<timestamp> or admin_guard_<guardId>_<timestamp>
+        if (chatIdParts.length >= 4) {
           const role1 = chatIdParts[0]; // 'client' or 'admin'
-          const role2 = chatIdParts[1]; // 'guard' or 'admin'
-          const participantId = chatIdParts[2];
+          const part1 = chatIdParts[1]; // Could be userId (new) or 'guard'/'admin' (old)
+          const part2 = chatIdParts[2]; // Could be 'guard'/'admin' (new) or guardId (old)
+          const part3 = chatIdParts[3]; // Could be userId (new) or timestamp (old)
           
-          // Get current user's role
-          const currentUser = await prisma.user.findUnique({
-            where: { id: userId },
-            select: { 
-              id: true,
-              role: true,
-            },
-          });
+          // Detect format: if part2 is 'guard' or 'admin', it's new format
+          // If part2 is a UUID (not 'guard' or 'admin'), it's old format
+          const isNewFormat = part2 === 'guard' || part2 === 'admin';
           
-          if (!currentUser) {
-            throw new Error('Chat not found or access denied');
-          }
-          
-          let hasAccess = false;
-          
-          // Case 1: Client-Guard chat (client_guard_<guardId>_<timestamp>)
-          if (role1 === 'client' && role2 === 'guard') {
-            const guardId = participantId;
-            const guard = await prisma.guard.findUnique({
-              where: { id: guardId },
-              select: { userId: true },
-            });
-            
-            const isGuardInChat = guard && guard.userId === userId;
-            const isClient = currentUser.role === 'CLIENT';
-            const isAdmin = currentUser.role === 'ADMIN' || currentUser.role === 'SUPER_ADMIN';
-            
-            hasAccess = isGuardInChat || isClient || isAdmin;
-          }
-          // Case 2: Admin-Guard chat (admin_guard_<guardId>_<timestamp>)
-          else if (role1 === 'admin' && role2 === 'guard') {
-            const guardId = participantId;
-            const guard = await prisma.guard.findUnique({
-              where: { id: guardId },
-              select: { userId: true },
-            });
-            
-            const isGuardInChat = guard && guard.userId === userId;
-            const isAdmin = currentUser.role === 'ADMIN' || currentUser.role === 'SUPER_ADMIN';
-            
-            hasAccess = isGuardInChat || isAdmin;
-          }
-          // Case 3: Client-Admin chat (client_admin_<adminId>_<timestamp>)
-          else if (role1 === 'client' && role2 === 'admin') {
-            const adminId = participantId;
-            // Get admin's userId from CompanyUser
-            const companyUser = await prisma.companyUser.findFirst({
-              where: {
-                userId: adminId,
-                isActive: true,
+          if (isNewFormat) {
+            // New format: role_userId_role_userId
+            const userId1 = part1;
+            const role2 = part2;
+            const userId2 = part3;
+            // Get current user's role
+            const currentUser = await prisma.user.findUnique({
+              where: { id: userId },
+              select: { 
+                id: true,
+                role: true,
               },
-              select: { userId: true },
             });
             
-            // Also check if adminId is directly a userId
-            const adminUser = await prisma.user.findUnique({
-              where: { id: adminId },
-              select: { id: true, role: true },
+            if (!currentUser) {
+              throw new Error('Chat not found or access denied');
+            }
+            
+            // Check if current user is one of the participants
+            const isParticipant = userId === userId1 || userId === userId2;
+            
+            if (!isParticipant) {
+              throw new Error('Chat not found or access denied');
+            }
+            
+            // For new chats, allow access - empty messages array will be returned
+            // The chat will be created when first message is sent
+          } else {
+            // Old format: role_role_<id>_<timestamp>
+            const role2 = part1; // 'guard' or 'admin'
+            const participantId = part2; // Guard/Admin ID (not userId)
+            
+            // Get current user's role
+            const currentUser = await prisma.user.findUnique({
+              where: { id: userId },
+              select: { 
+                id: true,
+                role: true,
+              },
             });
             
-            const isAdminInChat = (companyUser && companyUser.userId === userId) || 
-                                 (adminUser && adminUser.id === userId && adminUser.role === 'ADMIN');
-            const isClient = currentUser.role === 'CLIENT';
-            const isAdmin = currentUser.role === 'ADMIN' || currentUser.role === 'SUPER_ADMIN';
+            if (!currentUser) {
+              throw new Error('Chat not found or access denied');
+            }
             
-            hasAccess = isAdminInChat || isClient || isAdmin;
+            let hasAccess = false;
+            
+            // Case 1: Client-Guard chat (client_guard_<guardId>_<timestamp>)
+            if (role1 === 'client' && role2 === 'guard') {
+              // Try to find guard by ID and check if user is the guard or client
+              const guard = await prisma.guard.findUnique({
+                where: { id: participantId },
+                select: { userId: true },
+              });
+              
+              const isGuardInChat = guard && guard.userId === userId;
+              const isClient = currentUser.role === 'CLIENT';
+              const isAdmin = currentUser.role === 'ADMIN' || currentUser.role === 'SUPER_ADMIN';
+              
+              hasAccess = isGuardInChat || isClient || isAdmin;
+            }
+            // Case 2: Admin-Guard chat (admin_guard_<guardId>_<timestamp>)
+            else if (role1 === 'admin' && role2 === 'guard') {
+              const guard = await prisma.guard.findUnique({
+                where: { id: participantId },
+                select: { userId: true },
+              });
+              
+              const isGuardInChat = guard && guard.userId === userId;
+              const isAdmin = currentUser.role === 'ADMIN' || currentUser.role === 'SUPER_ADMIN';
+              
+              hasAccess = isGuardInChat || isAdmin;
+            }
+            // Case 3: Client-Admin chat (client_admin_<adminId>_<timestamp>)
+            else if (role1 === 'client' && role2 === 'admin') {
+              // Try to find admin by userId (adminId might be userId)
+              const adminUser = await prisma.user.findUnique({
+                where: { id: participantId },
+                select: { id: true, role: true },
+              });
+              
+              const isAdminInChat = adminUser && adminUser.id === userId && adminUser.role === 'ADMIN';
+              const isClient = currentUser.role === 'CLIENT';
+              const isAdmin = currentUser.role === 'ADMIN' || currentUser.role === 'SUPER_ADMIN';
+              
+              hasAccess = isAdminInChat || isClient || isAdmin;
+            }
+            
+            if (!hasAccess) {
+              throw new Error('Chat not found or access denied');
+            }
           }
-          
-          if (!hasAccess) {
+        } else if (chatId.startsWith('direct_')) {
+          // Handle direct_<userId1>_<userId2> format
+          const chatIdParts = chatId.split('_');
+          if (chatIdParts.length >= 3) {
+            const userId1 = chatIdParts[1];
+            const userId2 = chatIdParts[2];
+            const isParticipant = userId === userId1 || userId === userId2;
+            
+            if (!isParticipant) {
+              throw new Error('Chat not found or access denied');
+            }
+          } else {
             throw new Error('Chat not found or access denied');
           }
-          
-          // For new chats, allow access - empty messages array will be returned
-          // The chat will be created when first message is sent
         } else {
           // For other chatId formats, require existing conversation
           throw new Error('Chat not found or access denied');
@@ -764,11 +1165,13 @@ export class ChatService {
       }
       
       // Multi-tenant: Validate all participants belong to same company (if not SUPER_ADMIN)
+      // Exception: CLIENT-GUARD chats are allowed if guard is assigned to client's site
       const userCompanyId = data.securityCompanyId;
       if (userCompanyId) {
         const allParticipantIds = [...new Set([...data.participantIds, data.createdBy])];
         
-        // Validate all participants belong to the same company
+        // Helper function to validate company membership
+        const validateCompanyMembership = async (): Promise<boolean> => {
         const [participantAdmins, participantGuards, participantClients] = await Promise.all([
           prisma.companyUser.findMany({
             where: {
@@ -804,40 +1207,212 @@ export class ChatService {
           ...participantClients.filter(c => c.companyClients.length > 0).map(c => c.userId),
         ]);
 
-        // Reject if not all participants are in the same company
-        if (allParticipantIds.some(id => !validParticipantIds.has(id))) {
+          return !allParticipantIds.some(id => !validParticipantIds.has(id));
+        };
+
+        // Get user roles to check chat type
+        const participants = await prisma.user.findMany({
+          where: { id: { in: allParticipantIds } },
+          select: { id: true, role: true },
+        });
+
+        const participantMap = new Map(participants.map(p => [p.id, p.role]));
+        const creatorRole = participantMap.get(data.createdBy);
+        
+        // Get the other participant - handle case where createdBy might be in participantIds
+        let otherParticipantId = data.participantIds.find(id => id !== data.createdBy);
+        // If not found, get the first one that's different from creator
+        if (!otherParticipantId && data.participantIds.length > 0) {
+          otherParticipantId = data.participantIds[0];
+        }
+        const otherParticipantRole = otherParticipantId ? participantMap.get(otherParticipantId) : null;
+
+        logger.debug(`Chat creation - creatorRole: ${creatorRole}, otherRole: ${otherParticipantRole}, creatorId: ${data.createdBy}, otherId: ${otherParticipantId}`);
+
+        // Check if this is a CLIENT-GUARD or GUARD-CLIENT chat
+        const isClientGuardChat = 
+          (creatorRole === 'CLIENT' && otherParticipantRole === 'GUARD') ||
+          (creatorRole === 'GUARD' && otherParticipantRole === 'CLIENT');
+
+        // Check if this is ADMIN-GUARD, GUARD-ADMIN, ADMIN-CLIENT, or CLIENT-ADMIN chat
+        const isAdminGuardChat = 
+          (creatorRole === 'ADMIN' && otherParticipantRole === 'GUARD') ||
+          (creatorRole === 'GUARD' && otherParticipantRole === 'ADMIN');
+        
+        const isAdminClientChat = 
+          (creatorRole === 'ADMIN' && otherParticipantRole === 'CLIENT') ||
+          (creatorRole === 'CLIENT' && otherParticipantRole === 'ADMIN');
+
+        logger.debug(`Chat type detection - isClientGuard: ${isClientGuardChat}, isAdminGuard: ${isAdminGuardChat}, isAdminClient: ${isAdminClientChat}`);
+
+        // For ADMIN-GUARD or ADMIN-CLIENT chats within same company, allow them
+        if ((isAdminGuardChat || isAdminClientChat) && otherParticipantId) {
+          // Validate company membership for ADMIN chats
+          const isValid = await validateCompanyMembership();
+          if (!isValid) {
+            throw new Error('Cannot create chat: all participants must belong to the same company');
+          }
+          // If valid, allow the chat - skip to chatId generation
+        }
+        // For CLIENT-GUARD chats, check if guard is assigned to client's site
+        else if (isClientGuardChat && otherParticipantId) {
+          const clientUserId = creatorRole === 'CLIENT' ? data.createdBy : otherParticipantId;
+          const guardUserId = creatorRole === 'GUARD' ? data.createdBy : otherParticipantId;
+
+          // Get client's client record
+          const client = await prisma.client.findUnique({
+            where: { userId: clientUserId },
+            select: { id: true },
+          });
+
+          // Get guard's guard record
+          const guard = await prisma.guard.findUnique({
+            where: { userId: guardUserId },
+            select: { id: true },
+          });
+
+          if (client && guard) {
+            // Check if guard has any active or recent shifts at client's sites
+            const clientSites = await prisma.site.findMany({
+              where: { clientId: client.id },
+              select: { id: true },
+            });
+
+            if (clientSites.length > 0) {
+              const siteIds = clientSites.map(s => s.id);
+              const assignedShift = await prisma.shift.findFirst({
+                where: {
+                  guardId: guard.id,
+                  siteId: { in: siteIds },
+                  // Include active or recent shifts (last 30 days)
+                  OR: [
+                    {
+                      status: { in: ['SCHEDULED', 'IN_PROGRESS'] },
+                    },
+                    {
+                      scheduledStartTime: {
+                        gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+                      },
+                    },
+                  ],
+                },
+                select: { id: true },
+              });
+
+              // If guard is assigned to client's site, allow the chat (skip company validation)
+              if (assignedShift) {
+                logger.info(`Allowing CLIENT-GUARD chat: guard ${guard.id} is assigned to client ${client.id}'s site`);
+                // Skip company validation for this case
+              } else {
+                // Guard not assigned to client's site, validate company membership
+                const isValid = await validateCompanyMembership();
+                if (!isValid) {
           throw new Error('Cannot create chat: all participants must belong to the same company');
+                }
+              }
+            } else {
+              // Client has no sites, validate company membership
+              const isValid = await validateCompanyMembership();
+              if (!isValid) {
+                throw new Error('Cannot create chat: all participants must belong to the same company');
+              }
+            }
+          } else {
+            // Could not find client or guard records, validate company membership
+            const isValid = await validateCompanyMembership();
+            if (!isValid) {
+              throw new Error('Cannot create chat: all participants must belong to the same company');
+            }
+          }
+        } else {
+          // Not a CLIENT-GUARD chat, validate company membership
+          const isValid = await validateCompanyMembership();
+          if (!isValid) {
+            throw new Error('Cannot create chat: all participants must belong to the same company');
+          }
         }
       }
 
-      // Generate conversation ID
-      const chatId = `chat_${data.createdBy}_${data.participantIds.sort().join('_')}_${Date.now()}`;
+      // Generate conversation ID based on roles for consistency with virtual chats
+      let chatId: string;
       
-      // Create initial system message to establish the conversation
-      const initialMessage = await prisma.message.create({
-        data: {
-          senderId: data.createdBy,
-          conversationId: chatId,
-          content: data.name || 'Chat started',
-          isRead: false,
-        },
+      // Get user roles to create consistent chat ID
+      const participants = await prisma.user.findMany({
+        where: { id: { in: [data.createdBy, ...data.participantIds] } },
+        select: { id: true, role: true, firstName: true, lastName: true },
       });
 
-      // Get all participants' user data
-      const participants = await prisma.user.findMany({
-        where: {
-          id: { in: [...data.participantIds, data.createdBy] },
-        },
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          role: true,
-        },
+      const creator = participants.find(p => p.id === data.createdBy);
+      const participant = data.participantIds.length === 1 
+        ? participants.find(p => p.id === data.participantIds[0])
+        : null;
+
+      if (data.type === 'direct' && participant && creator) {
+        // Create consistent ID based on roles (matches getUserChats pattern)
+        if (creator.role === 'CLIENT' && participant.role === 'GUARD') {
+          chatId = `client_${data.createdBy}_guard_${data.participantIds[0]}`;
+        } else if (creator.role === 'GUARD' && participant.role === 'CLIENT') {
+          chatId = `client_${data.participantIds[0]}_guard_${data.createdBy}`;
+        } else if (creator.role === 'ADMIN' && participant.role === 'GUARD') {
+          chatId = `admin_${data.createdBy}_guard_${data.participantIds[0]}`;
+        } else if (creator.role === 'GUARD' && participant.role === 'ADMIN') {
+          chatId = `admin_${data.participantIds[0]}_guard_${data.createdBy}`;
+        } else if (creator.role === 'CLIENT' && participant.role === 'ADMIN') {
+          chatId = `client_${data.createdBy}_admin_${data.participantIds[0]}`;
+        } else if (creator.role === 'ADMIN' && participant.role === 'CLIENT') {
+          chatId = `client_${data.participantIds[0]}_admin_${data.createdBy}`;
+        } else {
+          // Fallback to sorted IDs for other combinations
+          const sortedIds = [data.createdBy, data.participantIds[0]].sort();
+          chatId = `direct_${sortedIds[0]}_${sortedIds[1]}`;
+        }
+      } else {
+        // For group/team chats, generate a unique ID
+        chatId = `${data.type}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      }
+      
+      // Check if chat already exists (from virtual chat or previous creation)
+      const existingChat = await prisma.message.findFirst({
+        where: { conversationId: chatId },
+        select: { conversationId: true },
       });
+
+      // Only create initial message if chat doesn't exist
+      let initialMessage;
+      if (!existingChat) {
+        initialMessage = await prisma.message.create({
+          data: {
+            senderId: data.createdBy,
+            conversationId: chatId,
+            content: data.name || 'Chat started',
+            isRead: false,
+          },
+        });
+      } else {
+        // Chat exists, get the latest message for lastMessage
+        initialMessage = await prisma.message.findFirst({
+          where: { conversationId: chatId },
+          orderBy: { createdAt: 'desc' },
+        });
+      }
+
+      // Get all participants' user data (reuse from above if available, otherwise fetch)
+      const allParticipants = participants.length > 0 
+        ? participants
+        : await prisma.user.findMany({
+            where: {
+              id: { in: [...data.participantIds, data.createdBy] },
+            },
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              role: true,
+            },
+          });
 
       // Build participants list
-      const chatParticipants: ChatParticipant[] = participants.map((user) => ({
+      const chatParticipants: ChatParticipant[] = allParticipants.map((user) => ({
         id: `part_${user.id}_${chatId}`,
         chatId,
         userId: user.id,
@@ -854,8 +1429,8 @@ export class ChatService {
 
       // Determine chat name
       let chatName = data.name;
-      if (!chatName && data.type === 'direct' && participants.length === 2) {
-        const otherParticipant = participants.find(p => p.id !== data.createdBy);
+      if (!chatName && data.type === 'direct' && allParticipants.length === 2) {
+        const otherParticipant = allParticipants.find(p => p.id !== data.createdBy);
         if (otherParticipant) {
           chatName = `${otherParticipant.firstName} ${otherParticipant.lastName}`.trim();
         }
@@ -866,7 +1441,7 @@ export class ChatService {
         name: chatName,
         type: data.type,
         participants: chatParticipants,
-        lastMessage: {
+        lastMessage: initialMessage ? {
           id: initialMessage.id,
           chatId,
           senderId: initialMessage.senderId,
@@ -875,16 +1450,16 @@ export class ChatService {
           timestamp: initialMessage.createdAt,
           isRead: false,
           sender: {
-            id: participants.find(p => p.id === initialMessage.senderId)?.id || '',
-            firstName: participants.find(p => p.id === initialMessage.senderId)?.firstName || '',
-            lastName: participants.find(p => p.id === initialMessage.senderId)?.lastName || '',
-            role: participants.find(p => p.id === initialMessage.senderId)?.role || 'GUARD',
+            id: allParticipants.find(p => p.id === initialMessage.senderId)?.id || '',
+            firstName: allParticipants.find(p => p.id === initialMessage.senderId)?.firstName || '',
+            lastName: allParticipants.find(p => p.id === initialMessage.senderId)?.lastName || '',
+            role: allParticipants.find(p => p.id === initialMessage.senderId)?.role || 'GUARD',
           },
-        },
-        lastMessageAt: initialMessage.createdAt,
+        } : undefined,
+        lastMessageAt: initialMessage?.createdAt,
         unreadCount: 0,
-        createdAt: initialMessage.createdAt,
-        updatedAt: initialMessage.createdAt,
+        createdAt: initialMessage?.createdAt || new Date(),
+        updatedAt: initialMessage?.createdAt || new Date(),
       };
 
       // Ensure all participants are joined to the chat room

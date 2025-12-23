@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StatusBar, Alert, ScrollView } from 'react-native';
+import { View, StatusBar, Alert, ScrollView, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useDispatch } from 'react-redux';
@@ -13,7 +13,8 @@ import AuthFooter from '../../components/auth/AuthFooter';
 import { AuthStackParamList, UserRole } from '../../types';
 import { authStyles } from '../../styles/authStyles';
 import { Country, defaultCountry } from '../../utils/countries';
-import { COLORS } from '../../styles/globalStyles';
+import { COLORS, SPACING } from '../../styles/globalStyles';
+import { showRegistrationError } from '../../utils/registrationErrorHandler';
 
 type GuardSignupScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'GuardSignup'>;
 
@@ -148,33 +149,17 @@ const GuardSignupScreen: React.FC = () => {
           });
         }
       } else {
-        // Registration failed
-        const errorMessage = result.payload as string;
-        
-        // Handle specific error cases
-        if (errorMessage.includes('already registered')) {
-          Alert.alert(
-            'Email Already Registered',
-            errorMessage.includes('login') 
-              ? errorMessage 
-              : 'This email is already registered. If you haven\'t verified your email, a new verification code has been sent. Otherwise, please login.',
-            [
-              { text: 'Login', onPress: () => navigation.navigate('Login') },
-              { text: 'OK', style: 'cancel' }
-            ]
-          );
-        } else if (errorMessage.includes('rate limit') || errorMessage.includes('Too many')) {
-          Alert.alert(
-            'Rate Limit Exceeded',
-            'Too many registration attempts. Please wait a few minutes before trying again.',
-            [{ text: 'OK' }]
-          );
-        } else {
-          Alert.alert('Registration Failed', errorMessage || 'Failed to create account. Please try again.');
-        }
+        // Use streamlined error handler for consistent UX
+        showRegistrationError({
+          error: result.payload,
+          navigation,
+        });
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to create account. Please try again.');
+      showRegistrationError({
+        error,
+        navigation,
+      });
     } finally {
       setIsLoading(false);
     }

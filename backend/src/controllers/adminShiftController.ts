@@ -26,11 +26,11 @@ export const createShift = async (req: AuthRequest, res: Response) => {
 
     const { guardId, siteId, locationName, locationAddress, scheduledStartTime, scheduledEndTime, description, notes, clientId } = req.body;
 
-    // Admin must provide guardId (direct assignment)
-    if (!guardId || !scheduledStartTime || !scheduledEndTime) {
+    // Admin can create shift with or without guard (can assign later)
+    if (!scheduledStartTime || !scheduledEndTime) {
       return res.status(400).json({
         success: false,
-        error: 'guardId, scheduledStartTime and scheduledEndTime are required',
+        error: 'scheduledStartTime and scheduledEndTime are required',
       });
     }
 
@@ -54,7 +54,7 @@ export const createShift = async (req: AuthRequest, res: Response) => {
     });
 
     const shift = await shiftService.createShift({
-      guardId, // Required for admin - direct assignment
+      guardId: guardId || undefined, // Optional - can assign later
       siteId, // Optional: if provided, will link to site and client
       clientId: clientId || undefined, // Support direct clientId
       locationName: locationName || '', // Will be overridden by site data if siteId provided
@@ -189,8 +189,131 @@ export const get30DaySchedule = async (req: AuthRequest, res: Response) => {
   }
 };
 
+/**
+ * Assign a guard to an unassigned shift
+ */
+export const assignGuardToShift = async (req: AuthRequest, res: Response) => {
+  try {
+    let securityCompanyId = req.securityCompanyId;
+    
+    if (req.user?.role === 'SUPER_ADMIN') {
+      securityCompanyId = req.body.securityCompanyId;
+      if (!securityCompanyId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Security company ID is required in request body for SUPER_ADMIN.',
+        });
+      }
+    } else if (!securityCompanyId) {
+      return res.status(403).json({
+        success: false,
+        error: 'Security company ID not found. Admin must be linked to a company.',
+      });
+    }
+
+    const { shiftId } = req.params;
+    const { guardId } = req.body;
+
+    if (!guardId) {
+      return res.status(400).json({
+        success: false,
+        error: 'guardId is required',
+      });
+    }
+
+    const shift = await shiftService.assignGuardToShift(shiftId, guardId, securityCompanyId);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Guard assigned to shift successfully',
+      data: shift,
+    });
+  } catch (error: any) {
+    logger.error('Admin assign guard error:', error);
+    return res.status(400).json({
+      success: false,
+      error: error.message || 'Failed to assign guard to shift',
+    });
+  }
+};
+
+/**
+ * Get unassigned shifts (shifts without guards)
+ */
+export const getUnassignedShifts = async (req: AuthRequest, res: Response) => {
+  try {
+    let securityCompanyId = req.securityCompanyId;
+    
+    if (req.user?.role === 'SUPER_ADMIN') {
+      securityCompanyId = req.body.securityCompanyId || req.query.securityCompanyId as string;
+    }
+
+    if (!securityCompanyId) {
+      return res.status(403).json({
+        success: false,
+        error: 'Security company ID not found',
+      });
+    }
+
+    const { date, startDate, endDate } = req.query;
+
+    let start: Date;
+    let end: Date;
+
+    if (date) {
+      const targetDate = new Date(date as string);
+      if (isNaN(targetDate.getTime())) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid date format. Use YYYY-MM-DD',
+        });
+      }
+      start = new Date(targetDate);
+      start.setHours(0, 0, 0, 0);
+      end = new Date(targetDate);
+      end.setHours(23, 59, 59, 999);
+    } else if (startDate && endDate) {
+      start = new Date(startDate as string);
+      end = new Date(endDate as string);
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid date format. Use YYYY-MM-DD',
+        });
+      }
+    } else {
+      // Default to today if no date specified
+      start = new Date();
+      start.setHours(0, 0, 0, 0);
+      end = new Date();
+      end.setHours(23, 59, 59, 999);
+    }
+
+    const shifts = await shiftService.getShiftsByDateRange(start, end, {
+      securityCompanyId,
+    });
+
+    // Filter to only unassigned shifts
+    const unassignedShifts = shifts.filter((shift: any) => !shift.guardId && shift.status === 'SCHEDULED');
+
+    return res.status(200).json({
+      success: true,
+      data: unassignedShifts,
+      message: 'Unassigned shifts fetched successfully',
+    });
+  } catch (error: any) {
+    logger.error('Admin get unassigned shifts error:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch unassigned shifts',
+    });
+  }
+};
+
 export default {
   createShift,
   getShifts,
   get30DaySchedule,
+  assignGuardToShift,
+  getUnassignedShifts,
 };

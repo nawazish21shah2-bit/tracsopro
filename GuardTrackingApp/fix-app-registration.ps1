@@ -66,3 +66,4 @@ Write-Host "1. Run: npx react-native start --reset-cache" -ForegroundColor White
 Write-Host "2. In another terminal, run: npx react-native run-android" -ForegroundColor White
 Write-Host ""
 
+

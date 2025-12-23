@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import clientService from '../services/clientService.js';
-import shiftServiceSimple from '../services/shiftServiceSimple.js';
+import shiftService from '../services/shiftService.js';
 import { AuthRequest } from '../middleware/auth.js';
 import prisma from '../config/database.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
@@ -174,12 +174,33 @@ export class ClientController {
         throw error;
       }
       
+      if (!client || !client.id) {
+        res.json({
+          success: true,
+          data: {
+            reports: [],
+            pagination: {
+              page,
+              limit,
+              total: 0,
+              pages: 0,
+            },
+          },
+        });
+        return;
+      }
+      
       const result = await clientService.getClientReports(client.id, page, limit);
       res.json({
         success: true,
         data: result,
       });
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Error in getMyReports controller:', {
+        error: error.message,
+        stack: error.stack,
+        userId: req.userId,
+      });
       next(error);
     }
   }
@@ -344,9 +365,9 @@ export class ClientController {
         }
       }
 
-      // Create shift using shiftServiceSimple
-      const shift = await shiftServiceSimple.createShift({
-        guardId: guardId || undefined, // Optional for client
+      // Create shift using shiftService (unified service)
+      const shift = await shiftService.createShift({
+        guardId: guardId || undefined, // Optional for client - admin can assign later
         siteId,
         clientId: client.id,
         locationName: site.name,

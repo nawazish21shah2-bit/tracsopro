@@ -30,6 +30,7 @@ import { authStyles, AUTH_INPUT_GAP } from '../../styles/authStyles';
 import Logo from '../../assets/images/tracSOpro-logo.png';
 import PhoneInput from '../../components/auth/PhoneInput';
 import { Country } from '../../utils/countries';
+import { showRegistrationError } from '../../utils/registrationErrorHandler';
 
 type RegisterScreenNavigationProp = StackNavigationProp<any, any>;
 type RegisterScreenRouteProp = RouteProp<any, any>;
@@ -172,32 +173,17 @@ const RegisterScreen: React.FC = () => {
           }
         }
       } else {
-        const errorMessage = result.payload as string;
-        
-        // Handle specific error cases
-        if (errorMessage.includes('already registered')) {
-          Alert.alert(
-            'Email Already Registered',
-            errorMessage.includes('login') 
-              ? errorMessage 
-              : 'This email is already registered. If you haven\'t verified your email, a new verification code has been sent. Otherwise, please login.',
-            [
-              { text: 'Login', onPress: () => navigation.navigate('Login') },
-              { text: 'OK', style: 'cancel' }
-            ]
-          );
-        } else if (errorMessage.includes('rate limit') || errorMessage.includes('Too many')) {
-          Alert.alert(
-            'Rate Limit Exceeded',
-            'Too many registration attempts. Please wait a few minutes before trying again.',
-            [{ text: 'OK' }]
-          );
-        } else {
-          Alert.alert('Registration Failed', errorMessage || 'Failed to create account. Please try again.');
-        }
+        // Use streamlined error handler for consistent UX
+        showRegistrationError({
+          error: result.payload,
+          navigation,
+        });
       }
     } catch (error) {
-      Alert.alert('Error', 'An unexpected error occurred');
+      showRegistrationError({
+        error,
+        navigation,
+      });
     }
   };
 

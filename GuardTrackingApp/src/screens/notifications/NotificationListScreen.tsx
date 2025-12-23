@@ -10,6 +10,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
@@ -19,6 +20,9 @@ import apiService from '../../services/api';
 import { COLORS, SPACING, TYPOGRAPHY } from '../../styles/globalStyles';
 import { NotificationIcon } from '../../components/ui/AppIcons';
 import { PersonIcon } from '../../components/ui/AppIcons';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import GuardProfileDrawer from '../../components/guard/GuardProfileDrawer';
+import { SettingsStackParamList } from '../../navigation/DashboardNavigator';
 
 interface NotificationItem {
   id: string;
@@ -39,12 +43,39 @@ interface NotificationItem {
 const NotificationListScreen: React.FC<{ variant?: 'client' | 'guard' | 'admin' | 'superAdmin' }> = ({ 
   variant = 'client' 
 }) => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<StackNavigationProp<SettingsStackParamList>>();
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
   const { notifications, unreadCount, isLoading } = useSelector((state: RootState) => state.notifications);
   
   const [refreshing, setRefreshing] = useState(false);
+
+  // Create drawer for guard variant
+  const renderProfileDrawer = () => {
+    if (variant === 'guard') {
+      return (
+        <GuardProfileDrawer
+          visible={isDrawerVisible}
+          onClose={closeDrawer}
+          onNavigateToProfile={() => {
+            closeDrawer();
+            navigation.navigate('GuardProfileEdit');
+          }}
+          onNavigateToNotifications={() => {
+            closeDrawer();
+            navigation.navigate('GuardNotificationSettings');
+          }}
+          onNavigateToSupport={() => {
+            closeDrawer();
+            navigation.navigate('GuardSupportContact');
+          }}
+        />
+      );
+    }
+    
+    return null;
+  };
 
   useEffect(() => {
     loadNotifications();
@@ -215,6 +246,7 @@ const NotificationListScreen: React.FC<{ variant?: 'client' | 'guard' | 'admin' 
       <SharedHeader
         variant={variant}
         title="Notification"
+        profileDrawer={renderProfileDrawer()}
         onNotificationPress={() => {
           // Bell icon in header - do nothing (we're already on notifications page)
         }}

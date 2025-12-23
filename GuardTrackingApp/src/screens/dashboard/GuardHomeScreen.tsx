@@ -9,6 +9,8 @@ import {
   RefreshControl,
   Alert,
   ActivityIndicator,
+  Platform,
+  PermissionsAndroid,
 } from 'react-native';
 import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -159,62 +161,128 @@ const GuardHomeScreen: React.FC = () => {
     }
   }, [dispatch]);
 
-  // Get current GPS location with retry logic
-  const getCurrentLocation = async (retries: number = 2): Promise<{ latitude: number; longitude: number; accuracy: number; address?: string }> => {
-    const attemptGetLocation = (useHighAccuracy: boolean): Promise<{ latitude: number; longitude: number; accuracy: number; address?: string }> => {
-      return new Promise((resolve, reject) => {
-        Geolocation.getCurrentPosition(
-          (position: Geolocation.GeoPosition) => {
-            // Validate location data
-            if (!position.coords || 
-                typeof position.coords.latitude !== 'number' || 
-                typeof position.coords.longitude !== 'number' ||
-                isNaN(position.coords.latitude) ||
-                isNaN(position.coords.longitude)) {
-              reject(new Error('Invalid location data received. Please try again.'));
-              return;
-            }
+  // Request location permission (Android)
+  const requestLocationPermission = async (): Promise<boolean> => {
+    if (Platform.OS === 'android') {
+      try {
+        // Check if permission is already granted
+        const checkResult = await PermissionsAndroid.check(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+        );
+        
+        if (checkResult) {
+          return true;
+        }
 
-            resolve({
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude,
-              accuracy: position.coords.accuracy || 0,
-              address: `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`,
-            });
-          },
-          (error: Geolocation.GeoError) => {
-            console.error('Location error:', error);
-            
-            // Provide specific error messages based on error code
-            let errorMessage = 'Unable to get your location.';
-            let shouldRetry = true;
-            
-            switch (error.code) {
-              case 1: // PERMISSION_DENIED
-                errorMessage = 'Location permission denied. Please enable location access in settings.';
-                shouldRetry = false; // Don't retry permission errors
-                break;
-              case 2: // POSITION_UNAVAILABLE
-                errorMessage = 'Location unavailable. Please ensure GPS is enabled and try again.';
-                break;
-              case 3: // TIMEOUT
-                errorMessage = 'Location request timed out. Please try again.';
-                break;
-              default:
-                errorMessage = 'Unable to get your location. Please ensure GPS is enabled and try again.';
-            }
-            
-            const locationError = new Error(errorMessage) as any;
-            locationError.code = error.code;
-            locationError.shouldRetry = shouldRetry;
-            reject(locationError);
-          },
+        // Request permission
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
           {
-            enableHighAccuracy: useHighAccuracy,
-            timeout: 20000, // Increased timeout to 20 seconds
-            maximumAge: 30000, // Accept location up to 30 seconds old
+            title: 'Location Permission',
+            message: 'This app needs access to your location for check-in and emergency alerts.',
+            buttonNeutral: 'Ask Me Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
           }
         );
+
+        return granted === PermissionsAndroid.RESULTS.GRANTED;
+      } catch (err) {
+        console.error('Error requesting location permission:', err);
+        return false;
+      }
+    }
+    
+    // iOS permissions are handled automatically by react-native-geolocation-service
+    return true;
+  };
+
+  // Get current GPS location with retry logic
+  const getCurrentLocation = async (retries: number = 2): Promise<{ latitude: number; longitude: number; accuracy: number; address?: string }> => {
+    // First, request permission if needed
+    const hasPermission = await requestLocationPermission();
+    if (!hasPermission) {
+      throw new Error('Location permission denied. Please enable location access in settings.');
+    }
+
+    const attemptGetLocation = (useHighAccuracy: boolean): Promise<{ latitude: number; longitude: number; accuracy: number; address?: string }> => {
+      return new Promise((resolve, reject) => {
+        try {
+          // Check if Geolocation is available
+          if (!Geolocation || typeof Geolocation.getCurrentPosition !== 'function') {
+            reject(new Error('Location service is not available. Please restart the app.'));
+            return;
+          }
+
+          Geolocation.getCurrentPosition(
+            (position: Geolocation.GeoPosition) => {
+              try {
+                // Validate location data
+                if (!position || !position.coords || 
+                    typeof position.coords.latitude !== 'number' || 
+                    typeof position.coords.longitude !== 'number' ||
+                    isNaN(position.coords.latitude) ||
+                    isNaN(position.coords.longitude)) {
+                  reject(new Error('Invalid location data received. Please try again.'));
+                  return;
+                }
+
+                resolve({
+                  latitude: position.coords.latitude,
+                  longitude: position.coords.longitude,
+                  accuracy: position.coords.accuracy || 0,
+                  address: `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`,
+                });
+              } catch (parseError) {
+                console.error('Error parsing location data:', parseError);
+                reject(new Error('Failed to process location data. Please try again.'));
+              }
+            },
+            (error: Geolocation.GeoError) => {
+              try {
+                console.error('Location error:', error);
+                
+                // Provide specific error messages based on error code
+                let errorMessage = 'Unable to get your location.';
+                let shouldRetry = true;
+                
+                if (error && typeof error.code === 'number') {
+                  switch (error.code) {
+                    case 1: // PERMISSION_DENIED
+                      errorMessage = 'Location permission denied. Please enable location access in settings.';
+                      shouldRetry = false; // Don't retry permission errors
+                      break;
+                    case 2: // POSITION_UNAVAILABLE
+                      errorMessage = 'Location unavailable. Please ensure GPS is enabled and try again.';
+                      break;
+                    case 3: // TIMEOUT
+                      errorMessage = 'Location request timed out. Please try again.';
+                      break;
+                    default:
+                      errorMessage = 'Unable to get your location. Please ensure GPS is enabled and try again.';
+                  }
+                }
+                
+                const locationError = new Error(errorMessage) as any;
+                locationError.code = error?.code;
+                locationError.shouldRetry = shouldRetry;
+                reject(locationError);
+              } catch (err) {
+                console.error('Error handling location error:', err);
+                reject(new Error('Failed to get location. Please try again.'));
+              }
+            },
+            {
+              enableHighAccuracy: useHighAccuracy,
+              timeout: 20000, // Increased timeout to 20 seconds
+              maximumAge: 30000, // Accept location up to 30 seconds old
+            }
+          );
+        } catch (error: any) {
+          console.error('Error calling getCurrentPosition:', error);
+          const errorMessage = error?.message || 'Failed to get location. Please try again.';
+          reject(new Error(errorMessage));
+        }
       });
     };
 
@@ -291,6 +359,7 @@ const GuardHomeScreen: React.FC = () => {
       try {
         location = await getCurrentLocation(2); // Retry up to 2 times
       } catch (locationError: any) {
+        console.error('Location error in check-in:', locationError);
         // If location fails, show specific error and don't proceed with check-in
         const locationErrorMessage = locationError?.message || 'Unable to get your location. Please enable GPS and try again.';
         Alert.alert(
@@ -313,6 +382,17 @@ const GuardHomeScreen: React.FC = () => {
         return;
       }
       
+      // Validate location data before proceeding
+      if (!location || typeof location.latitude !== 'number' || typeof location.longitude !== 'number') {
+        Alert.alert(
+          'Invalid Location',
+          'Unable to get valid location data. Please try again.',
+          [{ text: 'OK' }]
+        );
+        setGettingLocation(false);
+        return;
+      }
+      
       // Dispatch check-in action
       await dispatch(checkInToShiftWithLocation({
         shiftId,
@@ -325,6 +405,7 @@ const GuardHomeScreen: React.FC = () => {
       await dispatch(fetchActiveShift());
       await dispatch(fetchShiftStatistics({}));
     } catch (error: any) {
+      console.error('Check-in error:', error);
       // Handle check-in API errors separately from location errors
       const errorMessage = error?.message || 'Failed to check in. Please try again.';
       Alert.alert(
@@ -469,8 +550,13 @@ const GuardHomeScreen: React.FC = () => {
               let location;
               try {
                 location = await getCurrentLocation(1); // Quick retry for emergency
+                
+                // Validate location data
+                if (!location || typeof location.latitude !== 'number' || typeof location.longitude !== 'number') {
+                  throw new Error('Invalid location data');
+                }
               } catch (locationError: any) {
-                // For emergency, use last known location or default
+                // For emergency, use default location if GPS unavailable
                 console.warn('Could not get location for emergency:', locationError);
                 location = {
                   latitude: 0,
@@ -485,9 +571,9 @@ const GuardHomeScreen: React.FC = () => {
                 type: 'PANIC',
                 severity: 'CRITICAL',
                 location: {
-                  latitude: location.latitude,
-                  longitude: location.longitude,
-                  accuracy: location.accuracy,
+                  latitude: location.latitude || 0,
+                  longitude: location.longitude || 0,
+                  accuracy: location.accuracy || 1000,
                   address: location.address || 'Emergency location'
                 },
                 message: `Emergency alert triggered by ${user?.firstName || 'Guard'} ${user?.lastName || ''}`,
@@ -509,11 +595,42 @@ const GuardHomeScreen: React.FC = () => {
               }
             } catch (error: any) {
               console.error('Emergency alert error:', error);
-              Alert.alert(
-                'Error', 
-                error.message || 'Failed to send emergency alert. Please contact emergency services directly.',
-                [{ text: 'OK' }]
-              );
+              // Even if there's an error, try to send with default location
+              try {
+                const result = await apiService.triggerEmergencyAlert({
+                  type: 'PANIC',
+                  severity: 'CRITICAL',
+                  location: {
+                    latitude: 0,
+                    longitude: 0,
+                    accuracy: 1000,
+                    address: 'Location unavailable - Emergency alert sent'
+                  },
+                  message: `Emergency alert triggered by ${user?.firstName || 'Guard'} ${user?.lastName || ''}`,
+                  shiftId: activeShift?.id
+                });
+
+                if (result.success) {
+                  Alert.alert(
+                    'Emergency Alert Sent', 
+                    'Help is on the way! Alert sent with limited location data.',
+                    [{ text: 'OK' }]
+                  );
+                } else {
+                  Alert.alert(
+                    'Error', 
+                    'Failed to send emergency alert. Please contact emergency services directly (call 911 or your local emergency number).',
+                    [{ text: 'OK' }]
+                  );
+                }
+              } catch (fallbackError: any) {
+                console.error('Emergency alert fallback error:', fallbackError);
+                Alert.alert(
+                  'Critical Error', 
+                  'Unable to send emergency alert through the app. Please contact emergency services directly (call 911 or your local emergency number).',
+                  [{ text: 'OK' }]
+                );
+              }
             } finally {
               setGettingLocation(false);
             }
@@ -817,10 +934,6 @@ const GuardHomeScreen: React.FC = () => {
                 closeDrawer();
                 // Navigation handled in drawer
               }}
-              onNavigateToEarnings={() => {
-                closeDrawer();
-                // Navigation handled in drawer
-              }}
               onNavigateToNotifications={() => {
                 closeDrawer();
                 // Navigate to notifications/settings
@@ -871,10 +984,6 @@ const GuardHomeScreen: React.FC = () => {
                 // Navigation handled in drawer
               }}
               onNavigateToAttendance={() => {
-                closeDrawer();
-                // Navigation handled in drawer
-              }}
-              onNavigateToEarnings={() => {
                 closeDrawer();
                 // Navigation handled in drawer
               }}

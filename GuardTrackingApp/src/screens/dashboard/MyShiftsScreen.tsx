@@ -9,11 +9,15 @@ import {
   StatusBar,
   RefreshControl,
   Alert,
+  ActivityIndicator,
+  Platform,
+  PermissionsAndroid,
 } from 'react-native';
 import { useNavigation, DrawerActions } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { RootState } from '../../store';
+import Geolocation from 'react-native-geolocation-service';
+import { RootState, AppDispatch } from '../../store';
 import { securityManager } from '../../utils/security';
 import {
   fetchTodayShifts,
@@ -22,6 +26,8 @@ import {
   fetchActiveShift,
   fetchWeeklyShiftSummary,
   fetchShiftStatistics,
+  checkInToShiftWithLocation,
+  checkOutFromShiftWithLocation,
 } from '../../store/slices/shiftSlice';
 import { MenuIcon, BellIcon, MapPinIcon, AlertTriangleIcon, AlertCircleIcon, CheckCircleIcon, ClockIcon, FileTextIcon } from '../../components/ui/FeatherIcons';
 import { globalStyles, COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
@@ -31,6 +37,7 @@ import SharedHeader from '../../components/ui/SharedHeader';
 import GuardProfileDrawer from '../../components/guard/GuardProfileDrawer';
 import { ErrorState, NetworkError } from '../../components/ui/LoadingStates';
 import { clearError } from '../../store/slices/shiftSlice';
+import { Shift } from '../../types/shift.types';
 
 type MyShiftsScreenNavigationProp = StackNavigationProp<any, 'MyShifts'>;
 
@@ -67,11 +74,13 @@ interface WeeklyShift {
 
 const MyShiftsScreen: React.FC = () => {
   const navigation = useNavigation<MyShiftsScreenNavigationProp>();
-  const dispatch = useDispatch();
+  const dispatch = useDispatch<AppDispatch>();
   
   const [selectedTab, setSelectedTab] = useState('Today');
   const [activeTab, setActiveTab] = useState<'today' | 'upcoming' | 'past'>('today');
   const [refreshing, setRefreshing] = useState(false);
+  const [currentTime, setCurrentTime] = useState('00:00:00');
+  const [gettingLocation, setGettingLocation] = useState(false);
 
   // Redux state
   const { 
@@ -82,7 +91,9 @@ const MyShiftsScreen: React.FC = () => {
     weeklyShifts,
     stats,
     loading, 
-    error 
+    error,
+    checkInLoading,
+    checkOutLoading,
   } = useSelector((state: RootState) => state.shifts);
   const { isAuthenticated } = useSelector((state: RootState) => state.auth);
 
@@ -116,6 +127,20 @@ const MyShiftsScreen: React.FC = () => {
       }
     };
     loadData();
+
+    // Timer for current time
+    const timer = setInterval(() => {
+      const now = new Date();
+      const timeString = now.toLocaleTimeString('en-US', { 
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+      setCurrentTime(timeString);
+    }, 1000);
+
+    return () => clearInterval(timer);
   }, [dispatch, isAuthenticated]);
 
   const onRefresh = useCallback(async () => {
@@ -189,11 +214,313 @@ const MyShiftsScreen: React.FC = () => {
     );
   };
 
+  // Format time helper
+  const formatTime = (dateString: string): string => {
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleTimeString('en-US', { 
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch {
+      return dateString;
+    }
+  };
+
+  // Format time for table (matching Figma: "08:00 Am - 07:00 Pm")
+  const formatTableTime = (dateString: string): string => {
+    try {
+      const date = new Date(dateString);
+      const hours = date.getHours();
+      const minutes = date.getMinutes();
+      const ampm = hours >= 12 ? 'Pm' : 'Am';
+      const displayHours = hours % 12 || 12;
+      const formattedMinutes = minutes.toString().padStart(2, '0');
+      return `${displayHours.toString().padStart(2, '0')}:${formattedMinutes} ${ampm}`;
+    } catch {
+      return dateString;
+    }
+  };
+
+  // Format date helper
+  const formatDate = (dateString: string): string => {
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', { 
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      });
+    } catch {
+      return dateString;
+    }
+  };
+
+  // Calculate shift duration
+  const calculateShiftDuration = (shift: Shift): string => {
+    if (!shift.checkInTime) return 'Not started';
+    
+    const start = new Date(shift.checkInTime);
+    const now = new Date();
+    const diffMs = now.getTime() - start.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const hours = Math.floor(diffMins / 60);
+    const mins = diffMins % 60;
+    
+    return `${hours}h ${mins}m`;
+  };
+
+  // Request location permission (Android)
+  const requestLocationPermission = async (): Promise<boolean> => {
+    if (Platform.OS === 'android') {
+      try {
+        // Check if permission is already granted
+        const checkResult = await PermissionsAndroid.check(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+        );
+        
+        if (checkResult) {
+          return true;
+        }
+
+        // Request permission
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          {
+            title: 'Location Permission',
+            message: 'This app needs access to your location for check-in and emergency alerts.',
+            buttonNeutral: 'Ask Me Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
+          }
+        );
+
+        return granted === PermissionsAndroid.RESULTS.GRANTED;
+      } catch (err) {
+        console.error('Error requesting location permission:', err);
+        return false;
+      }
+    }
+    
+    // iOS permissions are handled automatically by react-native-geolocation-service
+    return true;
+  };
+
+  // Get current GPS location
+  const getCurrentLocation = async (retries: number = 2): Promise<{ latitude: number; longitude: number; accuracy: number; address?: string }> => {
+    // First, request permission if needed
+    const hasPermission = await requestLocationPermission();
+    if (!hasPermission) {
+      throw new Error('Location permission denied. Please enable location access in settings.');
+    }
+
+    const attemptGetLocation = (useHighAccuracy: boolean): Promise<{ latitude: number; longitude: number; accuracy: number; address?: string }> => {
+      return new Promise((resolve, reject) => {
+        try {
+          Geolocation.getCurrentPosition(
+            (position: Geolocation.GeoPosition) => {
+              if (!position || !position.coords || 
+                  typeof position.coords.latitude !== 'number' || 
+                  typeof position.coords.longitude !== 'number' ||
+                  isNaN(position.coords.latitude) ||
+                  isNaN(position.coords.longitude)) {
+                reject(new Error('Invalid location data received. Please try again.'));
+                return;
+              }
+
+              resolve({
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+                accuracy: position.coords.accuracy || 0,
+                address: `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`,
+              });
+            },
+            (error: Geolocation.GeoError) => {
+              console.error('Location error:', error);
+              let errorMessage = 'Unable to get your location.';
+              let shouldRetry = true;
+              
+              switch (error.code) {
+                case 1: // PERMISSION_DENIED
+                  errorMessage = 'Location permission denied. Please enable location access in settings.';
+                  shouldRetry = false;
+                  break;
+                case 2: // POSITION_UNAVAILABLE
+                  errorMessage = 'Location unavailable. Please ensure GPS is enabled and try again.';
+                  break;
+                case 3: // TIMEOUT
+                  errorMessage = 'Location request timed out. Please try again.';
+                  break;
+              }
+              
+              const locationError = new Error(errorMessage) as any;
+              locationError.code = error.code;
+              locationError.shouldRetry = shouldRetry;
+              reject(locationError);
+            },
+            {
+              enableHighAccuracy: useHighAccuracy,
+              timeout: 20000,
+              maximumAge: 30000,
+            }
+          );
+        } catch (error) {
+          console.error('Error calling getCurrentPosition:', error);
+          reject(new Error('Failed to get location. Please try again.'));
+        }
+      });
+    };
+
+    // Try with high accuracy first
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        // First attempt: high accuracy
+        if (attempt === 0) {
+          return await attemptGetLocation(true);
+        }
+        // Retry attempts: try with lower accuracy requirement
+        else {
+          console.log(`Location attempt ${attempt + 1}/${retries + 1}, trying with lower accuracy...`);
+          return await attemptGetLocation(false);
+        }
+      } catch (error: any) {
+        // If permission denied, don't retry - fail immediately
+        if (error.code === 1 || error.shouldRetry === false) {
+          throw error;
+        }
+        
+        // If this was the last attempt, throw the error
+        if (attempt === retries) {
+          throw error;
+        }
+        
+        // Otherwise, wait a bit before retrying
+        console.log(`Location attempt ${attempt + 1} failed, retrying in 2 seconds...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+
+    // This should never be reached, but TypeScript needs it
+    throw new Error('Unable to get your location after multiple attempts.');
+  };
+
+  // Handle check-in
+  const handleCheckIn = async (shiftId: string) => {
+    if (gettingLocation || checkInLoading) {
+      return;
+    }
+
+    try {
+      setGettingLocation(true);
+      
+      let location;
+      try {
+        location = await getCurrentLocation(2);
+      } catch (locationError: any) {
+        Alert.alert(
+          'Location Required',
+          locationError?.message || 'Unable to get your location. Please enable GPS and try again.',
+          [
+            { text: 'Retry', onPress: () => handleCheckIn(shiftId) },
+            { text: 'Cancel', style: 'cancel' }
+          ]
+        );
+        setGettingLocation(false);
+        return;
+      }
+      
+      await dispatch(checkInToShiftWithLocation({
+        shiftId,
+        location,
+      })).unwrap();
+
+      Alert.alert('Success', 'You have successfully checked in!');
+      
+      // Refresh data
+      await dispatch(fetchActiveShift());
+      await dispatch(fetchTodayShifts());
+    } catch (error: any) {
+      Alert.alert(
+        'Check-In Failed',
+        error?.message || 'Failed to check in. Please try again.',
+        [
+          { text: 'Retry', onPress: () => handleCheckIn(shiftId) },
+          { text: 'OK' }
+        ]
+      );
+    } finally {
+      setGettingLocation(false);
+    }
+  };
+
+  // Handle check-out
+  const handleCheckOut = async (shiftId: string) => {
+    if (gettingLocation || checkOutLoading) {
+      return;
+    }
+
+    Alert.alert(
+      'Check Out',
+      'Are you sure you want to check out from this shift?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Check Out', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setGettingLocation(true);
+              
+              let location;
+              try {
+                location = await getCurrentLocation(2);
+              } catch (locationError: any) {
+                Alert.alert(
+                  'Location Required',
+                  locationError?.message || 'Unable to get your location. Please enable GPS and try again.',
+                  [
+                    { text: 'Retry', onPress: () => handleCheckOut(shiftId) },
+                    { text: 'Cancel', style: 'cancel' }
+                  ]
+                );
+                setGettingLocation(false);
+                return;
+              }
+              
+              await dispatch(checkOutFromShiftWithLocation({
+                shiftId,
+                location,
+              })).unwrap();
+
+              Alert.alert('Success', 'You have successfully checked out!');
+              
+              // Refresh data
+              await dispatch(fetchActiveShift());
+              await dispatch(fetchTodayShifts());
+            } catch (error: any) {
+              Alert.alert(
+                'Check-Out Failed',
+                error?.message || 'Failed to check out. Please try again.',
+                [
+                  { text: 'Retry', onPress: () => handleCheckOut(shiftId) },
+                  { text: 'OK' }
+                ]
+              );
+            } finally {
+              setGettingLocation(false);
+            }
+          }
+        },
+      ]
+    );
+  };
+
   // Helper function to convert shift to ShiftData format
   const toShiftData = (s: any): ShiftData => ({
     id: s.id || '',
     location: s.locationName || s.site?.name || s.location || 'Unknown Location',
-    address: s.site?.address || s.address || '',
+    address: s.locationAddress || s.site?.address || s.address || '',
     status: s.status === 'IN_PROGRESS' ? 'active' : s.status === 'COMPLETED' ? 'completed' : s.status === 'MISSED' ? 'missed' : 'upcoming',
     startTime: s.startTime || '',
     endTime: s.endTime || '',
@@ -207,18 +534,31 @@ const MyShiftsScreen: React.FC = () => {
   // Convert activeShift to ShiftData format
   const todayShift: ShiftData | null = activeShift ? toShiftData(activeShift) : null;
 
+  // Format date as DD-MM-YYYY (matching Figma design)
+  const formatTableDate = (dateString: string): string => {
+    try {
+      const date = new Date(dateString);
+      const day = date.getDate().toString().padStart(2, '0');
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const year = date.getFullYear();
+      return `${day}-${month}-${year}`;
+    } catch {
+      return dateString;
+    }
+  };
+
   // Convert weeklyShifts from Redux to WeeklyShift format
   const formattedWeeklyShifts: WeeklyShift[] = weeklyShifts && Array.isArray(weeklyShifts) 
     ? weeklyShifts.map((shift: any) => {
         const date = new Date(shift.startTime || shift.date);
         return {
-          date: date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+          date: formatTableDate(shift.startTime || shift.date),
           day: date.toLocaleDateString('en-US', { weekday: 'long' }),
-          site: shift.locationName || shift.site || 'Unknown Site',
-          shiftTime: `${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} - ${new Date(shift.endTime || shift.date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`,
+          site: shift.locationName || shift.site?.name || shift.site || 'Unknown Site',
+          shiftTime: `${formatTableTime(shift.startTime || shift.date)} - ${formatTableTime(shift.endTime || shift.date)}`,
           status: shift.status === 'COMPLETED' ? 'completed' : 'missed',
-          checkIn: shift.checkInTime ? new Date(shift.checkInTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--',
-          checkOut: shift.checkOutTime ? new Date(shift.checkOutTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--',
+          checkIn: shift.checkInTime ? formatTableTime(shift.checkInTime) : '--:--',
+          checkOut: shift.checkOutTime ? formatTableTime(shift.checkOutTime) : '--:--',
         };
       })
     : [];
@@ -281,116 +621,235 @@ const MyShiftsScreen: React.FC = () => {
     { id: 'past', label: 'Past' },
   ];
 
-  const renderShiftCard = (shift: ShiftData) => (
-    <View key={shift.id} style={styles.shiftCard}>
-      <View style={styles.shiftHeader}>
-        <View style={styles.locationInfo}>
-          <MapPinIcon size={20} color={COLORS.primary} />
-          <View style={styles.locationText}>
-            <Text style={styles.locationName}>{shift.location}</Text>
-            <Text style={styles.locationAddress}>{shift.address}</Text>
-          </View>
-        </View>
-        <View style={[styles.statusBadge, 
-          shift.status === 'active' && styles.activeBadge,
-          shift.status === 'upcoming' && styles.upcomingBadge
-        ]}>
-          <Text style={[styles.statusText,
-            shift.status === 'active' && styles.activeText,
-            shift.status === 'upcoming' && styles.upcomingText
-          ]}>
-            {shift.status === 'active' ? 'Active' : 'Upcoming'}
-          </Text>
-        </View>
-      </View>
+  const renderShiftCard = (shift: ShiftData) => {
+    // Find the actual shift object from Redux state
+    const actualShift = activeShift?.id === shift.id ? activeShift : 
+                        todayShifts?.find(s => s.id === shift.id) ||
+                        upcomingShifts?.find(s => s.id === shift.id) ||
+                        pastShifts?.find(s => s.id === shift.id);
+    
+    const isActive = shift.status === 'active';
+    const isCheckedIn = !!actualShift?.checkInTime;
+    const isCheckedOut = !!actualShift?.checkOutTime;
 
-      <Text style={styles.shiftDescription}>{shift.description}</Text>
-      
-      <View style={styles.shiftDetails}>
-        <Text style={styles.shiftDetailLabel}>Shift Time:</Text>
-        <Text style={styles.shiftDetailValue}>{shift.startTime} - {shift.endTime}</Text>
-      </View>
-
-      {shift.status === 'active' && (
-        <>
-          <View style={styles.timerContainer}>
-            <Text style={styles.timerText}>{todayShift?.timer || '00:00:00'}</Text>
-          </View>
-          <Text style={styles.clockedInText}>
-            Clocked In at {shift.clockedIn}
-          </Text>
-          <Text style={styles.clockedInSubtext}>
-            Clocked In at 09:00 am
-          </Text>
-        </>
-      )}
-
-      {shift.status === 'upcoming' && (
-        <View style={styles.shiftDetails}>
-          <Text style={styles.shiftDetailLabel}>Shift Start In:</Text>
-          <Text style={styles.shiftDetailValue}>{shift.duration}</Text>
-        </View>
-      )}
-
-      {/* Only show action buttons for active shifts */}
-      {shift.status === 'active' && (
-        <View style={styles.actionButtons}>
-          <TouchableOpacity style={styles.incidentButton} onPress={handleAddIncidentReport}>
-            <AlertTriangleIcon size={16} color={COLORS.primary} style={styles.actionIconMargin} />
-            <Text style={styles.incidentButtonText}>Add Incident Report</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.emergencyButton} onPress={handleEmergencyAlert}>
-            <AlertCircleIcon size={16} color={COLORS.error} style={styles.actionIconMargin} />
-            <Text style={styles.emergencyButtonText}>Emergency Alert</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
-  );
-
-  const renderWeeklySummary = () => (
-    <View style={styles.weeklySummaryContainer}>
-      <Text style={styles.weeklySummaryTitle}>This Week's Shifts Summary</Text>
-      
-      <View style={styles.tableHeader}>
-        <Text style={[styles.tableHeaderText, { flex: 1.5 }]}>DATE</Text>
-        <Text style={[styles.tableHeaderText, { flex: 1 }]}>SITE</Text>
-        <Text style={[styles.tableHeaderText, { flex: 1.5 }]}>SHIFT TIME</Text>
-        <Text style={[styles.tableHeaderText, { flex: 1 }]}>STATUS</Text>
-        <Text style={[styles.tableHeaderText, { flex: 1 }]}>CHECK IN</Text>
-        <Text style={[styles.tableHeaderText, { flex: 1 }]}>CHECK OUT</Text>
-      </View>
-
-      {formattedWeeklyShifts.length > 0 ? formattedWeeklyShifts.map((shift, index) => (
-        <View key={index} style={styles.tableRow}>
-          <View style={{ flex: 1.5 }}>
-            <Text style={styles.tableCellDate}>{shift.date}</Text>
-            <Text style={styles.tableCellDay}>{shift.day}</Text>
-          </View>
-          <Text style={[styles.tableCellText, { flex: 1 }]}>{shift.site}</Text>
-          <Text style={[styles.tableCellText, { flex: 1.5 }]}>{shift.shiftTime}</Text>
-          <View style={{ flex: 1 }}>
-            <View style={[styles.tableStatusBadge, 
-              shift.status === 'completed' && styles.completedBadge,
-              shift.status === 'missed' && styles.missedBadge
-            ]}>
-              <Text style={[styles.tableStatusText,
-                shift.status === 'completed' && styles.completedText,
-                shift.status === 'missed' && styles.missedText
-              ]}>
-                {shift.status === 'completed' ? 'Completed' : 'Missed'}
-              </Text>
+    return (
+      <View key={shift.id} style={styles.shiftCard}>
+        <View style={styles.shiftHeader}>
+          <View style={styles.locationInfo}>
+            <View style={styles.locationIconContainer}>
+              <MapPinIcon size={20} color={COLORS.primary} />
+            </View>
+            <View style={styles.locationText}>
+              <Text style={styles.locationName}>{shift.location}</Text>
+              <Text style={styles.locationAddress}>{shift.address}</Text>
             </View>
           </View>
-          <Text style={[styles.tableCellText, { flex: 1 }]}>{shift.checkIn}</Text>
-          <Text style={[styles.tableCellText, { flex: 1 }]}>{shift.checkOut}</Text>
+          <View style={[styles.statusBadge, 
+            shift.status === 'active' && styles.activeBadge,
+            shift.status === 'upcoming' && styles.upcomingBadge,
+            shift.status === 'completed' && styles.completedBadge
+          ]}>
+            <Text style={[styles.statusText,
+              shift.status === 'active' && styles.activeText,
+              shift.status === 'upcoming' && styles.upcomingText,
+              shift.status === 'completed' && styles.completedText
+            ]}>
+              {shift.status === 'active' ? 'Active' : shift.status === 'upcoming' ? 'Upcoming' : shift.status === 'completed' ? 'Completed' : 'Missed'}
+            </Text>
+          </View>
         </View>
-      )) : (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No weekly shifts data available</Text>
+
+        {shift.description && (
+          <Text style={styles.shiftDescription}>{shift.description}</Text>
+        )}
+        
+        <View style={styles.shiftDetails}>
+          <View style={styles.shiftDetailRow}>
+            <View style={styles.shiftDetailIconContainer}>
+              <ClockIcon size={16} color={COLORS.textSecondary} />
+            </View>
+            <Text style={styles.shiftDetailLabel}>Shift Time:</Text>
+            <Text style={styles.shiftDetailValue}>
+              {formatTime(shift.startTime)} - {formatTime(shift.endTime)}
+            </Text>
+          </View>
+          
+          {actualShift?.breakStartTime && actualShift?.breakEndTime && (
+            <View style={styles.shiftDetailRow}>
+              <View style={styles.shiftDetailIconContainer}>
+                <ClockIcon size={16} color={COLORS.textSecondary} />
+              </View>
+              <Text style={styles.shiftDetailLabel}>Break Time:</Text>
+              <Text style={styles.shiftDetailValue}>
+                {formatTime(actualShift.breakStartTime)} - {formatTime(actualShift.breakEndTime)}
+              </Text>
+            </View>
+          )}
+          
+          {isCheckedIn && (
+            <View style={styles.shiftDetailRow}>
+              <View style={styles.shiftDetailIconContainer}>
+                <CheckCircleIcon size={16} color={COLORS.success} />
+              </View>
+              <Text style={styles.shiftDetailLabel}>Duration:</Text>
+              <Text style={styles.shiftDetailValue}>
+                {actualShift ? calculateShiftDuration(actualShift) : 'N/A'}
+              </Text>
+            </View>
+          )}
+          
+          {isCheckedIn && (
+            <View style={styles.shiftDetailRow}>
+              <View style={styles.shiftDetailIconContainer}>
+                <ClockIcon size={16} color={COLORS.textSecondary} />
+              </View>
+              <Text style={styles.shiftDetailLabel}>Checked In:</Text>
+              <Text style={styles.shiftDetailValue}>
+                {actualShift?.checkInTime ? formatTime(actualShift.checkInTime) : 'N/A'}
+              </Text>
+            </View>
+          )}
         </View>
-      )}
+
+        {isActive && isCheckedIn && !isCheckedOut && (
+          <View style={styles.timerContainer}>
+            <Text style={styles.timerText}>{currentTime}</Text>
+            <Text style={styles.timerLabel}>Active Shift Timer</Text>
+          </View>
+        )}
+
+        {!isCheckedOut && (
+          <TouchableOpacity 
+            style={[
+              styles.checkInButton, 
+              (checkInLoading || checkOutLoading || gettingLocation) && styles.buttonDisabled
+            ]} 
+            onPress={isCheckedIn ? () => handleCheckOut(shift.id) : () => handleCheckIn(shift.id)}
+            disabled={checkInLoading || checkOutLoading || gettingLocation}
+          >
+            {(checkInLoading || checkOutLoading || gettingLocation) ? (
+              <ActivityIndicator color={COLORS.textInverse} />
+            ) : (
+              <>
+                <ClockIcon size={20} color={COLORS.textInverse} style={styles.checkInIcon} />
+                <Text style={styles.checkInText}>
+                  {isCheckedIn ? 'Check Out' : 'Check In'}
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
+
+        {isActive && isCheckedIn && !isCheckedOut && (
+          <View style={styles.actionButtons}>
+            <TouchableOpacity style={styles.incidentButton} onPress={handleAddIncidentReport}>
+              <AlertTriangleIcon size={16} color="#FFFFFF" style={styles.actionIconMargin} />
+              <Text style={styles.incidentButtonText}>Report Incident</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.emergencyButton} onPress={handleEmergencyAlert}>
+              <AlertCircleIcon size={16} color="#FFFFFF" style={styles.actionIconMargin} />
+              <Text style={styles.emergencyButtonText}>Emergency</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {isCheckedOut && (
+          <View style={styles.completedContainer}>
+            <CheckCircleIcon size={24} color={COLORS.success} />
+            <Text style={styles.completedContainerText}>Shift Completed</Text>
+            <Text style={styles.completedSubtext}>
+              Checked out at {actualShift?.checkOutTime ? formatTime(actualShift.checkOutTime) : 'N/A'}
+            </Text>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const renderWeeklySummary = () => (
+    <View style={styles.weeklySummaryWrapper}>
+      <Text style={styles.weeklySummaryTitle}>This Week's Shifts Summary</Text>
+      
+      <View style={styles.weeklySummaryContainer}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={true}
+          contentContainerStyle={styles.tableScrollContent}
+          style={styles.tableScrollView}
+        >
+          <View style={styles.tableContainer}>
+            {/* Table Header */}
+            <View style={styles.tableHeader}>
+              <View style={[styles.tableHeaderCell, styles.dateColumn]}>
+                <Text style={styles.tableHeaderText}>DATE</Text>
+              </View>
+              <View style={[styles.tableHeaderCell, styles.siteColumn]}>
+                <Text style={styles.tableHeaderText}>SITE</Text>
+              </View>
+              <View style={[styles.tableHeaderCell, styles.shiftTimeColumn]}>
+                <Text style={styles.tableHeaderText}>SHIFT TIME</Text>
+              </View>
+              <View style={[styles.tableHeaderCell, styles.statusColumn]}>
+                <Text style={styles.tableHeaderText}>STATUS</Text>
+              </View>
+              <View style={[styles.tableHeaderCell, styles.checkColumn]}>
+                <Text style={styles.tableHeaderText}>CHECK IN</Text>
+              </View>
+              <View style={[styles.tableHeaderCell, styles.checkColumn]}>
+                <Text style={styles.tableHeaderText}>CHECK OUT</Text>
+              </View>
+            </View>
+
+            {/* Table Rows */}
+            {formattedWeeklyShifts.length > 0 ? formattedWeeklyShifts.map((shift, index) => {
+              const isMissed = shift.status === 'missed';
+              return (
+                <View key={index} style={styles.tableRow}>
+                  <View style={[styles.tableCell, styles.dateColumn]}>
+                    <Text style={isMissed ? styles.tableCellDateMissed : styles.tableCellDate}>
+                      {shift.date}
+                    </Text>
+                    <Text style={isMissed ? styles.tableCellDayMissed : styles.tableCellDay}>
+                      {shift.day}
+                    </Text>
+                  </View>
+                  <View style={[styles.tableCell, styles.siteColumn]}>
+                    <Text style={styles.tableCellText} numberOfLines={2}>{shift.site}</Text>
+                  </View>
+                  <View style={[styles.tableCell, styles.shiftTimeColumn]}>
+                    <Text style={styles.tableCellText}>{shift.shiftTime}</Text>
+                  </View>
+                  <View style={[styles.tableCell, styles.statusColumn]}>
+                    <View style={[styles.tableStatusBadge, 
+                      shift.status === 'completed' && styles.completedBadge,
+                      shift.status === 'missed' && styles.missedBadge
+                    ]}>
+                      {isMissed && <View style={styles.missedDot} />}
+                      <Text style={[styles.tableStatusText,
+                        shift.status === 'completed' && styles.completedText,
+                        shift.status === 'missed' && styles.missedText
+                      ]}>
+                        {shift.status === 'completed' ? 'Completed' : 'Missed'}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={[styles.tableCell, styles.checkColumn]}>
+                    <Text style={styles.tableCellText}>{shift.checkIn}</Text>
+                  </View>
+                  <View style={[styles.tableCell, styles.checkColumn]}>
+                    <Text style={styles.tableCellText}>{shift.checkOut}</Text>
+                  </View>
+                </View>
+              );
+            }) : (
+                <View style={styles.tableEmptyContainer}>
+                  <Text style={styles.tableEmptyText}>No weekly shifts data available</Text>
+                </View>
+              )}
+          </View>
+        </ScrollView>
+      </View>
     </View>
   );
 
@@ -529,9 +988,6 @@ const MyShiftsScreen: React.FC = () => {
             onNavigateToAttendance={() => {
               // Navigation handled in drawer
             }}
-            onNavigateToEarnings={() => {
-              // Navigation handled in drawer
-            }}
             onNavigateToNotifications={() => {
               // Navigate to notifications/settings
             }}
@@ -614,13 +1070,13 @@ const styles = StyleSheet.create({
   },
   monthlyStatsContainer: {
     marginTop: SPACING.lg,
-    marginBottom: SPACING.sectionGap || SPACING.xxl,
+    marginBottom: SPACING.xxl,
   },
   monthlyStatsTitle: {
     fontSize: TYPOGRAPHY.fontSize.md,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
     color: COLORS.textPrimary,
-    marginBottom: SPACING.fieldGap || SPACING.lg,
+    marginBottom: SPACING.lg,
   },
   statsGrid: {
     flexDirection: 'row',
@@ -693,219 +1149,396 @@ const styles = StyleSheet.create({
     color: COLORS.textInverse,
   },
   shiftCard: {
-    backgroundColor: COLORS.backgroundPrimary,
-    borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.lg,
-    marginBottom: SPACING.fieldGap || SPACING.lg,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    // Drop shadow: X 0, Y 4, Blur 4, Spread 0, Color #DCDCDC at 25% opacity
+    shadowColor: '#DCDCDC',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4, // Android shadow
+    // Border/Stroke: Color #DCDCDC, Weight 1
     borderWidth: 1,
-    borderColor: COLORS.borderCard,
-    // Border only, no shadow for minimal style
+    borderColor: '#DCDCDC',
+    borderStyle: 'solid',
+    overflow: 'hidden',
   },
   shiftHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: SPACING.md,
+    marginBottom: 12,
+    marginTop: 0,
   },
   locationInfo: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     flex: 1,
+    marginRight: 8,
+  },
+  locationIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#DBEAFE',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
   },
   locationText: {
-    marginLeft: SPACING.md,
     flex: 1,
   },
   locationName: {
-    fontSize: TYPOGRAPHY.fontSize.md,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.xs / 2,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#323232',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
+    marginBottom: 2,
   },
   locationAddress: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#828282',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
   },
   statusBadge: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    borderRadius: BORDER_RADIUS.round,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
   },
   activeBadge: {
-    backgroundColor: COLORS.success + '20',
+    backgroundColor: '#E8F5E9',
   },
   upcomingBadge: {
-    backgroundColor: COLORS.primaryLight,
+    backgroundColor: '#DBEAFE',
   },
   statusText: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    fontSize: 10,
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
+    textTransform: 'uppercase',
   },
   activeText: {
-    color: COLORS.success,
+    color: '#4CAF50',
   },
   upcomingText: {
-    color: COLORS.info,
+    color: '#1C6CA9',
   },
   shiftDescription: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.md,
-    lineHeight: 20,
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#828282',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
+    lineHeight: 16,
+    marginBottom: 12,
   },
   shiftDetails: {
+    marginBottom: 12,
+  },
+  shiftDetailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: SPACING.md,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  shiftDetailIconContainer: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    backgroundColor: '#F5F5F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
   },
   shiftDetailLabel: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#828282',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
+    marginRight: 8,
   },
   shiftDetailValue: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
-    color: COLORS.textPrimary,
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#323232',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
+    flex: 1,
+    textAlign: 'right',
   },
   timerContainer: {
-    backgroundColor: COLORS.textTertiary,
-    borderRadius: BORDER_RADIUS.sm,
-    paddingVertical: SPACING.lg,
-    paddingHorizontal: SPACING.xxl,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 8,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
     alignItems: 'center',
-    marginBottom: SPACING.md,
+    marginBottom: 12,
+    marginTop: 8,
   },
   timerText: {
-    fontSize: TYPOGRAPHY.fontSize.xxl,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
-    color: COLORS.textInverse,
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#323232',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
   },
-  clockedInText: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
-    color: COLORS.textPrimary,
-    textAlign: 'center',
-    marginBottom: SPACING.xs,
+  timerLabel: {
+    fontSize: 10,
+    fontWeight: '400',
+    color: '#828282',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
+    marginTop: 4,
   },
-  clockedInSubtext: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    marginBottom: SPACING.fieldGap || SPACING.lg,
+  checkInButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#1C6CA9',
+    borderRadius: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  checkInIcon: {
+    marginRight: 8,
+  },
+  checkInText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   actionButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: SPACING.md,
+    gap: 12,
+    marginTop: 8,
   },
   incidentButton: {
     flex: 1,
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.primaryLight,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg,
-    borderRadius: BORDER_RADIUS.sm,
-  },
-  incidentButtonIcon: {
-    fontSize: TYPOGRAPHY.fontSize.md,
-    marginRight: SPACING.sm,
+    alignItems: 'center',
+    backgroundColor: '#1C6CA9',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginRight: 6,
   },
   incidentButtonText: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
-    color: COLORS.primary,
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#FFFFFF',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
   },
   emergencyButton: {
     flex: 1,
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.error + '15',
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg,
-    borderRadius: BORDER_RADIUS.sm,
-  },
-  emergencyButtonIcon: {
-    fontSize: TYPOGRAPHY.fontSize.md,
-    marginRight: SPACING.sm,
+    alignItems: 'center',
+    backgroundColor: '#F44336',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginLeft: 6,
   },
   emergencyButtonText: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
-    color: COLORS.error,
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#FFFFFF',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
   },
-  weeklySummaryContainer: {
-    backgroundColor: COLORS.backgroundPrimary,
-    borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.lg,
-    marginTop: SPACING.lg,
-    borderWidth: 1,
-    borderColor: COLORS.borderCard,
-    // Border only, no shadow for minimal style
+  weeklySummaryWrapper: {
+    marginTop: 16,
   },
   weeklySummaryTitle: {
-    fontSize: TYPOGRAPHY.fontSize.md,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.fieldGap || SPACING.lg,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#323232',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
+    marginBottom: 12,
+  },
+  weeklySummaryContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#DCDCDC',
+    // Lighter drop shadow: X 0, Y 4, Blur 4, Spread 0, Color #000000 at 3% opacity
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  tableScrollView: {
+    maxHeight: 400,
+  },
+  tableScrollContent: {
+    paddingRight: 8,
+  },
+  tableContainer: {
+    minWidth: 650, // Minimum width to ensure horizontal scroll
+    backgroundColor: '#FFFFFF',
   },
   tableHeader: {
     flexDirection: 'row',
-    paddingVertical: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
-    marginBottom: SPACING.sm,
+    backgroundColor: '#D7EAF9',
+    borderRadius: 7,
+    paddingVertical: 8,
+    paddingHorizontal: 0,
+    marginBottom: 0,
+    height: 31,
+    alignItems: 'center',
+  },
+  tableHeaderCell: {
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    paddingHorizontal: 12,
+    height: '100%',
+  },
+  dateColumn: {
+    width: 110,
+    minWidth: 110,
+  },
+  siteColumn: {
+    width: 130,
+    minWidth: 130,
+  },
+  shiftTimeColumn: {
+    width: 150,
+    minWidth: 150,
+  },
+  statusColumn: {
+    width: 110,
+    minWidth: 110,
+  },
+  checkColumn: {
+    width: 100,
+    minWidth: 100,
   },
   tableHeaderText: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '600', // Semi Bold
+    color: '#7A7A7A',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
+    textTransform: 'uppercase',
+    textAlign: 'left',
   },
   tableRow: {
     flexDirection: 'row',
-    paddingVertical: SPACING.md,
+    paddingVertical: 12,
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
+    borderBottomColor: '#F0F0F0',
+    minHeight: 56,
+    backgroundColor: '#FFFFFF',
+  },
+  tableCell: {
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    paddingHorizontal: 12,
+    minHeight: 56,
   },
   tableCellDate: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    color: COLORS.textPrimary,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#323232',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
+    textAlign: 'left',
+    marginBottom: 2,
+  },
+  tableCellDateMissed: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#DC2626', // Red for missed shifts
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
+    textAlign: 'left',
+    marginBottom: 2,
   },
   tableCellDay: {
-    fontSize: TYPOGRAPHY.fontSize.xs - 2,
-    color: COLORS.textSecondary,
+    fontSize: 10,
+    fontWeight: '400',
+    color: '#828282',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
+    textAlign: 'left',
+  },
+  tableCellDayMissed: {
+    fontSize: 10,
+    fontWeight: '400',
+    color: '#DC2626', // Red for missed shifts
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
+    textAlign: 'left',
   },
   tableCellText: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    color: COLORS.textPrimary,
-    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#323232',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
+    textAlign: 'left',
   },
   tableStatusBadge: {
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: BORDER_RADIUS.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
     alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    minWidth: 70,
   },
   completedBadge: {
-    backgroundColor: COLORS.success + '20',
+    backgroundColor: '#DCFCE7', // Light green from Figma
   },
   missedBadge: {
-    backgroundColor: COLORS.error + '20',
+    backgroundColor: '#FFEBEE',
   },
   tableStatusText: {
-    fontSize: TYPOGRAPHY.fontSize.xs - 2,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    fontSize: 10,
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
+    textTransform: 'uppercase',
   },
   completedText: {
-    color: COLORS.success,
+    color: '#16A34A', // Green from Figma
   },
   missedText: {
-    color: COLORS.error,
+    color: '#DC2626', // Red from Figma
+  },
+  missedDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#DC2626',
+    marginRight: 4,
   },
   emptyText: {
     fontSize: TYPOGRAPHY.fontSize.md,
@@ -924,6 +1557,20 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.xxxxl,
     alignItems: 'center',
   },
+  tableEmptyContainer: {
+    paddingVertical: 40,
+    alignItems: 'center',
+    width: '100%',
+    minWidth: 600,
+  },
+  tableEmptyText: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#828282',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
+    textAlign: 'center',
+  },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -935,7 +1582,31 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   actionIconMargin: {
-    marginRight: SPACING.sm,
+    marginRight: 6,
+  },
+  completedContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    marginTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+  },
+  completedContainerText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4CAF50',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  completedSubtext: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#828282',
+    fontFamily: 'Inter',
+    letterSpacing: -0.41,
   },
 });
 

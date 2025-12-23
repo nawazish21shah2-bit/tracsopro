@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { DrawerContentComponentProps } from '@react-navigation/drawer';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../store';
-import { logoutUser } from '../store/slices/authSlice';
+import { logoutUser, updateUserProfile } from '../store/slices/authSlice';
 import { LogoutIcon } from '../components/ui/AppIcons';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../styles/globalStyles';
+import { ProfileAvatar } from '../components/common/ProfileAvatar';
+import apiService from '../services/api';
 
 interface DrawerItem {
   id: string;
@@ -17,17 +19,37 @@ const CustomDrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
   const { navigation } = props;
   const { user } = useSelector((state: RootState) => state.auth);
   const dispatch = useDispatch<AppDispatch>();
+  const [isUploadingPicture, setIsUploadingPicture] = useState(false);
 
-  const fullName = user ? `${user.firstName} ${user.lastName}`.trim() : 'Mark Husdon';
-  const initials = fullName
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map(part => part[0]?.toUpperCase() ?? '')
-    .join('');
+  const fullName = user ? `${user.firstName} ${user.lastName}`.trim() : 'User';
 
   const role = user?.role ?? 'GUARD';
   const isVerified = user?.isActive ?? false;
+
+  const handleProfilePictureSelected = async (imageUri: string) => {
+    try {
+      setIsUploadingPicture(true);
+      const uploadResponse = await apiService.uploadProfilePicture(imageUri);
+      
+      if (uploadResponse.success && uploadResponse.data?.url) {
+        if (user?.role === 'GUARD') {
+          await apiService.updateGuardProfile({ 
+            profilePictureUrl: uploadResponse.data.url 
+          });
+        }
+        await dispatch(updateUserProfile({ 
+          profilePictureUrl: uploadResponse.data.url 
+        } as any)).unwrap();
+        Alert.alert('Success', 'Profile picture updated successfully');
+      } else {
+        Alert.alert('Error', uploadResponse.message || 'Failed to upload profile picture');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to update profile picture');
+    } finally {
+      setIsUploadingPicture(false);
+    }
+  };
 
   const goHome = () => {
     navigation.navigate('MainTabs');
@@ -113,9 +135,15 @@ const CustomDrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
     <View style={styles.container}>
       {/* Header / Profile */}
       <View style={styles.header}>
-        <View style={styles.avatarCircle}>
-          <Text style={styles.avatarText}>{initials}</Text>
-        </View>
+        <ProfileAvatar
+          firstName={user?.firstName}
+          lastName={user?.lastName}
+          profilePictureUrl={user?.profilePictureUrl}
+          size={56}
+          editable={true}
+          isLoading={isUploadingPicture}
+          onImageSelected={handleProfilePictureSelected}
+        />
         <View style={styles.profileInfo}>
           <Text style={styles.name}>{fullName}</Text>
           {isVerified && (
@@ -172,22 +200,6 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'column',
     marginBottom: 24,
-  },
-  avatarCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: COLORS.backgroundSecondary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16,
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-  },
-  avatarText: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: COLORS.textPrimary,
   },
   profileInfo: {
     justifyContent: 'center',
