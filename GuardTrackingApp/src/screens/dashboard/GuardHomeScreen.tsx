@@ -16,7 +16,6 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { getCurrentLocationWithRetry } from '../../utils/safeLocationHelper';
-import { getCurrentLocationWithRetry } from '../../utils/safeLocationHelper';
 import {
   fetchShiftStatistics,
   fetchActiveShift,
