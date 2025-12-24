@@ -11,7 +11,6 @@ import {
   ActivityIndicator,
   Platform,
   PermissionsAndroid,
-  InteractionManager,
 } from 'react-native';
 import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -205,54 +204,26 @@ const GuardHomeScreen: React.FC = () => {
       throw new Error('Location permission denied. Please enable location access in settings.');
     }
 
-    // Add a delay to ensure native module is ready
-    await new Promise<void>(resolve => setTimeout(() => resolve(), 200));
-
     const attemptGetLocation = (useHighAccuracy: boolean): Promise<{ latitude: number; longitude: number; accuracy: number; address?: string }> => {
       return new Promise((resolve, reject) => {
         // Use setTimeout to ensure this runs in the next event loop tick
         // This helps prevent crashes in release builds
         setTimeout(() => {
           try {
-            // Comprehensive check if Geolocation module is available and ready
-            if (!Geolocation) {
-              console.error('Geolocation module is not available');
-              reject(new Error('Location service is not available. Please restart the app.'));
-              return;
-            }
-
-            if (typeof Geolocation.getCurrentPosition !== 'function') {
-              console.error('Geolocation.getCurrentPosition is not a function');
-              reject(new Error('Location service is not available. Please restart the app.'));
-              return;
-            }
-
-            // Try to verify the module is actually initialized by checking if it has properties
-            try {
-              // This will throw if the native module isn't properly linked
-              if (!Geolocation.getCurrentPosition) {
-                reject(new Error('Location service is not initialized. Please restart the app.'));
-                return;
-              }
-            } catch (moduleCheckError) {
-              console.error('Geolocation module check failed:', moduleCheckError);
+            // Check if Geolocation is available
+            if (!Geolocation || typeof Geolocation.getCurrentPosition !== 'function') {
               reject(new Error('Location service is not available. Please restart the app.'));
               return;
             }
 
             // Use simpler, safer options for Android release builds
-            // Set forceRequestLocation to true for better compatibility
             const options: Geolocation.GeoOptions = {
               enableHighAccuracy: useHighAccuracy,
-              timeout: 12000, // 12 seconds - shorter timeout
+              timeout: 15000, // Reduced timeout for faster failure
               maximumAge: 60000, // Accept location up to 1 minute old (more lenient)
-              forceRequestLocation: false, // Don't force if cached location is recent
-              showLocationDialog: true, // Show dialog if needed
             };
 
-            // Wrap in additional try-catch for native errors
-            try {
-              Geolocation.getCurrentPosition(
+            Geolocation.getCurrentPosition(
               (position: Geolocation.GeoPosition) => {
                 try {
                   // Validate position exists
@@ -316,19 +287,14 @@ const GuardHomeScreen: React.FC = () => {
                   reject(new Error('Failed to get location. Please try again.'));
                 }
               },
-                options
-              );
-            } catch (nativeError: any) {
-              console.error('Native error calling getCurrentPosition:', nativeError);
-              // If it's a native crash, provide a safe fallback
-              reject(new Error('Location service encountered an error. Please try again.'));
-            }
+              options
+            );
           } catch (error: any) {
-            console.error('Error in location request setup:', error);
+            console.error('Error calling getCurrentPosition:', error);
             const errorMessage = error?.message || 'Failed to get location. Please try again.';
             reject(new Error(errorMessage));
           }
-        }, 100); // Increased delay to ensure UI and native module are ready
+        }, 50); // Small delay to ensure UI is ready
       });
     };
 
@@ -400,12 +366,9 @@ const GuardHomeScreen: React.FC = () => {
     try {
       setGettingLocation(true);
       
-      // Wait for all interactions to complete before accessing native modules
+      // Add a small delay to ensure UI is ready before calling location service
       // This prevents crashes in release builds
-      await InteractionManager.runAfterInteractions();
-      
-      // Additional delay to ensure native module is ready
-      await new Promise<void>(resolve => setTimeout(() => resolve(), 300));
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 100));
       
       // Get GPS location with retry logic
       let location;
@@ -501,11 +464,8 @@ const GuardHomeScreen: React.FC = () => {
             try {
               setGettingLocation(true);
               
-              // Wait for all interactions to complete before accessing native modules
-              await InteractionManager.runAfterInteractions();
-              
-              // Additional delay to ensure native module is ready
-              await new Promise<void>(resolve => setTimeout(() => resolve(), 300));
+              // Add a small delay to ensure UI is ready before calling location service
+              await new Promise<void>(resolve => setTimeout(() => resolve(), 100));
               
               // Get GPS location with retry logic
               let location;
@@ -605,11 +565,8 @@ const GuardHomeScreen: React.FC = () => {
             try {
               setGettingLocation(true);
               
-              // Wait for all interactions to complete before accessing native modules
-              await InteractionManager.runAfterInteractions();
-              
-              // Additional delay to ensure native module is ready
-              await new Promise<void>(resolve => setTimeout(() => resolve(), 300));
+              // Add a small delay to ensure UI is ready
+              await new Promise<void>(resolve => setTimeout(() => resolve(), 100));
               
               // Get current location with retry logic - wrapped in try-catch
               let location;

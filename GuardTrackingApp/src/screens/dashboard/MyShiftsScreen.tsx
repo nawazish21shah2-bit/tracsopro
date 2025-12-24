@@ -316,55 +316,55 @@ const MyShiftsScreen: React.FC = () => {
     }
 
     const attemptGetLocation = (useHighAccuracy: boolean): Promise<{ latitude: number; longitude: number; accuracy: number; address?: string }> => {
-      return new Promise((resolve, reject) => {
+    return new Promise((resolve, reject) => {
         try {
-          Geolocation.getCurrentPosition(
-            (position: Geolocation.GeoPosition) => {
+      Geolocation.getCurrentPosition(
+        (position: Geolocation.GeoPosition) => {
               if (!position || !position.coords || 
-                  typeof position.coords.latitude !== 'number' || 
-                  typeof position.coords.longitude !== 'number' ||
-                  isNaN(position.coords.latitude) ||
-                  isNaN(position.coords.longitude)) {
-                reject(new Error('Invalid location data received. Please try again.'));
-                return;
-              }
+              typeof position.coords.latitude !== 'number' || 
+              typeof position.coords.longitude !== 'number' ||
+              isNaN(position.coords.latitude) ||
+              isNaN(position.coords.longitude)) {
+            reject(new Error('Invalid location data received. Please try again.'));
+            return;
+          }
 
-              resolve({
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude,
-                accuracy: position.coords.accuracy || 0,
-                address: `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`,
-              });
-            },
-            (error: Geolocation.GeoError) => {
+          resolve({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy || 0,
+            address: `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`,
+          });
+        },
+        (error: Geolocation.GeoError) => {
               console.error('Location error:', error);
-              let errorMessage = 'Unable to get your location.';
+          let errorMessage = 'Unable to get your location.';
               let shouldRetry = true;
               
-              switch (error.code) {
+          switch (error.code) {
                 case 1: // PERMISSION_DENIED
-                  errorMessage = 'Location permission denied. Please enable location access in settings.';
+              errorMessage = 'Location permission denied. Please enable location access in settings.';
                   shouldRetry = false;
-                  break;
+              break;
                 case 2: // POSITION_UNAVAILABLE
-                  errorMessage = 'Location unavailable. Please ensure GPS is enabled and try again.';
-                  break;
+              errorMessage = 'Location unavailable. Please ensure GPS is enabled and try again.';
+              break;
                 case 3: // TIMEOUT
-                  errorMessage = 'Location request timed out. Please try again.';
-                  break;
-              }
+              errorMessage = 'Location request timed out. Please try again.';
+              break;
+          }
               
               const locationError = new Error(errorMessage) as any;
               locationError.code = error.code;
               locationError.shouldRetry = shouldRetry;
               reject(locationError);
-            },
-            {
+        },
+        {
               enableHighAccuracy: useHighAccuracy,
-              timeout: 20000,
-              maximumAge: 30000,
-            }
-          );
+          timeout: 20000,
+          maximumAge: 30000,
+        }
+      );
         } catch (error) {
           console.error('Error calling getCurrentPosition:', error);
           reject(new Error('Failed to get location. Please try again.'));

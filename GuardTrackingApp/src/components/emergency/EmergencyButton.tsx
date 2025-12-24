@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   Platform,
   PermissionsAndroid,
-  InteractionManager,
 } from 'react-native';
 import {
   Alert,
@@ -44,7 +43,7 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
   const { user } = useSelector((state: RootState) => state.auth);
   const { loading } = useSelector((state: RootState) => state.emergency);
   const { activeShift } = useSelector((state: RootState) => state.shifts);
-  
+
   const [showTypeSelector, setShowTypeSelector] = useState(false);
   const [isPressed, setIsPressed] = useState(false);
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -104,7 +103,7 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
         const checkResult = await PermissionsAndroid.check(
           PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
         );
-        
+
         if (checkResult) {
           return true;
         }
@@ -127,7 +126,7 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
         return false;
       }
     }
-    
+
     // iOS permissions are handled automatically by react-native-geolocation-service
     return true;
   };
@@ -142,11 +141,9 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
         return null;
       }
 
-      // Wait for all interactions to complete before accessing native modules
-      await InteractionManager.runAfterInteractions();
-      
-      // Additional delay to ensure native module is ready
-      await new Promise<void>(resolve => setTimeout(() => resolve(), 200));
+      // Wait for UI to settle and native module to be ready
+      // Using simple setTimeout instead of InteractionManager to avoid crashes
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 300));
 
       return new Promise((resolve) => {
         // Use setTimeout to ensure this runs in the next event loop tick
@@ -191,36 +188,36 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
             // Wrap in additional try-catch for native errors
             try {
               Geolocation.getCurrentPosition(
-              (position) => {
-                try {
-                  if (!position || !position.coords) {
-                    resolve(null);
-                    return;
-                  }
-                  
-                  // Validate coordinates
-                  if (typeof position.coords.latitude !== 'number' || typeof position.coords.longitude !== 'number') {
-                    resolve(null);
-                    return;
-                  }
+                (position) => {
+                  try {
+                    if (!position || !position.coords) {
+                      resolve(null);
+                      return;
+                    }
 
-                  resolve({
-                    latitude: position.coords.latitude,
-                    longitude: position.coords.longitude,
-                    accuracy: position.coords.accuracy || 0,
-                    address: `${position.coords.latitude}, ${position.coords.longitude}`,
-                  });
-                } catch (parseError) {
-                  console.error('Error parsing location data:', parseError);
+                    // Validate coordinates
+                    if (typeof position.coords.latitude !== 'number' || typeof position.coords.longitude !== 'number') {
+                      resolve(null);
+                      return;
+                    }
+
+                    resolve({
+                      latitude: position.coords.latitude,
+                      longitude: position.coords.longitude,
+                      accuracy: position.coords.accuracy || 0,
+                      address: `${position.coords.latitude}, ${position.coords.longitude}`,
+                    });
+                  } catch (parseError) {
+                    console.error('Error parsing location data:', parseError);
+                    resolve(null);
+                  }
+                },
+                (error) => {
+                  console.error('Location error:', error);
                   resolve(null);
-                }
-              },
-              (error) => {
-                console.error('Location error:', error);
-                resolve(null);
-              },
-              options
-            );
+                },
+                options
+              );
             } catch (nativeError: any) {
               console.error('Native error calling getCurrentPosition:', nativeError);
               resolve(null);
@@ -281,7 +278,7 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
     } catch (e) {
       console.warn('Vibration not available:', e);
     }
-    
+
     // Show type selector
     setShowTypeSelector(true);
   };
@@ -289,12 +286,12 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
   const handleEmergencyTypeSelect = async (emergencyType: EmergencyType) => {
     try {
       setShowTypeSelector(false);
-      
+
       // Get current location
       let location = null;
       try {
         location = await getCurrentLocation();
-        
+
         // Validate location data if received
         if (location && (typeof location.latitude !== 'number' || typeof location.longitude !== 'number')) {
           location = null;
@@ -303,7 +300,7 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
         console.error('Error getting location for emergency:', error);
         location = null;
       }
-      
+
       if (!location) {
         Alert.alert(
           'Location Error',
@@ -338,21 +335,21 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
   const sendEmergencyAlert = async (emergencyType: EmergencyType, location: any) => {
     try {
       // Validate and sanitize location data
-      const locationData = location && 
-                           typeof location.latitude === 'number' && 
-                           typeof location.longitude === 'number'
+      const locationData = location &&
+        typeof location.latitude === 'number' &&
+        typeof location.longitude === 'number'
         ? {
-            latitude: location.latitude,
-            longitude: location.longitude,
-            accuracy: location.accuracy || 0,
-            address: location.address || 'Location unavailable',
-          }
+          latitude: location.latitude,
+          longitude: location.longitude,
+          accuracy: location.accuracy || 0,
+          address: location.address || 'Location unavailable',
+        }
         : {
-            latitude: 0,
-            longitude: 0,
-            accuracy: 0,
-            address: 'Location unavailable',
-          };
+          latitude: 0,
+          longitude: 0,
+          accuracy: 0,
+          address: 'Location unavailable',
+        };
 
       const alertData = {
         type: emergencyType.id,
@@ -364,7 +361,7 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
 
       // Dispatch emergency alert
       const result = await dispatch(triggerEmergencyAlert(alertData) as any);
-      
+
       if (result && result.type === 'emergency/triggerAlert/fulfilled') {
         // Success feedback
         try {
@@ -372,7 +369,7 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
         } catch (vibrationError) {
           console.warn('Vibration error:', vibrationError);
         }
-        
+
         Alert.alert(
           'Emergency Alert Sent',
           `Your ${emergencyType.label.toLowerCase()} has been sent to all administrators. Help is on the way.`,
@@ -411,7 +408,7 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
               <Text style={styles.typeSelectorSubtitle}>
                 Choose the type of emergency to send appropriate alert
               </Text>
-              
+
               {emergencyTypes.map((type) => (
                 <TouchableOpacity
                   key={type.id}
@@ -431,7 +428,7 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
                   </View>
                 </TouchableOpacity>
               ))}
-              
+
               <TouchableOpacity
                 style={styles.cancelButton}
                 onPress={() => setShowTypeSelector(false)}
@@ -473,17 +470,17 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
           disabled={loading}
           activeOpacity={0.8}
         >
-          <AlertTriangle 
-            width={currentSize.width * 0.4} 
-            height={currentSize.height * 0.4} 
-            color="#FFFFFF" 
+          <AlertTriangle
+            width={currentSize.width * 0.4}
+            height={currentSize.height * 0.4}
+            color="#FFFFFF"
           />
           <Text style={[styles.buttonText, { fontSize: currentSize.fontSize }]}>
             SOS
           </Text>
         </TouchableOpacity>
       </Animated.View>
-      
+
       {renderTypeSelector()}
     </>
   );
