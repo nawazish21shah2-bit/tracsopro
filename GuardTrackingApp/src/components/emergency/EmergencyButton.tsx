@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   Platform,
-  PermissionsAndroid,
 } from 'react-native';
 import {
   Alert,
@@ -17,7 +16,7 @@ import {
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../../store';
 import { triggerEmergencyAlert } from '../../store/slices/emergencySlice';
-import Geolocation from 'react-native-geolocation-service';
+import { getCurrentLocationSafe, requestLocationPermission } from '../../utils/safeLocationHelper';
 import { AlertTriangle, Phone, Shield, Heart } from 'react-native-feather';
 
 interface EmergencyButtonProps {
@@ -95,43 +94,7 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
 
   const currentSize = buttonSizes[size];
 
-  // Request location permission (Android)
-  const requestLocationPermission = async (): Promise<boolean> => {
-    if (Platform.OS === 'android') {
-      try {
-        // Check if permission is already granted
-        const checkResult = await PermissionsAndroid.check(
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
-        );
-
-        if (checkResult) {
-          return true;
-        }
-
-        // Request permission
-        const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-          {
-            title: 'Location Permission',
-            message: 'This app needs access to your location for emergency alerts.',
-            buttonNeutral: 'Ask Me Later',
-            buttonNegative: 'Cancel',
-            buttonPositive: 'OK',
-          }
-        );
-
-        return granted === PermissionsAndroid.RESULTS.GRANTED;
-      } catch (err) {
-        console.error('Error requesting location permission:', err);
-        return false;
-      }
-    }
-
-    // iOS permissions are handled automatically by react-native-geolocation-service
-    return true;
-  };
-
-  // Get current location helper function
+  // Get current location helper function - using safe location helper
   const getCurrentLocation = async (): Promise<any> => {
     try {
       // First, request permission if needed
@@ -141,92 +104,11 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
         return null;
       }
 
-      // Wait for UI to settle and native module to be ready
-      // Using simple setTimeout instead of InteractionManager to avoid crashes
-      await new Promise<void>(resolve => setTimeout(() => resolve(), 300));
-
-      return new Promise((resolve) => {
-        // Use setTimeout to ensure this runs in the next event loop tick
-        // This helps prevent crashes in release builds
-        setTimeout(() => {
-          try {
-            // Comprehensive check if Geolocation module is available and ready
-            if (!Geolocation) {
-              console.error('Geolocation module is not available');
-              resolve(null);
-              return;
-            }
-
-            if (typeof Geolocation.getCurrentPosition !== 'function') {
-              console.error('Geolocation.getCurrentPosition is not a function');
-              resolve(null);
-              return;
-            }
-
-            // Try to verify the module is actually initialized
-            try {
-              if (!Geolocation.getCurrentPosition) {
-                console.error('Geolocation module not properly initialized');
-                resolve(null);
-                return;
-              }
-            } catch (moduleCheckError) {
-              console.error('Geolocation module check failed:', moduleCheckError);
-              resolve(null);
-              return;
-            }
-
-            // Use simpler, safer options for Android release builds
-            const options: Geolocation.GeoOptions = {
-              enableHighAccuracy: true,
-              timeout: 12000, // 12 seconds - shorter timeout
-              maximumAge: 60000, // Accept location up to 1 minute old (more lenient)
-              forceRequestLocation: false, // Don't force if cached location is recent
-              showLocationDialog: true, // Show dialog if needed
-            };
-
-            // Wrap in additional try-catch for native errors
-            try {
-              Geolocation.getCurrentPosition(
-                (position) => {
-                  try {
-                    if (!position || !position.coords) {
-                      resolve(null);
-                      return;
-                    }
-
-                    // Validate coordinates
-                    if (typeof position.coords.latitude !== 'number' || typeof position.coords.longitude !== 'number') {
-                      resolve(null);
-                      return;
-                    }
-
-                    resolve({
-                      latitude: position.coords.latitude,
-                      longitude: position.coords.longitude,
-                      accuracy: position.coords.accuracy || 0,
-                      address: `${position.coords.latitude}, ${position.coords.longitude}`,
-                    });
-                  } catch (parseError) {
-                    console.error('Error parsing location data:', parseError);
-                    resolve(null);
-                  }
-                },
-                (error) => {
-                  console.error('Location error:', error);
-                  resolve(null);
-                },
-                options
-              );
-            } catch (nativeError: any) {
-              console.error('Native error calling getCurrentPosition:', nativeError);
-              resolve(null);
-            }
-          } catch (error) {
-            console.error('Error in location request setup:', error);
-            resolve(null);
-          }
-        }, 100); // Increased delay to ensure UI and native module are ready
+      // Use safe location helper that avoids scheduler issues
+      return await getCurrentLocationSafe({
+        enableHighAccuracy: true,
+        timeout: 12000,
+        maximumAge: 60000,
       });
     } catch (error) {
       console.error('Error in getCurrentLocation:', error);

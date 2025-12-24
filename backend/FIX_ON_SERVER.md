@@ -98,3 +98,4 @@ chmod +x fix-prisma-errors.sh
 - The server IP should be in your SSH config or you can find it in your hosting provider's dashboard.
 
 
+

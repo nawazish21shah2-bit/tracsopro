@@ -68,3 +68,4 @@ You should see:
 The `profilePictureUrl` field **DOES exist** in your Prisma schema (line 20 of schema.prisma), but the Prisma Client on the server is outdated. Running `npx prisma generate` will sync the client with the schema.
 
 
+
