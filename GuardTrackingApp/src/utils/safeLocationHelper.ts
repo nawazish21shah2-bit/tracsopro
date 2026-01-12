@@ -68,11 +68,18 @@ export function getCurrentLocationSafe(
     enableHighAccuracy?: boolean;
     timeout?: number;
     maximumAge?: number;
-  }
+  },
+  // Optional cancelToken to allow callers to ignore results after unmount/close
+  cancelToken?: { cancelled?: boolean }
 ): Promise<{ latitude: number; longitude: number; accuracy: number; address?: string }> {
   return new Promise((resolve, reject) => {
     // First, defer the entire operation to avoid scheduler conflicts
     safeDefer(() => {
+      // Respect cancellation if already requested
+      if (cancelToken?.cancelled) {
+        return reject(new Error('Cancelled'));
+      }
+
       // Validate Geolocation module exists
       if (!Geolocation || typeof Geolocation.getCurrentPosition !== 'function') {
         reject(new Error('Location service is not available. Please restart the app.'));
@@ -91,6 +98,11 @@ export function getCurrentLocationSafe(
         Geolocation.getCurrentPosition(
           (position) => {
             try {
+              // If caller cancelled while waiting, ignore result
+              if (cancelToken?.cancelled) {
+                return;
+              }
+
               // Validate position data
               if (!position?.coords) {
                 reject(new Error('No position data received.'));
@@ -121,6 +133,11 @@ export function getCurrentLocationSafe(
             }
           },
           (error) => {
+            // If caller cancelled while waiting, ignore error
+            if (cancelToken?.cancelled) {
+              return;
+            }
+
             console.error('Location error:', error);
             
             let errorMessage = 'Unable to get your location.';
@@ -137,6 +154,10 @@ export function getCurrentLocationSafe(
           geoOptions
         );
       } catch (nativeError: any) {
+        // If caller cancelled while waiting, ignore native error
+        if (cancelToken?.cancelled) {
+          return;
+        }
         console.error('Native error calling getCurrentPosition:', nativeError);
         reject(new Error('Failed to get location. Please try again.'));
       }
@@ -148,7 +169,8 @@ export function getCurrentLocationSafe(
  * Get current location with retry logic
  */
 export async function getCurrentLocationWithRetry(
-  retries: number = 2
+  retries: number = 2,
+  cancelToken?: { cancelled?: boolean }
 ): Promise<{ latitude: number; longitude: number; accuracy: number; address?: string }> {
   // Check permission first
   const hasPermission = await requestLocationPermission();
@@ -164,7 +186,7 @@ export async function getCurrentLocationWithRetry(
         enableHighAccuracy: useHighAccuracy,
         timeout: 15000,
         maximumAge: 60000,
-      });
+      }, cancelToken);
     } catch (error: any) {
       // Don't retry permission errors
       if (error?.message?.includes('permission denied')) {
@@ -185,4 +207,5 @@ export async function getCurrentLocationWithRetry(
 
   throw new Error('Unable to get your location after multiple attempts.');
 }
+
 

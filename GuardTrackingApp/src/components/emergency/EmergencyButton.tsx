@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -47,6 +47,18 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
   const [isPressed, setIsPressed] = useState(false);
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  // Cancellation token to ignore callbacks after unmount/close
+  const cancelTokenRef = useRef<{ cancelled?: boolean }>({ cancelled: false });
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      cancelTokenRef.current.cancelled = true;
+      if (abortControllerRef.current) {
+        try { abortControllerRef.current.abort(); } catch {}
+      }
+    };
+  }, []);
 
   const emergencyTypes: EmergencyType[] = [
     {
@@ -105,11 +117,14 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
       }
 
       // Use safe location helper that avoids scheduler issues
-      return await getCurrentLocationSafe({
+      const loc = await getCurrentLocationSafe({
         enableHighAccuracy: true,
         timeout: 12000,
         maximumAge: 60000,
-      });
+      }, cancelTokenRef.current);
+
+      if (cancelTokenRef.current.cancelled) return null;
+      return loc;
     } catch (error) {
       console.error('Error in getCurrentLocation:', error);
       return null;
@@ -189,7 +204,9 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
           'Unable to get your current location. Emergency alert will be sent without location data.',
           [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Continue', onPress: () => sendEmergencyAlert(emergencyType, null) },
+            { text: 'Continue', onPress: () => {
+                if (!cancelTokenRef.current.cancelled) sendEmergencyAlert(emergencyType, null);
+              } },
           ]
         );
         return;
@@ -204,7 +221,9 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
           {
             text: 'SEND ALERT',
             style: 'destructive',
-            onPress: () => sendEmergencyAlert(emergencyType, location),
+            onPress: () => {
+              if (!cancelTokenRef.current.cancelled) sendEmergencyAlert(emergencyType, location);
+            },
           },
         ]
       );
@@ -216,6 +235,7 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
 
   const sendEmergencyAlert = async (emergencyType: EmergencyType, location: any) => {
     try {
+      if (cancelTokenRef.current.cancelled) return;
       // Validate and sanitize location data
       const locationData = location &&
         typeof location.latitude === 'number' &&
@@ -241,8 +261,12 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
         shiftId: activeShift?.id, // Pass active shift ID for site-specific notifications
       };
 
-      // Dispatch emergency alert
-      const result = await dispatch(triggerEmergencyAlert(alertData) as any);
+      // Dispatch emergency alert using AbortController signal so we can cancel if unmounted
+      if (cancelTokenRef.current.cancelled) return;
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      const result = await dispatch(triggerEmergencyAlert({ alertData, options: { signal: controller.signal, retries: 1 } }) as any);
+      abortControllerRef.current = null;
 
       if (result && result.type === 'emergency/triggerAlert/fulfilled') {
         // Success feedback
@@ -260,7 +284,7 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
 
         // Call callback if provided
         if (onEmergencyTriggered && result.payload?.id) {
-          onEmergencyTriggered(result.payload.id);
+          if (!cancelTokenRef.current.cancelled) onEmergencyTriggered(result.payload.id);
         }
       } else {
         throw new Error('Failed to send emergency alert');

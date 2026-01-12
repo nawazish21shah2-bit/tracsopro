@@ -2,7 +2,6 @@
 // Dashboard Navigator
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { createStackNavigator } from '@react-navigation/stack';
 import { Text, View, StyleSheet } from 'react-native';
 import GuardHomeScreen from '../screens/dashboard/GuardHomeScreen';
 import MyShiftsScreen from '../screens/dashboard/MyShiftsScreen';
@@ -17,7 +16,11 @@ import ChangePasswordScreen from '../screens/settings/ChangePasswordScreen';
 import SupportContactScreen from '../screens/settings/SupportContactScreen';
 import NotificationListScreen from '../screens/notifications/NotificationListScreen';
 import { HomeIcon, ShiftsIcon, ReportsIcon, CheckInIcon, SettingsIcon } from '../components/ui/AppIcons';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../styles/globalStyles';
+import ChatListScreen from '../screens/chat/ChatListScreen';
+import ChatScreen from '../screens/chat/ChatScreen';
+import { createStackNavigator } from '@react-navigation/stack';
 
 export type DashboardTabParamList = {
   Home: undefined;
@@ -25,6 +28,7 @@ export type DashboardTabParamList = {
   'My Shifts': undefined;
   Reports: undefined;
   Settings: undefined;
+  Chat: undefined;
   Jobs: undefined;
 };
 
@@ -39,6 +43,11 @@ export type SettingsStackParamList = {
 
 const Tab = createBottomTabNavigator<DashboardTabParamList>();
 const SettingsStack = createStackNavigator<SettingsStackParamList>();
+type ChatStackParamList = {
+  ChatList: undefined;
+  Chat: { roomId: string; roomName?: string };
+};
+const ChatStack = createStackNavigator<ChatStackParamList>();
 
 // Settings Stack Navigator
 const SettingsStackNavigator: React.FC = () => {
@@ -66,6 +75,16 @@ const SettingsStackNavigator: React.FC = () => {
         component={() => <NotificationListScreen variant="guard" />} 
       />
     </SettingsStack.Navigator>
+  );
+};
+
+// Chat stack: list view + chat room
+const ChatStackNavigator: React.FC = () => {
+  return (
+    <ChatStack.Navigator screenOptions={{ headerShown: false }}>
+      <ChatStack.Screen name="ChatList" component={ChatListScreen} />
+      <ChatStack.Screen name="Chat" component={ChatScreen} />
+    </ChatStack.Navigator>
   );
 };
 
@@ -169,6 +188,25 @@ const DashboardNavigator: React.FC = () => {
               ellipsizeMode="tail"
               style={[styles.tabLabel, { color: focused ? COLORS.primary : COLORS.textSecondary }]}>
               Reports
+            </Text>
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Chat"
+        component={ChatStackNavigator}
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
+              <MaterialIcons name="chat" size={20} color={focused ? COLORS.primary : COLORS.textSecondary} />
+            </View>
+          ),
+          tabBarLabel: ({ focused }) => (
+            <Text 
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              style={[styles.tabLabel, { color: focused ? COLORS.primary : COLORS.textSecondary }]}>
+              Chat
             </Text>
           ),
         }}

@@ -51,6 +51,7 @@ router.use(authenticate);
  *         description: Notifications retrieved successfully
  */
 router.get('/', notificationController.getNotifications);
+router.get('/stats', notificationController.getNotificationStats);
 
 /**
  * @swagger
@@ -138,6 +139,7 @@ router.delete('/:id', notificationController.deleteNotification);
  *         description: Device token registered successfully
  */
 router.post('/register-device', notificationController.registerDevice);
+router.post('/record-event', notificationController.recordEvent);
 
 export default router;
 

@@ -3,7 +3,7 @@
  * GPS-based check-in/out with photo capture and location validation
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -59,10 +59,17 @@ const EnhancedCheckInScreen: React.FC<EnhancedCheckInScreenProps> = ({ navigatio
   const [isLoadingLocation, setIsLoadingLocation] = useState(true);
   const [biometricVerified, setBiometricVerified] = useState(false);
   const [checkInTime, setCheckInTime] = useState<Date | null>(null);
+  const cancelTokenRef = useRef<{ cancelled?: boolean }>({ cancelled: false });
 
   // Initialize location and validation
   useEffect(() => {
     initializeLocationValidation();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      cancelTokenRef.current.cancelled = true;
+    };
   }, []);
 
   const initializeLocationValidation = async () => {
@@ -71,12 +78,13 @@ const EnhancedCheckInScreen: React.FC<EnhancedCheckInScreenProps> = ({ navigatio
       
       // Get current location
       const location = await locationTrackingService.getCurrentLocation();
+      if (cancelTokenRef.current.cancelled) return;
       if (!location) {
         Alert.alert('Location Error', 'Unable to get current location. Please ensure GPS is enabled.');
         return;
       }
 
-      setCurrentLocationData(location);
+      if (!cancelTokenRef.current.cancelled) setCurrentLocationData(location);
 
       // Validate location if site location is provided
       if (siteLocation) {
@@ -87,7 +95,7 @@ const EnhancedCheckInScreen: React.FC<EnhancedCheckInScreenProps> = ({ navigatio
             requireHighAccuracy: true,
           }
         );
-        setLocationValidation(validation);
+        if (!cancelTokenRef.current.cancelled) setLocationValidation(validation);
       }
 
       setIsLoadingLocation(false);
@@ -187,10 +195,12 @@ const EnhancedCheckInScreen: React.FC<EnhancedCheckInScreenProps> = ({ navigatio
         biometricVerified: true,
       };
 
+      if (cancelTokenRef.current.cancelled) return;
       await dispatch(checkInToShift(checkInData) as any);
       
       // Send real-time update
-      WebSocketService.sendShiftStatusUpdate({
+      if (!cancelTokenRef.current.cancelled) {
+        WebSocketService.sendShiftStatusUpdate({
         guardId: activeShift?.guardId || 'unknown',
         shiftId,
         status: 'ACTIVE',
@@ -201,7 +211,8 @@ const EnhancedCheckInScreen: React.FC<EnhancedCheckInScreenProps> = ({ navigatio
           accuracy: currentLocationData.accuracy,
           timestamp: currentLocationData.timestamp,
         },
-      });
+        });
+      }
 
       setCheckInTime(new Date());
       
@@ -246,10 +257,12 @@ const EnhancedCheckInScreen: React.FC<EnhancedCheckInScreenProps> = ({ navigatio
         biometricVerified: true,
       };
 
+      if (cancelTokenRef.current.cancelled) return;
       await dispatch(checkOutFromShift(checkOutData) as any);
       
       // Send real-time update
-      WebSocketService.sendShiftStatusUpdate({
+      if (!cancelTokenRef.current.cancelled) {
+        WebSocketService.sendShiftStatusUpdate({
         guardId: activeShift?.guardId || 'unknown',
         shiftId,
         status: 'COMPLETED',
@@ -260,7 +273,8 @@ const EnhancedCheckInScreen: React.FC<EnhancedCheckInScreenProps> = ({ navigatio
           accuracy: currentLocationData.accuracy,
           timestamp: currentLocationData.timestamp,
         },
-      });
+        });
+      }
 
       Alert.alert(
         'Check-out Successful',

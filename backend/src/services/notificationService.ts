@@ -485,6 +485,21 @@ export class NotificationService {
 
       const response = await firebaseAdmin.messaging().send(message);
       logger.info(`Push notification sent to user ${userId}`, { messageId: response });
+
+      // Record analytics: notification sent
+      try {
+        await prisma.platformAnalytics.create({
+          data: {
+            securityCompanyId: null,
+            metricType: 'NOTIFICATIONS_SENT',
+            metricValue: 1,
+            dimensions: { userId, notificationType: payload.type },
+            timestamp: new Date(),
+          },
+        });
+      } catch (analyticsError) {
+        logger.error('Error recording notification sent analytics:', analyticsError);
+      }
     } catch (error: any) {
       if (error.code === 'messaging/invalid-registration-token' || error.code === 'messaging/registration-token-not-registered') {
         logger.warn(`Invalid device token for user ${userId} - marking inactive`);

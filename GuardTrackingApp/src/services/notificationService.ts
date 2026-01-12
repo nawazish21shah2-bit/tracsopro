@@ -204,6 +204,20 @@ class NotificationService {
       data,
       userId: data?.userId,
     });
+    
+    // Record delivered event to backend analytics
+    (async () => {
+      try {
+        const apiService = (await import('./api')).default;
+        await apiService.recordNotificationEvent({
+          notificationId: data?.notificationId,
+          eventType: 'DELIVERED',
+          notificationType: data?.type,
+        });
+      } catch (err) {
+        console.error('Failed to record delivered notification event:', err);
+      }
+    })();
   }
 
   private handleNotificationOpened(remoteMessage: any) {
@@ -213,6 +227,20 @@ class NotificationService {
       // Navigate to specific screen
       this.navigateToScreen(data.screen, data.params);
     }
+    
+    // Record opened event to backend analytics
+    (async () => {
+      try {
+        const apiService = (await import('./api')).default;
+        await apiService.recordNotificationEvent({
+          notificationId: data?.notificationId,
+          eventType: 'OPENED',
+          notificationType: data?.type,
+        });
+      } catch (err) {
+        console.error('Failed to record opened notification event:', err);
+      }
+    })();
   }
 
   private handleNotificationAction(notification: any) {

@@ -45,14 +45,17 @@ const initialState: EmergencyState = {
 // Async thunks
 export const triggerEmergencyAlert = createAsyncThunk(
   'emergency/triggerAlert',
-  async (alertData: {
-    type: EmergencyAlert['type'];
-    severity: EmergencyAlert['severity'];
-    location: EmergencyAlert['location'];
-    message?: string;
-    shiftId?: string; // Optional: pass current shift ID for site-specific notifications
+  async (payload: {
+    alertData: {
+      type: EmergencyAlert['type'];
+      severity: EmergencyAlert['severity'];
+      location: EmergencyAlert['location'];
+      message?: string;
+      shiftId?: string;
+    };
+    options?: { signal?: AbortSignal; retries?: number };
   }) => {
-    const response = await api.triggerEmergencyAlert(alertData);
+    const response = await api.triggerEmergencyAlert(payload.alertData, payload.options);
     
     if (!response.success) {
       throw new Error(response.message || 'Failed to trigger emergency alert');

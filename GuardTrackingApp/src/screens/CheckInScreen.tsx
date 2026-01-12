@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -50,6 +50,7 @@ const CheckInScreen: React.FC<CheckInScreenProps> = () => {
   const [currentLocation, setCurrentLocation] = useState<any>(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const cancelTokenRef = useRef<{ cancelled?: boolean }>({ cancelled: false });
 
   // Get shift from route params or use active shift
   const shift = (route.params as any)?.shift || activeShift;
@@ -59,8 +60,15 @@ const CheckInScreen: React.FC<CheckInScreenProps> = () => {
     initializeData();
   }, []);
 
+  useEffect(() => {
+    return () => {
+      cancelTokenRef.current.cancelled = true;
+    };
+  }, []);
+
   const initializeData = async () => {
     await getCurrentLocation();
+    if (cancelTokenRef.current.cancelled) return;
     if (!shift) {
       dispatch(fetchActiveShift() as any);
     }
@@ -88,7 +96,9 @@ const CheckInScreen: React.FC<CheckInScreenProps> = () => {
         address: '123 Main Street, San Francisco, CA',
       };
 
-      setCurrentLocation(mockLocation);
+      if (!cancelTokenRef.current.cancelled) {
+        setCurrentLocation(mockLocation);
+      }
     } catch (error) {
       console.error('Error getting location:', error);
       setLocationError('Unable to get your current location');
@@ -106,6 +116,7 @@ const CheckInScreen: React.FC<CheckInScreenProps> = () => {
     if (!currentLocation) {
       Alert.alert('Location Required', 'Getting your location for check-in...');
       await getCurrentLocation();
+      if (cancelTokenRef.current.cancelled) return;
       return;
     }
 
@@ -117,6 +128,7 @@ const CheckInScreen: React.FC<CheckInScreenProps> = () => {
         address: currentLocation.address || '',
       };
 
+      if (cancelTokenRef.current.cancelled) return;
       await dispatch(checkInToShiftWithLocation({
         shiftId: shift.id,
         location: locationData,

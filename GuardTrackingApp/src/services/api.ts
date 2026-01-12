@@ -1388,6 +1388,43 @@ class ApiService {
     }
   }
 
+  async recordNotificationEvent(event: { notificationId?: string; eventType: 'DELIVERED' | 'OPENED'; notificationType?: string; }): Promise<ApiResponse<null>> {
+    try {
+      await this.api.post('/notifications/record-event', event);
+      return {
+        success: true,
+        data: null,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to record notification event'
+      };
+    }
+  }
+
+  async getNotificationStats(params: { start?: string; end?: string; metric?: string } = {}): Promise<ApiResponse<any>> {
+    try {
+      const query = new URLSearchParams();
+      if (params.start) query.append('start', params.start);
+      if (params.end) query.append('end', params.end);
+      if (params.metric) query.append('metric', params.metric);
+
+      const response = await this.api.get(`/notifications/stats?${query.toString()}`);
+      return {
+        success: true,
+        data: response.data.data
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to fetch notification stats'
+      };
+    }
+  }
+
   // Client Dashboard Methods
   async getClientDashboardStats(): Promise<ApiResponse<any>> {
     try {

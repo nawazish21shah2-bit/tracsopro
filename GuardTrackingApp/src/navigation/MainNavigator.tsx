@@ -43,6 +43,7 @@ export type MainTabParamList = {
   Reports: undefined;
   Jobs: undefined;
   Profile: undefined;
+  // Moved: chat feature lives under the guard dashboard's tab navigator
 };
 
 export type MainStackParamList = {
@@ -126,14 +127,6 @@ const MainNavigator: React.FC = () => {
       <Stack.Screen
         name="RootDrawer"
         component={MainContentNavigator}
-      />
-      <Stack.Screen
-        name="Settings"
-        component={SettingsScreen}
-        options={{
-          title: 'Settings',
-          headerBackTitle: 'Back',
-        }}
       />
       <Stack.Screen
         name="IncidentDetail"

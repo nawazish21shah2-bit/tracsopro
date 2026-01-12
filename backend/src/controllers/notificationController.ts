@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../middleware/auth.js';
 import notificationService from '../services/notificationService.js';
 import { logger } from '../utils/logger.js';
+import prisma from '../config/database.js';
 
 export class NotificationController {
   /**
@@ -136,6 +137,79 @@ export class NotificationController {
       });
     } catch (error) {
       logger.error('Error registering device token:', error);
+      next(error);
+    }
+  }
+
+  /**
+   * Record a notification event (delivered/opened) from client
+   * POST /api/notifications/record-event
+   * body: { notificationId?: string, eventType: 'DELIVERED' | 'OPENED', notificationType?: string }
+   */
+  async recordEvent(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = req.userId!;
+      const { notificationId, eventType, notificationType } = req.body;
+      if (!eventType) {
+        return res.status(400).json({ success: false, message: 'eventType is required' });
+      }
+
+      let metricType = '';
+      if (eventType === 'DELIVERED') metricType = 'NOTIFICATIONS_DELIVERED';
+      else if (eventType === 'OPENED') metricType = 'NOTIFICATIONS_OPENED';
+      else return res.status(400).json({ success: false, message: 'Invalid eventType' });
+
+      await prisma.platformAnalytics.create({
+        data: {
+          securityCompanyId: null,
+          metricType,
+          metricValue: 1,
+          dimensions: { userId, notificationId: notificationId || null, notificationType: notificationType || null },
+          timestamp: new Date(),
+        },
+      });
+
+      res.json({ success: true, message: 'Event recorded' });
+    } catch (error) {
+      logger.error('Error recording notification event:', error);
+      next(error);
+    }
+  }
+
+  /**
+   * Get aggregated notification stats
+   * GET /api/notifications/stats?start=YYYY-MM-DD&end=YYYY-MM-DD&metric=NOTIFICATIONS_SENT
+   */
+  async getNotificationStats(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { start, end, metric } = req.query;
+      const where: any = {};
+      if (metric) where.metricType = metric;
+      if (start || end) {
+        where.timestamp = {};
+        if (start) where.timestamp.gte = new Date(start as string);
+        if (end) {
+          const endDate = new Date(end as string);
+          // include full day
+          endDate.setHours(23, 59, 59, 999);
+          where.timestamp.lte = endDate;
+        }
+      }
+
+      const rows = await prisma.platformAnalytics.findMany({ where, orderBy: { timestamp: 'asc' } });
+
+      // Aggregate counts by metricType and day
+      const aggregated: Record<string, Record<string, number>> = {};
+      rows.forEach(r => {
+        const key = r.metricType;
+        const day = r.timestamp.toISOString().slice(0, 10);
+        aggregated[key] = aggregated[key] || {};
+        aggregated[key][day] = (aggregated[key][day] || 0) + (r.metricValue || 0);
+      });
+
+      res.json({ success: true, data: aggregated });
+    } catch (error) {
+      logger.error('Error fetching notification stats:', error);
       next(error);
     }
   }

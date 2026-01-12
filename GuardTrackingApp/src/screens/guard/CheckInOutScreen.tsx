@@ -15,6 +15,7 @@ import { RootState } from '../../store';
 import apiService from '../../services/api';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
+import { getCurrentLocationWithRetry } from '../../utils/safeLocationHelper';
 
 const { width } = Dimensions.get('window');
 
@@ -35,7 +36,7 @@ const CheckInOutScreen: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { assignmentId } = route.params as { assignmentId: string };
-  
+
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [assignment, setAssignment] = useState<Assignment | null>(null);
@@ -51,7 +52,7 @@ const CheckInOutScreen: React.FC = () => {
   const loadAssignment = async () => {
     try {
       const result = await apiService.getShiftById(assignmentId);
-      
+
       if (result.success && result.data) {
         const shift = result.data;
         setAssignment({
@@ -62,7 +63,7 @@ const CheckInOutScreen: React.FC = () => {
           startTime: shift.startTime || shift.scheduledStartTime,
           endTime: shift.endTime || shift.scheduledEndTime,
           status: shift.status === 'IN_PROGRESS' ? 'IN_PROGRESS' :
-                 shift.status === 'COMPLETED' ? 'COMPLETED' : 'ASSIGNED',
+            shift.status === 'COMPLETED' ? 'COMPLETED' : 'ASSIGNED',
           checkInTime: shift.checkInTime || shift.actualStartTime,
           checkOutTime: shift.checkOutTime || shift.actualEndTime,
           notes: shift.notes || ''
@@ -82,7 +83,7 @@ const CheckInOutScreen: React.FC = () => {
 
     setProcessing(true);
     try {
-      // Get current location
+      // Get current location using safe helper
       let location = {
         latitude: 0,
         longitude: 0,
@@ -91,24 +92,18 @@ const CheckInOutScreen: React.FC = () => {
       };
 
       try {
-        const { Geolocation } = require('react-native');
-        const position = await new Promise<any>((resolve, reject) => {
-          Geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: true,
-            timeout: 10000,
-            maximumAge: 0
-          });
-        });
-        location.latitude = position.coords.latitude;
-        location.longitude = position.coords.longitude;
-        location.accuracy = position.coords.accuracy || 10;
-      } catch (locError) {
+        const position = await getCurrentLocationWithRetry(2);
+        location.latitude = position.latitude;
+        location.longitude = position.longitude;
+        location.accuracy = position.accuracy || 10;
+        location.address = position.address || 'Current location';
+      } catch (locError: any) {
         console.warn('Could not get location:', locError);
-        Alert.alert('Location Error', 'Could not get your location. Check-in will proceed without location data.');
+        Alert.alert('Location Error', locError?.message || 'Could not get your location. Check-in will proceed without location data.');
       }
 
       const result = await apiService.checkInToShift(assignmentId, location);
-      
+
       if (result.success) {
         // Update local state
         setAssignment(prev => prev ? {
@@ -135,7 +130,7 @@ const CheckInOutScreen: React.FC = () => {
 
     setProcessing(true);
     try {
-      // Get current location
+      // Get current location using safe helper
       let location = {
         latitude: 0,
         longitude: 0,
@@ -144,24 +139,18 @@ const CheckInOutScreen: React.FC = () => {
       };
 
       try {
-        const { Geolocation } = require('react-native');
-        const position = await new Promise<any>((resolve, reject) => {
-          Geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: true,
-            timeout: 10000,
-            maximumAge: 0
-          });
-        });
-        location.latitude = position.coords.latitude;
-        location.longitude = position.coords.longitude;
-        location.accuracy = position.coords.accuracy || 10;
-      } catch (locError) {
+        const position = await getCurrentLocationWithRetry(2);
+        location.latitude = position.latitude;
+        location.longitude = position.longitude;
+        location.accuracy = position.accuracy || 10;
+        location.address = position.address || 'Current location';
+      } catch (locError: any) {
         console.warn('Could not get location:', locError);
-        Alert.alert('Location Error', 'Could not get your location. Check-out will proceed without location data.');
+        Alert.alert('Location Error', locError?.message || 'Could not get your location. Check-out will proceed without location data.');
       }
 
       const result = await apiService.checkOutFromShift(assignmentId, location, notes);
-      
+
       if (result.success) {
         // Update local state
         setAssignment(prev => prev ? {
@@ -207,7 +196,7 @@ const CheckInOutScreen: React.FC = () => {
     const shiftStart = new Date(assignment.startTime);
     const shiftEnd = new Date(assignment.endTime);
     const thirtyMinutesEarly = new Date(shiftStart.getTime() - 30 * 60 * 1000);
-    
+
     return now >= thirtyMinutesEarly && now <= shiftEnd;
   };
 
@@ -239,7 +228,7 @@ const CheckInOutScreen: React.FC = () => {
     <SafeAreaWrapper>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
@@ -267,7 +256,7 @@ const CheckInOutScreen: React.FC = () => {
         <View style={styles.section}>
           <Text style={styles.shiftTitle}>{assignment.shiftTitle}</Text>
           <Text style={styles.siteName}>{assignment.siteName}</Text>
-          
+
           <View style={styles.detailsContainer}>
             <View style={styles.detailRow}>
               <MapPin width={16} height={16} color="#666" />
@@ -292,7 +281,7 @@ const CheckInOutScreen: React.FC = () => {
                 </Text>
               </View>
             )}
-            
+
             {assignment.checkOutTime && (
               <View style={styles.statusRow}>
                 <XCircle width={16} height={16} color="#DC3545" />
@@ -311,7 +300,7 @@ const CheckInOutScreen: React.FC = () => {
               {canCheckOut ? 'Check-out Notes' : 'Check-in Notes'}
             </Text>
             <Text style={styles.notesHint}>
-              {canCheckOut 
+              {canCheckOut
                 ? 'Add any final notes about your shift completion'
                 : 'Add any notes about your arrival or observations'
               }
@@ -341,7 +330,7 @@ const CheckInOutScreen: React.FC = () => {
         {!isCompleted && (
           <View style={styles.actionContainer}>
             {canCheckIn && (
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.actionButton, styles.checkInButton, processing && styles.actionButtonDisabled]}
                 onPress={handleCheckIn}
                 disabled={processing}
@@ -354,7 +343,7 @@ const CheckInOutScreen: React.FC = () => {
             )}
 
             {canCheckOut && (
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.actionButton, styles.checkOutButton, processing && styles.actionButtonDisabled]}
                 onPress={handleCheckOut}
                 disabled={processing}
@@ -369,7 +358,7 @@ const CheckInOutScreen: React.FC = () => {
             {!canCheckIn && !canCheckOut && (
               <View style={styles.infoContainer}>
                 <Text style={styles.infoText}>
-                  {assignment.status === 'ASSIGNED' 
+                  {assignment.status === 'ASSIGNED'
                     ? 'You can check in 30 minutes before your shift starts'
                     : 'Please check in first to access check-out'
                   }

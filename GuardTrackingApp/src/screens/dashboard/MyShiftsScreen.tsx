@@ -1,5 +1,5 @@
 // My Shifts Screen - Pixel Perfect Figma Implementation
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -81,6 +81,7 @@ const MyShiftsScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [currentTime, setCurrentTime] = useState('00:00:00');
   const [gettingLocation, setGettingLocation] = useState(false);
+  const cancelTokenRef = useRef<{ cancelled?: boolean }>({ cancelled: false });
 
   // Redux state
   const { 
@@ -142,6 +143,13 @@ const MyShiftsScreen: React.FC = () => {
 
     return () => clearInterval(timer);
   }, [dispatch, isAuthenticated]);
+
+  useEffect(() => {
+    return () => {
+      // Cancel any in-flight location/network callbacks when component unmounts
+      cancelTokenRef.current.cancelled = true;
+    };
+  }, []);
 
   const onRefresh = useCallback(async () => {
     try {
@@ -320,15 +328,18 @@ const MyShiftsScreen: React.FC = () => {
         try {
       Geolocation.getCurrentPosition(
         (position: Geolocation.GeoPosition) => {
+              // If cancelled, ignore result
+              if (cancelTokenRef.current.cancelled) return;
               if (!position || !position.coords || 
               typeof position.coords.latitude !== 'number' || 
               typeof position.coords.longitude !== 'number' ||
               isNaN(position.coords.latitude) ||
               isNaN(position.coords.longitude)) {
-            reject(new Error('Invalid location data received. Please try again.'));
+            if (!cancelTokenRef.current.cancelled) reject(new Error('Invalid location data received. Please try again.'));
             return;
           }
 
+          if (cancelTokenRef.current.cancelled) return;
           resolve({
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
@@ -337,6 +348,7 @@ const MyShiftsScreen: React.FC = () => {
           });
         },
         (error: Geolocation.GeoError) => {
+              if (cancelTokenRef.current.cancelled) return;
               console.error('Location error:', error);
           let errorMessage = 'Unable to get your location.';
               let shouldRetry = true;
@@ -357,7 +369,7 @@ const MyShiftsScreen: React.FC = () => {
               const locationError = new Error(errorMessage) as any;
               locationError.code = error.code;
               locationError.shouldRetry = shouldRetry;
-              reject(locationError);
+              if (!cancelTokenRef.current.cancelled) reject(locationError);
         },
         {
               enableHighAccuracy: useHighAccuracy,
@@ -366,8 +378,10 @@ const MyShiftsScreen: React.FC = () => {
         }
       );
         } catch (error) {
-          console.error('Error calling getCurrentPosition:', error);
-          reject(new Error('Failed to get location. Please try again.'));
+          if (!cancelTokenRef.current.cancelled) {
+            console.error('Error calling getCurrentPosition:', error);
+            reject(new Error('Failed to get location. Please try again.'));
+          }
         }
       });
     };
