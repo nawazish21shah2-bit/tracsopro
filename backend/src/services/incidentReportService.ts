@@ -495,7 +495,8 @@ class IncidentReportService {
 
   async respondToReport(reportId: string, userId: string, userRole: string, status: string, responseNotes?: string) {
     try {
-      // Find the report
+      // Find the report with simplified includes to avoid Prisma validation errors
+      // CompanyClient has 'client' and 'securityCompany' relations, not 'user'
       const report = await prisma.incidentReport.findUnique({
         where: { id: reportId },
         include: {
@@ -504,15 +505,7 @@ class IncidentReportService {
               user: true,
               companyGuards: {
                 include: {
-                  securityCompany: {
-                    include: {
-                      clients: {
-                        include: {
-                          user: true
-                        }
-                      }
-                    }
-                  }
+                  securityCompany: true
                 }
               }
             }
@@ -579,10 +572,10 @@ class IncidentReportService {
       }
 
       // Update report status and add response to description
-      const responseText = responseNotes 
+      const responseText = responseNotes
         ? `\n\n[Response by ${userRole} - ${status}]: ${responseNotes}`
         : `\n\n[Response by ${userRole} - ${status}]`;
-      
+
       const updatedReport = await prisma.incidentReport.update({
         where: { id: reportId },
         data: {

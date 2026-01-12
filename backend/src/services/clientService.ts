@@ -9,7 +9,7 @@ interface ClientProfileUpdateData {
   state?: string;
   zipCode?: string;
   country?: string;
-  
+
   // Company account fields
   companyName?: string;
   companyRegistrationNumber?: string;
@@ -20,7 +20,7 @@ interface ClientProfileUpdateData {
 export class ClientService {
   async getAllClients(page: number = 1, limit: number = 50, accountType?: string, securityCompanyId?: string) {
     const skip = (page - 1) * limit;
-    
+
     const where: any = {};
     if (accountType) {
       where.accountType = accountType;
@@ -309,7 +309,7 @@ export class ClientService {
       // Get new reports (reports from last 24 hours)
       const yesterday = new Date(today);
       yesterday.setDate(yesterday.getDate() - 1);
-      
+
       // Get shifts for client (Option B)
       const clientShifts = await prisma.shift.findMany({
         where: {
@@ -347,7 +347,7 @@ export class ClientService {
     try {
       const skip = (page - 1) * limit;
       const now = new Date();
-      
+
       // Get shifts for this client that are:
       // 1. Active (IN_PROGRESS) - regardless of date
       // 2. Upcoming (SCHEDULED with scheduledEndTime >= now)
@@ -355,7 +355,7 @@ export class ClientService {
       // 4. Recent past shifts (completed within last 7 days)
       const sevenDaysAgo = new Date(now);
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      
+
       const today = new Date(now);
       today.setHours(0, 0, 0, 0);
       const tomorrow = new Date(today);
@@ -366,7 +366,7 @@ export class ClientService {
         prisma.shift.findMany({
           where: {
             clientId,
-            guardId: { not: null }, // Only shifts with assigned guards
+            NOT: { guardId: null }, // Only shifts with assigned guards
             OR: [
               {
                 // Active shifts
@@ -442,7 +442,7 @@ export class ClientService {
         prisma.shift.count({
           where: {
             clientId,
-            guardId: { not: null },
+            NOT: { guardId: null },
             OR: [
               {
                 status: 'IN_PROGRESS',
@@ -473,42 +473,42 @@ export class ClientService {
       // Group shifts by guard ID and get the most relevant shift for each guard
       // Priority: Active > Upcoming (soonest) > Today > Recent past
       const guardShiftMap = new Map<string, typeof allShifts[0]>();
-      
+
       for (const shift of allShifts) {
         if (!shift.guardId || !shift.guard) continue;
-        
+
         const existingShift = guardShiftMap.get(shift.guardId);
-        
+
         if (!existingShift) {
           guardShiftMap.set(shift.guardId, shift);
         } else {
           // Prioritize: IN_PROGRESS > SCHEDULED (soonest) > others
-          const existingPriority = existingShift.status === 'IN_PROGRESS' ? 1 : 
-                                   existingShift.status === 'SCHEDULED' ? 2 : 3;
-          const currentPriority = shift.status === 'IN_PROGRESS' ? 1 : 
-                                  shift.status === 'SCHEDULED' ? 2 : 3;
-          
+          const existingPriority = existingShift.status === 'IN_PROGRESS' ? 1 :
+            existingShift.status === 'SCHEDULED' ? 2 : 3;
+          const currentPriority = shift.status === 'IN_PROGRESS' ? 1 :
+            shift.status === 'SCHEDULED' ? 2 : 3;
+
           if (currentPriority < existingPriority) {
             guardShiftMap.set(shift.guardId, shift);
-          } else if (currentPriority === existingPriority && 
-                     shift.scheduledStartTime < existingShift.scheduledStartTime) {
+          } else if (currentPriority === existingPriority &&
+            shift.scheduledStartTime < existingShift.scheduledStartTime) {
             // If same priority, pick the one starting sooner
             guardShiftMap.set(shift.guardId, shift);
           }
         }
       }
-      
+
       // Convert map to array and apply pagination
       const shifts = Array.from(guardShiftMap.values())
         .slice(skip, skip + limit);
-      
+
       const total = guardShiftMap.size;
 
       // Transform shifts to guard data format
       const guards = shifts.map((shift) => {
         const guardUser = shift.guard.user;
         const guardName = `${guardUser.firstName} ${guardUser.lastName}`;
-        
+
         // Format shift time
         const formatTime = (date: Date) => {
           const hours = date.getHours();
@@ -606,11 +606,11 @@ export class ClientService {
                 guard: {
                   include: {
                     user: {
-                      select: { 
+                      select: {
                         id: true,
-                        firstName: true, 
-                        lastName: true, 
-                        email: true 
+                        firstName: true,
+                        lastName: true,
+                        email: true
                       }
                     }
                   }
@@ -618,11 +618,11 @@ export class ClientService {
               }
             },
             guard: {
-              select: { 
+              select: {
                 id: true,
-                firstName: true, 
-                lastName: true, 
-                email: true 
+                firstName: true,
+                lastName: true,
+                email: true
               }
             }
           },
@@ -639,11 +639,11 @@ export class ClientService {
             guard: {
               include: {
                 user: {
-                  select: { 
+                  select: {
                     id: true,
-                    firstName: true, 
-                    lastName: true, 
-                    email: true 
+                    firstName: true,
+                    lastName: true,
+                    email: true
                   }
                 }
               }
@@ -672,10 +672,10 @@ export class ClientService {
         try {
           // ShiftReport.guard is a User directly, Shift.guard is a Guard with user relation
           const guardUser = report.guard || report.shift?.guard?.user;
-          const guardName = guardUser 
+          const guardName = guardUser
             ? `${guardUser.firstName || ''} ${guardUser.lastName || ''}`.trim() || 'Unknown Guard'
             : 'Unknown Guard';
-          
+
           // Map report type from ReportTypeEnum
           let type: 'Medical Emergency' | 'Incident' | 'Violation' | 'Maintenance' = 'Incident';
           switch (report.reportType) {
@@ -701,21 +701,21 @@ export class ClientService {
             type,
             guardName,
             site: siteName,
-            time: report.submittedAt 
-              ? new Date(report.submittedAt).toLocaleTimeString('en-US', { 
-                  hour: '2-digit', 
-                  minute: '2-digit',
-                  hour12: true 
-                })
+            time: report.submittedAt
+              ? new Date(report.submittedAt).toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+              })
               : 'Unknown Time',
             description: report.content || 'No description',
             status,
             checkInTime: checkInTime
-              ? new Date(checkInTime).toLocaleTimeString('en-US', { 
-                  hour: '2-digit', 
-                  minute: '2-digit',
-                  hour12: true 
-                })
+              ? new Date(checkInTime).toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+              })
               : undefined,
             guardId: report.shift?.guard?.id,
             guardUserId: report.guard?.id || report.shift?.guard?.userId,
@@ -741,10 +741,10 @@ export class ClientService {
       const transformedIncidentReports = incidentReports.map((report) => {
         try {
           const guardUser = report.guard?.user;
-          const guardName = guardUser 
+          const guardName = guardUser
             ? `${guardUser.firstName || ''} ${guardUser.lastName || ''}`.trim() || 'Unknown Guard'
             : 'Unknown Guard';
-          
+
           // Map report type from reportType string
           let type: 'Medical Emergency' | 'Incident' | 'Violation' | 'Maintenance' = 'Incident';
           const reportTypeUpper = (report.reportType || '').toUpperCase();
@@ -774,12 +774,12 @@ export class ClientService {
             type,
             guardName,
             site: siteName,
-            time: report.submittedAt 
-              ? new Date(report.submittedAt).toLocaleTimeString('en-US', { 
-                  hour: '2-digit', 
-                  minute: '2-digit',
-                  hour12: true 
-                })
+            time: report.submittedAt
+              ? new Date(report.submittedAt).toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+              })
               : 'Unknown Time',
             description: report.description || 'No description',
             status,
@@ -817,7 +817,7 @@ export class ClientService {
       const total = shiftReportsTotal + incidentReportsTotal;
 
       logger.info(`Reports list requested for client: ${clientId}, found ${allReports.length} reports (${shiftReports.length} shift reports, ${incidentReports.length} incident reports)`);
-      
+
       return {
         reports: allReports,
         pagination: {
@@ -866,7 +866,7 @@ export class ClientService {
 
       // ShiftReport doesn't have status field, so we'll update the content with response
       // In future, consider adding a status field or using IncidentReport for status tracking
-      const updatedContent = responseNotes 
+      const updatedContent = responseNotes
         ? `${report.content}\n\n[Client Response - ${status}]: ${responseNotes}`
         : `${report.content}\n\n[Client Response - ${status}]`;
 
@@ -916,7 +916,7 @@ export class ClientService {
           where: { clientId },
           include: {
             shifts: {
-              where: { 
+              where: {
                 status: { in: ['SCHEDULED', 'IN_PROGRESS'] }
               },
               include: {
