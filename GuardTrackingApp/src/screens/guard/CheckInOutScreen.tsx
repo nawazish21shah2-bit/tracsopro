@@ -435,7 +435,7 @@ const styles = StyleSheet.create({
   },
   currentTime: {
     color: COLORS.textInverse,
-    fontSize: TYPOGRAPHY.fontSize.xxxxl,
+    fontSize: TYPOGRAPHY.fontSize.xxxl,
     fontWeight: TYPOGRAPHY.fontWeight.bold,
     marginBottom: SPACING.xs,
   },
@@ -463,10 +463,10 @@ const styles = StyleSheet.create({
   siteName: {
     fontSize: TYPOGRAPHY.fontSize.md,
     color: COLORS.textSecondary,
-    marginBottom: SPACING.fieldGap || SPACING.lg,
+    marginBottom: SPACING.lg,
   },
   detailsContainer: {
-    marginBottom: SPACING.fieldGap || SPACING.lg,
+    marginBottom: SPACING.lg,
   },
   detailRow: {
     flexDirection: 'row',
@@ -556,7 +556,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.warning + '40',
   },
   infoText: {
-    color: COLORS.warningDark,
+    color: COLORS.warning,
     fontSize: TYPOGRAPHY.fontSize.sm,
     textAlign: 'center',
   },
