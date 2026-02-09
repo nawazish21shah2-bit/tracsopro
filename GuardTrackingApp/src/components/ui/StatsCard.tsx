@@ -26,7 +26,7 @@ const getVariantColors = (variant: StatsCardProps['variant']) => {
 
 const StatsCard: React.FC<StatsCardProps> = ({ label, value, icon, variant = 'neutral', style, twoLineLabel = false }) => {
   const colors = getVariantColors(variant);
-  
+
   // Split label into words for two-line display only if twoLineLabel prop is true
   const labelWords = twoLineLabel ? label.split(' ') : [label];
 
@@ -58,7 +58,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
+    padding: 12,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#DCDCDC',
@@ -77,13 +77,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 8,
   },
   textContainer: {
     flex: 1,
     justifyContent: 'center',
-    marginRight: 8,
-    minWidth: 0, // Allow flex to shrink if needed, but prevent truncation
+    marginRight: 4,
+    minWidth: 0,
   },
   label: {
     fontSize: 12,
@@ -92,17 +92,17 @@ const styles = StyleSheet.create({
     color: '#7A7A7A',
     lineHeight: 16,
     letterSpacing: -0.41,
-    flexShrink: 0, // Prevent individual words from being truncated
+    flexShrink: 1,
   },
   value: {
-    fontSize: 24,
+    fontSize: 22,
     fontFamily: TYPOGRAPHY.fontPrimary,
     fontWeight: TYPOGRAPHY.fontWeight.bold,
     color: '#323232',
     lineHeight: 29,
     textAlign: 'right',
-    flexShrink: 0, // Prevent shrinking to ensure full value is visible
-    minWidth: 60, // Minimum width to accommodate values like "8.5 min"
+    flexShrink: 0,
+    marginLeft: 'auto',
   },
 });
 

@@ -49,7 +49,7 @@ const SupportContactScreen: React.FC<SupportContactScreenProps> = ({
   // Create drawer for guard variant if not provided
   const renderProfileDrawer = () => {
     if (profileDrawer) return profileDrawer;
-    
+
     if (variant === 'guard') {
       return (
         <GuardProfileDrawer
@@ -70,7 +70,7 @@ const SupportContactScreen: React.FC<SupportContactScreenProps> = ({
         />
       );
     }
-    
+
     return null;
   };
 
@@ -112,7 +112,7 @@ const SupportContactScreen: React.FC<SupportContactScreenProps> = ({
     } catch (error: any) {
       console.error('Error submitting support request:', error);
       const errorMessage = error?.message || 'Failed to submit support request. Please try again.';
-      
+
       // If it's a session expired error, show a more user-friendly message
       if (errorMessage.includes('session has expired') || errorMessage.includes('expired')) {
         Alert.alert(
@@ -130,7 +130,7 @@ const SupportContactScreen: React.FC<SupportContactScreenProps> = ({
 
   return (
     <SafeAreaWrapper>
-      <SharedHeader variant={variant} title="Contact Support" profileDrawer={renderProfileDrawer()} />
+      <SharedHeader variant={variant} title="Contact Support" onNotificationPress={() => navigation.navigate('Notifications')} profileDrawer={renderProfileDrawer()} />
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.card}>
           <View style={styles.header}>

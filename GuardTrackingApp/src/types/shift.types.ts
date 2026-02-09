@@ -69,12 +69,25 @@ export interface CheckInRequest {
   shiftId: string;
   latitude?: number;
   longitude?: number;
+  location?: {
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+    address?: string;
+  };
 }
 
 export interface CheckOutRequest {
   shiftId: string;
   latitude?: number;
   longitude?: number;
+  location?: {
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+    address?: string;
+  };
+  notes?: string;
 }
 
 export interface CreateShiftReportRequest {

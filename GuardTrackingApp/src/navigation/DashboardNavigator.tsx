@@ -15,7 +15,7 @@ import ProfileEditScreen from '../screens/settings/ProfileEditScreen';
 import ChangePasswordScreen from '../screens/settings/ChangePasswordScreen';
 import SupportContactScreen from '../screens/settings/SupportContactScreen';
 import NotificationListScreen from '../screens/notifications/NotificationListScreen';
-import { HomeIcon, ShiftsIcon, ReportsIcon, CheckInIcon, SettingsIcon } from '../components/ui/AppIcons';
+import { HomeIcon, ShiftsIcon, ReportsIcon, CheckInIcon, SettingsIcon, ChatIcon } from '../components/ui/AppIcons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../styles/globalStyles';
 import ChatListScreen from '../screens/chat/ChatListScreen';
@@ -54,25 +54,25 @@ const SettingsStackNavigator: React.FC = () => {
   return (
     <SettingsStack.Navigator screenOptions={{ headerShown: false }}>
       <SettingsStack.Screen name="GuardSettings" component={GuardSettingsScreen} />
-      <SettingsStack.Screen 
-        name="GuardNotificationSettings" 
-        component={() => <NotificationSettingsScreen variant="guard" />} 
+      <SettingsStack.Screen
+        name="GuardNotificationSettings"
+        component={() => <NotificationSettingsScreen variant="guard" />}
       />
-      <SettingsStack.Screen 
-        name="GuardProfileEdit" 
-        component={() => <ProfileEditScreen variant="guard" />} 
+      <SettingsStack.Screen
+        name="GuardProfileEdit"
+        component={() => <ProfileEditScreen variant="guard" />}
       />
-      <SettingsStack.Screen 
-        name="GuardChangePassword" 
-        component={() => <ChangePasswordScreen variant="guard" />} 
+      <SettingsStack.Screen
+        name="GuardChangePassword"
+        component={() => <ChangePasswordScreen variant="guard" />}
       />
-      <SettingsStack.Screen 
-        name="GuardSupportContact" 
-        component={() => <SupportContactScreen variant="guard" />} 
+      <SettingsStack.Screen
+        name="GuardSupportContact"
+        component={() => <SupportContactScreen variant="guard" />}
       />
-      <SettingsStack.Screen 
-        name="Notifications" 
-        component={() => <NotificationListScreen variant="guard" />} 
+      <SettingsStack.Screen
+        name="Notifications"
+        component={() => <NotificationListScreen variant="guard" />}
       />
     </SettingsStack.Navigator>
   );
@@ -104,7 +104,7 @@ const DashboardNavigator: React.FC = () => {
           height: 70,
         },
         tabBarLabelStyle: {
-          fontSize: TYPOGRAPHY.fontSize.xs,
+          fontSize: 10,
           fontWeight: TYPOGRAPHY.fontWeight.medium,
           marginTop: SPACING.xs,
         },
@@ -126,7 +126,7 @@ const DashboardNavigator: React.FC = () => {
             </View>
           ),
           tabBarLabel: ({ focused }) => (
-            <Text 
+            <Text
               numberOfLines={1}
               ellipsizeMode="tail"
               style={[styles.tabLabel, { color: focused ? COLORS.primary : COLORS.textSecondary }]}>
@@ -145,7 +145,7 @@ const DashboardNavigator: React.FC = () => {
             </View>
           ),
           tabBarLabel: ({ focused }) => (
-            <Text 
+            <Text
               numberOfLines={1}
               ellipsizeMode="tail"
               style={[styles.tabLabel, { color: focused ? COLORS.primary : COLORS.textSecondary }]}>
@@ -164,7 +164,7 @@ const DashboardNavigator: React.FC = () => {
             </View>
           ),
           tabBarLabel: ({ focused }) => (
-            <Text 
+            <Text
               numberOfLines={1}
               ellipsizeMode="tail"
               style={[styles.tabLabel, { color: focused ? COLORS.primary : COLORS.textSecondary }]}>
@@ -183,7 +183,7 @@ const DashboardNavigator: React.FC = () => {
             </View>
           ),
           tabBarLabel: ({ focused }) => (
-            <Text 
+            <Text
               numberOfLines={1}
               ellipsizeMode="tail"
               style={[styles.tabLabel, { color: focused ? COLORS.primary : COLORS.textSecondary }]}>
@@ -198,11 +198,11 @@ const DashboardNavigator: React.FC = () => {
         options={{
           tabBarIcon: ({ focused }) => (
             <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
-              <MaterialIcons name="chat" size={20} color={focused ? COLORS.primary : COLORS.textSecondary} />
+              <ChatIcon size={20} color={focused ? COLORS.primary : COLORS.textSecondary} />
             </View>
           ),
           tabBarLabel: ({ focused }) => (
-            <Text 
+            <Text
               numberOfLines={1}
               ellipsizeMode="tail"
               style={[styles.tabLabel, { color: focused ? COLORS.primary : COLORS.textSecondary }]}>
@@ -221,7 +221,7 @@ const DashboardNavigator: React.FC = () => {
             </View>
           ),
           tabBarLabel: ({ focused }) => (
-            <Text 
+            <Text
               numberOfLines={1}
               ellipsizeMode="tail"
               style={[styles.tabLabel, { color: focused ? COLORS.primary : COLORS.textSecondary }]}>
@@ -242,8 +242,8 @@ const styles = StyleSheet.create({
   tabIconWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: BORDER_RADIUS.round,
     backgroundColor: COLORS.backgroundSecondary,
   },
@@ -251,9 +251,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primaryLight,
   },
   tabLabel: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontSize: 10,
     fontWeight: TYPOGRAPHY.fontWeight.medium,
-    marginTop: SPACING.xs,
+    marginTop: 2,
     textAlign: 'center',
     flexShrink: 0,
     flexWrap: 'nowrap',

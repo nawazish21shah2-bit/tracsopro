@@ -71,7 +71,7 @@ const ProfileEditScreen: React.FC<ProfileEditScreenProps> = ({
   // Create drawer for guard variant if not provided
   const renderProfileDrawer = () => {
     if (profileDrawer) return profileDrawer;
-    
+
     if (variant === 'guard') {
       return (
         <GuardProfileDrawer
@@ -92,7 +92,7 @@ const ProfileEditScreen: React.FC<ProfileEditScreenProps> = ({
         />
       );
     }
-    
+
     return null;
   };
 
@@ -108,13 +108,13 @@ const ProfileEditScreen: React.FC<ProfileEditScreenProps> = ({
         firstName: profile.firstName || '',
         lastName: profile.lastName || '',
         phone: profile.phone || '',
-        timezone: profile.timezone || '',
-        language: profile.language || 'en',
+        timezone: '',
+        language: 'en',
       });
     } catch (error: any) {
       console.error('Error loading profile:', error);
       const errorMessage = error?.message || 'Failed to load profile';
-      
+
       // If it's a session expired error, show a more user-friendly message
       if (errorMessage.includes('session has expired') || errorMessage.includes('expired')) {
         Alert.alert(
@@ -149,7 +149,7 @@ const ProfileEditScreen: React.FC<ProfileEditScreenProps> = ({
         lastName: formData.lastName.trim(),
         phone: formData.phone.trim() || undefined,
         timezone: formData.timezone.trim() || undefined,
-        language: formData.language,
+        // Note: timezone is stored locally only for now
       });
 
       // Update Redux store
@@ -165,7 +165,7 @@ const ProfileEditScreen: React.FC<ProfileEditScreenProps> = ({
     } catch (error: any) {
       console.error('Error updating profile:', error);
       const errorMessage = error?.message || 'Failed to update profile. Please try again.';
-      
+
       // If it's a session expired error, show a more user-friendly message
       if (errorMessage.includes('session has expired') || errorMessage.includes('expired')) {
         Alert.alert(
@@ -184,7 +184,7 @@ const ProfileEditScreen: React.FC<ProfileEditScreenProps> = ({
   if (loading) {
     return (
       <SafeAreaWrapper>
-        <SharedHeader variant={variant} title="Edit Profile" profileDrawer={renderProfileDrawer()} />
+        <SharedHeader variant={variant} title="Edit Profile" onNotificationPress={() => navigation.navigate('Notifications')} profileDrawer={renderProfileDrawer()} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
@@ -194,7 +194,7 @@ const ProfileEditScreen: React.FC<ProfileEditScreenProps> = ({
 
   return (
     <SafeAreaWrapper>
-      <SharedHeader variant={variant} title="Edit Profile" profileDrawer={profileDrawer} />
+      <SharedHeader variant={variant} title="Edit Profile" onNotificationPress={() => navigation.navigate('Notifications')} profileDrawer={renderProfileDrawer()} />
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.card}>
           <View style={styles.inputGroup}>
@@ -286,7 +286,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.backgroundPrimary,
     borderRadius: BORDER_RADIUS.md,
     padding: SPACING.lg,
-    marginBottom: SPACING.fieldGap || SPACING.lg,
+    marginBottom: SPACING.lg,
     borderWidth: 1,
     borderColor: COLORS.borderCard,
     // Border only, no shadow for minimal style

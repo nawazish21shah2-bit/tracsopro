@@ -21,6 +21,7 @@ export class AuthController {
 
   async login(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      console.log('🔵 LOGIN CONTROLLER - req.body:', JSON.stringify(req.body));
       debugger;
       const result = await authService.login(req.body);
       const { email } = req.body as { email?: string };
@@ -34,6 +35,7 @@ export class AuthController {
         data: result,
       });
     } catch (error) {
+      console.log('🔴 LOGIN ERROR:', error);
       next(error);
     }
   }

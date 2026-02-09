@@ -176,10 +176,16 @@ export const checkInToShift = createAsyncThunk(
   'shift/checkIn',
   async (data: CheckInRequest, { rejectWithValue }) => {
     try {
-      const response = await shiftService.checkIn(data);
-      return response.shift;
+      // Use checkInToShift which calls the correct endpoint /shifts/:id/check-in
+      const shift = await shiftService.checkInToShift(data.shiftId, {
+        latitude: data.location?.latitude || 0,
+        longitude: data.location?.longitude || 0,
+        accuracy: data.location?.accuracy || 10,
+        address: data.location?.address,
+      });
+      return shift;
     } catch (error: any) {
-      return rejectWithValue(error.response?.data?.error || 'Failed to check in');
+      return rejectWithValue(error.response?.data?.error || error.message || 'Failed to check in');
     }
   }
 );
@@ -195,15 +201,15 @@ export const syncAllData = createAsyncThunk(
         dispatch(fetchTodayShifts()),
         dispatch(fetchMonthlyStats()),
       ]);
-      
+
       const errors = results
         .filter(result => result.status === 'rejected')
         .map(result => (result as PromiseRejectedResult).reason);
-      
+
       if (errors.length > 0) {
         throw new Error(`Sync partially failed: ${errors.join(', ')}`);
       }
-      
+
       return { syncTime: new Date().toISOString() };
     } catch (error: any) {
       return rejectWithValue(error.message || 'Sync failed');
@@ -213,10 +219,10 @@ export const syncAllData = createAsyncThunk(
 
 export const createIncidentReport = createAsyncThunk(
   'shift/createIncidentReport',
-  async (data: { 
-    shiftId: string; 
-    description: string; 
-    severity: 'low' | 'medium' | 'high'; 
+  async (data: {
+    shiftId: string;
+    description: string;
+    severity: 'low' | 'medium' | 'high';
     photos?: string[];
     location?: { latitude: number; longitude: number };
   }, { rejectWithValue }) => {
@@ -254,10 +260,16 @@ export const checkOutFromShift = createAsyncThunk(
   'shift/checkOut',
   async (data: CheckOutRequest, { rejectWithValue }) => {
     try {
-      const response = await shiftService.checkOut(data);
-      return response.shift;
+      // Use checkOutFromShift which calls the correct endpoint /shifts/:id/check-out
+      const shift = await shiftService.checkOutFromShift(data.shiftId, {
+        latitude: data.location?.latitude || 0,
+        longitude: data.location?.longitude || 0,
+        accuracy: data.location?.accuracy || 10,
+        address: data.location?.address,
+      }, data.notes);
+      return shift;
     } catch (error: any) {
-      return rejectWithValue(error.response?.data?.error || 'Failed to check out');
+      return rejectWithValue(error.response?.data?.error || error.message || 'Failed to check out');
     }
   }
 );

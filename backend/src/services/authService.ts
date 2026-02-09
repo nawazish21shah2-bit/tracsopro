@@ -36,7 +36,7 @@ export class AuthService {
 
     // Validate registration requirements
     const userRole = role || 'GUARD';
-    
+
     // Guard and Client MUST have invitation code
     if ((userRole === 'GUARD' || userRole === 'CLIENT') && !invitationCode) {
       throw new ValidationError(
@@ -68,21 +68,21 @@ export class AuthService {
       // If user exists but email is not verified, allow resending OTP
       if (!existingUser.isEmailVerified) {
         logger.info(`User ${existingUser.id} exists but email not verified. Resending OTP.`);
-        
+
         // Generate and send new OTP
         const otp = otpService.generateOTP();
         await otpService.storeOTP(existingUser.id, otp);
-        
+
         try {
           await otpService.sendOTPEmail(existingUser.email, otp, firstName);
           logger.info(`OTP resent to unverified user: ${existingUser.email}`);
         } catch (emailError: any) {
           // In dev mode, if SMTP is not configured, log OTP and continue
           const isDevMode = process.env.NODE_ENV !== 'production';
-          const isSmtpError = emailError.message?.includes('SMTP') || 
-                            emailError.message?.includes('email authentication') ||
-                            emailError.message?.includes('Failed to send');
-          
+          const isSmtpError = emailError.message?.includes('SMTP') ||
+            emailError.message?.includes('email authentication') ||
+            emailError.message?.includes('Failed to send');
+
           if (isDevMode && isSmtpError) {
             logger.warn(`SMTP not configured - OTP not sent via email. DEV OTP: ${otp}`);
           } else {
@@ -90,7 +90,7 @@ export class AuthService {
             throw emailError;
           }
         }
-        
+
         // Return user info for OTP verification
         return {
           userId: existingUser.id,
@@ -100,7 +100,7 @@ export class AuthService {
           message: 'A new verification code has been sent to your email. Please verify your email to complete registration.',
         };
       }
-      
+
       // If email is already verified, user should login instead
       throw new ConflictError('Email already registered. Please login instead.');
     }
@@ -187,7 +187,7 @@ export class AuthService {
       // Handle invitation code if provided
       if (data.invitationCode) {
         const invitationService = (await import('./invitationService.js')).default;
-        
+
         const validation = await invitationService.validateInvitation(
           data.invitationCode,
           user.email
@@ -252,7 +252,7 @@ export class AuthService {
       // Generate and send OTP
       const otp = otpService.generateOTP();
       await otpService.storeOTP(user.id, otp);
-      
+
       // Try to send OTP email, but don't fail registration if email fails in dev mode
       try {
         await otpService.sendOTPEmail(user.email, otp, user.firstName);
@@ -260,25 +260,25 @@ export class AuthService {
       } catch (emailError: any) {
         // In development mode, if email fails due to missing SMTP, bypass OTP
         const isDevMode = process.env.NODE_ENV !== 'production';
-        const isSmtpError = emailError.message?.includes('SMTP') || 
-                          emailError.message?.includes('email authentication') ||
-                          emailError.message?.includes('Failed to send') ||
-                          emailError.message?.includes('ECONNECTION') ||
-                          emailError.code === 'EAUTH' ||
-                          emailError.code === 'ECONNECTION';
-        
+        const isSmtpError = emailError.message?.includes('SMTP') ||
+          emailError.message?.includes('email authentication') ||
+          emailError.message?.includes('Failed to send') ||
+          emailError.message?.includes('ECONNECTION') ||
+          emailError.code === 'EAUTH' ||
+          emailError.code === 'ECONNECTION';
+
         if (isDevMode && isSmtpError) {
           logger.warn(`SMTP not configured - bypassing OTP verification for dev mode. OTP: ${otp}`);
-          
+
           // Mark email as verified automatically in dev mode when SMTP is missing
           await prisma.user.update({
             where: { id: user.id },
             data: { isEmailVerified: true },
           });
-          
+
           const token = signAccessToken(user.id);
           const refreshToken = signRefreshToken(user.id);
-          
+
           return {
             token,
             refreshToken,
@@ -301,7 +301,7 @@ export class AuthService {
           throw emailError;
         }
       }
-      
+
       // Return user info without tokens (they'll get tokens after OTP verification)
       return {
         userId: user.id,
@@ -341,6 +341,8 @@ export class AuthService {
 
   async login(data: LoginData) {
     const { email, password } = data;
+    console.log('🔐 LOGIN ATTEMPT:', email);
+
 
     // Find user with profile data
     const user = await prisma.user.findUnique({
@@ -352,17 +354,29 @@ export class AuthService {
     });
 
     if (!user) {
+      console.log('❌ User not found:', email.toLowerCase());
+      import('fs').then(fs => fs.appendFileSync('login-debug.log', `[${new Date().toISOString()}] User not found: ${email}\n`));
       throw new UnauthorizedError('Invalid credentials');
     }
 
+    console.log('✅ User found:', user.email, 'Active:', user.isActive);
+
     if (!user.isActive) {
+      console.log('❌ User inactive');
+      import('fs').then(fs => fs.appendFileSync('login-debug.log', `[${new Date().toISOString()}] User inactive: ${email}\n`));
       throw new UnauthorizedError('Account is inactive');
     }
 
     // Verify password
+    console.log('🔐 Password hash:', user.password.slice(0, 30) + '...');
+    console.log('🔐 Input password:', password);
     const isValidPassword = await bcrypt.compare(password, user.password);
+    console.log('🔐 bcrypt.compare result:', isValidPassword);
+
+    import('fs').then(fs => fs.appendFileSync('login-debug.log', `[${new Date().toISOString()}] Login attempt for ${email}. Hash: ${user.password.substring(0, 10)}... Input: ${password} Match: ${isValidPassword}\n`));
 
     if (!isValidPassword) {
+      console.log('❌ Password mismatch');
       throw new UnauthorizedError('Invalid credentials');
     }
 

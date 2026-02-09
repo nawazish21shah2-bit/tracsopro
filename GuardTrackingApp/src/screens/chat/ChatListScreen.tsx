@@ -34,7 +34,7 @@ const ChatListScreen: React.FC = () => {
   const navigation = useNavigation();
   const dispatch = useDispatch();
   const { user } = useSelector((state: RootState) => state.auth);
-  
+
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [chats, setChats] = useState<ChatItem[]>([]);
@@ -42,7 +42,7 @@ const ChatListScreen: React.FC = () => {
   const [newChatModalVisible, setNewChatModalVisible] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState({ x: 0, y: 0 });
-  const menuButtonRef = useRef<TouchableOpacity>(null);
+  const menuButtonRef = useRef<any>(null);
 
   // Build menu items based on user role
   const getMenuItems = (): DropdownMenuItem[] => {
@@ -56,7 +56,7 @@ const ChatListScreen: React.FC = () => {
     ];
 
     // Admin can create group chats
-    if (user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') {
+    if (user?.role === 'ADMIN' || (user?.role as string) === 'SUPER_ADMIN') {
       baseItems.push({
         id: 'new-group',
         label: 'New Group Chat',
@@ -83,7 +83,7 @@ const ChatListScreen: React.FC = () => {
 
   const handleMenuPress = () => {
     // Measure the menu button position
-    menuButtonRef.current?.measureInWindow((x, y, width, height) => {
+    menuButtonRef.current?.measureInWindow((x: number, y: number, width: number, height: number) => {
       setMenuAnchor({ x: x + width, y: y + height });
       setMenuVisible(true);
     });
@@ -97,7 +97,7 @@ const ChatListScreen: React.FC = () => {
     try {
       const apiService = (await import('../../services/api')).default;
       const response = await apiService.getChatRooms();
-      
+
       if (!response.success) {
         console.error('Failed to load chats:', response.message || 'Unknown error');
         // Don't set empty array on error - keep previous chats if available
@@ -123,7 +123,7 @@ const ChatListScreen: React.FC = () => {
         let isOnline = false;
 
         if (chat.type === 'direct' && chat.participants) {
-          const otherParticipant = chat.participants.find((p: any) => 
+          const otherParticipant = chat.participants.find((p: any) =>
             p.userId !== user?.id && p.user
           );
           if (otherParticipant?.user) {
@@ -136,7 +136,7 @@ const ChatListScreen: React.FC = () => {
         // Handle assigned guards (guards assigned to client's sites)
         const isAssignedGuard = (chat as any).metadata?.isAssignedGuard;
         if (isAssignedGuard && chat.participants) {
-          const guardParticipant = chat.participants.find((p: any) => 
+          const guardParticipant = chat.participants.find((p: any) =>
             p.userId !== user?.id && p.user?.role === 'GUARD'
           );
           if (guardParticipant?.user) {
@@ -154,8 +154,8 @@ const ChatListScreen: React.FC = () => {
         // Format timestamp
         let timestamp = 'now';
         if (chat.lastMessageAt || chat.lastMessage?.timestamp) {
-          const lastMsgTime = chat.lastMessageAt 
-            ? new Date(chat.lastMessageAt) 
+          const lastMsgTime = chat.lastMessageAt
+            ? new Date(chat.lastMessageAt)
             : new Date(chat.lastMessage.timestamp);
           const now = new Date();
           const diffMs = now.getTime() - lastMsgTime.getTime();
@@ -176,10 +176,10 @@ const ChatListScreen: React.FC = () => {
           }
         }
         const lastMessage = chat.lastMessage?.content || chat.lastMessage?.message || '';
-        
+
         // For assigned guards without messages, show a helpful placeholder
-        const displayMessage = isAssignedGuard && !lastMessage 
-          ? 'Tap to start conversation' 
+        const displayMessage = isAssignedGuard && !lastMessage
+          ? 'Tap to start conversation'
           : lastMessage;
 
         return {
@@ -246,14 +246,14 @@ const ChatListScreen: React.FC = () => {
         const apiService = (await import('../../services/api')).default;
         // Find the raw chat data to get participants
         const rawChatData = rawChats.find((c: any) => c.id === chat.id);
-        const guardParticipant = rawChatData?.participants?.find((p: any) => 
+        const guardParticipant = rawChatData?.participants?.find((p: any) =>
           p.userId !== user?.id && p.user?.role === 'GUARD'
         );
-        
+
         if (guardParticipant?.userId) {
           // Create a direct chat with the guard
           const createResponse = await apiService.createChat('direct', [guardParticipant.userId]);
-          
+
           if (createResponse.success && createResponse.data) {
             // Reload chats to get the updated list
             await loadChats();
@@ -271,12 +271,12 @@ const ChatListScreen: React.FC = () => {
         // Fall through to navigate with existing chat ID
       }
     }
-    
+
     // Navigate to existing chat
-    (navigation as any).navigate('IndividualChatScreen', { 
-      chatId: chat.id, 
+    (navigation as any).navigate('IndividualChatScreen', {
+      chatId: chat.id,
       chatName: chat.name,
-      avatar: chat.avatar 
+      avatar: chat.avatar
     });
   };
 
@@ -315,7 +315,7 @@ const ChatListScreen: React.FC = () => {
             </View>
           )}
         </View>
-        
+
         <View style={styles.chatContent}>
           <View style={styles.chatHeader}>
             <Text style={styles.chatName} numberOfLines={1}>
@@ -327,18 +327,18 @@ const ChatListScreen: React.FC = () => {
               </Text>
             ) : null}
           </View>
-          
-          <Text 
+
+          <Text
             style={[
               styles.lastMessage,
               item.isAssignedGuard && !item.lastMessage && styles.assignedGuardMessage
-            ]} 
+            ]}
             numberOfLines={1}
           >
             {item.lastMessage || ''}
           </Text>
         </View>
-        
+
         {item.unreadCount > 0 ? (
           <View style={styles.unreadBadge}>
             <Text style={styles.unreadCount}>
@@ -354,18 +354,18 @@ const ChatListScreen: React.FC = () => {
     <SafeAreaWrapper>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.menuButton}
           onPress={() => (navigation as any).goBack()}
         >
           <Menu width={24} height={24} color={COLORS.textPrimary} />
         </TouchableOpacity>
-        
+
         <Text style={styles.headerTitle}>Chats</Text>
-        
-        <TouchableOpacity 
+
+        <TouchableOpacity
           ref={menuButtonRef}
-          style={styles.notificationButton}
+          style={styles.headerActionButton}
           onPress={handleMenuPress}
         >
           <MoreVertical width={24} height={24} color={COLORS.textPrimary} />
@@ -402,7 +402,7 @@ const ChatListScreen: React.FC = () => {
         keyExtractor={(item, index) => item.id || `chat-${index}`}
         style={styles.chatList}
         contentContainerStyle={
-          filteredChats.length === 0 
+          filteredChats.length === 0
             ? [styles.chatListContent, { flexGrow: 1, justifyContent: 'center' }]
             : styles.chatListContent
         }
@@ -431,6 +431,15 @@ const ChatListScreen: React.FC = () => {
         windowSize={10}
       />
 
+      {/* Floating Action Button */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => setNewChatModalVisible(true)}
+        activeOpacity={0.8}
+      >
+        <MessageCircle width={24} height={24} color={COLORS.textInverse} />
+      </TouchableOpacity>
+
       {/* New Chat Modal */}
       <NewChatModal
         visible={newChatModalVisible}
@@ -443,14 +452,14 @@ const ChatListScreen: React.FC = () => {
             }
 
             const apiService = (await import('../../services/api')).default;
-            
+
             // Create chat with selected user
             const createResponse = await apiService.createChat('direct', [userId]);
-            
+
             if (createResponse.success && createResponse.data) {
               // Reload chats to get the new one
               await loadChats();
-              
+
               // Navigate to the new chat
               (navigation as any).navigate('IndividualChatScreen', {
                 chatId: createResponse.data.id,
@@ -491,11 +500,13 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     textAlign: 'center',
   },
-  notificationButton: {
-    width: 24,
-    height: 24,
+  headerActionButton: {
+    width: 40,
+    height: 40,
     justifyContent: 'center',
     alignItems: 'center',
+    borderRadius: 20,
+    backgroundColor: COLORS.backgroundSecondary,
   },
   searchContainer: {
     paddingHorizontal: SPACING.lg,
@@ -651,6 +662,20 @@ const styles = StyleSheet.create({
   assignedGuardMessage: {
     fontStyle: 'italic',
     color: COLORS.primary,
+  },
+  fab: {
+    position: 'absolute',
+    bottom: SPACING.xxxxl * 2,
+    right: SPACING.lg,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...SHADOWS.medium,
+    elevation: 5,
+    zIndex: 10,
   },
 });
 

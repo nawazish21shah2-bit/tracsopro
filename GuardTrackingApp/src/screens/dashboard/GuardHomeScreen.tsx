@@ -82,24 +82,24 @@ interface NotificationData {
 const GuardHomeScreen: React.FC = () => {
   const navigation = useNavigation<GuardHomeScreenNavigationProp>();
   const dispatch = useDispatch<AppDispatch>();
-  
+
   const [refreshing, setRefreshing] = useState(false);
   const [currentTime, setCurrentTime] = useState('00:00:00');
   const [gettingLocation, setGettingLocation] = useState(false);
-  
+
   // Redux state
-  const { 
-    stats, 
-    activeShift, 
-    upcomingShifts, 
-    loading, 
+  const {
+    stats,
+    activeShift,
+    upcomingShifts,
+    loading,
     error,
     checkInLoading,
     checkOutLoading,
   } = useSelector((state: RootState) => state.shifts);
-  
+
   const { user } = useSelector((state: RootState) => state.auth);
-  
+
   // Use Redux data or fallback to default stats
   const statistics = stats || {
     completedShifts: 0,
@@ -116,7 +116,7 @@ const GuardHomeScreen: React.FC = () => {
     // Timer for current time
     const timer = setInterval(() => {
       const now = new Date();
-      const timeString = now.toLocaleTimeString('en-US', { 
+      const timeString = now.toLocaleTimeString('en-US', {
         hour12: false,
         hour: '2-digit',
         minute: '2-digit',
@@ -138,11 +138,11 @@ const GuardHomeScreen: React.FC = () => {
 
   const initializeData = async () => {
     try {
-        await Promise.all([
+      await Promise.all([
         dispatch(fetchShiftStatistics({})),
         dispatch(fetchActiveShift()),
         dispatch(fetchUpcomingShifts()),
-        ]);
+      ]);
     } catch (error) {
       console.error('Error initializing dashboard data:', error);
     }
@@ -174,8 +174,8 @@ const GuardHomeScreen: React.FC = () => {
           `You have an upcoming shift at ${nextShift.locationName} starting at ${new Date(nextShift.startTime).toLocaleTimeString()}. Would you like to check in early?`,
           [
             { text: 'Cancel', style: 'cancel' },
-            { 
-              text: 'Check In Early', 
+            {
+              text: 'Check In Early',
               onPress: () => handleCheckInToShift(nextShift.id)
             },
           ]
@@ -198,11 +198,11 @@ const GuardHomeScreen: React.FC = () => {
 
     try {
       setGettingLocation(true);
-      
+
       // Add a small delay to ensure UI is ready before calling location service
       // This prevents crashes in release builds
       await new Promise<void>(resolve => setTimeout(() => resolve(), 100));
-      
+
       // Get GPS location with retry logic
       let location;
       try {
@@ -215,8 +215,8 @@ const GuardHomeScreen: React.FC = () => {
           'Location Required',
           locationErrorMessage,
           [
-            { 
-              text: 'Retry', 
+            {
+              text: 'Retry',
               onPress: () => {
                 // Retry getting location after a short delay
                 setTimeout(() => {
@@ -230,7 +230,7 @@ const GuardHomeScreen: React.FC = () => {
         setGettingLocation(false);
         return;
       }
-      
+
       // Validate location data before proceeding
       if (!location || typeof location.latitude !== 'number' || typeof location.longitude !== 'number') {
         Alert.alert(
@@ -241,7 +241,7 @@ const GuardHomeScreen: React.FC = () => {
         setGettingLocation(false);
         return;
       }
-      
+
       // Dispatch check-in action
       await dispatch(checkInToShiftWithLocation({
         shiftId,
@@ -249,7 +249,7 @@ const GuardHomeScreen: React.FC = () => {
       })).unwrap();
 
       Alert.alert('Success', 'You have successfully checked in!');
-      
+
       // Refresh data
       await dispatch(fetchActiveShift());
       await dispatch(fetchShiftStatistics({}));
@@ -261,8 +261,8 @@ const GuardHomeScreen: React.FC = () => {
         'Check-In Failed',
         errorMessage,
         [
-          { 
-            text: 'Retry', 
+          {
+            text: 'Retry',
             onPress: () => handleCheckInToShift(shiftId)
           },
           { text: 'OK' }
@@ -290,16 +290,16 @@ const GuardHomeScreen: React.FC = () => {
       'Are you sure you want to check out from this shift?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Check Out', 
+        {
+          text: 'Check Out',
           style: 'destructive',
           onPress: async () => {
             try {
               setGettingLocation(true);
-              
+
               // Add a small delay to ensure UI is ready before calling location service
               await new Promise<void>(resolve => setTimeout(() => resolve(), 100));
-              
+
               // Get GPS location with retry logic
               let location;
               try {
@@ -311,8 +311,8 @@ const GuardHomeScreen: React.FC = () => {
                   'Location Required',
                   locationErrorMessage,
                   [
-                    { 
-                      text: 'Retry', 
+                    {
+                      text: 'Retry',
                       onPress: () => {
                         // Retry getting location after a short delay
                         setTimeout(() => {
@@ -326,7 +326,7 @@ const GuardHomeScreen: React.FC = () => {
                 setGettingLocation(false);
                 return;
               }
-              
+
               // Dispatch check-out action
               await dispatch(checkOutFromShiftWithLocation({
                 shiftId: activeShift.id,
@@ -334,7 +334,7 @@ const GuardHomeScreen: React.FC = () => {
               })).unwrap();
 
               Alert.alert('Success', 'You have successfully checked out!');
-              
+
               // Refresh data
               await dispatch(fetchActiveShift());
               await dispatch(fetchShiftStatistics({}));
@@ -345,8 +345,8 @@ const GuardHomeScreen: React.FC = () => {
                 'Check-Out Failed',
                 errorMessage,
                 [
-                  { 
-                    text: 'Retry', 
+                  {
+                    text: 'Retry',
                     onPress: () => handleCheckOut()
                   },
                   { text: 'OK' }
@@ -365,9 +365,9 @@ const GuardHomeScreen: React.FC = () => {
     if (activeShift) {
       // Navigate to site details if available, otherwise just show alert
       if (activeShift.locationId) {
-        (navigation as any).navigate('GuardSiteDetails', { 
+        (navigation as any).navigate('GuardSiteDetails', {
           siteId: activeShift.locationId,
-          shiftId: activeShift.id 
+          shiftId: activeShift.id
         });
       } else {
         Alert.alert('Location', `Location: ${activeShift.locationName}\nAddress: ${activeShift.locationAddress}`);
@@ -391,21 +391,21 @@ const GuardHomeScreen: React.FC = () => {
       'Are you sure you want to send an emergency alert? This will notify all supervisors, administrators, and clients.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Send Alert', 
+        {
+          text: 'Send Alert',
           style: 'destructive',
           onPress: async () => {
             try {
               setGettingLocation(true);
-              
+
               // Add a small delay to ensure UI is ready
               await new Promise<void>(resolve => setTimeout(() => resolve(), 100));
-              
+
               // Get current location with retry logic - wrapped in try-catch
               let location;
               try {
                 location = await getCurrentLocation(1); // Quick retry for emergency
-                
+
                 // Validate location data
                 if (!location || typeof location.latitude !== 'number' || typeof location.longitude !== 'number') {
                   throw new Error('Invalid location data');
@@ -437,13 +437,13 @@ const GuardHomeScreen: React.FC = () => {
 
               if (result.success) {
                 Alert.alert(
-                  'Emergency Alert Sent', 
+                  'Emergency Alert Sent',
                   'Help is on the way! All supervisors, administrators, and clients have been notified.',
                   [{ text: 'OK' }]
                 );
               } else {
                 Alert.alert(
-                  'Error', 
+                  'Error',
                   result.message || 'Failed to send emergency alert. Please try again or contact emergency services directly.',
                   [{ text: 'OK' }]
                 );
@@ -467,13 +467,13 @@ const GuardHomeScreen: React.FC = () => {
 
                 if (result.success) {
                   Alert.alert(
-                    'Emergency Alert Sent', 
+                    'Emergency Alert Sent',
                     'Help is on the way! Alert sent with limited location data.',
                     [{ text: 'OK' }]
                   );
                 } else {
                   Alert.alert(
-                    'Error', 
+                    'Error',
                     'Failed to send emergency alert. Please contact emergency services directly (call 911 or your local emergency number).',
                     [{ text: 'OK' }]
                   );
@@ -481,7 +481,7 @@ const GuardHomeScreen: React.FC = () => {
               } catch (fallbackError: any) {
                 console.error('Emergency alert fallback error:', fallbackError);
                 Alert.alert(
-                  'Critical Error', 
+                  'Critical Error',
                   'Unable to send emergency alert through the app. Please contact emergency services directly (call 911 or your local emergency number).',
                   [{ text: 'OK' }]
                 );
@@ -503,7 +503,7 @@ const GuardHomeScreen: React.FC = () => {
   const formatTime = (dateString: string): string => {
     try {
       const date = new Date(dateString);
-      return date.toLocaleTimeString('en-US', { 
+      return date.toLocaleTimeString('en-US', {
         hour: '2-digit',
         minute: '2-digit',
         hour12: true
@@ -516,14 +516,14 @@ const GuardHomeScreen: React.FC = () => {
   // Calculate shift duration
   const calculateShiftDuration = (shift: Shift): string => {
     if (!shift.checkInTime) return 'Not started';
-    
+
     const start = new Date(shift.checkInTime);
     const now = new Date();
     const diffMs = now.getTime() - start.getTime();
     const diffMins = Math.floor(diffMs / 60000);
     const hours = Math.floor(diffMins / 60);
     const mins = diffMins % 60;
-    
+
     return `${hours}h ${mins}m`;
   };
 
@@ -532,7 +532,7 @@ const GuardHomeScreen: React.FC = () => {
       {/* <Text style={styles.sectionTitle}>This Month Shifts</Text> */}
       <AppStatGrid style={styles.statsGrid}>
         <StatsCard
-          label="Completed Shifts"
+          label="Completed"
           value={statistics.completedShifts}
           icon={<CheckCircleIcon size={18} color={COLORS.success} />}
           variant="success"
@@ -549,11 +549,11 @@ const GuardHomeScreen: React.FC = () => {
           label="Active Sites"
           value={statistics.totalSites}
           icon={<MapPinIcon size={18} color={COLORS.primary} />}
-                variant="info"
+          variant="info"
           style={styles.statCard}
         />
         <StatsCard
-          label="Incident Reported"
+          label="Incidents"
           value={statistics.incidentReports}
           icon={<AlertTriangleIcon size={18} color={COLORS.textSecondary} />}
           variant="neutral"
@@ -566,11 +566,11 @@ const GuardHomeScreen: React.FC = () => {
   const renderTodayShift = () => {
     // Show active shift if available, otherwise show next upcoming shift
     const displayShift = activeShift || (upcomingShifts && upcomingShifts.length > 0 ? upcomingShifts[0] : null);
-    
+
     if (!displayShift) {
       return (
-    <View style={styles.shiftSection}>
-      <Text style={styles.sectionTitle}>Today's Shifts</Text>
+        <View style={styles.shiftSection}>
+          <Text style={styles.sectionTitle}>Today's Shifts</Text>
           <AppCard style={styles.shiftCard}>
             <View style={styles.emptyShiftContainer}>
               <ClockIcon size={48} color={COLORS.textSecondary} />
@@ -591,48 +591,48 @@ const GuardHomeScreen: React.FC = () => {
         <Text style={styles.sectionTitle}>
           {isActive ? 'Active Shift' : 'Upcoming Shift'}
         </Text>
-      <AppCard style={styles.shiftCard}>
-        <View style={styles.shiftHeader}>
-          <View style={styles.locationInfo}>
-            <View style={styles.locationIconContainer}>
-            <MapPinIcon size={20} color={COLORS.primary} style={styles.locationIcon} />
-            </View>
+        <AppCard style={styles.shiftCard}>
+          <View style={styles.shiftHeader}>
+            <View style={styles.locationInfo}>
+              <View style={styles.locationIconContainer}>
+                <MapPinIcon size={20} color={COLORS.primary} style={styles.locationIcon} />
+              </View>
               <View style={styles.flex1}>
                 <Text style={styles.locationName}>{displayShift.locationName}</Text>
                 <Text style={styles.locationAddress}>{displayShift.locationAddress}</Text>
+              </View>
             </View>
-          </View>
             {isActive && (
-          <TouchableOpacity style={styles.viewLocationButton} onPress={handleViewLocation}>
-            <Text style={styles.viewLocationText}>View Location</Text>
-          </TouchableOpacity>
+              <TouchableOpacity style={styles.viewLocationButton} onPress={handleViewLocation}>
+                <Text style={styles.viewLocationText}>View Location</Text>
+              </TouchableOpacity>
             )}
-        </View>
-        
+          </View>
+
           {displayShift.description && (
             <Text style={styles.shiftDescription}>{displayShift.description}</Text>
           )}
-        
-        <View style={styles.shiftDetails}>
-          <View style={styles.shiftDetailRow}>
+
+          <View style={styles.shiftDetails}>
+            <View style={styles.shiftDetailRow}>
               <Text style={styles.shiftDetailLabel}>Shift Time:</Text>
               <Text style={styles.shiftDetailValue}>
                 {formatTime(displayShift.startTime)} - {formatTime(displayShift.endTime)}
               </Text>
-          </View>
+            </View>
             {displayShift.breakStartTime && displayShift.breakEndTime && (
-          <View style={styles.shiftDetailRow}>
-            <Text style={styles.shiftDetailLabel}>Break Time:</Text>
+              <View style={styles.shiftDetailRow}>
+                <Text style={styles.shiftDetailLabel}>Break Time:</Text>
                 <Text style={styles.shiftDetailValue}>
                   {formatTime(displayShift.breakStartTime)} - {formatTime(displayShift.breakEndTime)}
                 </Text>
-          </View>
+              </View>
             )}
             {isCheckedIn && (
-          <View style={styles.shiftDetailRow}>
+              <View style={styles.shiftDetailRow}>
                 <Text style={styles.shiftDetailLabel}>Duration:</Text>
                 <Text style={styles.shiftDetailValue}>{calculateShiftDuration(displayShift)}</Text>
-          </View>
+              </View>
             )}
             {isCheckedIn && (
               <View style={styles.shiftDetailRow}>
@@ -642,21 +642,21 @@ const GuardHomeScreen: React.FC = () => {
                 </Text>
               </View>
             )}
-        </View>
+          </View>
 
           {isActive && isCheckedIn && (
-        <View style={styles.timerContainer}>
-          <Text style={styles.timerText}>{currentTime}</Text>
+            <View style={styles.timerContainer}>
+              <Text style={styles.timerText}>{currentTime}</Text>
               <Text style={styles.timerLabel}>Active Shift Timer</Text>
-        </View>
+            </View>
           )}
 
           {!isCheckedOut && (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[
-                styles.checkInButton, 
+                styles.checkInButton,
                 (checkInLoading || gettingLocation) && styles.buttonDisabled
-              ]} 
+              ]}
               onPress={isCheckedIn ? handleCheckOut : handleCheckIn}
               disabled={checkInLoading || checkOutLoading || gettingLocation}
             >
@@ -664,27 +664,27 @@ const GuardHomeScreen: React.FC = () => {
                 <ActivityIndicator color={COLORS.textInverse} />
               ) : (
                 <>
-          <ClockIcon size={24} color={COLORS.textInverse} style={styles.checkInIcon} />
+                  <ClockIcon size={24} color={COLORS.textInverse} style={styles.checkInIcon} />
                   <Text style={styles.checkInText}>
                     {isCheckedIn ? 'Check Out' : 'Check In'}
                   </Text>
                 </>
               )}
-        </TouchableOpacity>
+            </TouchableOpacity>
           )}
 
           {isCheckedIn && !isCheckedOut && (
-        <View style={styles.actionButtons}>
-          <TouchableOpacity style={styles.incidentButton} onPress={handleIncidentReport}>
-            <AlertTriangleIcon size={20} color={COLORS.textInverse} style={styles.incidentIcon} />
+            <View style={styles.actionButtons}>
+              <TouchableOpacity style={styles.incidentButton} onPress={handleIncidentReport}>
+                <AlertTriangleIcon size={20} color={COLORS.textInverse} style={styles.incidentIcon} />
                 <Text style={styles.incidentText}>Report Incident</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.emergencyButton} onPress={handleEmergencyAlert}>
-            <AlertCircleIcon size={20} color={COLORS.textInverse} style={styles.emergencyIcon} />
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.emergencyButton} onPress={handleEmergencyAlert}>
+                <AlertCircleIcon size={20} color={COLORS.textInverse} style={styles.emergencyIcon} />
                 <Text style={styles.emergencyText}>Emergency</Text>
-          </TouchableOpacity>
-        </View>
+              </TouchableOpacity>
+            </View>
           )}
 
           {isCheckedOut && (
@@ -696,9 +696,9 @@ const GuardHomeScreen: React.FC = () => {
               </Text>
             </View>
           )}
-      </AppCard>
-    </View>
-  );
+        </AppCard>
+      </View>
+    );
   };
 
   const renderUpcomingShifts = () => {
@@ -716,11 +716,11 @@ const GuardHomeScreen: React.FC = () => {
     }
 
     return (
-    <View style={styles.notificationsSection}>
+      <View style={styles.notificationsSection}>
         <Text style={styles.sectionTitle}>Upcoming Shifts</Text>
         {displayShifts.map((shift) => (
-          <TouchableOpacity 
-            key={shift.id} 
+          <TouchableOpacity
+            key={shift.id}
             style={styles.notificationItem}
             onPress={() => {
               // Navigate to parent stack navigator
@@ -732,35 +732,35 @@ const GuardHomeScreen: React.FC = () => {
               }
             }}
           >
-          <View style={styles.notificationAvatar}>
+            <View style={styles.notificationAvatar}>
               <MapPinIcon size={24} color={COLORS.primary} />
-          </View>
-          <View style={styles.notificationContent}>
+            </View>
+            <View style={styles.notificationContent}>
               <Text style={styles.notificationUser}>{shift.locationName}</Text>
               <Text style={styles.notificationAction}>
                 {formatTime(shift.startTime)} - {formatTime(shift.endTime)}
               </Text>
               <Text style={styles.notificationSite}>{shift.locationAddress}</Text>
-          </View>
-          <View style={styles.notificationStatus}>
+            </View>
+            <View style={styles.notificationStatus}>
               <Text style={styles.statusText}>
                 {new Date(shift.startTime).toLocaleDateString()}
               </Text>
-          </View>
+            </View>
           </TouchableOpacity>
-      ))}
-    </View>
-  );
+        ))}
+      </View>
+    );
   };
 
   // Show error state if there's an error and no data
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
 
   // Check if it's a network error
-  const isNetworkError = error?.toLowerCase().includes('network') || 
-                         error?.toLowerCase().includes('connection') ||
-                         error?.toLowerCase().includes('econnrefused') ||
-                         error?.toLowerCase().includes('enotfound');
+  const isNetworkError = error?.toLowerCase().includes('network') ||
+    error?.toLowerCase().includes('connection') ||
+    error?.toLowerCase().includes('econnrefused') ||
+    error?.toLowerCase().includes('enotfound');
 
   if (error && !activeShift && !upcomingShifts?.length) {
     return (
@@ -818,48 +818,48 @@ const GuardHomeScreen: React.FC = () => {
 
   return (
     <AppScreen>
-        <SharedHeader
-          variant="guard"
-          showLogo={true}
-          onNotificationPress={handleNotificationPress}
-          profileDrawer={
-            <GuardProfileDrawer
-              visible={isDrawerVisible}
-              onClose={closeDrawer}
-              onNavigateToProfile={() => {
-                closeDrawer();
-                // Navigate to profile/settings when available
-              }}
-              onNavigateToPastJobs={() => {
-                closeDrawer();
-                // Navigation handled in drawer
-              }}
-              onNavigateToAssignedSites={() => {
-                closeDrawer();
-                // Navigation handled in drawer
-              }}
-              onNavigateToAttendance={() => {
-                closeDrawer();
-                // Navigation handled in drawer
-              }}
-              onNavigateToNotifications={() => {
-                closeDrawer();
-                // Navigate to notifications/settings
-              }}
-              onNavigateToSupport={() => {
-                closeDrawer();
-                // Navigation handled in drawer
-              }}
-            />
-          }
-        />
-      
+      <SharedHeader
+        variant="guard"
+        showLogo={true}
+        onNotificationPress={handleNotificationPress}
+        profileDrawer={
+          <GuardProfileDrawer
+            visible={isDrawerVisible}
+            onClose={closeDrawer}
+            onNavigateToProfile={() => {
+              closeDrawer();
+              // Navigate to profile/settings when available
+            }}
+            onNavigateToPastJobs={() => {
+              closeDrawer();
+              // Navigation handled in drawer
+            }}
+            onNavigateToAssignedSites={() => {
+              closeDrawer();
+              // Navigation handled in drawer
+            }}
+            onNavigateToAttendance={() => {
+              closeDrawer();
+              // Navigation handled in drawer
+            }}
+            onNavigateToNotifications={() => {
+              closeDrawer();
+              // Navigate to notifications/settings
+            }}
+            onNavigateToSupport={() => {
+              closeDrawer();
+              // Navigation handled in drawer
+            }}
+          />
+        }
+      />
+
       {/* Loading overlay for initial load */}
       <LoadingOverlay
         visible={loading && !activeShift && !upcomingShifts?.length}
         message="Loading dashboard..."
       />
-      
+
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -871,7 +871,7 @@ const GuardHomeScreen: React.FC = () => {
         {loading && (activeShift || upcomingShifts?.length) ? (
           <InlineLoading message="Updating data..." style={styles.inlineLoading} />
         ) : null}
-        
+
         {renderStatsSection()}
         {renderTodayShift()}
         {renderUpcomingShifts()}

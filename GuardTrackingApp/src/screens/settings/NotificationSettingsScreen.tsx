@@ -45,7 +45,7 @@ const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = ({
   // Create drawer for guard variant if not provided
   const renderProfileDrawer = () => {
     if (profileDrawer) return profileDrawer;
-    
+
     if (variant === 'guard') {
       return (
         <GuardProfileDrawer
@@ -66,7 +66,7 @@ const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = ({
         />
       );
     }
-    
+
     return null;
   };
 
@@ -82,7 +82,7 @@ const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = ({
     } catch (error: any) {
       console.error('Error loading notification settings:', error);
       const errorMessage = error?.message || 'Failed to load notification settings';
-      
+
       // If it's a session expired error, show a more user-friendly message
       if (errorMessage.includes('session has expired') || errorMessage.includes('expired')) {
         Alert.alert(
@@ -111,7 +111,7 @@ const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = ({
       // Revert on error
       setSettings(previousSettings);
       const errorMessage = error?.message || 'Failed to update notification settings';
-      
+
       // Session expired handling
       if (errorMessage.includes('session has expired') || errorMessage.includes('expired')) {
         Alert.alert('Session Expired', 'Your session has expired. Please login again.', [{ text: 'OK' }]);
@@ -126,7 +126,7 @@ const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = ({
   if (loading) {
     return (
       <SafeAreaWrapper>
-        <SharedHeader variant={variant} title="Notification Settings" profileDrawer={renderProfileDrawer()} />
+        <SharedHeader variant={variant} title="Notification Settings" onNotificationPress={() => navigation.navigate('Notifications')} profileDrawer={renderProfileDrawer()} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#1C6CA9" />
         </View>
@@ -136,7 +136,7 @@ const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = ({
 
   return (
     <SafeAreaWrapper>
-      <SharedHeader variant={variant} title="Notification Settings" profileDrawer={renderProfileDrawer()} />
+      <SharedHeader variant={variant} title="Notification Settings" onNotificationPress={() => navigation.navigate('Notifications')} profileDrawer={renderProfileDrawer()} />
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {[
           {

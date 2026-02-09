@@ -45,7 +45,7 @@ export const AppIcon: React.FC<IconProps> = ({
   style,
 }) => {
   const iconStyle = style as any;
-  
+
   switch (type) {
     case 'material':
       return <MaterialIcons name={name} size={size} color={color} style={iconStyle} />;
@@ -65,11 +65,11 @@ export const AppIcon: React.FC<IconProps> = ({
 type SvgIconProps = { size?: number; color?: string; style?: any };
 const SvgIcon = ({ Svg, size = 24, color, style }: SvgIconProps & { Svg: any }) => {
   const iconColor = color || '#000000';
-  
+
   return (
-    <Svg 
-      width={size} 
-      height={size} 
+    <Svg
+      width={size}
+      height={size}
       fill={iconColor}
       stroke={iconColor}
       color={iconColor}
@@ -318,6 +318,11 @@ export const MoreHorizontalIcon: React.FC<CommonIconProps> = ({ size = 24, color
   <AppIcon type="material" name="more-horiz" size={size} color={color} style={style} />
 );
 
+export const ChatIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => {
+  const FeatherMessageCircle = require('react-native-feather').MessageCircle;
+  return <FeatherMessageCircle width={size} height={size} stroke={color} strokeWidth={1.5} style={style} />;
+};
+
 // Export a default object for easy imports
 const AppIcons = {
   HomeIcon,
@@ -368,6 +373,7 @@ const AppIcons = {
   MicIcon,
   SendIcon,
   MoreHorizontalIcon,
+  ChatIcon,
 };
 
 export default AppIcons;

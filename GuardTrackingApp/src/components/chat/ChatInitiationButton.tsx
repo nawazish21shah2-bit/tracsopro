@@ -54,7 +54,7 @@ const ChatInitiationButton: React.FC<ChatInitiationButtonProps> = ({
       <MessageCircle
         width={currentSize.iconSize}
         height={currentSize.iconSize}
-        color={variant === 'outline' ? COLORS.primary : COLORS.white}
+        color={variant === 'outline' ? COLORS.primary : COLORS.textInverse}
       />
     </TouchableOpacity>
   );

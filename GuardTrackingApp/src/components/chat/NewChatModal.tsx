@@ -68,11 +68,11 @@ const NewChatModal: React.FC<NewChatModalProps> = ({
   const loadAvailableUsers = async () => {
     try {
       setLoading(true);
-      
+
       // Get available users based on current user's role
       const availableUsers: UserOption[] = [];
 
-      if (currentUserRole === 'ADMIN') {
+      if (currentUserRole === 'ADMIN' || currentUserRole === 'SUPER_ADMIN') {
         // Admins can chat with guards and clients
         const [guardsResponse, clientsResponse] = await Promise.all([
           apiService.getGuards(1, 100),
@@ -89,7 +89,7 @@ const NewChatModal: React.FC<NewChatModalProps> = ({
                 userId: guard.user.id,
                 name: guardName || guard.user.email || `Guard ${guard.id}`,
                 role: 'GUARD',
-                avatar: guard.profilePictureUrl,
+                avatar: guard.profilePictureUrl || guard.user.avatar,
               });
             }
           });
@@ -105,40 +105,54 @@ const NewChatModal: React.FC<NewChatModalProps> = ({
                 userId: client.user.id,
                 name: clientName || client.user.email || `Client ${client.id}`,
                 role: 'CLIENT',
+                avatar: client.user.avatar,
               });
             }
           });
         }
       } else if (currentUserRole === 'CLIENT') {
         // Clients can chat with guards assigned to their sites
-        const sitesResponse = await apiService.getClientSites(1, 100);
-        if (sitesResponse.success && sitesResponse.data?.sites) {
-          // Get guards from shifts at client's sites
-          // This is already handled in getUserChats, but we can also show them here
-          // For now, we'll get guards from the chat list
-          const chatsResponse = await apiService.getChatRooms();
-          if (chatsResponse.success && chatsResponse.data) {
-            const chats = chatsResponse.data as any[];
-            chats.forEach((chat: any) => {
-              if (chat.participants) {
-                chat.participants.forEach((participant: any) => {
-                  if (
-                    participant.userId !== user?.id &&
-                    participant.user?.role === 'GUARD' &&
-                    !availableUsers.find((u) => u.userId === participant.userId)
-                  ) {
-                    availableUsers.push({
-                      id: participant.userId,
-                      userId: participant.userId,
-                      name: `${participant.user.firstName} ${participant.user.lastName}`.trim(),
-                      role: 'GUARD',
-                      avatar: participant.user.avatar,
-                    });
-                  }
-                });
-              }
-            });
-          }
+        const guardsResponse = await apiService.getClientGuards(1, 100);
+        if (guardsResponse.success && guardsResponse.data) {
+          const guards = guardsResponse.data.items || guardsResponse.data || [];
+          guards.forEach((guard: any) => {
+            const guardUser = guard.user || guard;
+            if (guardUser && guardUser.id !== user?.id) {
+              availableUsers.push({
+                id: guard.id || guardUser.id,
+                userId: guardUser.id,
+                name: `${guardUser.firstName || ''} ${guardUser.lastName || ''}`.trim() || guardUser.email || 'Guard',
+                role: 'GUARD',
+                avatar: guard.profilePictureUrl || guardUser.avatar,
+              });
+            }
+          });
+        }
+
+        // Also add existing admins from chats
+        const chatsResponse = await apiService.getChatRooms();
+        if (chatsResponse.success && chatsResponse.data) {
+          const chats = chatsResponse.data as any[];
+          chats.forEach((chat: any) => {
+            if (chat.participants) {
+              chat.participants.forEach((participant: any) => {
+                const pUser = participant.user || participant;
+                if (
+                  pUser.id !== user?.id &&
+                  (pUser.role === 'ADMIN' || pUser.role === 'SUPER_ADMIN') &&
+                  !availableUsers.find((u) => u.userId === pUser.id)
+                ) {
+                  availableUsers.push({
+                    id: pUser.id,
+                    userId: pUser.id,
+                    name: `${pUser.firstName || ''} ${pUser.lastName || ''}`.trim() || pUser.email || 'Admin',
+                    role: 'ADMIN',
+                    avatar: pUser.avatar,
+                  });
+                }
+              });
+            }
+          });
         }
       } else if (currentUserRole === 'GUARD') {
         // Guards can see admins and clients from their chats
@@ -148,17 +162,18 @@ const NewChatModal: React.FC<NewChatModalProps> = ({
           chats.forEach((chat: any) => {
             if (chat.participants) {
               chat.participants.forEach((participant: any) => {
+                const pUser = participant.user || participant;
                 if (
-                  participant.userId !== user?.id &&
-                  (participant.user?.role === 'ADMIN' || participant.user?.role === 'CLIENT') &&
-                  !availableUsers.find((u) => u.userId === participant.userId)
+                  pUser.id !== user?.id &&
+                  (pUser.role === 'ADMIN' || pUser.role === 'SUPER_ADMIN' || pUser.role === 'CLIENT') &&
+                  !availableUsers.find((u) => u.userId === pUser.id)
                 ) {
                   availableUsers.push({
-                    id: participant.userId,
-                    userId: participant.userId,
-                    name: `${participant.user.firstName} ${participant.user.lastName}`.trim(),
-                    role: participant.user.role,
-                    avatar: participant.user.avatar,
+                    id: pUser.id,
+                    userId: pUser.id,
+                    name: `${pUser.firstName || ''} ${pUser.lastName || ''}`.trim() || pUser.email || pUser.role,
+                    role: pUser.role === 'CLIENT' ? 'CLIENT' : 'ADMIN',
+                    avatar: pUser.avatar,
                   });
                 }
               });
@@ -271,47 +286,50 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.backgroundPrimary,
     borderTopLeftRadius: BORDER_RADIUS.xl,
     borderTopRightRadius: BORDER_RADIUS.xl,
-    maxHeight: '80%',
+    maxHeight: '90%',
     paddingBottom: SPACING.lg,
+    minHeight: 400,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: SPACING.md,
+    padding: SPACING.lg,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: COLORS.borderCard,
   },
   headerTitle: {
-    ...TYPOGRAPHY.h2,
+    fontSize: TYPOGRAPHY.fontSize.xl,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
     color: COLORS.textPrimary,
   },
   closeButton: {
     padding: SPACING.xs,
   },
   searchContainer: {
-    padding: SPACING.md,
+    padding: SPACING.lg,
   },
   searchInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.backgroundSecondary,
     borderRadius: BORDER_RADIUS.md,
-    paddingHorizontal: SPACING.sm,
+    paddingHorizontal: SPACING.md,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: COLORS.borderLight,
+    height: 48,
   },
   searchIcon: {
-    marginRight: SPACING.xs,
+    marginRight: SPACING.sm,
   },
   searchInput: {
     flex: 1,
-    ...TYPOGRAPHY.body,
+    fontSize: TYPOGRAPHY.fontSize.md,
     color: COLORS.textPrimary,
-    paddingVertical: SPACING.sm,
+    height: '100%',
   },
   userList: {
     flex: 1,
@@ -319,23 +337,24 @@ const styles = StyleSheet.create({
   userItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: SPACING.md,
+    padding: SPACING.lg,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: COLORS.backgroundSecondary,
   },
   avatarContainer: {
-    marginRight: SPACING.sm,
+    marginRight: SPACING.md,
   },
   avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: COLORS.backgroundSecondary,
   },
   avatarPlaceholder: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: COLORS.surface,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: COLORS.backgroundSecondary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -343,37 +362,37 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   userName: {
-    ...TYPOGRAPHY.body,
-    fontWeight: '600',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
     color: COLORS.textPrimary,
-    marginBottom: SPACING.xs / 2,
+    marginBottom: 2,
   },
   userRole: {
-    ...TYPOGRAPHY.caption,
+    fontSize: TYPOGRAPHY.fontSize.xs,
     color: COLORS.textSecondary,
     textTransform: 'capitalize',
   },
   loadingContainer: {
-    padding: SPACING.xl,
+    padding: SPACING.xxxxl,
     alignItems: 'center',
   },
   loadingText: {
-    ...TYPOGRAPHY.body,
+    fontSize: TYPOGRAPHY.fontSize.md,
     color: COLORS.textSecondary,
-    marginTop: SPACING.sm,
+    marginTop: SPACING.md,
   },
   emptyContainer: {
-    padding: SPACING.xl,
+    padding: SPACING.xxxxl,
     alignItems: 'center',
   },
   emptyText: {
-    ...TYPOGRAPHY.body,
-    fontWeight: '600',
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
     color: COLORS.textPrimary,
-    marginBottom: SPACING.xs,
+    marginBottom: SPACING.sm,
   },
   emptySubtext: {
-    ...TYPOGRAPHY.caption,
+    fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.textSecondary,
     textAlign: 'center',
   },

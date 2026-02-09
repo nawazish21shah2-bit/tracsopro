@@ -53,10 +53,10 @@ interface GuardData {
 
 const ClientDashboard: React.FC = () => {
   const { user } = useSelector((state: RootState) => state.auth);
-  const { 
-    dashboardStats, 
-    guards, 
-    loading, 
+  const {
+    dashboardStats,
+    guards,
+    loading,
     guardsLoading,
     error,
     guardsError,
@@ -136,10 +136,10 @@ const ClientDashboard: React.FC = () => {
   };
 
   // Check for network errors
-  const isNetworkError = error?.toLowerCase().includes('network') || 
-                         error?.toLowerCase().includes('connection') ||
-                         error?.toLowerCase().includes('econnrefused') ||
-                         error?.toLowerCase().includes('enotfound');
+  const isNetworkError = error?.toLowerCase().includes('network') ||
+    error?.toLowerCase().includes('connection') ||
+    error?.toLowerCase().includes('econnrefused') ||
+    error?.toLowerCase().includes('enotfound');
 
   return (
     <SafeAreaWrapper>
@@ -184,8 +184,8 @@ const ClientDashboard: React.FC = () => {
         }
       />
 
-      <ScrollView 
-        style={styles.content} 
+      <ScrollView
+        style={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -196,7 +196,7 @@ const ClientDashboard: React.FC = () => {
           <View style={styles.statsRow}>
             <View style={styles.statsColumn}>
               <StatsCard
-                label="Guards On Duty"
+                label="Guards Active"
                 value={dashboardStats?.guardsOnDuty || 0}
                 icon={<UserIcon size={20} color={COLORS.success} />}
                 variant="success"
@@ -204,7 +204,7 @@ const ClientDashboard: React.FC = () => {
             </View>
             <View style={styles.statsColumn}>
               <StatsCard
-                label="Missed Shifts"
+                label="Missed"
                 value={dashboardStats?.missedShifts || 0}
                 icon={<EmergencyIcon size={20} color={COLORS.error} />}
                 variant="danger"
@@ -222,7 +222,7 @@ const ClientDashboard: React.FC = () => {
             </View>
             <View style={styles.statsColumn}>
               <StatsCard
-                label="New Reports"
+                label="Reports"
                 value={dashboardStats?.newReports || 0}
                 icon={<ReportsIcon size={20} color={COLORS.textSecondary} />}
                 variant="neutral"
@@ -326,7 +326,7 @@ const ClientDashboard: React.FC = () => {
         {/* Interactive Map Section */}
         <View style={styles.mapContainer}>
           <Text style={styles.sectionTitle}>Live Guards Location</Text>
-          <InteractiveMapView 
+          <InteractiveMapView
             height={200}
             showControls={true}
             onGuardSelect={(guardId: string) => {
@@ -339,8 +339,8 @@ const ClientDashboard: React.FC = () => {
         <View style={styles.shiftsSection}>
           <Text style={styles.sectionTitle}>Todays Shifts Summary</Text>
           <View style={styles.tableContainer}>
-            <ScrollView 
-              horizontal 
+            <ScrollView
+              horizontal
               showsHorizontalScrollIndicator={true}
               contentContainerStyle={styles.tableScrollContent}
             >

@@ -56,7 +56,7 @@ const ChangePasswordScreen: React.FC<ChangePasswordScreenProps> = ({
   // Create drawer for guard variant if not provided
   const renderProfileDrawer = () => {
     if (profileDrawer) return profileDrawer;
-    
+
     if (variant === 'guard') {
       return (
         <GuardProfileDrawer
@@ -77,7 +77,7 @@ const ChangePasswordScreen: React.FC<ChangePasswordScreenProps> = ({
         />
       );
     }
-    
+
     return null;
   };
 
@@ -147,7 +147,7 @@ const ChangePasswordScreen: React.FC<ChangePasswordScreenProps> = ({
     } catch (error: any) {
       console.error('Error changing password:', error);
       const errorMessage = error?.message || 'Failed to change password. Please try again.';
-      
+
       if (errorMessage.includes('session has expired') || errorMessage.includes('expired')) {
         Alert.alert(
           'Session Expired',
@@ -166,7 +166,7 @@ const ChangePasswordScreen: React.FC<ChangePasswordScreenProps> = ({
 
   return (
     <SafeAreaWrapper>
-      <SharedHeader variant={variant} title="Change Password" profileDrawer={renderProfileDrawer()} />
+      <SharedHeader variant={variant} title="Change Password" onNotificationPress={() => navigation.navigate('Notifications')} profileDrawer={renderProfileDrawer()} />
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.card}>
           <View style={styles.header}>

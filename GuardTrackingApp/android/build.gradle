@@ -4,8 +4,11 @@ buildscript {
         minSdkVersion = 24
         compileSdkVersion = 36
         targetSdkVersion = 36
-        ndkVersion = "27.1.12297006"  // Updated to NDK 27+ for better C++20 support with React Native 0.82.1
+        ndkVersion = "29.0.14206865"  // Updated to NDK 29 which is installed and has better C++ runtime support
         kotlinVersion = "2.1.20"
+        // Fix for FusedLocationProviderClient IncompatibleClassChangeError
+        // Use a newer version that matches device's Play Services
+        playServicesLocationVersion = "21.0.1"
     }
     repositories {
         google()

@@ -72,6 +72,7 @@ const GuardSettingsScreen: React.FC = () => {
       <SharedHeader
         variant="guard"
         title="Settings"
+        onNotificationPress={() => navigation.navigate('Notifications')}
         profileDrawer={
           <GuardProfileDrawer
             visible={isDrawerVisible}

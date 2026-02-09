@@ -25,7 +25,7 @@ const PRODUCTION_WS_URL = 'http://143.110.198.38:3000';
 // Your local IP address for development
 // Find it with: ipconfig (Windows) or ifconfig (Mac/Linux)
 // ⚠️ Updated to current local IP for testing
-const LOCAL_IP = '192.168.1.13';
+const LOCAL_IP = '192.168.1.12';
 
 // Development URLs
 const DEV_API_URL_ANDROID = `http://${LOCAL_IP}:3000/api`;
@@ -45,6 +45,12 @@ const isDev = typeof __DEV__ !== 'undefined' ? __DEV__ : false;
  * Get the API base URL based on environment
  */
 export const getApiBaseUrl = (): string => {
+  if (isDev) {
+    // For Android emulator, 10.0.2.2 is more reliable than localhost
+    // For physical devices, we use localhost + adb reverse
+    // OR we use the LAN IP if ADB is not connected - USING LAN IP for reliability
+    return Platform.OS === 'android' ? `http://${LOCAL_IP}:3000/api` : 'http://localhost:3000/api';
+  }
   // Production mode - using DigitalOcean backend
   return PRODUCTION_API_URL;
 };
@@ -53,6 +59,9 @@ export const getApiBaseUrl = (): string => {
  * Get the WebSocket base URL based on environment
  */
 export const getWebSocketUrl = (): string => {
+  if (isDev) {
+    return Platform.OS === 'android' ? `http://${LOCAL_IP}:3000` : 'http://localhost:3000';
+  }
   // Production mode
   return PRODUCTION_WS_URL;
 };
