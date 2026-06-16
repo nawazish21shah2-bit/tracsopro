@@ -30,6 +30,20 @@ interface SocketMeta {
   securityCompanyId?: string;
 }
 
+const parseSocketCorsOrigins = (): string | string[] => {
+  const configured = process.env.CORS_ORIGIN?.trim();
+  if (!configured) {
+    return process.env.NODE_ENV === 'production' ? [] : '*';
+  }
+  if (configured === '*') {
+    return process.env.NODE_ENV === 'production' ? [] : '*';
+  }
+  if (configured.includes(',')) {
+    return configured.split(',').map((origin) => origin.trim()).filter(Boolean);
+  }
+  return configured;
+};
+
 class WebSocketService {
   private io: SocketIOServer | null = null;
   private connectedClients: Map<string, string> = new Map(); // socketId -> userId
@@ -40,7 +54,7 @@ class WebSocketService {
   initialize(server: HTTPServer): void {
     this.io = new SocketIOServer(server, {
       cors: {
-        origin: process.env.CORS_ORIGIN || '*',
+        origin: parseSocketCorsOrigins(),
         methods: ['GET', 'POST'],
         credentials: true,
       },

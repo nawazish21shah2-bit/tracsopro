@@ -87,15 +87,15 @@ const LoginScreen: React.FC = () => {
     }
 
     try {
-      // Save credentials if remember me is checked
+      // Save non-sensitive credential hint only.
       if (rememberMe) {
         await AsyncStorage.setItem('rememberedEmail', formData.email);
-        await AsyncStorage.setItem('rememberedPassword', formData.password);
       } else {
         // Clear saved credentials if remember me is unchecked
         await AsyncStorage.removeItem('rememberedEmail');
-        await AsyncStorage.removeItem('rememberedPassword');
       }
+      // Cleanup legacy plaintext password cache if present from older versions.
+      await AsyncStorage.removeItem('rememberedPassword');
 
       const result = await dispatch(loginUser(formData));
       if (loginUser.fulfilled.match(result)) {
@@ -125,16 +125,15 @@ const LoginScreen: React.FC = () => {
     navigation.navigate('ForgotPassword');
   }, [navigation]);
 
-  // Load saved credentials on mount
+  // Load remembered email only; never prefill stored password.
   useEffect(() => {
     const loadSavedCredentials = async () => {
       try {
         const savedEmail = await AsyncStorage.getItem('rememberedEmail');
-        const savedPassword = await AsyncStorage.getItem('rememberedPassword');
-        if (savedEmail && savedPassword) {
+        if (savedEmail) {
           setFormData({
             email: savedEmail,
-            password: savedPassword,
+            password: '',
           });
           setRememberMe(true);
         }

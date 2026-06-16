@@ -269,7 +269,7 @@ describe('LoginScreen', () => {
           'rememberedEmail',
           'guard@test.com'
         );
-        expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+        expect(AsyncStorage.setItem).not.toHaveBeenCalledWith(
           'rememberedPassword',
           'password123'
         );
