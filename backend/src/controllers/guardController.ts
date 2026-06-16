@@ -1,6 +1,7 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import guardService from '../services/guardService.js';
 import { AuthRequest } from '../middleware/auth.js';
+import { resolveSecurityCompanyId } from '../utils/companyAuth.js';
 
 export class GuardController {
   async getAllGuards(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
@@ -19,9 +20,9 @@ export class GuardController {
     }
   }
 
-  async getGuardById(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getGuardById(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const guard = await guardService.getGuardById(req.params.id);
+      const guard = await guardService.getGuardById(req.params.id, req.securityCompanyId);
       res.json({
         success: true,
         data: guard,
@@ -53,9 +54,18 @@ export class GuardController {
     }
   }
 
-  async updateGuard(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async updateGuard(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const guard = await guardService.updateGuard(req.params.id, req.body);
+      const companyResult = resolveSecurityCompanyId(req);
+      if (companyResult.error) {
+        res.status(companyResult.status || 400).json({
+          success: false,
+          message: companyResult.error,
+        });
+        return;
+      }
+
+      const guard = await guardService.updateGuard(req.params.id, req.body, companyResult.securityCompanyId);
       res.json({
         success: true,
         data: guard,
@@ -65,9 +75,18 @@ export class GuardController {
     }
   }
 
-  async deleteGuard(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async deleteGuard(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const result = await guardService.deleteGuard(req.params.id);
+      const companyResult = resolveSecurityCompanyId(req);
+      if (companyResult.error) {
+        res.status(companyResult.status || 400).json({
+          success: false,
+          message: companyResult.error,
+        });
+        return;
+      }
+
+      const result = await guardService.deleteGuard(req.params.id, companyResult.securityCompanyId);
       res.json({
         success: true,
         data: result,
@@ -77,9 +96,27 @@ export class GuardController {
     }
   }
 
-  async addEmergencyContact(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async addEmergencyContact(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const contact = await guardService.addEmergencyContact(req.params.id, req.body);
+      const guardId = req.params.id;
+
+      if (req.user?.role === 'GUARD' && req.user.guardId !== guardId) {
+        return res.status(403).json({
+          success: false,
+          message: 'Guards can only add emergency contacts for their own profile.',
+        });
+      }
+
+      const companyResult = resolveSecurityCompanyId(req);
+      if (companyResult.error) {
+        res.status(companyResult.status || 400).json({
+          success: false,
+          message: companyResult.error,
+        });
+        return;
+      }
+
+      const contact = await guardService.addEmergencyContact(guardId, req.body, companyResult.securityCompanyId);
       res.status(201).json({
         success: true,
         data: contact,
@@ -89,9 +126,27 @@ export class GuardController {
     }
   }
 
-  async addQualification(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async addQualification(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const qualification = await guardService.addQualification(req.params.id, req.body);
+      const guardId = req.params.id;
+
+      if (req.user?.role === 'GUARD' && req.user.guardId !== guardId) {
+        return res.status(403).json({
+          success: false,
+          message: 'Guards can only add qualifications for their own profile.',
+        });
+      }
+
+      const companyResult = resolveSecurityCompanyId(req);
+      if (companyResult.error) {
+        res.status(companyResult.status || 400).json({
+          success: false,
+          message: companyResult.error,
+        });
+        return;
+      }
+
+      const qualification = await guardService.addQualification(guardId, req.body, companyResult.securityCompanyId);
       res.status(201).json({
         success: true,
         data: qualification,
@@ -101,10 +156,28 @@ export class GuardController {
     }
   }
 
-  async getGuardPerformance(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getGuardPerformance(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
+      const guardId = req.params.id;
       const months = parseInt(req.query.months as string) || 6;
-      const metrics = await guardService.getGuardPerformance(req.params.id, months);
+
+      if (req.user?.role === 'GUARD' && req.user.guardId !== guardId) {
+        return res.status(403).json({
+          success: false,
+          message: 'Guards can only view their own performance metrics.',
+        });
+      }
+
+      const companyResult = resolveSecurityCompanyId(req);
+      if (companyResult.error) {
+        res.status(companyResult.status || 400).json({
+          success: false,
+          message: companyResult.error,
+        });
+        return;
+      }
+
+      const metrics = await guardService.getGuardPerformance(guardId, months, companyResult.securityCompanyId);
       res.json({
         success: true,
         data: metrics,

@@ -24,12 +24,18 @@ import {
   checkOutFromShiftWithLocation,
   refreshDashboardData,
 } from '../../store/slices/shiftSlice';
+import {
+  triggerEmergencyAlert,
+  fetchGuardActiveEmergencyAlert,
+} from '../../store/slices/emergencySlice';
 import { globalStyles, COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { AppScreen, AppCard, AppStatGrid } from '../../components/ui/AppComponents';
 import StatsCard from '../../components/ui/StatsCard';
 import SharedHeader from '../../components/ui/SharedHeader';
 import GuardProfileDrawer from '../../components/guard/GuardProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import { useNotificationBell } from '../../hooks/useNotificationBell';
+import { useGuardLocationTracking } from '../../hooks/useGuardLocationTracking';
 import { LoadingOverlay, ErrorState, NetworkError, InlineLoading } from '../../components/ui/LoadingStates';
 import {
   MapPinIcon,
@@ -42,7 +48,6 @@ import {
 } from '../../components/ui/FeatherIcons';
 import { Shift, ShiftStatus } from '../../types/shift.types';
 import { GuardStackParamList } from '../../navigation/GuardStackNavigator';
-import apiService from '../../services/api';
 
 type GuardHomeScreenNavigationProp = CompositeNavigationProp<
   StackNavigationProp<any, 'GuardHome'>,
@@ -86,6 +91,7 @@ const GuardHomeScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [currentTime, setCurrentTime] = useState('00:00:00');
   const [gettingLocation, setGettingLocation] = useState(false);
+  const [emergencySubmitting, setEmergencySubmitting] = useState(false);
 
   // Redux state
   const {
@@ -99,6 +105,11 @@ const GuardHomeScreen: React.FC = () => {
   } = useSelector((state: RootState) => state.shifts);
 
   const { user } = useSelector((state: RootState) => state.auth);
+  const { guardActiveAlert, submitting: emergencySending } = useSelector(
+    (state: RootState) => state.emergency
+  );
+
+  useGuardLocationTracking();
 
   // Use Redux data or fallback to default stats
   const statistics = stats || {
@@ -142,6 +153,7 @@ const GuardHomeScreen: React.FC = () => {
         dispatch(fetchShiftStatistics({})),
         dispatch(fetchActiveShift()),
         dispatch(fetchUpcomingShifts()),
+        dispatch(fetchGuardActiveEmergencyAlert()),
       ]);
     } catch (error) {
       console.error('Error initializing dashboard data:', error);
@@ -386,6 +398,19 @@ const GuardHomeScreen: React.FC = () => {
   };
 
   const handleEmergencyAlert = async () => {
+    if (emergencySubmitting || emergencySending) {
+      return;
+    }
+
+    if (guardActiveAlert) {
+      Alert.alert(
+        'Emergency Already Active',
+        'You already have an active emergency alert. Responders have been notified and help is on the way.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     Alert.alert(
       'Emergency Alert',
       'Are you sure you want to send an emergency alert? This will notify all supervisors, administrators, and clients.',
@@ -395,101 +420,78 @@ const GuardHomeScreen: React.FC = () => {
           text: 'Send Alert',
           style: 'destructive',
           onPress: async () => {
+            if (emergencySubmitting || emergencySending) {
+              return;
+            }
+
+            setEmergencySubmitting(true);
+
             try {
               setGettingLocation(true);
-
-              // Add a small delay to ensure UI is ready
               await new Promise<void>(resolve => setTimeout(() => resolve(), 100));
 
-              // Get current location with retry logic - wrapped in try-catch
               let location;
               try {
-                location = await getCurrentLocation(1); // Quick retry for emergency
+                location = await getCurrentLocation(1);
 
-                // Validate location data
                 if (!location || typeof location.latitude !== 'number' || typeof location.longitude !== 'number') {
                   throw new Error('Invalid location data');
                 }
               } catch (locationError: any) {
-                // For emergency, use default location if GPS unavailable
                 console.warn('Could not get location for emergency:', locationError);
                 location = {
                   latitude: 0,
                   longitude: 0,
-                  accuracy: 1000, // Low accuracy if GPS unavailable
-                  address: 'Location unavailable - Emergency alert sent'
+                  accuracy: 1000,
+                  address: 'Location unavailable - Emergency alert sent',
                 };
               }
 
-              // Trigger emergency alert with shiftId if available
-              const result = await apiService.triggerEmergencyAlert({
-                type: 'PANIC',
-                severity: 'CRITICAL',
-                location: {
-                  latitude: location.latitude || 0,
-                  longitude: location.longitude || 0,
-                  accuracy: location.accuracy || 1000,
-                  address: location.address || 'Emergency location'
-                },
-                message: `Emergency alert triggered by ${user?.firstName || 'Guard'} ${user?.lastName || ''}`,
-                shiftId: activeShift?.id // Include shiftId to notify correct client/admin
-              });
+              const result = await dispatch(
+                triggerEmergencyAlert({
+                  alertData: {
+                    type: 'PANIC',
+                    severity: 'CRITICAL',
+                    location: {
+                      latitude: location.latitude || 0,
+                      longitude: location.longitude || 0,
+                      accuracy: location.accuracy || 1000,
+                      address: location.address || 'Emergency location',
+                    },
+                    message: `Emergency alert triggered by ${user?.firstName || 'Guard'} ${user?.lastName || ''}`,
+                    shiftId: activeShift?.id,
+                  },
+                })
+              );
 
-              if (result.success) {
+              if (triggerEmergencyAlert.fulfilled.match(result)) {
+                const isDuplicate = !!(result.payload as { duplicate?: boolean })?.duplicate;
                 Alert.alert(
-                  'Emergency Alert Sent',
-                  'Help is on the way! All supervisors, administrators, and clients have been notified.',
+                  isDuplicate ? 'Alert Already Active' : 'Emergency Alert Sent',
+                  isDuplicate
+                    ? 'Your emergency alert is already active. Responders have been notified.'
+                    : 'Help is on the way! All supervisors, administrators, and clients have been notified.',
                   [{ text: 'OK' }]
                 );
               } else {
                 Alert.alert(
                   'Error',
-                  result.message || 'Failed to send emergency alert. Please try again or contact emergency services directly.',
+                  'Failed to send emergency alert. Please try again or contact emergency services directly.',
                   [{ text: 'OK' }]
                 );
               }
             } catch (error: any) {
               console.error('Emergency alert error:', error);
-              // Even if there's an error, try to send with default location
-              try {
-                const result = await apiService.triggerEmergencyAlert({
-                  type: 'PANIC',
-                  severity: 'CRITICAL',
-                  location: {
-                    latitude: 0,
-                    longitude: 0,
-                    accuracy: 1000,
-                    address: 'Location unavailable - Emergency alert sent'
-                  },
-                  message: `Emergency alert triggered by ${user?.firstName || 'Guard'} ${user?.lastName || ''}`,
-                  shiftId: activeShift?.id
-                });
-
-                if (result.success) {
-                  Alert.alert(
-                    'Emergency Alert Sent',
-                    'Help is on the way! Alert sent with limited location data.',
-                    [{ text: 'OK' }]
-                  );
-                } else {
-                  Alert.alert(
-                    'Error',
-                    'Failed to send emergency alert. Please contact emergency services directly (call 911 or your local emergency number).',
-                    [{ text: 'OK' }]
-                  );
-                }
-              } catch (fallbackError: any) {
-                console.error('Emergency alert fallback error:', fallbackError);
-                Alert.alert(
-                  'Critical Error',
-                  'Unable to send emergency alert through the app. Please contact emergency services directly (call 911 or your local emergency number).',
-                  [{ text: 'OK' }]
-                );
-              }
+              Alert.alert(
+                'Critical Error',
+                'Unable to send emergency alert through the app. Please contact emergency services directly (call 911 or your local emergency number).',
+                [{ text: 'OK' }]
+              );
             } finally {
               setGettingLocation(false);
+              setEmergencySubmitting(false);
             }
-          }
+          },
         },
       ]
     );
@@ -498,6 +500,7 @@ const GuardHomeScreen: React.FC = () => {
   const handleNotificationPress = () => {
     (navigation as any).navigate('Notifications');
   };
+  const { notificationCount } = useNotificationBell({ refreshOnFocus: false });
 
   // Format time helper
   const formatTime = (dateString: string): string => {
@@ -680,9 +683,24 @@ const GuardHomeScreen: React.FC = () => {
                 <Text style={styles.incidentText}>Report Incident</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.emergencyButton} onPress={handleEmergencyAlert}>
-                <AlertCircleIcon size={20} color={COLORS.textInverse} style={styles.emergencyIcon} />
-                <Text style={styles.emergencyText}>Emergency</Text>
+              <TouchableOpacity
+                style={[
+                  styles.emergencyButton,
+                  (emergencySubmitting || emergencySending || gettingLocation) && styles.buttonDisabled,
+                ]}
+                onPress={handleEmergencyAlert}
+                disabled={emergencySubmitting || emergencySending || gettingLocation}
+              >
+                {(emergencySubmitting || emergencySending) ? (
+                  <ActivityIndicator color={COLORS.textInverse} size="small" />
+                ) : (
+                  <>
+                    <AlertCircleIcon size={20} color={COLORS.textInverse} style={styles.emergencyIcon} />
+                    <Text style={styles.emergencyText}>
+                      {guardActiveAlert ? 'Alert Active' : 'Emergency'}
+                    </Text>
+                  </>
+                )}
               </TouchableOpacity>
             </View>
           )}
@@ -769,6 +787,7 @@ const GuardHomeScreen: React.FC = () => {
           variant="guard"
           showLogo={true}
           onNotificationPress={handleNotificationPress}
+          notificationCount={notificationCount}
           profileDrawer={
             <GuardProfileDrawer
               visible={isDrawerVisible}
@@ -822,6 +841,7 @@ const GuardHomeScreen: React.FC = () => {
         variant="guard"
         showLogo={true}
         onNotificationPress={handleNotificationPress}
+        notificationCount={notificationCount}
         profileDrawer={
           <GuardProfileDrawer
             visible={isDrawerVisible}

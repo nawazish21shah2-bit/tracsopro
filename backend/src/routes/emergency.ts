@@ -68,6 +68,8 @@ router.use(authenticate);
  */
 router.post('/alert', authorize('GUARD'), emergencyController.triggerEmergencyAlert);
 
+router.get('/my-active', authorize('GUARD'), emergencyController.getMyActiveEmergencyAlert);
+
 /**
  * @swagger
  * /emergency/alert/{alertId}/acknowledge:

@@ -17,8 +17,7 @@ import { SettingsStackParamList } from '../../navigation/DashboardNavigator';
 import { RootState, AppDispatch } from '../../store';
 import { logoutUser } from '../../store/slices/authSlice';
 import SharedHeader from '../../components/ui/SharedHeader';
-import GuardProfileDrawer from '../../components/guard/GuardProfileDrawer';
-import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import { useRoleScreenHeader } from '../../hooks/useRoleScreenHeader';
 
 // Hardcoded colors to avoid module load issues
 const ICON_COLOR = '#828282';
@@ -35,7 +34,7 @@ const GuardSettingsScreen: React.FC = () => {
   const navigation = useNavigation<StackNavigationProp<SettingsStackParamList>>();
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
-  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+  const { headerProps } = useRoleScreenHeader('Settings', 'guard');
 
   const handleProfile = () => {
     navigation.navigate('GuardProfileEdit');
@@ -50,7 +49,7 @@ const GuardSettingsScreen: React.FC = () => {
   };
 
   const handleSupport = () => {
-    navigation.navigate('GuardSupportContact');
+    navigation.navigate('SupportHubScreen', { variant: 'guard', mode: 'mine' });
   };
 
   const handleLogout = () => {
@@ -64,34 +63,12 @@ const GuardSettingsScreen: React.FC = () => {
     { id: '1', title: 'My Profile', icon: <User width={20} height={20} color={ICON_COLOR} />, onPress: handleProfile },
     { id: '2', title: 'Notifications', icon: <Bell width={20} height={20} color={ICON_COLOR} />, onPress: handleNotifications },
     { id: '3', title: 'Change Password', icon: <Lock width={20} height={20} color={ICON_COLOR} />, onPress: handleChangePassword },
-    { id: '4', title: 'Contact Support', icon: <HelpCircle width={20} height={20} color={ICON_COLOR} />, onPress: handleSupport },
+    { id: '4', title: 'Support Center', icon: <HelpCircle width={20} height={20} color={ICON_COLOR} />, onPress: handleSupport },
   ];
 
   return (
     <SafeAreaWrapper>
-      <SharedHeader
-        variant="guard"
-        title="Settings"
-        onNotificationPress={() => navigation.navigate('Notifications')}
-        profileDrawer={
-          <GuardProfileDrawer
-            visible={isDrawerVisible}
-            onClose={closeDrawer}
-            onNavigateToProfile={() => {
-              closeDrawer();
-              navigation.navigate('GuardProfileEdit');
-            }}
-            onNavigateToNotifications={() => {
-              closeDrawer();
-              navigation.navigate('GuardNotificationSettings');
-            }}
-            onNavigateToSupport={() => {
-              closeDrawer();
-              navigation.navigate('GuardSupportContact');
-            }}
-          />
-        }
-      />
+      <SharedHeader {...headerProps} />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.card}>

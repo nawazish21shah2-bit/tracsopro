@@ -4,6 +4,9 @@ import { User, AuthState, LoginForm, RegisterForm, UserRole } from '../../types'
 import apiService from '../../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { securityManager } from '../../utils/security';
+import { superAdminService } from '../../services/superAdminService';
+
+const IMPERSONATION_BACKUP_KEY = 'impersonationBackup';
 
 // Initial state
 const initialState: AuthState = {
@@ -16,6 +19,8 @@ const initialState: AuthState = {
   isEmailVerified: false,
   isLoading: false,
   error: null,
+  impersonationActive: false,
+  impersonatorLabel: null,
 };
 
 // Async thunks
@@ -210,6 +215,85 @@ export const forgotPassword = createAsyncThunk(
   }
 );
 
+export const startImpersonation = createAsyncThunk(
+  'auth/startImpersonation',
+  async (targetUserId: string, { getState, rejectWithValue }) => {
+    try {
+      const state = getState() as { auth: AuthState };
+      const currentTokens = await securityManager.getTokens();
+      const backup = {
+        user: state.auth.user,
+        token: state.auth.token,
+        refreshToken: state.auth.refreshToken,
+        tokens: currentTokens,
+      };
+      await AsyncStorage.setItem(IMPERSONATION_BACKUP_KEY, JSON.stringify(backup));
+
+      const result = await superAdminService.impersonateUser(targetUserId);
+      const userWithName = {
+        ...result.user,
+        name: `${result.user.firstName} ${result.user.lastName}`.trim(),
+      };
+
+      await securityManager.storeTokens({
+        accessToken: result.token,
+        refreshToken: result.refreshToken,
+        expiresAt: Date.now() + (result.expiresIn * 1000),
+        tokenType: 'Bearer',
+      });
+      await securityManager.storeUserData(userWithName);
+
+      const impersonatorLabel = state.auth.user
+        ? `${state.auth.user.firstName} ${state.auth.user.lastName}`.trim() || state.auth.user.email
+        : 'Super Admin';
+
+      return {
+        user: userWithName,
+        token: result.token,
+        refreshToken: result.refreshToken,
+        impersonatorLabel,
+      };
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.error || error.message || 'Impersonation failed');
+    }
+  }
+);
+
+export const exitImpersonation = createAsyncThunk(
+  'auth/exitImpersonation',
+  async (_, { rejectWithValue }) => {
+    try {
+      const raw = await AsyncStorage.getItem(IMPERSONATION_BACKUP_KEY);
+      if (!raw) {
+        return rejectWithValue('No impersonation session to restore');
+      }
+      const backup = JSON.parse(raw);
+      if (backup.tokens) {
+        await securityManager.storeTokens(backup.tokens);
+      } else if (backup.token) {
+        await securityManager.storeTokens({
+          accessToken: backup.token,
+          refreshToken: backup.refreshToken,
+          expiresAt: Date.now() + 3600 * 1000,
+          tokenType: 'Bearer',
+        });
+      }
+      if (backup.user) {
+        await securityManager.storeUserData(backup.user);
+      }
+      await AsyncStorage.removeItem(IMPERSONATION_BACKUP_KEY);
+
+      return {
+        user: backup.user,
+        token: backup.token,
+        refreshToken: backup.refreshToken,
+      };
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Failed to exit impersonation');
+    }
+  }
+);
+
 // Auth slice
 const authSlice = createSlice({
   name: 'auth',
@@ -238,6 +322,8 @@ const authSlice = createSlice({
       state.isAuthenticated = false;
       state.isEmailVerified = false;
       state.error = null;
+      state.impersonationActive = false;
+      state.impersonatorLabel = null;
     },
     setTempUserData: (state, action: PayloadAction<{ userId: string; email: string }>) => {
       state.tempUserId = action.payload.userId;
@@ -422,6 +508,45 @@ const authSlice = createSlice({
         state.error = null;
       })
       .addCase(forgotPassword.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload as string;
+      });
+
+    builder
+      .addCase(startImpersonation.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(startImpersonation.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.user = action.payload.user;
+        state.token = action.payload.token;
+        state.refreshToken = action.payload.refreshToken;
+        state.isAuthenticated = true;
+        state.impersonationActive = true;
+        state.impersonatorLabel = action.payload.impersonatorLabel;
+        state.error = null;
+      })
+      .addCase(startImpersonation.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload as string;
+      });
+
+    builder
+      .addCase(exitImpersonation.pending, (state) => {
+        state.isLoading = true;
+      })
+      .addCase(exitImpersonation.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.user = action.payload.user;
+        state.token = action.payload.token;
+        state.refreshToken = action.payload.refreshToken;
+        state.isAuthenticated = true;
+        state.impersonationActive = false;
+        state.impersonatorLabel = null;
+        state.error = null;
+      })
+      .addCase(exitImpersonation.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload as string;
       });

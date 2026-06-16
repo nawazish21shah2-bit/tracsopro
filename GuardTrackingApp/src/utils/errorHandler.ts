@@ -8,11 +8,27 @@ export interface ErrorResponse {
   message: string;
   errors?: string[];
   statusCode?: number;
+  isNetworkError?: boolean;
+}
+
+export interface ParsedApiError {
+  message: string;
+  statusCode?: number;
+  isNetworkError: boolean;
+  errors?: string[];
 }
 
 export interface NetworkError {
   code?: string;
   message: string;
+  status?: number;
+  isNetworkError?: boolean;
+  data?: {
+    success?: boolean;
+    message?: string;
+    error?: string;
+    errors?: string[];
+  };
   response?: {
     status: number;
     data?: {
@@ -24,67 +40,86 @@ export interface NetworkError {
   };
 }
 
+function readResponseBody(error: any): {
+  statusCode?: number;
+  data?: any;
+} {
+  if (error?.response?.status) {
+    return { statusCode: error.response.status, data: error.response.data };
+  }
+  if (error?.status && error.status >= 400) {
+    return { statusCode: error.status, data: error.data };
+  }
+  return {};
+}
+
 /**
  * Extract user-friendly error message from various error formats
  */
 export function extractErrorMessage(error: any): string {
-  // Handle string errors
   if (typeof error === 'string') {
     return error;
   }
 
-  // Handle error objects with response (Axios errors)
-  if (error?.response?.data) {
-    const errorData = error.response.data;
-    
-    // Backend returns { success: false, message: "..." }
-    if (errorData.message) {
-      return errorData.message;
-    }
-    
-    // Alternative format: { success: false, error: "..." }
-    if (errorData.error) {
-      return errorData.error;
-    }
-    
-    // Validation errors: { success: false, errors: [...] }
-    if (errorData.errors && Array.isArray(errorData.errors) && errorData.errors.length > 0) {
-      return errorData.errors[0];
-    }
+  const { data } = readResponseBody(error);
+
+  if (data?.message) {
+    return data.message;
   }
 
-  // Handle error.message
+  if (data?.error) {
+    return data.error;
+  }
+
+  if (data?.errors && Array.isArray(data.errors) && data.errors.length > 0) {
+    return data.errors[0];
+  }
+
   if (error?.message) {
     return error.message;
   }
 
-  // Default fallback
   return 'An unexpected error occurred. Please try again.';
 }
 
 /**
- * Determine if error is a network/connection error
+ * Determine if error is a network/connection error (no HTTP response from server)
  */
 export function isNetworkError(error: any): boolean {
   if (!error) return false;
-  
-  // No response means network error
-  if (!error.response) {
-    return true;
+
+  if (error.isNetworkError === true) return true;
+  if (error.isNetworkError === false) return false;
+
+  const { statusCode } = readResponseBody(error);
+  if (statusCode && statusCode >= 400) {
+    return false;
   }
-  
-  // Check for specific network error codes
-  const networkErrorCodes = ['ECONNREFUSED', 'ETIMEDOUT', 'ECONNABORTED', 'ENOTFOUND'];
+
+  const networkErrorCodes = [
+    'ECONNREFUSED',
+    'ETIMEDOUT',
+    'ECONNABORTED',
+    'ENOTFOUND',
+    'ERR_NETWORK',
+  ];
   if (error.code && networkErrorCodes.includes(error.code)) {
     return true;
   }
-  
-  // Check for network-related messages
-  const errorMessage = error.message?.toLowerCase() || '';
-  if (errorMessage.includes('network') || errorMessage.includes('timeout')) {
+
+  if (error.request && !error.response && !statusCode) {
     return true;
   }
-  
+
+  const errorMessage = (error.message || '').toLowerCase();
+  if (
+    errorMessage === 'network error' ||
+    errorMessage.includes('network error') ||
+    errorMessage.includes('timeout')
+  ) {
+    return true;
+  }
+
   return false;
 }
 
@@ -98,25 +133,29 @@ export function getNetworkErrorMessage(error: any, baseURL?: string): string {
   if (errorCode === 'ECONNREFUSED') {
     return `Cannot connect to server${baseURL ? ` at ${baseURL}` : ''}. Please ensure the backend server is running.`;
   }
-  
+
   if (errorCode === 'ETIMEDOUT' || errorCode === 'ECONNABORTED') {
     return 'Request timed out. The server may be slow or unresponsive. Please try again.';
   }
-  
+
   if (errorMessage.includes('Network Error') || errorMessage.includes('network')) {
-    return 'Network error. Please check your internet connection and ensure the backend server is running.';
+    return `Cannot reach the server${baseURL ? ` at ${baseURL}` : ''}. Check your Wi‑Fi and that the backend is running.`;
   }
-  
-  return 'Unable to connect to server. Please check your internet connection and ensure the backend server is running.';
+
+  return `Cannot connect to server${baseURL ? ` at ${baseURL}` : ''}. Check your connection and ensure the backend is running.`;
 }
 
 /**
  * Get user-friendly error message based on status code
  */
 export function getStatusErrorMessage(statusCode: number, defaultMessage: string): string {
+  if (defaultMessage && defaultMessage !== 'An unexpected error occurred. Please try again.') {
+    return defaultMessage;
+  }
+
   switch (statusCode) {
     case 400:
-      return defaultMessage || 'Invalid request. Please check your input and try again.';
+      return 'Invalid request. Please check your input and try again.';
     case 401:
       return 'Your session has expired. Please log in again.';
     case 403:
@@ -124,7 +163,7 @@ export function getStatusErrorMessage(statusCode: number, defaultMessage: string
     case 404:
       return 'The requested resource was not found.';
     case 409:
-      return defaultMessage || 'This resource already exists.';
+      return 'This resource already exists.';
     case 429:
       return 'Too many requests. Please wait a moment and try again.';
     case 500:
@@ -137,35 +176,56 @@ export function getStatusErrorMessage(statusCode: number, defaultMessage: string
 }
 
 /**
- * Format error for display to user
+ * Single parser for axios errors, wrapped api errors, and plain strings
  */
-export function formatErrorForUser(error: any, baseURL?: string): ErrorResponse {
-  // Check if it's a network error
-  if (isNetworkError(error)) {
+export function parseApiError(error: any, baseURL?: string): ParsedApiError {
+  if (typeof error === 'string') {
+    return { message: error, isNetworkError: false };
+  }
+
+  const { statusCode, data } = readResponseBody(error);
+
+  if (statusCode && statusCode >= 400) {
+    const message =
+      data?.message ||
+      data?.error ||
+      (Array.isArray(data?.errors) && data.errors[0]) ||
+      error?.message ||
+      getStatusErrorMessage(statusCode, 'Request failed');
+
     return {
-      success: false,
-      message: getNetworkErrorMessage(error, baseURL),
-      statusCode: undefined,
+      message,
+      statusCode,
+      isNetworkError: false,
+      errors: Array.isArray(data?.errors) ? data.errors : undefined,
     };
   }
 
-  // Extract message from response
-  const message = extractErrorMessage(error);
-  const statusCode = error?.response?.status;
+  if (isNetworkError(error)) {
+    return {
+      message: getNetworkErrorMessage(error, baseURL),
+      isNetworkError: true,
+    };
+  }
 
-  // Enhance message with status code context if needed
-  const userMessage = statusCode 
-    ? getStatusErrorMessage(statusCode, message)
-    : message;
+  return {
+    message: error?.message || 'An unexpected error occurred. Please try again.',
+    isNetworkError: false,
+  };
+}
 
-  // Extract validation errors if present
-  const errors = error?.response?.data?.errors || [];
+/**
+ * Format error for display to user
+ */
+export function formatErrorForUser(error: any, baseURL?: string): ErrorResponse {
+  const parsed = parseApiError(error, baseURL);
 
   return {
     success: false,
-    message: userMessage,
-    errors: errors.length > 0 ? errors : undefined,
-    statusCode,
+    message: parsed.message,
+    errors: parsed.errors,
+    statusCode: parsed.statusCode,
+    isNetworkError: parsed.isNetworkError,
   };
 }
 
@@ -174,26 +234,36 @@ export function formatErrorForUser(error: any, baseURL?: string): ErrorResponse 
  */
 export function isErrorType(error: any, keywords: string[]): boolean {
   const message = extractErrorMessage(error).toLowerCase();
-  return keywords.some(keyword => message.includes(keyword.toLowerCase()));
+  return keywords.some((keyword) => message.includes(keyword.toLowerCase()));
 }
 
 /**
  * Get actionable error message with suggestions
  */
-export function getActionableErrorMessage(error: any): { title: string; message: string; actions?: string[] } {
-  const errorMessage = extractErrorMessage(error).toLowerCase();
-  const statusCode = error?.response?.status;
+export function getActionableErrorMessage(error: any): {
+  title: string;
+  message: string;
+  actions?: string[];
+} {
+  const parsed = parseApiError(error);
+  const errorMessage = parsed.message;
+  const statusCode = parsed.statusCode;
 
-  // Email already registered
-  if (isErrorType(error, ['already registered', 'email exists', 'duplicate email'])) {
+  if (isErrorType(error, ['already registered', 'email exists', 'duplicate email', 'login instead'])) {
     return {
       title: 'Email Already Registered',
-      message: extractErrorMessage(error),
+      message: errorMessage,
       actions: ['Login', 'Forgot Password'],
     };
   }
 
-  // Rate limiting
+  if (isErrorType(error, ['invalid invitation', 'invitation code', 'invitation is for'])) {
+    return {
+      title: 'Invalid Invitation Code',
+      message: errorMessage,
+    };
+  }
+
   if (statusCode === 429 || isErrorType(error, ['rate limit', 'too many', 'throttle'])) {
     return {
       title: 'Rate Limit Exceeded',
@@ -201,26 +271,23 @@ export function getActionableErrorMessage(error: any): { title: string; message:
     };
   }
 
-  // Validation errors
-  if (statusCode === 400 && error?.response?.data?.errors) {
+  if (statusCode === 400 && parsed.errors?.length) {
     return {
       title: 'Validation Error',
-      message: extractErrorMessage(error),
+      message: errorMessage,
     };
   }
 
-  // Network errors
-  if (isNetworkError(error)) {
+  if (parsed.isNetworkError) {
     return {
       title: 'Connection Error',
-      message: getNetworkErrorMessage(error),
+      message: errorMessage,
       actions: ['Retry', 'Check Settings'],
     };
   }
 
-  // Default
   return {
     title: 'Error',
-    message: extractErrorMessage(error),
+    message: errorMessage,
   };
 }

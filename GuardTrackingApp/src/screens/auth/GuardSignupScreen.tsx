@@ -185,7 +185,7 @@ const GuardSignupScreen: React.FC = () => {
       >
         <AuthHeader title="SIGN UP" />
 
-        <View style={authStyles.form}>
+        <View style={[authStyles.form, styles.form]}>
           <View style={authStyles.inputContainer}>
             <AuthInput
               icon="person-outline"
@@ -261,14 +261,14 @@ const GuardSignupScreen: React.FC = () => {
           </View>
         </View>
 
-        <View style={styles.buttonContainer}>
+        <View style={authStyles.authActions}>
           <Button
             title="Continue"
             onPress={handleSignup}
             fullWidth
             size="large"
             loading={isLoading}
-            style={styles.submitButton}
+            style={authStyles.submitButton}
           />
         </View>
 
@@ -288,12 +288,8 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingBottom: SPACING.xxxxl,
   },
-  buttonContainer: {
-    paddingHorizontal: SPACING.lg, // Same padding as form
-    marginTop: SPACING.xxxxl, // 40px spacing above button
-  },
-  submitButton: {
-    // Button styles handled by Button component
+  form: {
+    flex: 0,
   },
 });
 

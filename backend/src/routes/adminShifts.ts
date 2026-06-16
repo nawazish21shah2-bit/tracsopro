@@ -11,6 +11,9 @@ router.get('/schedule/30-days', adminShiftController.get30DaySchedule);
 router.get('/unassigned', adminShiftController.getUnassignedShifts);
 router.get('/', adminShiftController.getShifts);
 router.post('/', adminShiftController.createShift);
+router.post('/bulk', adminShiftController.createBulkShifts);
 router.patch('/:shiftId/assign-guard', adminShiftController.assignGuardToShift);
+router.put('/:shiftId', adminShiftController.updateShift);
+router.delete('/:shiftId', adminShiftController.deleteShift);
 
 export default router;

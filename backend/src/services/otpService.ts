@@ -14,18 +14,18 @@ const emailAttempts = new Map<string, { count: number; lastAttempt: number }>();
 const createTransporter = () => {
   const config = {
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT || '587'),
-    secure: process.env.SMTP_PORT === '465', // true for 465, false for other ports
+    port: parseInt(process.env.SMTP_PORT || '587', 10),
+    secure: process.env.SMTP_PORT === '465',
     auth: {
       user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
+      pass: (process.env.SMTP_PASS || '').replace(/\s+/g, ''),
     },
     tls: {
-      rejectUnauthorized: false, // Allow self-signed certificates in development
+      rejectUnauthorized: process.env.NODE_ENV === 'production',
     },
-    connectionTimeout: 60000, // 60 seconds
-    greetingTimeout: 30000, // 30 seconds
-    socketTimeout: 60000, // 60 seconds
+    connectionTimeout: 60000,
+    greetingTimeout: 30000,
+    socketTimeout: 60000,
   };
 
   if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
@@ -36,14 +36,34 @@ const createTransporter = () => {
   return nodemailer.createTransport(config);
 };
 
-const transporter = createTransporter();
+/** Lazy init so .env is loaded before first use (import order safe). */
+let cachedTransporter: ReturnType<typeof nodemailer.createTransport> | null | undefined;
+
+const getOrCreateTransporter = () => {
+  if (cachedTransporter === undefined) {
+    cachedTransporter = createTransporter();
+  }
+  return cachedTransporter;
+};
 
 /**
- * Get email transporter instance
- * Export for use in other services
+ * Get email transporter instance (lazy — reads SMTP_* from env at first call)
  */
-export const getEmailTransporter = () => {
-  return transporter;
+export const getEmailTransporter = () => getOrCreateTransporter();
+
+/** Reset cached transporter after env changes (tests / hot reload). */
+export const resetEmailTransporter = () => {
+  cachedTransporter = undefined;
+};
+
+const requireTransporter = () => {
+  const tx = getOrCreateTransporter();
+  if (!tx) {
+    throw new Error(
+      'SMTP credentials not configured. Set SMTP_USER and SMTP_PASS in backend/.env'
+    );
+  }
+  return tx;
 };
 
 /**
@@ -363,9 +383,9 @@ export const sendOTPEmail = async (email: string, otp: string, userName?: string
   }
 
   try {
-    // Verify transporter configuration
+    const transporter = requireTransporter();
     await transporter.verify();
-    
+
     const info = await transporter.sendMail(mailOptions);
     logger.info(`OTP email sent successfully to ${email}`, { messageId: info.messageId });
   } catch (error: any) {
@@ -829,6 +849,7 @@ export const sendPasswordResetOTP_Email = async (email: string, otp: string, use
   };
 
   try {
+    const transporter = requireTransporter();
     await transporter.verify();
     const info = await transporter.sendMail(mailOptions);
     logger.info(`Password reset OTP email sent to ${email}`, { messageId: info.messageId });

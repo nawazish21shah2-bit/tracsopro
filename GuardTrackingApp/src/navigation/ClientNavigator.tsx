@@ -1,9 +1,9 @@
 
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, Text, StyleSheet } from 'react-native';
-import { HomeIcon, ShiftsIcon, ReportsIcon, SettingsIcon, UserIcon } from '../components/ui/AppIcons';
-import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../styles/globalStyles';
+import { Text, StyleSheet } from 'react-native';
+import TabBarIcon from '../components/navigation/TabBarIcon';
+import { COLORS, TYPOGRAPHY, SPACING } from '../styles/globalStyles';
 
 // Import Client Screens
 import ClientDashboard from '../screens/client/ClientDashboard';
@@ -28,36 +28,20 @@ const ClientNavigator: React.FC = () => {
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarIcon: ({ focused }) => {
-          let IconComponent;
-
           switch (route.name) {
             case 'Dashboard':
-              IconComponent = HomeIcon;
-              break;
+              return <TabBarIcon name="home" focused={focused} />;
             case 'Sites & Shifts':
-              IconComponent = ShiftsIcon;
-              break;
+              return <TabBarIcon name="calendar" focused={focused} />;
             case 'Reports':
-              IconComponent = ReportsIcon;
-              break;
+              return <TabBarIcon name="fileText" focused={focused} />;
             case 'Guards':
-              IconComponent = UserIcon;
-              break;
+              return <TabBarIcon name="user" focused={focused} />;
             case 'Settings':
-              IconComponent = SettingsIcon;
-              break;
+              return <TabBarIcon name="settings" focused={focused} />;
             default:
-              IconComponent = HomeIcon;
+              return <TabBarIcon name="home" focused={focused} />;
           }
-
-          return (
-            <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
-              <IconComponent
-                size={20}
-                color={focused ? COLORS.primary : COLORS.textSecondary}
-              />
-            </View>
-          );
         },
         tabBarLabel: ({ focused }) => (
           <Text
@@ -121,17 +105,6 @@ const styles = StyleSheet.create({
     paddingTop: SPACING.sm,
     paddingBottom: SPACING.sm,
     height: 70,
-  },
-  tabIconWrapper: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: BORDER_RADIUS.round,
-    backgroundColor: COLORS.backgroundSecondary,
-  },
-  tabIconWrapperActive: {
-    backgroundColor: COLORS.primaryLight,
   },
   tabLabel: {
     fontSize: TYPOGRAPHY.fontSize.xs,

@@ -1,5 +1,6 @@
 // Incident Report Service
 import prisma from '../config/database.js';
+import notificationService from './notificationService.js';
 
 interface CreateIncidentReportData {
   guardId: string;
@@ -90,6 +91,41 @@ class IncidentReportService {
 
       return newReport;
     });
+
+    try {
+      const guardCompany = await prisma.companyGuard.findFirst({
+        where: { guardId: guard.id, isActive: true },
+        select: { securityCompanyId: true },
+      });
+
+      if (guardCompany) {
+        const companyAdmins = await prisma.companyUser.findMany({
+          where: { securityCompanyId: guardCompany.securityCompanyId, isActive: true },
+          select: { userId: true },
+        });
+        const adminUserIds = companyAdmins.map((cu) => cu.userId).filter(Boolean);
+        const guardName = `${guard.user.firstName} ${guard.user.lastName}`;
+        const locationLabel = location?.name ? ` at ${location.name}` : '';
+
+        if (adminUserIds.length > 0) {
+          await notificationService.createBulkNotifications(
+            adminUserIds,
+            {
+              type: 'INCIDENT_ALERT',
+              title: 'New Incident Report',
+              message: `${guardName} submitted a ${reportType} report${locationLabel}.`,
+              data: { incidentId: report.id, reportId: report.id },
+              sendPush: true,
+              priority: 'high',
+            },
+            guardCompany.securityCompanyId,
+            guard.user.id
+          );
+        }
+      }
+    } catch (err) {
+      console.error('Failed to notify admins of new incident report:', err);
+    }
 
     return this.formatIncidentReport(report);
   }
@@ -547,12 +583,12 @@ class IncidentReportService {
       } else if (userRole === 'ADMIN' || userRole === 'SUPER_ADMIN') {
         // Admin can respond to reports from guards in their company
         if (userRole !== 'SUPER_ADMIN') {
-          const admin = await prisma.securityCompanyAdmin.findFirst({
+          const admin = await prisma.companyUser.findFirst({
             where: { userId },
             include: {
               securityCompany: {
                 include: {
-                  companyGuards: {
+                  guards: {
                     where: {
                       guardId: report.guardId,
                       isActive: true
@@ -563,7 +599,7 @@ class IncidentReportService {
             }
           });
 
-          if (!admin || admin.securityCompany.companyGuards.length === 0) {
+          if (!admin || admin.securityCompany.guards.length === 0) {
             throw new Error('Access denied: This report does not belong to your company');
           }
         }
@@ -576,11 +612,25 @@ class IncidentReportService {
         ? `\n\n[Response by ${userRole} - ${status}]: ${responseNotes}`
         : `\n\n[Response by ${userRole} - ${status}]`;
 
+      const newStatus = status === 'REVIEWED' ? 'REVIEWED' : status === 'RESOLVED' ? 'RESOLVED' : report.status;
+      
+      const historyEntry = {
+        status: newStatus,
+        changedBy: userRole,
+        notes: responseNotes || '',
+        timestamp: new Date().toISOString()
+      };
+
+      // @ts-ignore - Prisma types might not be perfectly in sync due to locked node_modules
+      const currentHistory = report.statusHistory ? (report.statusHistory as any[]) : [];
+      const newHistory = [...currentHistory, historyEntry];
+
       const updatedReport = await prisma.incidentReport.update({
         where: { id: reportId },
         data: {
-          status: status === 'REVIEWED' ? 'REVIEWED' : status === 'RESOLVED' ? 'RESOLVED' : report.status,
+          status: newStatus,
           description: report.description + responseText,
+          statusHistory: newHistory,
           updatedAt: new Date(),
         },
         include: {
@@ -599,6 +649,20 @@ class IncidentReportService {
           media: true,
         }
       });
+
+      // Send notification to the guard (not the admin/client who responded)
+      try {
+        await notificationService.createNotification({
+          userId: report.guard.user.id,
+          type: 'INCIDENT_ALERT',
+          title: `Report ${newStatus}`,
+          message: `Your incident report has been ${newStatus.toLowerCase()} by ${userRole}. ${responseNotes ? `Notes: ${responseNotes}` : ''}`,
+          data: { reportId: updatedReport.id },
+          sendPush: true,
+        }, undefined, userId);
+      } catch (err) {
+        console.error('Failed to send notification to guard:', err);
+      }
 
       return this.formatIncidentReport(updatedReport);
     } catch (error) {
@@ -639,6 +703,7 @@ class IncidentReportService {
       submittedAt: report.submittedAt,
       updatedAt: report.updatedAt,
       createdAt: report.createdAt,
+      statusHistory: Array.isArray(report.statusHistory) ? report.statusHistory : (report.statusHistory ? report.statusHistory : []),
     };
   }
 }

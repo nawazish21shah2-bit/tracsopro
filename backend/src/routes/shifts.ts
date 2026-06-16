@@ -10,6 +10,7 @@ import {
   checkOutFromShift,
   startBreak,
   endBreak,
+  getActiveBreak,
   reportIncident,
   getShiftStatistics,
   getShiftById,
@@ -38,9 +39,16 @@ router.get('/past', getPastShifts);
 router.get('/weekly-summary', getWeeklyShiftSummary);
 router.get('/schedule/30-days', async (req: any, res: any) => {
   try {
+    const guardId = req.guardId;
+    if (!guardId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Guard profile not found or not linked to a company.',
+      });
+    }
+
     const shiftService = (await import('../services/shiftService.js')).default;
-    const guardId = req.user?.guard?.id;
-    const shifts = await shiftService.get30DaySchedule(guardId);
+    const shifts = await shiftService.get30DaySchedule(guardId, req.securityCompanyId);
     res.json({ success: true, data: shifts });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -50,6 +58,9 @@ router.get('/schedule/30-days', async (req: any, res: any) => {
 // Get shift statistics
 router.get('/statistics', getShiftStatistics);
 
+// Break routes (before /:id)
+router.get('/:id/active-break', getActiveBreak);
+
 // Get shift by ID (must be after all specific routes)
 router.get('/:id', getShiftById);
 
@@ -57,7 +68,6 @@ router.get('/:id', getShiftById);
 router.post('/:id/check-in', checkInToShift);
 router.post('/:id/check-out', checkOutFromShift);
 
-// Phase 2: Break management (placeholder)
 router.post('/:id/start-break', startBreak);
 router.post('/:shiftId/end-break/:breakId', endBreak);
 

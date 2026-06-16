@@ -1,28 +1,35 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Image,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SharedHeader from '../../components/ui/SharedHeader';
-import { fetchNotifications, markNotificationAsRead, markAllAsRead } from '../../store/slices/notificationSlice';
-import apiService from '../../services/api';
+import {
+  fetchNotifications,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+  deleteNotification,
+  clearAllNotifications,
+} from '../../store/slices/notificationSlice';
+import { useNotificationBell } from '../../hooks/useNotificationBell';
 import { COLORS, SPACING, TYPOGRAPHY } from '../../styles/globalStyles';
 import { NotificationIcon } from '../../components/ui/AppIcons';
-import { PersonIcon } from '../../components/ui/AppIcons';
-import { useProfileDrawer } from '../../hooks/useProfileDrawer';
-import GuardProfileDrawer from '../../components/guard/GuardProfileDrawer';
-import { SettingsStackParamList } from '../../navigation/DashboardNavigator';
+import { TrashIcon } from '../../components/ui/FeatherIcons';
+import ProfileAvatar from '../../components/common/ProfileAvatar';
+import { parseDisplayName } from '../../utils/parseDisplayName';
+import { pickProfilePictureUrl } from '../../utils/profilePictureUtils';
+import { useRoleScreenHeader, RoleHeaderVariant } from '../../hooks/useRoleScreenHeader';
 
 interface NotificationItem {
   id: string;
@@ -37,6 +44,7 @@ interface NotificationItem {
     firstName: string;
     lastName: string;
     avatar?: string;
+    profilePictureUrl?: string;
   };
 }
 
@@ -46,60 +54,64 @@ const NotificationListScreen: React.FC<{ variant?: 'client' | 'guard' | 'admin' 
   const navigation = useNavigation<StackNavigationProp<SettingsStackParamList>>();
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
-  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
-  const { notifications, unreadCount, isLoading } = useSelector((state: RootState) => state.notifications);
+  const roleVariant: RoleHeaderVariant =
+    variant === 'superAdmin'
+      ? 'superAdmin'
+      : variant === 'admin'
+        ? 'admin'
+        : variant === 'guard'
+          ? 'guard'
+          : 'client';
+  const { headerProps } = useRoleScreenHeader('Notification', roleVariant);
+  const { notifications, unreadCount, isLoading, error } = useSelector((state: RootState) => state.notifications);
+  const bell = useNotificationBell({ refreshOnFocus: false });
   
   const [refreshing, setRefreshing] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'unread'>('all');
 
-  // Create drawer for guard variant
-  const renderProfileDrawer = () => {
-    if (variant === 'guard') {
-      return (
-        <GuardProfileDrawer
-          visible={isDrawerVisible}
-          onClose={closeDrawer}
-          onNavigateToProfile={() => {
-            closeDrawer();
-            navigation.navigate('GuardProfileEdit');
-          }}
-          onNavigateToNotifications={() => {
-            closeDrawer();
-            navigation.navigate('GuardNotificationSettings');
-          }}
-          onNavigateToSupport={() => {
-            closeDrawer();
-            navigation.navigate('GuardSupportContact');
-          }}
-        />
-      );
-    }
-    
-    return null;
-  };
-
-  useEffect(() => {
-    loadNotifications();
-  }, []);
-
-  const loadNotifications = async () => {
+  const loadNotifications = useCallback(async () => {
     try {
-      const result = await dispatch(fetchNotifications()).unwrap();
+      const result = await dispatch(
+        fetchNotifications({ unreadOnly: filter === 'unread' })
+      ).unwrap();
       if (__DEV__) {
-        console.log('Notifications loaded:', result?.length || 0);
+        console.log('Notifications loaded:', result?.notifications?.length || 0);
       }
     } catch (error: any) {
       console.error('Error loading notifications:', error);
-      // Show user-friendly error message
       if (error?.message) {
         console.error('Error details:', error.message);
       }
     }
-  };
+  }, [dispatch, filter]);
+
+  useEffect(() => {
+    loadNotifications();
+  }, [loadNotifications]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadNotifications();
+    }, [loadNotifications])
+  );
 
   const handleRefresh = async () => {
     setRefreshing(true);
     await loadNotifications();
     setRefreshing(false);
+  };
+
+  const parseNotificationData = (raw: unknown): Record<string, unknown> => {
+    if (!raw) return {};
+    if (typeof raw === 'object') return raw as Record<string, unknown>;
+    if (typeof raw === 'string') {
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return {};
+      }
+    }
+    return {};
   };
 
   const handleNotificationPress = async (notification: NotificationItem) => {
@@ -113,9 +125,7 @@ const NotificationListScreen: React.FC<{ variant?: 'client' | 'guard' | 'admin' 
     }
 
     // Navigate based on notification type and data
-    const data = notification.data 
-      ? (typeof notification.data === 'string' ? JSON.parse(notification.data) : notification.data)
-      : {};
+    const data = parseNotificationData(notification.data);
 
     // Navigation map for cleaner routing
     const navigationTargets: Array<{ screen: string; params: any }> = [];
@@ -131,6 +141,16 @@ const NotificationListScreen: React.FC<{ variant?: 'client' | 'guard' | 'admin' 
         screen: 'IndividualChatScreen', 
         params: { chatId: data.conversationId, chatName: notification.title } 
       });
+    } else if (data.ticketId) {
+      navigationTargets.push({
+        screen: 'SupportTicketDetailScreen',
+        params: { ticketId: data.ticketId },
+      });
+    } else if (data.chatId) {
+      navigationTargets.push({
+        screen: 'IndividualChatScreen',
+        params: { chatId: data.chatId, chatName: notification.title },
+      });
     }
 
     // Navigate to first valid target
@@ -141,19 +161,51 @@ const NotificationListScreen: React.FC<{ variant?: 'client' | 'guard' | 'admin' 
   };
 
   const handleMarkAllAsRead = useCallback(async () => {
+    if (unreadCount === 0) return;
     try {
-      dispatch(markAllAsRead());
-      await apiService.markAllNotificationsAsRead();
-    } catch (error) {
-      console.error('Error marking all as read:', error);
+      await dispatch(markAllNotificationsAsRead()).unwrap();
+    } catch (err) {
+      console.error('Error marking all as read:', err);
     }
-  }, [dispatch]);
+  }, [dispatch, unreadCount]);
+
+  const handleDeleteNotification = useCallback(
+    async (notificationId: string) => {
+      try {
+        await dispatch(deleteNotification(notificationId)).unwrap();
+      } catch (err) {
+        console.error('Error deleting notification:', err);
+      }
+    },
+    [dispatch]
+  );
+
+  const handleClearAll = useCallback(() => {
+    if (notifications.length === 0) return;
+
+    Alert.alert(
+      'Clear all notifications?',
+      'This will permanently remove all notifications from your inbox.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear all',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await dispatch(clearAllNotifications()).unwrap();
+            } catch (err) {
+              console.error('Error clearing notifications:', err);
+            }
+          },
+        },
+      ]
+    );
+  }, [dispatch, notifications.length]);
 
   const formatNotificationMessage = useCallback((notification: NotificationItem): { action: string; site: string } => {
     const message = notification.message || '';
-    const data = notification.data 
-      ? (typeof notification.data === 'string' ? JSON.parse(notification.data) : notification.data)
-      : {};
+    const data = parseNotificationData(notification.data);
 
     // Extract site name
     const site = data.siteName || data.site || data.locationName || 'Site';
@@ -193,7 +245,7 @@ const NotificationListScreen: React.FC<{ variant?: 'client' | 'guard' | 'admin' 
   }, []);
 
   const getUserAvatar = useCallback((notification: NotificationItem): string | undefined => {
-    return notification.user?.avatar;
+    return pickProfilePictureUrl(notification.user);
   }, []);
 
   const renderNotificationItem = useCallback(({ item }: { item: NotificationItem }) => {
@@ -208,57 +260,91 @@ const NotificationListScreen: React.FC<{ variant?: 'client' | 'guard' | 'admin' 
         activeOpacity={0.7}
       >
         <View style={styles.cardContent}>
-          <View style={styles.avatarContainer}>
-            {userAvatar ? (
-              <Image source={{ uri: userAvatar }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <PersonIcon size={24} color={COLORS.textSecondary} />
-              </View>
-            )}
-          </View>
+          <ProfileAvatar
+            firstName={userName.split(' ')[0]}
+            lastName={userName.split(' ').slice(1).join(' ')}
+            profilePictureUrl={userAvatar}
+            size={48}
+          />
           <View style={styles.detailsContainer}>
-            <Text style={styles.userName}>{userName}</Text>
+            <Text style={styles.userName}>{item.title || userName}</Text>
             <Text style={styles.actionText}>{action}</Text>
             <Text style={styles.siteText}>{site}</Text>
           </View>
           <View style={styles.statusContainer}>
-            <View style={styles.activeBadge}>
-              <View style={styles.activeDot} />
-              <Text style={styles.activeText}>Active</Text>
-            </View>
+            {!item.isRead ? (
+              <View style={styles.unreadDot} />
+            ) : null}
+            <TouchableOpacity
+              onPress={() => handleDeleteNotification(item.id)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={styles.deleteButton}
+            >
+              <TrashIcon size={18} color={COLORS.textSecondary} />
+            </TouchableOpacity>
           </View>
         </View>
       </TouchableOpacity>
     );
-  }, [formatNotificationMessage, getUserName, getUserAvatar, handleNotificationPress]);
+  }, [
+    formatNotificationMessage,
+    getUserName,
+    getUserAvatar,
+    handleNotificationPress,
+    handleDeleteNotification,
+  ]);
 
   const renderEmptyState = useCallback(() => (
     <View style={styles.emptyContainer}>
       <NotificationIcon size={64} color={COLORS.textSecondary} />
       <Text style={styles.emptyTitle}>No Notifications</Text>
-      <Text style={styles.emptyMessage}>You're all caught up!</Text>
+      <Text style={styles.emptyMessage}>
+        {error ? 'Could not load notifications. Pull to refresh.' : "You're all caught up!"}
+      </Text>
     </View>
-  ), []);
+  ), [error]);
 
   return (
     <SafeAreaWrapper>
       <SharedHeader
-        variant={variant}
-        title="Notification"
-        profileDrawer={renderProfileDrawer()}
-        onNotificationPress={() => {
-          // Bell icon in header - do nothing (we're already on notifications page)
-        }}
+        {...headerProps}
+        onNotificationPress={bell.onNotificationPress}
         notificationCount={unreadCount}
         rightIcon={
-          unreadCount > 0 ? (
-            <TouchableOpacity onPress={handleMarkAllAsRead} style={styles.markAllButton}>
-              <Text style={styles.markAllText}>Mark all read</Text>
-            </TouchableOpacity>
+          notifications.length > 0 || unreadCount > 0 ? (
+            <View style={styles.headerActions}>
+              {unreadCount > 0 ? (
+                <TouchableOpacity onPress={handleMarkAllAsRead} style={styles.headerActionButton}>
+                  <Text style={styles.markAllText}>Mark read</Text>
+                </TouchableOpacity>
+              ) : null}
+              {notifications.length > 0 ? (
+                <TouchableOpacity onPress={handleClearAll} style={styles.headerActionButton}>
+                  <Text style={styles.clearAllText}>Clear all</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           ) : null
         }
       />
+      <View style={styles.filterRow}>
+        <TouchableOpacity
+          style={[styles.filterChip, filter === 'all' && styles.filterChipActive]}
+          onPress={() => setFilter('all')}
+        >
+          <Text style={[styles.filterChipText, filter === 'all' && styles.filterChipTextActive]}>
+            All
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.filterChip, filter === 'unread' && styles.filterChipActive]}
+          onPress={() => setFilter('unread')}
+        >
+          <Text style={[styles.filterChipText, filter === 'unread' && styles.filterChipTextActive]}>
+            Unread{unreadCount > 0 ? ` (${unreadCount})` : ''}
+          </Text>
+        </TouchableOpacity>
+      </View>
       {isLoading && notifications.length === 0 ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
@@ -354,26 +440,53 @@ const styles = StyleSheet.create({
   },
   statusContainer: {
     alignItems: 'flex-end',
+    gap: 8,
   },
-  activeBadge: {
+  unreadDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: COLORS.primary,
+  },
+  deleteButton: {
+    padding: 4,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    paddingHorizontal: SPACING.md,
+    paddingBottom: SPACING.sm,
+    gap: SPACING.sm,
+  },
+  filterChip: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+  },
+  filterChipActive: {
+    backgroundColor: COLORS.primary,
+  },
+  filterChipText: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+  },
+  filterChipTextActive: {
+    color: '#FFFFFF',
+  },
+  headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F0FDF4',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    gap: SPACING.sm,
   },
-  activeDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#16A34A',
-    marginRight: 4,
+  headerActionButton: {
+    paddingHorizontal: SPACING.xs,
+    paddingVertical: SPACING.xs,
   },
-  activeText: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
+  clearAllText: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.error || '#DC2626',
     fontWeight: TYPOGRAPHY.fontWeight.medium,
-    color: '#16A34A',
   },
   loadingContainer: {
     flex: 1,

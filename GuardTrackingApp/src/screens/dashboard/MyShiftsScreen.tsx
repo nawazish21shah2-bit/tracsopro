@@ -30,12 +30,17 @@ import {
   checkOutFromShiftWithLocation,
 } from '../../store/slices/shiftSlice';
 import { MenuIcon, BellIcon, MapPinIcon, AlertTriangleIcon, AlertCircleIcon, CheckCircleIcon, ClockIcon, FileTextIcon } from '../../components/ui/FeatherIcons';
+import { useNotificationBell } from '../../hooks/useNotificationBell';
 import { globalStyles, COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { AppScreen, AppCard } from '../../components/ui/AppComponents';
 import StatsCard from '../../components/ui/StatsCard';
 import SharedHeader from '../../components/ui/SharedHeader';
 import GuardProfileDrawer from '../../components/guard/GuardProfileDrawer';
-import { ErrorState, NetworkError } from '../../components/ui/LoadingStates';
+import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
+import SegmentTabs from '../../components/shifts/SegmentTabs';
+import ReportsActionBar from '../../components/reports/ReportsActionBar';
+import { ErrorState, NetworkError, EmptyState, InlineLoading } from '../../components/ui/LoadingStates';
+import { getShiftStatusColor, getShiftStatusLabel } from '../../utils/shiftStatusUtils';
 import { clearError } from '../../store/slices/shiftSlice';
 import { Shift } from '../../types/shift.types';
 
@@ -189,38 +194,7 @@ const MyShiftsScreen: React.FC = () => {
     (navigation as any).navigate('Notifications');
   }, [navigation]);
 
-
-
-  const handleEmergencyAlert = () => {
-    if (!activeShift || activeShift.status !== 'IN_PROGRESS') {
-      Alert.alert(
-        'Shift Not Active',
-        'You can only send emergency alerts for active shifts. Please check in to your shift first.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-    
-    Alert.alert(
-      'Emergency Alert',
-      'Are you sure you want to send an emergency alert? This will notify all supervisors and administrators immediately.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Send Alert',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // TODO: Implement emergency alert API call
-              Alert.alert('Emergency Alert', 'Emergency alert sent successfully');
-            } catch (error) {
-              Alert.alert('Error', 'Failed to send emergency alert. Please try again.');
-            }
-          },
-        },
-      ]
-    );
-  };
+  const { notificationCount } = useNotificationBell({ refreshOnFocus: false });
 
   // Format time helper
   const formatTime = (dateString: string): string => {
@@ -411,7 +385,7 @@ const MyShiftsScreen: React.FC = () => {
         
         // Otherwise, wait a bit before retrying
         console.log(`Location attempt ${attempt + 1} failed, retrying in 2 seconds...`);
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise<void>((resolve) => setTimeout(() => resolve(), 2000));
       }
     }
 
@@ -577,22 +551,6 @@ const MyShiftsScreen: React.FC = () => {
       })
     : [];
 
-  const handleAddIncidentReport = () => {
-    if (!activeShift || activeShift.status !== 'IN_PROGRESS') {
-      Alert.alert(
-        'Shift Not Active',
-        'You can only submit incident reports for active shifts. Please check in to your shift first.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-    navigation.navigate('AddIncidentReport');
-  };
-
-
-
-
-
   const renderMonthlyStats = () => (
     <View style={styles.monthlyStatsContainer}>
       <Text style={styles.monthlyStatsTitle}>This Month Shifts</Text>
@@ -629,11 +587,6 @@ const MyShiftsScreen: React.FC = () => {
     </View>
   );
 
-  const tabs = [
-    { id: 'today', label: 'Today' },
-    { id: 'upcoming', label: 'Upcoming' },
-    { id: 'past', label: 'Past' },
-  ];
 
   const renderShiftCard = (shift: ShiftData) => {
     // Find the actual shift object from Redux state
@@ -658,17 +611,9 @@ const MyShiftsScreen: React.FC = () => {
               <Text style={styles.locationAddress}>{shift.address}</Text>
             </View>
           </View>
-          <View style={[styles.statusBadge, 
-            shift.status === 'active' && styles.activeBadge,
-            shift.status === 'upcoming' && styles.upcomingBadge,
-            shift.status === 'completed' && styles.completedBadge
-          ]}>
-            <Text style={[styles.statusText,
-              shift.status === 'active' && styles.activeText,
-              shift.status === 'upcoming' && styles.upcomingText,
-              shift.status === 'completed' && styles.completedText
-            ]}>
-              {shift.status === 'active' ? 'Active' : shift.status === 'upcoming' ? 'Upcoming' : shift.status === 'completed' ? 'Completed' : 'Missed'}
+          <View style={[styles.statusBadge, { backgroundColor: getShiftStatusColor(shift.status) }]}>
+            <Text style={[styles.statusText, styles.statusTextInverse]}>
+              {getShiftStatusLabel(shift.status)}
             </Text>
           </View>
         </View>
@@ -733,6 +678,15 @@ const MyShiftsScreen: React.FC = () => {
         )}
 
         {!isCheckedOut && (
+          <TouchableOpacity
+            style={styles.detailsLink}
+            onPress={() => (navigation as any).navigate('ShiftDetails', { shiftId: shift.id })}
+          >
+            <Text style={styles.detailsLinkText}>View shift details</Text>
+          </TouchableOpacity>
+        )}
+
+        {!isCheckedOut && (
           <TouchableOpacity 
             style={[
               styles.checkInButton, 
@@ -755,17 +709,7 @@ const MyShiftsScreen: React.FC = () => {
         )}
 
         {isActive && isCheckedIn && !isCheckedOut && (
-          <View style={styles.actionButtons}>
-            <TouchableOpacity style={styles.incidentButton} onPress={handleAddIncidentReport}>
-              <AlertTriangleIcon size={16} color="#FFFFFF" style={styles.actionIconMargin} />
-              <Text style={styles.incidentButtonText}>Report Incident</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.emergencyButton} onPress={handleEmergencyAlert}>
-              <AlertCircleIcon size={16} color="#FFFFFF" style={styles.actionIconMargin} />
-              <Text style={styles.emergencyButtonText}>Emergency</Text>
-            </TouchableOpacity>
-          </View>
+          <ReportsActionBar layout="stack" requireActiveShift emergencySize="small" />
         )}
 
         {isCheckedOut && (
@@ -902,6 +846,16 @@ const MyShiftsScreen: React.FC = () => {
   };
 
   const renderContent = () => {
+    if (loading && activeTab === 'today' && !todayShift && (!todayShifts || todayShifts.length === 0)) {
+      return <InlineLoading size="large" message="Loading shifts..." style={styles.emptyContainer} />;
+    }
+    if (loading && activeTab === 'upcoming' && (!upcomingShifts || upcomingShifts.length === 0)) {
+      return <InlineLoading size="large" message="Loading shifts..." style={styles.emptyContainer} />;
+    }
+    if (loading && activeTab === 'past' && (!pastShifts || pastShifts.length === 0)) {
+      return <InlineLoading size="large" message="Loading shifts..." style={styles.emptyContainer} />;
+    }
+
     // Show error state if there's an error relevant to current tab
     if (isErrorRelevant()) {
       return (
@@ -926,10 +880,12 @@ const MyShiftsScreen: React.FC = () => {
       case 'today':
         if (!todayShift && !loading) {
           return (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No active shift today</Text>
-              <Text style={styles.emptySubtext}>You don't have any shifts scheduled for today</Text>
-            </View>
+            <EmptyState
+              title="No active shift today"
+              message="You don't have any shifts scheduled for today."
+              icon={<ClockIcon size={40} color={COLORS.textTertiary} />}
+              style={styles.emptyContainer}
+            />
           );
         }
         return (
@@ -944,10 +900,12 @@ const MyShiftsScreen: React.FC = () => {
         // Show empty state if no shifts, but only if not loading and no error
         if (!loading && (!upcomingShifts || !Array.isArray(upcomingShifts) || upcomingShifts.length === 0)) {
           return (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No upcoming shifts</Text>
-              <Text style={styles.emptySubtext}>You don't have any upcoming shifts scheduled</Text>
-            </View>
+            <EmptyState
+              title="No upcoming shifts"
+              message="You don't have any upcoming shifts scheduled."
+              icon={<ClockIcon size={40} color={COLORS.textTertiary} />}
+              style={styles.emptyContainer}
+            />
           );
         }
         return (
@@ -961,16 +919,19 @@ const MyShiftsScreen: React.FC = () => {
       case 'past':
         if (!loading && (!pastShifts || !Array.isArray(pastShifts) || pastShifts.length === 0)) {
           return (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No past shifts to display</Text>
-            </View>
+            <EmptyState
+              title="No past shifts"
+              message="Completed and missed shifts will appear here."
+              icon={<ClockIcon size={40} color={COLORS.textTertiary} />}
+              style={styles.emptyContainer}
+            />
           );
         }
         return (
           <View>
             {pastShifts && Array.isArray(pastShifts) && pastShifts.length > 0
               ? pastShifts.map(toShiftData).map(renderShiftCard)
-              : <Text style={styles.emptyText}>No past shifts to display</Text>
+              : null
             }
           </View>
         );
@@ -979,76 +940,65 @@ const MyShiftsScreen: React.FC = () => {
     }
   };
 
+  const segmentTabs = [
+    { key: 'today' as const, label: 'Today' },
+    { key: 'upcoming' as const, label: 'Upcoming' },
+    { key: 'past' as const, label: 'Past' },
+  ];
+
   return (
-    <View style={styles.container}>
+    <SafeAreaWrapper>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.backgroundPrimary} />
       <SharedHeader
         variant="guard"
         title="My Shifts"
         onNotificationPress={handleNotificationPress}
+        notificationCount={notificationCount}
         profileDrawer={
           <GuardProfileDrawer
             visible={false}
             onClose={() => {}}
             onNavigateToProfile={() => {
-              // Navigate to profile/settings when available
+              (navigation as any).navigate('GuardSettings');
             }}
             onNavigateToPastJobs={() => {
-              // Navigation handled in drawer
+              (navigation as any).navigate('Jobs');
             }}
             onNavigateToAssignedSites={() => {
-              // Navigation handled in drawer
+              (navigation as any).navigate('GuardSiteDetails');
             }}
             onNavigateToAttendance={() => {
-              // Navigation handled in drawer
+              setActiveTab('past');
             }}
             onNavigateToNotifications={() => {
-              // Navigate to notifications/settings
+              (navigation as any).navigate('Notifications');
             }}
             onNavigateToSupport={() => {
-              // Navigation handled in drawer
+              (navigation as any).navigate('SupportContact');
             }}
           />
         }
       />
+
+      <SegmentTabs
+        tabs={segmentTabs}
+        activeKey={activeTab}
+        onChange={setActiveTab}
+      />
       
       <ScrollView
         style={styles.content}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
         {renderMonthlyStats()}
-        
-        {/* Tab Navigation */}
-        <View style={styles.tabsContainer}>
-          {tabs.map((tab) => (
-            <TouchableOpacity
-              key={tab.id}
-              style={[
-                styles.tab,
-                activeTab === tab.id && styles.activeTab,
-              ]}
-              onPress={() => setActiveTab(tab.id as 'today' | 'upcoming' | 'past')}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === tab.id && styles.activeTabText,
-                ]}
-              >
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
         {renderContent()}
-        {/* Only show weekly summary on today tab */}
         {activeTab === 'today' && renderWeeklySummary()}
       </ScrollView>
-    </View>
+    </SafeAreaWrapper>
   );
 };
 
@@ -1081,6 +1031,9 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: SPACING.lg,
+  },
+  scrollContent: {
+    paddingBottom: SPACING.xxxxl,
   },
   monthlyStatsContainer: {
     marginTop: SPACING.lg,
@@ -1241,6 +1194,9 @@ const styles = StyleSheet.create({
     letterSpacing: -0.41,
     textTransform: 'uppercase',
   },
+  statusTextInverse: {
+    color: COLORS.textInverse,
+  },
   activeText: {
     color: '#4CAF50',
   },
@@ -1324,6 +1280,15 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 16,
     marginBottom: 12,
+  },
+  detailsLink: {
+    alignSelf: 'flex-start',
+    marginBottom: SPACING.sm,
+  },
+  detailsLinkText: {
+    color: COLORS.primary,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: '600',
   },
   checkInIcon: {
     marginRight: 8,

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import authRoutes from './auth.js';
+import SuperAdminService from '../services/superAdminService.js';
 import guardRoutes from './guards.js';
 import clientRoutes from './clients.js';
 import trackingRoutes from './tracking.js';
@@ -22,15 +23,22 @@ import operationsRoutes from './operations.js';
 import invitationRoutes from './invitations.js';
 import notificationRoutes from './notifications.js';
 import userRoutes from './users.js';
+import subscriptionRoutes from './subscription.js';
+import supportRoutes from './supportRoutes.js';
 
 const router = Router();
 
 // Health check
-router.get('/health', (req, res) => {
+router.get('/health', async (req, res) => {
+  const maintenanceMode = await SuperAdminService.isMaintenanceModeEnabled();
+  const { isFirebaseAdminInitialized, initializeFirebaseAdmin } = await import('../config/firebase.js');
+  initializeFirebaseAdmin();
   res.json({
     success: true,
     data: {
       status: 'ok',
+      maintenanceMode,
+      pushNotifications: isFirebaseAdminInitialized(),
       time: new Date().toISOString(),
       environment: process.env.NODE_ENV || 'development',
     },
@@ -40,6 +48,7 @@ router.get('/health', (req, res) => {
 // API routes
 router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
+router.use('/subscription', subscriptionRoutes);
 router.use('/guards', guardRoutes);
 router.use('/clients', clientRoutes);
 router.use('/tracking', trackingRoutes);
@@ -52,6 +61,7 @@ router.use('/sites', siteRoutes);
 router.use('/emergency', emergencyRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/chat', chatRoutes);
+router.use('/support', supportRoutes);
 // Register specific admin routes BEFORE the generic /admin route
 // This ensures Express matches specific paths first
 router.use('/admin/users', adminUserRoutes);
@@ -62,32 +72,7 @@ router.use('/admin/operations', operationsRoutes);
 router.use('/admin/invitations', invitationRoutes);
 // Register generic /admin route LAST to avoid catching specific routes
 router.use('/admin', adminRoutes);
-// Test route for Super Admin
-router.get('/super-admin-test', (req, res) => {
-  res.json({ success: true, message: 'Super Admin routes are working!' });
-});
-
-// Super Admin routes with simple test
-router.get('/super-admin/test', (req, res) => {
-  res.json({ success: true, message: 'Super Admin endpoint working!' });
-});
-
+router.use('/notifications', notificationRoutes);
 router.use('/super-admin', superAdminRoutes);
-
-// Legacy routes for backward compatibility with in-memory server
-router.get('/locations', (req, res) => {
-  res.json({ success: true, data: [] });
-});
-
-router.get('/messages', (req, res) => {
-  res.json({ success: true, data: [] });
-});
-
-router.post('/messages', (req, res) => {
-  res.json({ success: true, data: { id: 'msg-1', ...req.body } });
-});
-
-// Notification routes are now handled by notificationRoutes
-// Legacy routes removed - use /api/notifications instead
 
 export default router;

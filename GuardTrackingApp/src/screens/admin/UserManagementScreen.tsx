@@ -25,6 +25,10 @@ import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import { useNotificationBell } from '../../hooks/useNotificationBell';
+import { useSubscriptionLimits } from '../../hooks/useSubscriptionLimits';
+import { showActionErrorAlert } from '../../utils/subscriptionLimitAlert';
+import { SubscriptionResource } from '../../utils/subscriptionUtils';
 import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
 import { RefreshControl } from 'react-native';
 import { findOrCreateAdminGuardChat, findOrCreateClientAdminChat } from '../../utils/chatHelper';
@@ -44,16 +48,29 @@ interface UserManagementScreenProps {
   navigation: any;
 }
 
+/** Split a display name into first/last without duplicating single-word names. */
+function splitFullName(fullName: string): { firstName: string; lastName: string } {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  return {
+    firstName: parts[0] || '',
+    lastName: parts.slice(1).join(' '),
+  };
+}
+
 const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation }) => {
   const { user } = useSelector((state: RootState) => state.auth);
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+  const { onNotificationPress, notificationCount } = useNotificationBell({
+    notificationsRoute: 'AdminNotifications',
+  });
+  const { ensureCanAdd, refresh: refreshLimits } = useSubscriptionLimits();
   const insets = useSafeAreaInsets();
-  
+
   // Tab bar height is 70px, add safe area bottom inset and spacing
-  const TAB_BAR_HEIGHT = 70;
+  const TAB_BAR_HEIGHT = 0; // Removed extra height
   const BUTTON_SPACING = 16;
   const buttonBottom = TAB_BAR_HEIGHT + insets.bottom + BUTTON_SPACING;
-  
+
   const [users, setUsers] = useState<User[]>([]);
   const [selectedRole, setSelectedRole] = useState<'all' | 'admin' | 'guard' | 'client'>('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -85,7 +102,7 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
     try {
       setLoading(true);
       setError(null);
-      
+
       const roleMap: Record<string, 'ADMIN' | 'GUARD' | 'CLIENT' | 'SUPER_ADMIN' | undefined> = {
         'all': undefined,
         'admin': 'ADMIN',
@@ -147,6 +164,21 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
     await loadUsers();
   };
 
+  const userResource = (role: User['role']): SubscriptionResource | null => {
+    if (role === 'guard') return 'guards';
+    if (role === 'client') return 'clients';
+    return null;
+  };
+
+  const handleOpenCreateModal = async () => {
+    const resource = userResource(newUser.role);
+    if (resource) {
+      const allowed = await ensureCanAdd(resource, navigation);
+      if (!allowed) return;
+    }
+    setShowCreateModal(true);
+  };
+
   const handleCreateUser = async () => {
     if (creatingUser) return;
 
@@ -162,11 +194,16 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
       client: 'CLIENT',
     };
 
-    const [firstName, ...rest] = newUser.name.trim().split(' ');
-    const lastName = rest.join(' ') || firstName;
+    const { firstName, lastName } = splitFullName(newUser.name);
 
     // Generate temporary password
     const tempPassword = `Temp${Math.floor(100000 + Math.random() * 900000)}!`;
+
+    const resource = userResource(newUser.role);
+    if (resource) {
+      const allowed = await ensureCanAdd(resource, navigation);
+      if (!allowed) return;
+    }
 
     setCreatingUser(true);
     try {
@@ -180,7 +217,10 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
       });
 
       if (!response.success) {
-        Alert.alert('Error', response.message || 'Failed to create user');
+        showActionErrorAlert('Create User', response.message || 'Failed to create user', {
+          role: user?.role,
+          onUpgrade: () => navigation.navigate('AdminSubscription'),
+        });
         return;
       }
 
@@ -199,6 +239,7 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
       setUsers(prev => [createdUser, ...prev]);
       setShowCreateModal(false);
       setNewUser({ name: '', email: '', role: 'guard', department: '' });
+      await refreshLimits();
 
       Alert.alert(
         'User Created',
@@ -206,30 +247,10 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
       );
     } catch (error: any) {
       console.error('Create user error:', error);
-      
-      let errorMessage = 'Failed to create user. ';
-      
-      if (!error.response) {
-        if (error.message?.includes('Network Error') || error.message?.includes('ECONNREFUSED')) {
-          errorMessage = 'Cannot connect to backend server. Please check:\n\n' +
-                         '• Backend server is running\n' +
-                         '• Network connection is active\n' +
-                         '• Server address is correct';
-        } else if (error.message?.includes('timeout')) {
-          errorMessage = 'Request timed out. Please try again.';
-        } else {
-          errorMessage = 'No response from server. Please check backend logs.';
-        }
-      } else {
-        const statusCode = error.response?.status;
-        if (statusCode === 409) {
-          errorMessage = `User with email ${newUser.email} already exists.`;
-        } else {
-          errorMessage = error.response?.data?.message || error.message || 'Failed to create user';
-        }
-      }
-      
-      Alert.alert('Error', errorMessage);
+      showActionErrorAlert('Create User', error, {
+        role: user?.role,
+        onUpgrade: () => navigation.navigate('AdminSubscription'),
+      });
     } finally {
       setCreatingUser(false);
     }
@@ -248,8 +269,8 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
           `Are you sure you want to suspend ${user.name}?`,
           [
             { text: 'Cancel', style: 'cancel' },
-            { 
-              text: 'Suspend', 
+            {
+              text: 'Suspend',
               style: 'destructive',
               onPress: () => updateUserStatus(userId, false),
             },
@@ -265,8 +286,8 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
           `Are you sure you want to delete ${user.name}? This action cannot be undone.`,
           [
             { text: 'Cancel', style: 'cancel' },
-            { 
-              text: 'Delete', 
+            {
+              text: 'Delete',
               style: 'destructive',
               onPress: () => deleteUser(userId),
             },
@@ -293,7 +314,7 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
         Alert.alert('Error', response.message || `Failed to ${isActive ? 'activate' : 'suspend'} user`);
         return;
       }
-      setUsers(prev => prev.map(u => 
+      setUsers(prev => prev.map(u =>
         u.id === userId ? { ...u, status: isActive ? 'active' : 'suspended' } : u
       ));
     } catch (error: any) {
@@ -335,8 +356,7 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
       client: 'CLIENT',
     };
 
-    const [firstName, ...rest] = editUser.name.trim().split(' ');
-    const lastName = rest.join(' ') || firstName;
+    const { firstName, lastName } = splitFullName(editUser.name);
 
     setUpdatingUser(true);
     try {
@@ -358,14 +378,14 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
         CLIENT: 'client',
       };
 
-      setUsers(prev => prev.map(u => 
+      setUsers(prev => prev.map(u =>
         u.id === editingUserId
           ? {
-              ...u,
-              name: editUser.name,
-              email: editUser.email.trim().toLowerCase(),
-              role: roleMapBack[response.data.role] || editUser.role,
-            }
+            ...u,
+            name: editUser.name,
+            email: editUser.email.trim().toLowerCase(),
+            role: roleMapBack[response.data.role] || editUser.role,
+          }
           : u
       ));
 
@@ -398,8 +418,8 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
     }
   };
 
-  const filteredUsers = selectedRole === 'all' 
-    ? users 
+  const filteredUsers = selectedRole === 'all'
+    ? users
     : users.filter(u => u.role === selectedRole);
 
   const renderUserItem = ({ item }: { item: User }) => (
@@ -409,7 +429,7 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
           <Text style={styles.userName}>{item.name}</Text>
           <Text style={styles.userEmail}>{item.email}</Text>
         </View>
-        
+
         <View style={styles.userBadges}>
           <View style={[styles.roleBadge, { backgroundColor: getRoleColor(item.role) + '20' }]}>
             <Text style={[styles.roleText, { color: getRoleColor(item.role) }]}>
@@ -423,13 +443,13 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
           </View>
         </View>
       </View>
-      
+
       {item.department && (
         <View style={styles.departmentContainer}>
           <Text style={styles.userDepartment}>Department: {item.department}</Text>
         </View>
       )}
-      
+
       <View style={styles.userMeta}>
         <Text style={styles.metaText}>
           Created: {new Date(item.createdAt).toLocaleDateString('en-US', {
@@ -450,11 +470,11 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
           </Text>
         )}
       </View>
-      
+
       <View style={styles.userActions}>
         {/* Chat Button - Only show for guards and clients */}
         {(item.role === 'guard' || item.role === 'client') && (
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.actionButton}
             onPress={async () => {
               try {
@@ -493,12 +513,12 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
             }}
             activeOpacity={0.7}
           >
-            <MessageCircle size={16} color={COLORS.primary} />
+            <MessageCircle size={14} color={COLORS.primary} />
             <Text style={styles.actionText}>Chat</Text>
           </TouchableOpacity>
         )}
 
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.actionButton}
           onPress={() => handleUserAction(item.id, 'edit')}
           activeOpacity={0.7}
@@ -507,9 +527,9 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
           <SettingsIcon size={16} color={actionLoading === item.id ? COLORS.textSecondary : COLORS.primary} />
           <Text style={[styles.actionText, actionLoading === item.id && styles.actionTextDisabled]}>Edit</Text>
         </TouchableOpacity>
-        
+
         {item.status === 'active' ? (
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.actionButton}
             onPress={() => handleUserAction(item.id, 'suspend')}
             activeOpacity={0.7}
@@ -517,14 +537,14 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
           >
             <EmergencyIcon size={16} color={actionLoading === item.id ? COLORS.textSecondary : COLORS.warning} />
             <Text style={[
-              styles.actionText, 
+              styles.actionText,
               { color: actionLoading === item.id ? COLORS.textSecondary : COLORS.warning }
             ]}>
               {actionLoading === item.id ? 'Loading...' : 'Suspend'}
             </Text>
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.actionButton}
             onPress={() => handleUserAction(item.id, 'activate')}
             activeOpacity={0.7}
@@ -532,22 +552,22 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
           >
             <UserIcon size={16} color={actionLoading === item.id ? COLORS.textSecondary : COLORS.success} />
             <Text style={[
-              styles.actionText, 
+              styles.actionText,
               { color: actionLoading === item.id ? COLORS.textSecondary : COLORS.success }
             ]}>
               {actionLoading === item.id ? 'Loading...' : 'Activate'}
             </Text>
           </TouchableOpacity>
         )}
-        
-        <TouchableOpacity 
+
+        <TouchableOpacity
           style={styles.actionButton}
           onPress={() => handleUserAction(item.id, 'delete')}
           activeOpacity={0.7}
           disabled={actionLoading === item.id}
         >
           <Text style={[
-            styles.actionText, 
+            styles.actionText,
             { color: actionLoading === item.id ? COLORS.textSecondary : COLORS.error }
           ]}>
             {actionLoading === item.id ? 'Loading...' : 'Delete'}
@@ -564,6 +584,8 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
         title="User Management"
         showLogo={false}
         onMenuPress={openDrawer}
+        onNotificationPress={onNotificationPress}
+        notificationCount={notificationCount}
         profileDrawer={
           <AdminProfileDrawer
             visible={isDrawerVisible}
@@ -578,7 +600,7 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
       <View style={styles.filterContainer}>
         {[
           { key: 'all', label: 'All Users', icon: UsersIcon },
-          { key: 'admin', label: 'Admins', icon: UserIcon },
+          { key: 'admin', label: 'Admin', icon: UserIcon },
           { key: 'guard', label: 'Guards', icon: UserIcon },
           { key: 'client', label: 'Clients', icon: UserIcon },
         ].map((role) => {
@@ -642,17 +664,17 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
           />
         )}
       </View>
-      
+
       {loading && users.length > 0 && <LoadingOverlay visible={true} message="Refreshing..." />}
 
       {/* Sticky Action Button */}
-      <TouchableOpacity 
+      <TouchableOpacity
         style={[
-          styles.stickyAddButton, 
+          styles.stickyAddButton,
           { bottom: buttonBottom },
           (creatingUser || updatingUser) && styles.stickyAddButtonDisabled
         ]}
-        onPress={() => setShowCreateModal(true)}
+        onPress={handleOpenCreateModal}
         disabled={creatingUser || updatingUser}
         activeOpacity={(creatingUser || updatingUser) ? 1 : 0.7}
       >
@@ -667,7 +689,7 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Create New User</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => setShowCreateModal(false)}
               disabled={creatingUser}
               activeOpacity={creatingUser ? 1 : 0.7}
@@ -675,7 +697,7 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
               <Text style={[styles.closeButton, creatingUser && styles.closeButtonDisabled]}>✕</Text>
             </TouchableOpacity>
           </View>
-          
+
           <View style={styles.modalContent}>
             <View style={styles.formField}>
               <Text style={styles.fieldLabel}>Full Name</Text>
@@ -704,7 +726,7 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
             <View style={styles.formField}>
               <Text style={styles.fieldLabel}>Role</Text>
               <View style={styles.roleSelector}>
-                {['admin', 'guard', 'client'].map((role) => (
+                {['guard', 'client'].map((role) => (
                   <TouchableOpacity
                     key={role}
                     style={[
@@ -802,7 +824,7 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
             <View style={styles.formField}>
               <Text style={styles.fieldLabel}>Role</Text>
               <View style={styles.roleSelector}>
-                {['admin', 'guard', 'client'].map((role) => (
+                {['guard', 'client'].map((role) => (
                   <TouchableOpacity
                     key={role}
                     style={[
@@ -873,14 +895,12 @@ const styles = StyleSheet.create({
   stickyAddButton: {
     position: 'absolute',
     left: SPACING.lg,
-    right: SPACING.lg,
     backgroundColor: COLORS.primary,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderRadius: BORDER_RADIUS.md,
     ...SHADOWS.small,
     zIndex: 1000,
-    alignItems: 'center',
   },
   stickyAddButtonText: {
     color: COLORS.textInverse,
@@ -923,7 +943,7 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     padding: SPACING.lg,
-    paddingBottom: 120, // Space for floating button + bottom nav
+    paddingBottom: 80, // Space for floating button + bottom nav
   },
   errorContainer: {
     flex: 1,

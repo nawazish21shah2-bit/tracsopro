@@ -1,0 +1,29 @@
+title = "tracsopro gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known safe placeholders and documentation"
+paths = [
+  '''(^|/)\.env\.example$''',
+  '''(^|/)backend/\.env\.example$''',
+  '''(^|/)GuardTrackingApp/\.env\.example$''',
+  '''(^|/)audit-docs/''',
+  '''\.md$''',
+  '''(^|/)backend/tests/''',
+  '''(^|/)backend/scripts/scan-secrets\.mjs$''',
+]
+regexTarget = "match"
+regexes = [
+  '''replace-with-a-long-random-secret''',
+  '''postgresql://USER:PASSWORD@''',
+  '''AdminPass123!''',
+  '''GuardPass123!''',
+  '''ClientPass123!''',
+  '''dev-secret-change-me-in-production''',
+  '''integration-test-jwt-secret-min-32-chars!!''',
+  '''sk_test_''',
+  '''pk_test_''',
+  '''whsec_replace''',
+]

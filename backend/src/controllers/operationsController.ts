@@ -8,7 +8,8 @@ import { AuthRequest } from '../middleware/auth.js';
 import { logger } from '../utils/logger.js';
 import prisma from '../config/database.js';
 import { EmergencyService } from '../services/emergencyService.js';
-import { GuardStatus, ShiftStatus } from '@prisma/client';
+import { GuardStatus, ShiftStatus, IncidentSeverity, IncidentStatus } from '@prisma/client';
+import { resolveSecurityCompanyId } from '../utils/companyAuth.js';
 
 const emergencyService = EmergencyService.getInstance();
 
@@ -28,27 +29,35 @@ export const getOperationsMetrics = async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
-    const securityCompanyId = req.securityCompanyId;
+    const companyResult = resolveSecurityCompanyId(req);
+    if (companyResult.error) {
+      return res.status(companyResult.status || 403).json({
+        success: false,
+        message: companyResult.error,
+      });
+    }
+
+    const securityCompanyId = companyResult.securityCompanyId;
 
     // Multi-tenant: Build company filters
-    const guardWhere = securityCompanyId ? {
+    const guardWhere = {
       companyGuards: {
         some: {
           securityCompanyId,
           isActive: true,
         },
       },
-    } : {};
+    };
 
-    const siteWhere = securityCompanyId ? {
+    const siteWhere = {
       companySites: {
         some: {
           securityCompanyId,
         },
       },
-    } : {};
+    };
 
-    const shiftWhere = securityCompanyId ? {
+    const shiftWhere = {
       guard: {
         companyGuards: {
           some: {
@@ -57,36 +66,32 @@ export const getOperationsMetrics = async (req: AuthRequest, res: Response) => {
           },
         },
       },
-    } : {};
+    };
 
-    // Get company guard IDs if filtering by company (needed for breaks and incidents)
-    let companyGuardIds: string[] | undefined;
-    if (securityCompanyId) {
-      const companyGuards = await prisma.companyGuard.findMany({
-        where: {
-          securityCompanyId,
-          isActive: true,
+    // Get company guard IDs (needed for breaks and incidents)
+    const companyGuards = await prisma.companyGuard.findMany({
+      where: {
+        securityCompanyId,
+        isActive: true,
+      },
+      select: { guardId: true },
+    });
+    const companyGuardIds = companyGuards.map(cg => cg.guardId).filter(Boolean) as string[];
+
+    if (companyGuardIds.length === 0) {
+      return res.json({
+        success: true,
+        data: {
+          totalGuards: 0,
+          activeGuards: 0,
+          guardsOnBreak: 0,
+          offlineGuards: 0,
+          emergencyAlerts: 0,
+          siteCoverage: 0,
+          averageResponseTime: 0,
+          incidentsToday: 0,
         },
-        select: { guardId: true },
       });
-      companyGuardIds = companyGuards.map(cg => cg.guardId).filter(Boolean) as string[];
-      
-      // If no guards in company, return empty metrics
-      if (companyGuardIds.length === 0) {
-        return res.json({
-          success: true,
-          data: {
-            totalGuards: 0,
-            activeGuards: 0,
-            guardsOnBreak: 0,
-            offlineGuards: 0,
-            emergencyAlerts: 0,
-            siteCoverage: 0,
-            averageResponseTime: 0,
-            incidentsToday: 0,
-          },
-        });
-      }
     }
 
     // Guard Statistics
@@ -111,16 +116,7 @@ export const getOperationsMetrics = async (req: AuthRequest, res: Response) => {
             select: { shift: { select: { guardId: true } } },
             distinct: ['shiftId'],
           })
-        : prisma.shiftBreak.findMany({
-            where: {
-              endTime: null,
-              shift: {
-                status: 'IN_PROGRESS',
-              },
-            },
-            select: { shift: { select: { guardId: true } } },
-            distinct: ['shiftId'],
-          }),
+        : [],
     ]);
 
     const guardsOnBreak = activeBreaks.length;
@@ -138,12 +134,8 @@ export const getOperationsMetrics = async (req: AuthRequest, res: Response) => {
     const shiftsForSiteCoverageWhere: any = {
       status: ShiftStatus.IN_PROGRESS,
       site: siteCoverageWhere,
+      guardId: { in: companyGuardIds },
     };
-
-    // Also filter shifts by company guards if filtering by company
-    if (companyGuardIds) {
-      shiftsForSiteCoverageWhere.guardId = { in: companyGuardIds };
-    }
 
     const [activeSites, sitesWithGuardsResult] = await Promise.all([
       prisma.site.count({
@@ -186,7 +178,7 @@ export const getOperationsMetrics = async (req: AuthRequest, res: Response) => {
         where: {
           ...incidentWhere,
           createdAt: { gte: last24Hours },
-          resolvedAt: { isNot: null },
+          resolvedAt: { not: null },
         },
         select: { createdAt: true, resolvedAt: true },
       }),
@@ -245,17 +237,24 @@ export const getGuardStatuses = async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
-    const securityCompanyId = req.securityCompanyId;
+    const companyResult = resolveSecurityCompanyId(req);
+    if (companyResult.error) {
+      return res.status(companyResult.status || 403).json({
+        success: false,
+        message: companyResult.error,
+      });
+    }
 
-    // Multi-tenant: Build company filter for guards
-    const guardWhere = securityCompanyId ? {
+    const securityCompanyId = companyResult.securityCompanyId;
+
+    const guardWhere = {
       companyGuards: {
         some: {
           securityCompanyId,
           isActive: true,
         },
       },
-    } : {};
+    };
 
     // Fetch guards with user info (filtered by company)
     const guards = await prisma.guard.findMany({
@@ -324,7 +323,7 @@ export const getGuardStatuses = async (req: AuthRequest, res: Response) => {
           location,
           currentSite: currentShift?.site?.name || 'No Site',
           siteId: currentShift?.siteId,
-          shiftStart: currentShift?.startTime?.getTime() || Date.now(),
+          shiftStart: currentShift?.actualStartTime?.getTime() || currentShift?.scheduledStartTime?.getTime() || Date.now(),
           lastUpdate: latestLocation?.timestamp.getTime() || Date.now(),
           batteryLevel: latestLocation?.batteryLevel || undefined,
           emergencyAlert: guardAlert
@@ -350,8 +349,233 @@ export const getGuardStatuses = async (req: AuthRequest, res: Response) => {
   }
 };
 
+const EMERGENCY_INCIDENT_TYPES = ['SECURITY_BREACH', 'MEDICAL_EMERGENCY', 'FIRE', 'OTHER'] as const;
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+function mapIncidentSeverity(severity: IncidentSeverity): 'low' | 'medium' | 'high' | 'critical' {
+  switch (severity) {
+    case IncidentSeverity.CRITICAL:
+      return 'critical';
+    case IncidentSeverity.HIGH:
+      return 'high';
+    case IncidentSeverity.MEDIUM:
+      return 'medium';
+    default:
+      return 'low';
+  }
+}
+
+function mapIncidentActivityStatus(status: IncidentStatus): 'active' | 'resolved' | 'pending' {
+  if (status === IncidentStatus.RESOLVED || status === IncidentStatus.CLOSED) {
+    return 'resolved';
+  }
+  if (status === IncidentStatus.INVESTIGATING) {
+    return 'active';
+  }
+  return 'pending';
+}
+
+/**
+ * Get live activity feed for operations center (incidents, check-ins, breaks, emergencies)
+ */
+export const getOperationsActivity = async (req: AuthRequest, res: Response) => {
+  try {
+    const adminId = req.user?.id;
+    if (!adminId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const limit = Math.min(parseInt(req.query.limit as string, 10) || 50, 100);
+    const companyResult = resolveSecurityCompanyId(req);
+    if (companyResult.error) {
+      return res.status(companyResult.status || 403).json({
+        success: false,
+        message: companyResult.error,
+      });
+    }
+
+    const securityCompanyId = companyResult.securityCompanyId;
+    const companyGuards = await prisma.companyGuard.findMany({
+      where: { securityCompanyId, isActive: true },
+      select: { guardId: true },
+    });
+    const companyGuardIds = companyGuards.map((cg) => cg.guardId).filter(Boolean) as string[];
+
+    if (companyGuardIds.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+
+    const guards = await prisma.guard.findMany({
+      where: { id: { in: companyGuardIds } },
+      select: { id: true, userId: true },
+    });
+    const companyUserIds = guards.map((g) => g.userId).filter(Boolean) as string[];
+    const since = new Date(Date.now() - THIRTY_DAYS_MS);
+
+    const [incidents, shifts, breaks] = await Promise.all([
+      prisma.incident.findMany({
+        where: {
+          reportedBy: { in: companyUserIds },
+          createdAt: { gte: since },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        include: {
+          location: { select: { name: true } },
+          reporter: {
+            select: {
+              firstName: true,
+              lastName: true,
+              guard: { select: { id: true } },
+            },
+          },
+        },
+      }),
+      prisma.shift.findMany({
+        where: {
+          guardId: { in: companyGuardIds },
+          OR: [
+            { actualStartTime: { gte: since } },
+            { actualEndTime: { gte: since } },
+          ],
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: limit,
+        include: {
+          guard: {
+            include: {
+              user: { select: { firstName: true, lastName: true } },
+            },
+          },
+          site: { select: { name: true } },
+        },
+      }),
+      prisma.shiftBreak.findMany({
+        where: {
+          shift: { guardId: { in: companyGuardIds } },
+          startTime: { gte: since },
+        },
+        orderBy: { startTime: 'desc' },
+        take: limit,
+        include: {
+          shift: {
+            include: {
+              guard: {
+                include: {
+                  user: { select: { firstName: true, lastName: true } },
+                },
+              },
+              site: { select: { name: true } },
+            },
+          },
+        },
+      }),
+    ]);
+
+    const items: Array<{
+      id: string;
+      type: string;
+      guardId: string;
+      guardName: string;
+      siteName: string;
+      message: string;
+      timestamp: number;
+      severity?: string;
+      status?: string;
+    }> = [];
+
+    for (const incident of incidents) {
+      const guardName =
+        `${incident.reporter.firstName || ''} ${incident.reporter.lastName || ''}`.trim() ||
+        'Unknown Guard';
+      const siteName = incident.location?.name || 'Unknown Site';
+      const isEmergency = EMERGENCY_INCIDENT_TYPES.includes(
+        incident.type as (typeof EMERGENCY_INCIDENT_TYPES)[number]
+      );
+
+      items.push({
+        id: `incident_${incident.id}`,
+        type: isEmergency ? 'emergency' : 'incident',
+        guardId: incident.reporter.guard?.id || '',
+        guardName,
+        siteName,
+        message: incident.description || incident.title,
+        timestamp: incident.createdAt.getTime(),
+        severity: mapIncidentSeverity(incident.severity),
+        status: mapIncidentActivityStatus(incident.status),
+      });
+    }
+
+    for (const shift of shifts) {
+      if (!shift.guardId) continue;
+
+      const guardName = shift.guard?.user
+        ? `${shift.guard.user.firstName} ${shift.guard.user.lastName}`.trim()
+        : 'Unknown Guard';
+      const siteName = shift.site?.name || shift.locationName || 'Unknown Site';
+
+      if (shift.actualStartTime && shift.actualStartTime >= since) {
+        items.push({
+          id: `checkin_${shift.id}`,
+          type: 'check_in',
+          guardId: shift.guardId,
+          guardName,
+          siteName,
+          message: `Checked in at ${siteName}`,
+          timestamp: shift.actualStartTime.getTime(),
+        });
+      }
+
+      if (shift.actualEndTime && shift.actualEndTime >= since) {
+        items.push({
+          id: `checkout_${shift.id}`,
+          type: 'check_out',
+          guardId: shift.guardId,
+          guardName,
+          siteName,
+          message: `Checked out from ${siteName}`,
+          timestamp: shift.actualEndTime.getTime(),
+        });
+      }
+    }
+
+    for (const shiftBreak of breaks) {
+      const shift = shiftBreak.shift;
+      if (!shift?.guardId) continue;
+
+      const guardName = shift.guard?.user
+        ? `${shift.guard.user.firstName} ${shift.guard.user.lastName}`.trim()
+        : 'Unknown Guard';
+      const siteName = shift.site?.name || shift.locationName || 'Unknown Site';
+      const isEnded = Boolean(shiftBreak.endTime);
+
+      items.push({
+        id: `break_${shiftBreak.id}_${isEnded ? 'end' : 'start'}`,
+        type: isEnded ? 'break_end' : 'break_start',
+        guardId: shift.guardId,
+        guardName,
+        siteName,
+        message: isEnded ? `Ended break at ${siteName}` : `Started break at ${siteName}`,
+        timestamp: (shiftBreak.endTime || shiftBreak.startTime).getTime(),
+      });
+    }
+
+    items.sort((a, b) => b.timestamp - a.timestamp);
+
+    res.json({ success: true, data: items.slice(0, limit) });
+  } catch (error) {
+    logger.error('Error getting operations activity:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get operations activity',
+      error: process.env.NODE_ENV === 'development' ? error : undefined,
+    });
+  }
+};
+
 export default {
   getOperationsMetrics,
   getGuardStatuses,
+  getOperationsActivity,
 };
 

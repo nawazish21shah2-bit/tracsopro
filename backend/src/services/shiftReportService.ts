@@ -14,7 +14,15 @@ class ShiftReportService {
    * Create a shift report
    */
   async createShiftReport(data: CreateShiftReportData): Promise<ShiftReport> {
-    // Verify shift exists and belongs to guard
+    const guard = await prisma.guard.findFirst({
+      where: { userId: data.guardId },
+      select: { id: true },
+    });
+
+    if (!guard) {
+      throw new Error('Guard profile not found');
+    }
+
     const shift = await prisma.shift.findUnique({
       where: { id: data.shiftId },
     });
@@ -23,7 +31,7 @@ class ShiftReportService {
       throw new Error('Shift not found');
     }
 
-    if (shift.guardId !== data.guardId) {
+    if (shift.guardId !== guard.id) {
       throw new Error('Unauthorized: This shift does not belong to you');
     }
 
@@ -93,7 +101,24 @@ class ShiftReportService {
   /**
    * Get reports for a specific shift
    */
-  async getShiftReports(shiftId: string) {
+  async getShiftReports(shiftId: string, guardUserId: string) {
+    const guard = await prisma.guard.findFirst({
+      where: { userId: guardUserId },
+      select: { id: true },
+    });
+
+    if (!guard) {
+      throw new Error('Guard profile not found');
+    }
+
+    const shift = await prisma.shift.findFirst({
+      where: { id: shiftId, guardId: guard.id },
+    });
+
+    if (!shift) {
+      throw new Error('Unauthorized: This shift does not belong to you');
+    }
+
     return await prisma.shiftReport.findMany({
       where: {
         shiftId,
@@ -166,6 +191,86 @@ class ShiftReportService {
         },
       },
     });
+  }
+
+  /**
+   * Get shift reports scoped to a security company (admin)
+   */
+  async getCompanyShiftReports(
+    securityCompanyId: string,
+    page: number = 1,
+    limit: number = 50
+  ) {
+    const skip = (page - 1) * limit;
+
+    const companyGuards = await prisma.companyGuard.findMany({
+      where: { securityCompanyId, isActive: true },
+      select: { guardId: true },
+    });
+    const guardIds = companyGuards.map(cg => cg.guardId);
+
+    const guards = guardIds.length
+      ? await prisma.guard.findMany({
+          where: { id: { in: guardIds } },
+          select: { userId: true },
+        })
+      : [];
+    const guardUserIds = guards.map(g => g.userId);
+
+    const where: any = {
+      OR: [
+        ...(guardUserIds.length ? [{ guardId: { in: guardUserIds } }] : []),
+        {
+          shift: {
+            OR: [
+              { client: { companyClients: { some: { securityCompanyId, isActive: true } } } },
+              { site: { companySites: { some: { securityCompanyId, isActive: true } } } },
+            ],
+          },
+        },
+      ],
+    };
+
+    if (!where.OR.length) {
+      return { reports: [], pagination: { page, limit, total: 0, pages: 0 } };
+    }
+
+    const [reports, total] = await Promise.all([
+      prisma.shiftReport.findMany({
+        where,
+        include: {
+          shift: {
+            include: {
+              site: { select: { name: true, address: true } },
+              guard: {
+                include: {
+                  user: {
+                    select: { id: true, firstName: true, lastName: true, email: true },
+                  },
+                },
+              },
+            },
+          },
+          guard: {
+            select: { id: true, firstName: true, lastName: true, email: true },
+          },
+        },
+        orderBy: { submittedAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.shiftReport.count({ where }),
+    ]);
+
+    return {
+      reports,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    };
   }
 
   /**

@@ -3,7 +3,7 @@
  * Live guard monitoring, emergency alerts, and comprehensive operations management
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -29,6 +29,9 @@ import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 import operationsService, { GuardStatus, OperationsMetrics, EmergencyAlert } from '../../services/operationsService';
+import { useLiveGuardLocations } from '../../hooks/useLiveGuardLocations';
+import { isValidCoordinate } from '../../utils/liveGuardLocationMapper';
+import EmergencyAlertsPanel from '../../components/emergency/EmergencyAlertsPanel';
 
 interface AdminOperationsCenterProps {
   navigation: any;
@@ -42,10 +45,35 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
   const [guardStatuses, setGuardStatuses] = useState<GuardStatus[]>([]);
   const [operationsMetrics, setOperationsMetrics] = useState<OperationsMetrics | null>(null);
   const [emergencyAlerts, setEmergencyAlerts] = useState<EmergencyAlert[]>([]);
+  const [acknowledgingAlertId, setAcknowledgingAlertId] = useState<string | null>(null);
+  const [ackCooldownUntilById, setAckCooldownUntilById] = useState<Record<string, number>>({});
   const [selectedView, setSelectedView] = useState<'overview' | 'guards' | 'alerts' | 'analytics'>('overview');
   const [isLiveMode, setIsLiveMode] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedGuard, setSelectedGuard] = useState<string | null>(null);
+
+  const supplementalLiveGuards = useMemo(
+    () =>
+      guardStatuses
+        .filter((guard) =>
+          isValidCoordinate(guard.location.latitude, guard.location.longitude)
+        )
+        .map((guard) => ({
+          guardId: guard.guardId,
+          guardName: guard.guardName,
+          latitude: guard.location.latitude,
+          longitude: guard.location.longitude,
+          accuracy: guard.location.accuracy,
+          status: guard.status,
+          siteName: guard.currentSite,
+          timestamp: guard.lastUpdate,
+        })),
+    [guardStatuses]
+  );
+
+  const { guards: liveGuards } = useLiveGuardLocations({
+    supplementalGuards: supplementalLiveGuards,
+  });
 
   useEffect(() => {
     initializeOperationsCenter();
@@ -112,7 +140,34 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
     setRefreshing(false);
   }, []);
 
+  const getCooldownFromMessage = (message?: string): number => {
+    if (!message) return 0;
+    const match = message.match(/(\d+)\s*second/i);
+    return match ? Number(match[1]) : 0;
+  };
+
+  const getRemainingCooldownSeconds = (alertId: string): number => {
+    const until = ackCooldownUntilById[alertId];
+    if (!until) return 0;
+    const remainingMs = until - Date.now();
+    return remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0;
+  };
+
+  const applyAckCooldown = (alertId: string, seconds: number) => {
+    if (seconds <= 0) return;
+    setAckCooldownUntilById((prev) => ({
+      ...prev,
+      [alertId]: Date.now() + seconds * 1000,
+    }));
+  };
+
   const handleEmergencyAlert = (alertId: string) => {
+    const remaining = getRemainingCooldownSeconds(alertId);
+    if (remaining > 0) {
+      Alert.alert('Please Wait', `You can retry this action in ${remaining} seconds.`);
+      return;
+    }
+
     Alert.alert(
       'Emergency Alert',
       'Acknowledge this emergency alert and dispatch assistance?',
@@ -127,14 +182,37 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
     );
   };
 
+  const pendingEmergencyAlerts = useMemo(
+    () => emergencyAlerts.filter((alert) => !alert.acknowledged),
+    [emergencyAlerts]
+  );
+
   const acknowledgeEmergency = async (alertId: string) => {
-    const success = await operationsService.acknowledgeEmergencyAlert(alertId);
-    if (success) {
-      await loadEmergencyAlerts();
-      await loadGuardStatuses();
-      Alert.alert('Emergency Acknowledged', 'Emergency services have been dispatched.');
-    } else {
-      Alert.alert('Error', 'Failed to acknowledge emergency alert.');
+    if (acknowledgingAlertId) {
+      return;
+    }
+
+    setAcknowledgingAlertId(alertId);
+    try {
+      const result = await operationsService.acknowledgeEmergencyAlert(alertId);
+      if (result.success) {
+        const alreadyHandled = result.message?.toLowerCase().includes('already') ?? false;
+        const responseCooldown = getCooldownFromMessage(result.message);
+        applyAckCooldown(alertId, responseCooldown || (alreadyHandled ? 20 : 8));
+        await loadEmergencyAlerts();
+        await loadGuardStatuses();
+        await loadOperationsMetrics();
+        Alert.alert(
+          alreadyHandled ? 'Already Acknowledged' : 'Emergency Acknowledged',
+          alreadyHandled
+            ? 'This emergency alert was already acknowledged.'
+            : 'Emergency services have been dispatched.'
+        );
+      } else {
+        Alert.alert('Error', result.message || 'Failed to dispatch emergency response.');
+      }
+    } finally {
+      setAcknowledgingAlertId(null);
     }
   };
 
@@ -182,7 +260,7 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
         <View style={styles.metricsGrid}>
           <StatsCard
             label="Active Guards"
-            value={operationsMetrics?.activeGuards || 8}
+            value={operationsMetrics?.activeGuards ?? 0}
             variant="info"
             style={styles.metricCard}
             twoLineLabel={true}
@@ -190,7 +268,7 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
           
           <StatsCard
             label="Emergency Alerts"
-            value={operationsMetrics?.emergencyAlerts || 1}
+            value={operationsMetrics?.emergencyAlerts ?? 0}
             variant="danger"
             style={styles.metricCard}
             twoLineLabel={true}
@@ -198,7 +276,11 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
           
           <StatsCard
             label="Site Coverage"
-            value={`${operationsMetrics?.siteCoverage?.toFixed(1) || 94.2}%`}
+            value={
+              operationsMetrics != null
+                ? `${operationsMetrics.siteCoverage.toFixed(1)}%`
+                : '0%'
+            }
             variant="info"
             style={styles.metricCard}
             twoLineLabel={true}
@@ -206,41 +288,25 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
           
           <StatsCard
             label="Average Response"
-            value={`${operationsMetrics?.averageResponseTime?.toFixed(1) || 8.5} min`}
+            value={
+              operationsMetrics != null
+                ? `${operationsMetrics.averageResponseTime.toFixed(1)} min`
+                : '0 min'
+            }
             variant="info"
             style={styles.metricCard}
             twoLineLabel={true}
           />
         </View>
 
-        {/* Emergency Alerts - Exact Figma Specs */}
-        {emergencyAlerts.length > 0 && (
-          <View style={styles.emergencySection}>
-            <View style={styles.emergencySectionHeader}>
-              <View style={styles.emergencyIconContainer}>
-                <BellIcon size={20} color="#323232" />
-                <FeatherIcon name="zap" size={16} color="#323232" style={styles.lightningIcon} />
-              </View>
-              <Text style={styles.emergencyTitle}>Active Emergency Alert</Text>
-            </View>
-            {emergencyAlerts.map((alert) => (
-              <TouchableOpacity
-                key={alert.id}
-                style={styles.emergencyAlert}
-                onPress={() => handleEmergencyAlert(alert.id)}
-                activeOpacity={0.8}
-              >
-                <View style={styles.emergencyContent}>
-                  <Text style={styles.emergencyGuard}>{alert.guardName}</Text>
-                  <Text style={styles.emergencyMessage}>{alert.message}</Text>
-                  <Text style={styles.emergencyTime}>
-                    {formatTimeAgo(alert.timestamp)}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
+        <EmergencyAlertsPanel
+          alerts={pendingEmergencyAlerts}
+          title="Active Emergency"
+          onAcknowledge={handleEmergencyAlert}
+          acknowledgeLabel="Dispatch"
+          compact
+          acknowledgingAlertId={acknowledgingAlertId}
+        />
 
         {/* Live Map - Exact Figma Specs */}
         <View style={styles.mapSection}>
@@ -249,16 +315,9 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
             <InteractiveMapView
               height={300}
               showControls={true}
+              liveGuards={liveGuards}
+              enableLiveTracking={false}
               onGuardSelect={handleGuardSelect}
-              guardData={guardStatuses.map(guard => ({
-                guardId: guard.guardId,
-                guardName: guard.guardName,
-                latitude: guard.location.latitude,
-                longitude: guard.location.longitude,
-                accuracy: guard.location.accuracy,
-                status: guard.status,
-                siteName: guard.currentSite,
-              }))}
             />
           </View>
           
@@ -411,6 +470,7 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
             <LiveActivityFeed
               maxItems={20}
               showFilters={true}
+              useOperationsApi
               onActivityPress={(activity) => console.log('Activity:', activity)}
             />
           </View>

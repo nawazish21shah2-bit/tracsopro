@@ -6,17 +6,9 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
-import { View, Text, StyleSheet } from 'react-native';
-import { 
-  HomeIcon, 
-  UserIcon, 
-  ReportsIcon, 
-  SettingsIcon, 
-  ShiftsIcon,
-  LocationIcon,
-  EmergencyIcon 
-} from '../components/ui/AppIcons';
-import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../styles/globalStyles';
+import { Text, StyleSheet } from 'react-native';
+import { COLORS, TYPOGRAPHY, SPACING } from '../styles/globalStyles';
+import TabBarIcon from '../components/navigation/TabBarIcon';
 
 // Import Admin Screens
 import AdminDashboard from '../screens/admin/AdminDashboard';
@@ -37,6 +29,10 @@ import ChangePasswordScreen from '../screens/settings/ChangePasswordScreen';
 import SystemSettingsScreen from '../screens/superAdmin/SystemSettingsScreen';
 import IndividualChatScreen from '../screens/chat/IndividualChatScreen';
 import ChatListScreen from '../screens/chat/ChatListScreen';
+import SupportHubScreen from '../screens/support/SupportHubScreen';
+import SupportTicketDetailScreen from '../screens/support/SupportTicketDetailScreen';
+import ShiftDetailsScreen from '../screens/shifts/ShiftDetailsScreen';
+import EditShiftScreen from '../screens/shifts/EditShiftScreen';
 
 export type AdminTabParamList = {
   Dashboard: undefined;
@@ -67,9 +63,17 @@ export type AdminStackParamList = {
     chatId: string;
     chatName: string;
     avatar?: string;
-    context?: 'report' | 'site' | 'general';
+    context?: 'report' | 'site' | 'general' | 'support';
   };
   ChatListScreen: undefined;
+  SupportHubScreen: { variant?: 'admin'; mode?: 'mine' | 'inbox' | 'platform' };
+  SupportTicketDetailScreen: {
+    ticketId: string;
+    variant?: 'admin' | 'superAdmin' | 'client' | 'guard';
+    mode?: 'mine' | 'inbox' | 'platform';
+  };
+  ShiftDetails: { shiftId: string; shift?: any };
+  EditShift: { shiftId: string; shift?: any };
 };
 
 const Tab = createBottomTabNavigator<AdminTabParamList>();
@@ -119,37 +123,21 @@ const AdminTabNavigator: React.FC = () => {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarIcon: ({ focused, color, size }) => {
-          let IconComponent;
-          
+        tabBarIcon: ({ focused }) => {
           switch (route.name) {
             case 'Dashboard':
-              IconComponent = HomeIcon;
-              break;
+              return <TabBarIcon name="home" focused={focused} />;
             case 'Operations':
-              IconComponent = EmergencyIcon;
-              break;
+              return <TabBarIcon name="activity" focused={focused} />;
             case 'Management':
-              IconComponent = UserIcon;
-              break;
+              return <TabBarIcon name="user" focused={focused} />;
             case 'Reports':
-              IconComponent = ReportsIcon;
-              break;
+              return <TabBarIcon name="fileText" focused={focused} />;
             case 'Settings':
-              IconComponent = SettingsIcon;
-              break;
+              return <TabBarIcon name="settings" focused={focused} />;
             default:
-              IconComponent = HomeIcon;
+              return <TabBarIcon name="home" focused={focused} />;
           }
-          
-          return (
-            <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
-              <IconComponent 
-                size={20}
-                color={focused ? COLORS.primary : COLORS.textSecondary} 
-              />
-            </View>
-          );
         },
         tabBarLabel: ({ focused, color }) => (
           <Text style={[
@@ -255,22 +243,24 @@ const AdminNavigator: React.FC = () => {
         component={ChatListScreen}
         options={{ headerShown: false }}
       />
+      <Stack.Screen
+        name="SupportHubScreen"
+        component={SupportHubScreen}
+        initialParams={{ variant: 'admin', mode: 'inbox' }}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="SupportTicketDetailScreen"
+        component={SupportTicketDetailScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen name="ShiftDetails" component={ShiftDetailsScreen} />
+      <Stack.Screen name="EditShift" component={EditShiftScreen} />
     </Stack.Navigator>
   );
 };
 
 const styles = StyleSheet.create({
-  tabIconWrapper: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: BORDER_RADIUS.round,
-    backgroundColor: COLORS.backgroundSecondary,
-  },
-  tabIconWrapperActive: {
-    backgroundColor: COLORS.primaryLight,
-  },
   tabLabel: {
     fontSize: TYPOGRAPHY.fontSize.xs,
     fontWeight: TYPOGRAPHY.fontWeight.medium,

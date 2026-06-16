@@ -292,48 +292,20 @@ export class SettingsService {
 
   async createSupportTicket(userId: string, ticketData: SupportTicket): Promise<any> {
     try {
-      // Map lowercase category to enum
-      const categoryMap: Record<string, 'TECHNICAL' | 'BILLING' | 'GENERAL' | 'URGENT'> = {
-        'technical': 'TECHNICAL',
-        'billing': 'BILLING',
-        'general': 'GENERAL',
-        'urgent': 'URGENT'
-      };
-
-      const category = categoryMap[ticketData.category.toLowerCase()] || 'GENERAL';
-
-      // Validate required fields
-      if (!ticketData.subject || !ticketData.message) {
-        throw new Error('Subject and message are required');
-      }
-
-      const ticket = await prisma.supportTicket.create({
-        data: {
-          userId,
-          subject: ticketData.subject.trim(),
-          message: ticketData.message.trim(),
-          category: category,
-          status: 'OPEN',
-          priority: category === 'URGENT' ? 'URGENT' : category === 'TECHNICAL' ? 'HIGH' : 'NORMAL'
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true
-            }
-          }
-        }
+      const supportService = await import('./supportService.js');
+      const audience =
+        ticketData.category?.toLowerCase() === 'billing' && ticketData.subject?.includes('platform')
+          ? undefined
+          : undefined;
+      return supportService.createSupportTicket(userId, {
+        subject: ticketData.subject,
+        message: ticketData.message,
+        category: ticketData.category,
+        audience,
       });
-
-      return ticket;
     } catch (error) {
       console.error('Error creating support ticket:', error);
-      if (error instanceof Error) {
-        throw error;
-      }
+      if (error instanceof Error) throw error;
       throw new Error('Failed to create support ticket');
     }
   }

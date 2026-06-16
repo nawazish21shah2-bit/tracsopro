@@ -23,9 +23,38 @@ export interface NotificationPreferences {
   incidentAlerts: boolean;
 }
 
+/** Users who triggered the event — never notify them (e.g. guard who sent the alert). */
+export type NotificationExcludeUserIds = string | string[] | undefined;
+
 export class NotificationService {
   private static instance: NotificationService;
   private firebaseInitialized: boolean = false;
+
+  /**
+   * Remove actors / duplicates from a recipient list.
+   */
+  filterRecipients(userIds: string[], excludeUserIds?: NotificationExcludeUserIds): string[] {
+    const exclude = new Set(
+      (excludeUserIds == null
+        ? []
+        : Array.isArray(excludeUserIds)
+          ? excludeUserIds
+          : [excludeUserIds]
+      ).filter(Boolean)
+    );
+    const seen = new Set<string>();
+    return userIds.filter((id) => {
+      if (!id || exclude.has(id) || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  }
+
+  private shouldSkipActor(userId: string, excludeUserIds?: NotificationExcludeUserIds): boolean {
+    if (!excludeUserIds) return false;
+    const exclude = Array.isArray(excludeUserIds) ? excludeUserIds : [excludeUserIds];
+    return exclude.includes(userId);
+  }
 
   static getInstance(): NotificationService {
     if (!NotificationService.instance) {
@@ -80,9 +109,15 @@ export class NotificationService {
    */
   async createNotification(
     data: CreateNotificationData,
-    securityCompanyId?: string
+    securityCompanyId?: string,
+    excludeUserIds?: NotificationExcludeUserIds
   ): Promise<any> {
     try {
+      if (this.shouldSkipActor(data.userId, excludeUserIds)) {
+        logger.debug(`Notification skipped for actor ${data.userId}`);
+        return null;
+      }
+
       // Multi-tenant validation
       if (securityCompanyId && !(await this.validateUserBelongsToCompany(data.userId, securityCompanyId))) {
         throw new Error('User does not belong to the specified company');
@@ -135,15 +170,30 @@ export class NotificationService {
       const notificationPromises: Promise<void>[] = [];
 
       if (data.sendPush !== false && preferences.pushNotifications) {
-        notificationPromises.push(
-          this.sendPushNotification(data.userId, {
-            title: data.title,
-            body: data.message,
-            type: data.type,
-            data: data.data,
-            priority: data.priority || 'normal',
-          }).catch(err => logger.error('Push notification failed:', err))
-        );
+        const pushPayload = {
+          title: data.title,
+          body: data.message,
+          type: data.type,
+          data: {
+            ...(data.data || {}),
+            notificationId: notification.id,
+          },
+          priority: data.priority || 'normal',
+        };
+
+        if (data.type === 'EMERGENCY') {
+          notificationPromises.push(
+            this.sendPushWithRetry(data.userId, pushPayload).catch(err =>
+              logger.error('Emergency push notification failed:', err)
+            )
+          );
+        } else {
+          notificationPromises.push(
+            this.sendPushNotification(data.userId, pushPayload).catch(err =>
+              logger.error('Push notification failed:', err)
+            )
+          );
+        }
       }
 
       if (data.sendEmail && preferences.emailNotifications) {
@@ -185,11 +235,12 @@ export class NotificationService {
   async createBulkNotifications(
     userIds: string[],
     data: Omit<CreateNotificationData, 'userId'>,
-    securityCompanyId?: string
+    securityCompanyId?: string,
+    excludeUserIds?: NotificationExcludeUserIds
   ): Promise<any[]> {
     try {
       // Multi-tenant: Filter users by company if provided
-      let validUserIds = userIds;
+      let validUserIds = this.filterRecipients(userIds, excludeUserIds);
       if (securityCompanyId) {
         const [companyAdmins, companyGuards, companyClients] = await Promise.all([
           prisma.companyUser.findMany({
@@ -218,10 +269,17 @@ export class NotificationService {
           select: { id: true },
         });
 
-        validUserIds = [
-          ...Array.from(companyUserIds),
-          ...superAdmins.map(u => u.id),
-        ];
+        validUserIds = this.filterRecipients(
+          [
+            ...Array.from(companyUserIds),
+            ...superAdmins.map(u => u.id),
+          ],
+          excludeUserIds
+        );
+      }
+
+      if (validUserIds.length === 0) {
+        return [];
       }
 
       // Create notifications for all valid users
@@ -364,6 +422,21 @@ export class NotificationService {
   }
 
   /**
+   * Delete all notifications for a user
+   */
+  async deleteAllNotifications(userId: string): Promise<{ count: number }> {
+    try {
+      const result = await prisma.notification.deleteMany({
+        where: { userId },
+      });
+      return { count: result.count };
+    } catch (error) {
+      logger.error('Error deleting all notifications:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Get user notification preferences
    */
   private async getUserNotificationPreferences(userId: string): Promise<NotificationPreferences> {
@@ -425,7 +498,7 @@ export class NotificationService {
   }
 
   /**
-   * Send push notification via FCM
+   * Send push notification via FCM (fire-and-forget wrapper)
    */
   private async sendPushNotification(
     userId: string,
@@ -437,20 +510,36 @@ export class NotificationService {
       priority?: 'low' | 'normal' | 'high' | 'urgent';
     }
   ): Promise<void> {
+    await this.deliverPush(userId, payload);
+  }
+
+  /**
+   * Attempt FCM delivery once. Returns delivery outcome for retry logic.
+   */
+  private async deliverPush(
+    userId: string,
+    payload: {
+      title: string;
+      body: string;
+      type: string;
+      data?: any;
+      priority?: 'low' | 'normal' | 'high' | 'urgent';
+    }
+  ): Promise<'delivered' | 'skipped' | 'failed'> {
+    let deviceToken: string | null = null;
     try {
-      const deviceToken = await this.getDeviceToken(userId);
+      deviceToken = await this.getDeviceToken(userId);
       if (!deviceToken) {
         logger.debug(`No device token for user ${userId}`);
-        return;
+        return 'skipped';
       }
 
       const firebaseAdmin = (await import('../config/firebase.js')).getFirebaseAdmin();
       if (!firebaseAdmin) {
         logger.warn('Firebase Admin not initialized - skipping push notification');
-        return;
+        return 'failed';
       }
 
-      // Convert data values to strings (FCM requirement)
       const stringifiedData: Record<string, string> = {};
       if (payload.data) {
         Object.keys(payload.data).forEach((key) => {
@@ -486,7 +575,6 @@ export class NotificationService {
       const response = await firebaseAdmin.messaging().send(message);
       logger.info(`Push notification sent to user ${userId}`, { messageId: response });
 
-      // Record analytics: notification sent
       try {
         await prisma.platformAnalytics.create({
           data: {
@@ -500,17 +588,159 @@ export class NotificationService {
       } catch (analyticsError) {
         logger.error('Error recording notification sent analytics:', analyticsError);
       }
+
+      return 'delivered';
     } catch (error: any) {
-      if (error.code === 'messaging/invalid-registration-token' || error.code === 'messaging/registration-token-not-registered') {
-        logger.warn(`Invalid device token for user ${userId} - marking inactive`);
-        await prisma.deviceToken.updateMany({
-          where: { userId },
-          data: { isActive: false },
-        });
-      } else {
-        logger.error(`Error sending push notification to user ${userId}:`, error);
+      if (
+        error.code === 'messaging/invalid-registration-token' ||
+        error.code === 'messaging/registration-token-not-registered'
+      ) {
+        if (deviceToken) {
+          await this.markDeviceTokenInvalid(deviceToken);
+        }
+        return 'skipped';
+      }
+
+      logger.error(`Error sending push notification to user ${userId}:`, error);
+      return 'failed';
+    }
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Emergency push delivery with inline retries and persistent queue fallback.
+   */
+  async sendPushWithRetry(
+    userId: string,
+    payload: {
+      title: string;
+      body: string;
+      type: string;
+      data?: any;
+      priority?: 'low' | 'normal' | 'high' | 'urgent';
+    },
+    options?: { maxInlineAttempts?: number }
+  ): Promise<boolean> {
+    const maxInlineAttempts = options?.maxInlineAttempts ?? 3;
+
+    for (let attempt = 1; attempt <= maxInlineAttempts; attempt++) {
+      const result = await this.deliverPush(userId, payload);
+      if (result === 'delivered') {
+        return true;
+      }
+      if (result === 'skipped') {
+        return false;
+      }
+      if (attempt < maxInlineAttempts) {
+        await this.sleep(1000 * Math.pow(2, attempt - 1));
       }
     }
+
+    await this.enqueuePushRetry(userId, payload);
+    return false;
+  }
+
+  private async enqueuePushRetry(
+    userId: string,
+    payload: {
+      title: string;
+      body: string;
+      type: string;
+      data?: any;
+      priority?: 'low' | 'normal' | 'high' | 'urgent';
+    }
+  ): Promise<void> {
+    try {
+      await prisma.pushNotificationRetry.create({
+        data: {
+          userId,
+          title: payload.title,
+          body: payload.body,
+          type: payload.type,
+          payloadData: payload.data ?? undefined,
+          priority: payload.priority || 'normal',
+          nextRetryAt: new Date(Date.now() + 60_000),
+        },
+      });
+      logger.warn(`Queued push retry for user ${userId} (${payload.type})`);
+    } catch (error) {
+      logger.error(`Failed to enqueue push retry for user ${userId}:`, error);
+    }
+  }
+
+  async processPushRetryQueue(limit = 20): Promise<void> {
+    const pending = await prisma.pushNotificationRetry.findMany({
+      where: {
+        status: 'PENDING',
+        nextRetryAt: { lte: new Date() },
+      },
+      take: limit,
+      orderBy: { nextRetryAt: 'asc' },
+    });
+
+    for (const job of pending) {
+      const result = await this.deliverPush(job.userId, {
+        title: job.title,
+        body: job.body,
+        type: job.type,
+        data: job.payloadData,
+        priority: job.priority as 'low' | 'normal' | 'high' | 'urgent',
+      });
+
+      if (result === 'delivered') {
+        await prisma.pushNotificationRetry.update({
+          where: { id: job.id },
+          data: { status: 'SENT', attempts: job.attempts + 1 },
+        });
+        continue;
+      }
+
+      if (result === 'skipped') {
+        await prisma.pushNotificationRetry.update({
+          where: { id: job.id },
+          data: {
+            status: 'FAILED',
+            attempts: job.attempts + 1,
+            lastError: 'No valid device token',
+          },
+        });
+        continue;
+      }
+
+      const attempts = job.attempts + 1;
+      if (attempts >= job.maxAttempts) {
+        await prisma.pushNotificationRetry.update({
+          where: { id: job.id },
+          data: {
+            status: 'FAILED',
+            attempts,
+            lastError: 'Max retries exceeded',
+          },
+        });
+      } else {
+        const delayMs = Math.min(60_000 * Math.pow(2, attempts - 1), 3_600_000);
+        await prisma.pushNotificationRetry.update({
+          where: { id: job.id },
+          data: {
+            attempts,
+            nextRetryAt: new Date(Date.now() + delayMs),
+            lastError: 'FCM delivery failed',
+          },
+        });
+      }
+    }
+  }
+
+  startPushRetryProcessor(intervalMs = 60_000): void {
+    setInterval(() => {
+      this.processPushRetryQueue().catch(err =>
+        logger.error('Push retry queue processing failed:', err)
+      );
+    }, intervalMs);
+    logger.info('Push notification retry processor started');
   }
 
   /**
@@ -728,6 +958,206 @@ export class NotificationService {
   }
 
   /**
+   * Mark a specific FCM token as invalid (dead token cleanup).
+   */
+  async markDeviceTokenInvalid(token: string): Promise<void> {
+    const result = await prisma.deviceToken.updateMany({
+      where: { token, isActive: true },
+      data: { isActive: false, updatedAt: new Date() },
+    });
+    if (result.count > 0) {
+      logger.warn(`Deactivated ${result.count} invalid device token record(s)`);
+    }
+  }
+
+  /**
+   * Remove stale inactive tokens and cap active tokens per user.
+   */
+  async cleanupStaleDeviceTokens(options?: {
+    inactiveDays?: number;
+    maxActivePerUser?: number;
+  }): Promise<{ deletedInactive: number; deactivatedExcess: number }> {
+    const inactiveDays = options?.inactiveDays ?? 30;
+    const maxActivePerUser = options?.maxActivePerUser ?? 5;
+    const cutoff = new Date(Date.now() - inactiveDays * 24 * 60 * 60 * 1000);
+
+    const deletedInactive = await prisma.deviceToken.deleteMany({
+      where: {
+        isActive: false,
+        updatedAt: { lt: cutoff },
+      },
+    });
+
+    let deactivatedExcess = 0;
+    const activeTokens = await prisma.deviceToken.findMany({
+      where: { isActive: true },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true, userId: true },
+    });
+
+    const tokensByUser = new Map<string, string[]>();
+    for (const token of activeTokens) {
+      const list = tokensByUser.get(token.userId) || [];
+      list.push(token.id);
+      tokensByUser.set(token.userId, list);
+    }
+
+    const excessTokenIds: string[] = [];
+    for (const ids of tokensByUser.values()) {
+      if (ids.length > maxActivePerUser) {
+        excessTokenIds.push(...ids.slice(maxActivePerUser));
+      }
+    }
+
+    if (excessTokenIds.length > 0) {
+      const result = await prisma.deviceToken.updateMany({
+        where: { id: { in: excessTokenIds } },
+        data: { isActive: false, updatedAt: new Date() },
+      });
+      deactivatedExcess = result.count;
+    }
+
+    if (deletedInactive.count > 0 || deactivatedExcess > 0) {
+      logger.info(
+        `Device token cleanup: deleted ${deletedInactive.count} inactive, deactivated ${deactivatedExcess} excess`
+      );
+    }
+
+    return { deletedInactive: deletedInactive.count, deactivatedExcess };
+  }
+
+  startDeviceTokenCleanupProcessor(intervalMs = 24 * 60 * 60 * 1000): void {
+    setInterval(() => {
+      this.cleanupStaleDeviceTokens().catch(err =>
+        logger.error('Device token cleanup failed:', err)
+      );
+    }, intervalMs);
+    logger.info('Device token cleanup processor started');
+  }
+
+  /**
+   * Notify guard when a shift is assigned
+   */
+  async notifyShiftAssigned(
+    guardUserId: string,
+    shift: {
+      id: string;
+      scheduledStartTime: Date;
+      scheduledEndTime: Date;
+      locationName?: string | null;
+      locationAddress?: string | null;
+    },
+    securityCompanyId?: string
+  ): Promise<void> {
+    const location = shift.locationName || shift.locationAddress || 'assigned site';
+    const start = new Date(shift.scheduledStartTime).toLocaleString();
+
+    await this.createNotification(
+      {
+        userId: guardUserId,
+        type: 'SHIFT_REMINDER',
+        title: 'New Shift Assigned',
+        message: `You have been assigned a shift at ${location} starting ${start}.`,
+        data: { shiftId: shift.id },
+        sendPush: true,
+      },
+      securityCompanyId
+    );
+  }
+
+  /**
+   * Notify company admins when a guard checks in
+   */
+  async notifyCheckIn(
+    guardUserId: string,
+    shift: { id: string; guardId: string; locationName?: string | null },
+    adminUserIds: string[],
+    securityCompanyId: string
+  ): Promise<void> {
+    const guard = await prisma.user.findUnique({
+      where: { id: guardUserId },
+      select: { firstName: true, lastName: true },
+    });
+    const guardName = guard ? `${guard.firstName} ${guard.lastName}` : 'A guard';
+    const location = shift.locationName || 'site';
+
+    await this.createBulkNotifications(
+      adminUserIds,
+      {
+        type: 'SYSTEM',
+        title: 'Guard Checked In',
+        message: `${guardName} checked in at ${location}.`,
+        data: { shiftId: shift.id, guardId: shift.guardId },
+        sendPush: true,
+      },
+      securityCompanyId,
+      guardUserId
+    );
+  }
+
+  /**
+   * Notify company admins when a guard checks out
+   */
+  async notifyCheckOut(
+    guardUserId: string,
+    shift: { id: string; guardId: string; locationName?: string | null },
+    adminUserIds: string[],
+    securityCompanyId: string
+  ): Promise<void> {
+    const guard = await prisma.user.findUnique({
+      where: { id: guardUserId },
+      select: { firstName: true, lastName: true },
+    });
+    const guardName = guard ? `${guard.firstName} ${guard.lastName}` : 'A guard';
+    const location = shift.locationName || 'site';
+
+    await this.createBulkNotifications(
+      adminUserIds,
+      {
+        type: 'SYSTEM',
+        title: 'Guard Checked Out',
+        message: `${guardName} checked out from ${location}.`,
+        data: { shiftId: shift.id, guardId: shift.guardId },
+        sendPush: true,
+      },
+      securityCompanyId,
+      guardUserId
+    );
+  }
+
+  /**
+   * Notify chat participants of a new message (excluding sender)
+   */
+  async notifyChatMessage(
+    recipientUserIds: string[],
+    payload: {
+      senderName: string;
+      senderUserId: string;
+      chatId: string;
+      messageId: string;
+      preview: string;
+    },
+    securityCompanyId?: string
+  ): Promise<void> {
+    await this.createBulkNotifications(
+      recipientUserIds,
+      {
+        type: 'MESSAGE',
+        title: `Message from ${payload.senderName}`,
+        message: payload.preview,
+        data: {
+          conversationId: payload.chatId,
+          chatId: payload.chatId,
+          messageId: payload.messageId,
+        },
+        sendPush: true,
+      },
+      securityCompanyId,
+      payload.senderUserId
+    );
+  }
+
+  /**
    * Get device token for push notifications
    */
   private async getDeviceToken(userId: string): Promise<string | null> {
@@ -753,6 +1183,19 @@ export class NotificationService {
     deviceId?: string
   ): Promise<void> {
     try {
+      if (deviceId) {
+        await prisma.deviceToken.updateMany({
+          where: {
+            userId,
+            deviceId,
+            platform,
+            token: { not: token },
+            isActive: true,
+          },
+          data: { isActive: false, updatedAt: new Date() },
+        });
+      }
+
       await prisma.deviceToken.upsert({
         where: {
           userId_token: {
@@ -774,6 +1217,9 @@ export class NotificationService {
           isActive: true,
         },
       });
+
+      await this.cleanupStaleDeviceTokens({ inactiveDays: 30, maxActivePerUser: 5 });
+
       logger.info(`Device token registered for user ${userId}, platform: ${platform}`);
     } catch (error) {
       logger.error('Error registering device token:', error);

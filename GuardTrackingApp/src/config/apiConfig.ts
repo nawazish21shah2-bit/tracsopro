@@ -1,98 +1,91 @@
 /**
  * API Configuration
- * 
- * This file centralizes all API and WebSocket URLs for easy configuration.
- * 
- * TO DEPLOY TO PRODUCTION:
- * 1. Replace PRODUCTION_API_URL with your live backend URL
- * 2. Replace PRODUCTION_WS_URL with your live WebSocket URL (usually same as API without /api)
- * 3. Build the app in release mode (not __DEV__)
+ *
+ * Development: set DEV_LOCAL_IP to your machine's LAN IP for physical devices.
+ * Local LAN release APK: set USE_LOCAL_LAN_RELEASE true (same WiFi as laptop backend).
+ * Production store: set USE_LOCAL_LAN_RELEASE false and use HTTPS URLs below.
  */
 
 import { Platform } from 'react-native';
 
-// ============================================
-// PRODUCTION CONFIGURATION
-// ============================================
-// DigitalOcean Droplet backend URLs
-// TODO: Set up HTTPS/SSL certificate (Let's Encrypt) and update to https://
-const PRODUCTION_API_URL = 'http://143.110.198.38:3000/api';
-const PRODUCTION_WS_URL = 'http://143.110.198.38:3000';
+// --- Local LAN release (physical phone + laptop backend on same WiFi) ---
+/** Set true when building a release APK to test against your laptop backend. */
+const USE_LOCAL_LAN_RELEASE = true;
+/** LAN IP of your dev machine (run `ipconfig` on Windows). */
+const DEV_LOCAL_IP = '192.168.1.4';
 
-// ============================================
-// DEVELOPMENT CONFIGURATION
-// ============================================
-// Your local IP address for development
-// Find it with: ipconfig (Windows) or ifconfig (Mac/Linux)
-// ⚠️ Updated to current local IP for testing
-const LOCAL_IP = '192.168.1.12';
+// --- Production (store release) — must use HTTPS ---
+const PRODUCTION_API_URL =
+  'https://api.tracsopro.com/api'; // Update before store release
+const PRODUCTION_WS_URL = 'https://api.tracsopro.com';
 
-// Development URLs
-const DEV_API_URL_ANDROID = `http://${LOCAL_IP}:3000/api`;
-const DEV_API_URL_IOS = `http://${LOCAL_IP}:3000/api`;
-const DEV_WS_URL = `http://${LOCAL_IP}:3000`;
+/** Set true when running on Android emulator (uses 10.0.2.2). */
+const USE_ANDROID_EMULATOR = true;
 
-// For Android Emulator (alternative)
+const DEV_API_URL = `http://${DEV_LOCAL_IP}:3000/api`;
+const DEV_WS_URL = `http://${DEV_LOCAL_IP}:3000`;
 const DEV_API_URL_ANDROID_EMULATOR = 'http://10.0.2.2:3000/api';
 const DEV_WS_URL_ANDROID_EMULATOR = 'http://10.0.2.2:3000';
 
-// ============================================
-// CONFIGURATION LOGIC
-// ============================================
 const isDev = typeof __DEV__ !== 'undefined' ? __DEV__ : false;
 
-/**
- * Get the API base URL based on environment
- */
-export const getApiBaseUrl = (): string => {
-  if (isDev) {
-    // For Android emulator, 10.0.2.2 is more reliable than localhost
-    // For physical devices, we use localhost + adb reverse
-    // OR we use the LAN IP if ADB is not connected - USING LAN IP for reliability
-    return Platform.OS === 'android' ? `http://${LOCAL_IP}:3000/api` : 'http://localhost:3000/api';
+const assertProductionUrls = (): void => {
+  if (isDev || USE_LOCAL_LAN_RELEASE) return;
+  const urls = [PRODUCTION_API_URL, PRODUCTION_WS_URL];
+  for (const url of urls) {
+    if (!url.startsWith('https://')) {
+      console.error(
+        `[apiConfig] Production URL must use HTTPS: ${url}. Update src/config/apiConfig.ts before release.`
+      );
+    }
   }
-  // Production mode - using DigitalOcean backend
+};
+
+assertProductionUrls();
+
+export const getApiBaseUrl = (): string => {
+  // Release APK on same WiFi as laptop backend
+  if (USE_LOCAL_LAN_RELEASE && !isDev) {
+    return DEV_API_URL;
+  }
+  if (isDev) {
+    if (Platform.OS === 'android' && USE_ANDROID_EMULATOR) {
+      return DEV_API_URL_ANDROID_EMULATOR;
+    }
+    return DEV_API_URL;
+  }
   return PRODUCTION_API_URL;
 };
 
-/**
- * Get the WebSocket base URL based on environment
- */
 export const getWebSocketUrl = (): string => {
-  if (isDev) {
-    return Platform.OS === 'android' ? `http://${LOCAL_IP}:3000` : 'http://localhost:3000';
+  if (USE_LOCAL_LAN_RELEASE && !isDev) {
+    return DEV_WS_URL;
   }
-  // Production mode
+  if (isDev) {
+    if (Platform.OS === 'android' && USE_ANDROID_EMULATOR) {
+      return DEV_WS_URL_ANDROID_EMULATOR;
+    }
+    return DEV_WS_URL;
+  }
   return PRODUCTION_WS_URL;
 };
 
-/**
- * Check if running in development mode
- */
-export const isDevelopment = (): boolean => {
-  return isDev;
-};
+export const isDevelopment = (): boolean => isDev;
 
-/**
- * Get current configuration info (for debugging)
- */
-export const getConfigInfo = () => {
-  return {
-    isDev,
-    apiUrl: getApiBaseUrl(),
-    wsUrl: getWebSocketUrl(),
-    platform: Platform.OS,
-  };
-};
+export const getConfigInfo = () => ({
+  isDev,
+  useLocalLanRelease: USE_LOCAL_LAN_RELEASE,
+  apiUrl: getApiBaseUrl(),
+  wsUrl: getWebSocketUrl(),
+  platform: Platform.OS,
+  useAndroidEmulator: USE_ANDROID_EMULATOR,
+});
 
-// Export constants for direct use if needed
 export const API_CONFIG = {
+  USE_LOCAL_LAN_RELEASE,
   PRODUCTION_API_URL,
   PRODUCTION_WS_URL,
-  DEV_API_URL_ANDROID,
-  DEV_API_URL_IOS,
+  DEV_LOCAL_IP,
+  DEV_API_URL,
   DEV_WS_URL,
-  LOCAL_IP,
 };
-
-

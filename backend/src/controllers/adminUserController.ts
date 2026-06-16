@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import adminUserService from '../services/adminUserService.js';
 import { AuthRequest } from '../middleware/auth.js';
+import { resolveSecurityCompanyId } from '../utils/companyAuth.js';
 
 export class AdminUserController {
   async getUsers(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
@@ -16,13 +17,22 @@ export class AdminUserController {
           ? isActiveParam.toLowerCase() === 'true'
           : undefined;
 
+      const companyResult = resolveSecurityCompanyId(req);
+      if (companyResult.error) {
+        res.status(companyResult.status || 400).json({
+          success: false,
+          error: companyResult.error,
+        });
+        return;
+      }
+
       const result = await adminUserService.getUsers({
         page,
         limit,
         role,
         search,
         isActive,
-        securityCompanyId: req.securityCompanyId, // Multi-tenant filter
+        securityCompanyId: companyResult.securityCompanyId, // Multi-tenant filter
       });
 
       res.json({ success: true, data: result });
@@ -31,29 +41,55 @@ export class AdminUserController {
     }
   }
 
-  async updateUserStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async updateUserStatus(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params;
       const { isActive } = req.body as { isActive: boolean };
 
-      const user = await adminUserService.updateUserStatus(id, Boolean(isActive));
+      const companyResult = resolveSecurityCompanyId(req);
+      if (companyResult.error) {
+        res.status(companyResult.status || 400).json({
+          success: false,
+          error: companyResult.error,
+        });
+        return;
+      }
+
+      const user = await adminUserService.updateUserStatus(
+        id,
+        Boolean(isActive),
+        companyResult.securityCompanyId,
+      );
       res.json({ success: true, data: user });
     } catch (error) {
       next(error);
     }
   }
 
-  async updateUser(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async updateUser(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params;
       const { firstName, lastName, email, role } = req.body;
 
-      const user = await adminUserService.updateUser(id, {
-        firstName,
-        lastName,
-        email,
-        role,
-      });
+      const companyResult = resolveSecurityCompanyId(req);
+      if (companyResult.error) {
+        res.status(companyResult.status || 400).json({
+          success: false,
+          error: companyResult.error,
+        });
+        return;
+      }
+
+      const user = await adminUserService.updateUser(
+        id,
+        {
+          firstName,
+          lastName,
+          email,
+          role,
+        },
+        companyResult.securityCompanyId,
+      );
 
       res.json({ success: true, data: user });
     } catch (error) {
@@ -61,10 +97,23 @@ export class AdminUserController {
     }
   }
 
-  async deleteUser(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async deleteUser(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params;
-      const result = await adminUserService.deleteUser(id);
+
+      const companyResult = resolveSecurityCompanyId(req);
+      if (companyResult.error) {
+        res.status(companyResult.status || 400).json({
+          success: false,
+          error: companyResult.error,
+        });
+        return;
+      }
+
+      const result = await adminUserService.deleteUser(
+        id,
+        companyResult.securityCompanyId,
+      );
       res.json({ success: true, data: result });
     } catch (error) {
       next(error);
@@ -75,10 +124,23 @@ export class AdminUserController {
     try {
       const { email, password, firstName, lastName, role, phone, department } = req.body;
 
-      if (!email || !password || !firstName || !lastName || !role) {
+      if (!email || !password || !firstName || !role) {
         res.status(400).json({
           success: false,
-          message: 'Email, password, firstName, lastName, and role are required',
+          message: 'Email, password, first name, and role are required',
+        });
+        return;
+      }
+
+      const companyResult = resolveSecurityCompanyId(
+        req,
+        req.body.securityCompanyId,
+        'Security company ID is required in request body for SUPER_ADMIN.'
+      );
+      if (companyResult.error) {
+        res.status(companyResult.status || 400).json({
+          success: false,
+          error: companyResult.error,
         });
         return;
       }
@@ -87,10 +149,10 @@ export class AdminUserController {
         email,
         password,
         firstName,
-        lastName,
+        lastName: lastName?.trim() ?? '',
         role,
         phone,
-        securityCompanyId: req.securityCompanyId,
+        securityCompanyId: companyResult.securityCompanyId,
         department,
       });
 

@@ -51,15 +51,28 @@ export class SiteController {
     }
   }
 
-  // Get all active sites (for guards)
-  async getActiveSites(req: Request, res: Response, next: NextFunction): Promise<void> {
+  // Get all active sites (for guards to browse available shifts)
+  async getActiveSites(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
+      if (!req.securityCompanyId) {
+        res.status(403).json({
+          success: false,
+          message: 'Security company ID not found. User must be linked to a company.',
+        });
+        return;
+      }
+
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 10;
       const search = req.query.search as string;
 
-      const result = await siteService.getAllActiveSites(page, limit, search);
-      
+      const result = await siteService.getAllActiveSites(
+        page,
+        limit,
+        search,
+        req.securityCompanyId
+      );
+
       res.json({
         success: true,
         data: result
@@ -73,7 +86,13 @@ export class SiteController {
   async getSiteById(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params;
-      const site = await siteService.getSiteById(id, req.userId!, req.user?.role!);
+      const site = await siteService.getSiteById(
+        id,
+        req.userId!,
+        req.user?.role!,
+        req.securityCompanyId,
+        req.guardId
+      );
       
       res.json({
         success: true,

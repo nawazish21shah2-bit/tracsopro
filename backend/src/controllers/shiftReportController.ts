@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import shiftReportService from '../services/shiftReportService';
 import { ReportTypeEnum } from '@prisma/client';
+import { AuthRequest } from '../middleware/auth.js';
+import { resolveSecurityCompanyId } from '../utils/companyAuth.js';
 
 /**
  * @swagger
@@ -182,7 +184,7 @@ export const getShiftReports = async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const reports = await shiftReportService.getShiftReports(shiftId);
+    const reports = await shiftReportService.getShiftReports(shiftId, guardId);
 
     res.json(reports);
   } catch (error: any) {
@@ -292,5 +294,37 @@ export const deleteShiftReport = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Error deleting shift report:', error);
     res.status(400).json({ error: error.message || 'Failed to delete shift report' });
+  }
+};
+
+/**
+ * Get shift reports for admin's security company (multi-tenant isolated)
+ */
+export const getCompanyShiftReports = async (req: AuthRequest, res: Response) => {
+  try {
+    const companyResult = resolveSecurityCompanyId(req);
+    if (companyResult.error) {
+      return res.status(companyResult.status || 400).json({
+        success: false,
+        error: companyResult.error,
+      });
+    }
+
+    const page = req.query.page ? parseInt(req.query.page as string) : 1;
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+
+    const result = await shiftReportService.getCompanyShiftReports(
+      companyResult.securityCompanyId!,
+      page,
+      limit
+    );
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error: any) {
+    console.error('Error getting company shift reports:', error);
+    res.status(500).json({ error: error.message || 'Failed to get company shift reports' });
   }
 };

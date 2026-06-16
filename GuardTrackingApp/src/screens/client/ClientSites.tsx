@@ -22,10 +22,13 @@ import { ClientStackParamList } from '../../navigation/ClientStackNavigator';
 import SharedHeader from '../../components/ui/SharedHeader';
 import ClientProfileDrawer from '../../components/client/ClientProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import { useNotificationBell } from '../../hooks/useNotificationBell';
 import { fetchMySites } from '../../store/slices/clientSlice';
 import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import apiService from '../../services/api';
+import { getClientGuardChatParams } from '../../utils/chatHelper';
+import { useSubscriptionLimits } from '../../hooks/useSubscriptionLimits';
 
 interface SiteData {
   id: string;
@@ -43,6 +46,9 @@ const ClientSites: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const navigation = useNavigation<StackNavigationProp<ClientStackParamList>>();
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+  const { onNotificationPress, notificationCount } = useNotificationBell({
+    notificationsRoute: 'ClientNotifications',
+  });
   const [refreshing, setRefreshing] = useState(false);
 
   // Redux state
@@ -53,6 +59,14 @@ const ClientSites: React.FC = () => {
   } = useSelector((state: RootState) => state.client);
   
   const { user } = useSelector((state: RootState) => state.auth);
+  const { ensureCanAdd } = useSubscriptionLimits();
+
+  const handleAddSitePress = async () => {
+    const allowed = await ensureCanAdd('sites');
+    if (allowed) {
+      navigation.navigate('AddSite');
+    }
+  };
 
   const loadSites = useCallback(async () => {
     try {
@@ -85,7 +99,7 @@ const ClientSites: React.FC = () => {
   }, [loadSites]);
 
   const handleNotificationPress = () => {
-    navigation.navigate('ClientNotifications');
+    onNotificationPress();
   };
 
   const handleSitePress = (siteId: string) => {
@@ -146,27 +160,13 @@ const ClientSites: React.FC = () => {
     );
   };
 
-  const handleChatWithGuard = async (guardId: string, guardName: string) => {
-    try {
-      if (!user) {
-        Alert.alert('Error', 'User not logged in');
-        return;
-      }
-
-      // Use centralized chat helper to find or create chat
-      const { findOrCreateClientGuardChat } = await import('../../utils/chatHelper');
-      const chatParams = await findOrCreateClientGuardChat(
-        user.id,
-        guardId,
-        guardName,
-        'site'
-      );
-
-      navigation.navigate('IndividualChatScreen', chatParams);
-    } catch (error) {
-      console.error('Error navigating to chat:', error);
-      Alert.alert('Error', 'Failed to open chat. Please try again.');
+  const handleChatWithGuard = (guardUserId: string, guardName: string) => {
+    if (!user?.id) {
+      Alert.alert('Error', 'User not logged in');
+      return;
     }
+    const chatParams = getClientGuardChatParams(user.id, guardUserId, guardName, undefined, 'site');
+    navigation.navigate('IndividualChatScreen', chatParams);
   };
 
   // Check for network errors
@@ -181,6 +181,7 @@ const ClientSites: React.FC = () => {
         variant="client"
         title="My Sites"
         onNotificationPress={handleNotificationPress}
+        notificationCount={notificationCount}
         profileDrawer={
           <ClientProfileDrawer
             visible={isDrawerVisible}
@@ -195,6 +196,15 @@ const ClientSites: React.FC = () => {
           />
         }
       />
+
+      <TouchableOpacity
+        style={styles.allShiftsBanner}
+        onPress={() => navigation.navigate('ClientMyShifts')}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.allShiftsTitle}>View all shifts</Text>
+        <Text style={styles.allShiftsSubtext}>Upcoming, active, and past shifts across your sites</Text>
+      </TouchableOpacity>
 
       <LoadingOverlay
         visible={sitesLoading && sites.length === 0}
@@ -220,11 +230,7 @@ const ClientSites: React.FC = () => {
 
       <ScrollView 
         style={styles.content} 
-        contentContainerStyle={
-          sites && sites.length > 0 
-            ? styles.scrollContent 
-            : [styles.scrollContent, { flexGrow: 1, justifyContent: 'center' }]
-        }
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
@@ -310,7 +316,7 @@ const ClientSites: React.FC = () => {
             <Text style={styles.emptySubtext}>Add a new site to get started</Text>
             <TouchableOpacity 
               style={styles.addSiteButton}
-              onPress={() => navigation.navigate('AddSite')}
+              onPress={handleAddSitePress}
             >
               <Text style={styles.addSiteButtonText}>Add New Site</Text>
             </TouchableOpacity>
@@ -318,13 +324,12 @@ const ClientSites: React.FC = () => {
         ) : null}
       </ScrollView>
 
-      {/* Sticky Add New Site Button - Always Visible */}
       <TouchableOpacity 
-        style={styles.stickyAddButton}
-        onPress={() => navigation.navigate('AddSite')}
-        activeOpacity={0.8}
+        style={styles.footerAddButton}
+        onPress={handleAddSitePress}
+        activeOpacity={0.85}
       >
-        <Text style={styles.stickyAddButtonText}>+ Add New Site</Text>
+        <Text style={styles.footerAddButtonText}>+ Add New Site</Text>
       </TouchableOpacity>
     </SafeAreaWrapper>
   );
@@ -342,12 +347,31 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.fontSize.sm,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
+  allShiftsBanner: {
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.sm,
+    padding: SPACING.lg,
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.lg,
+    ...SHADOWS.sm,
+  },
+  allShiftsTitle: {
+    color: COLORS.textInverse,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    marginBottom: SPACING.xs,
+  },
+  allShiftsSubtext: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+  },
   content: {
     flex: 1,
-    padding: SPACING.lg,
   },
   scrollContent: {
-    paddingBottom: 80, // Add padding to prevent content from being hidden behind sticky button
+    flexGrow: 1,
+    padding: SPACING.lg,
+    paddingBottom: SPACING.md,
   },
   loadingContainer: {
     flex: 1,
@@ -364,6 +388,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: SPACING.xxxxl,
+    minHeight: 240,
   },
   emptyText: {
     fontSize: TYPOGRAPHY.fontSize.lg,
@@ -400,11 +425,10 @@ const styles = StyleSheet.create({
   errorState: {
     flex: 1,
   },
-  stickyAddButton: {
-    position: 'absolute',
-    bottom: SPACING.lg,
-    left: SPACING.lg,
-    right: SPACING.lg,
+  footerAddButton: {
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.sm,
     backgroundColor: COLORS.primary,
     paddingVertical: SPACING.md,
     paddingHorizontal: SPACING.lg,
@@ -412,9 +436,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...SHADOWS.medium,
-    zIndex: 1000,
   },
-  stickyAddButtonText: {
+  footerAddButtonText: {
     color: COLORS.textInverse,
     fontSize: TYPOGRAPHY.fontSize.md,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,

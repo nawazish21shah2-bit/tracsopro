@@ -11,6 +11,8 @@ export interface DashboardStats {
 
 export interface GuardData {
   id: string;
+  userId?: string;
+  shiftId?: string;
   name: string;
   avatar?: string;
   site?: string;

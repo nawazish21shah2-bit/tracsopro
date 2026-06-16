@@ -260,7 +260,6 @@ const GuardSiteDetailsScreen: React.FC = () => {
             />
           }
         />
-        />
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>Site not found</Text>
           <TouchableOpacity 

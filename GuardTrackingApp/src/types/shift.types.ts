@@ -44,6 +44,13 @@ export interface Shift {
   shiftReports?: ShiftReport[];
 }
 
+export interface StatusHistoryEntry {
+  status: string;
+  changedBy: string;
+  notes: string;
+  timestamp: string;
+}
+
 export interface ShiftReport {
   id: string;
   shiftId: string;
@@ -54,6 +61,15 @@ export interface ShiftReport {
   createdAt: string;
   updatedAt: string;
   shift?: Shift;
+  // Incident report extras
+  description?: string;
+  status?: string;
+  responseNotes?: string | null;
+  statusHistory?: StatusHistoryEntry[];
+  location?: {
+    name?: string;
+    address?: string;
+  };
 }
 
 export interface ShiftStats {

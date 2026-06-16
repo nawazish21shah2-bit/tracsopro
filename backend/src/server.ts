@@ -1,3 +1,7 @@
+/**
+ * @deprecated Legacy in-memory mock API — not used in production.
+ * Use `npm run dev` or `npm run dev:db` (server-db.ts + Prisma) instead.
+ */
 import express from 'express';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';

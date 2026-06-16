@@ -18,7 +18,7 @@ import {
 } from '../types';
 import { securityManager } from '../utils/security';
 import { getApiBaseUrl, getConfigInfo } from '../config/apiConfig';
-import { formatErrorForUser } from '../utils/errorHandler';
+import { formatErrorForUser, parseApiError, extractErrorMessage } from '../utils/errorHandler';
 
 class ApiService {
   private api: AxiosInstance;
@@ -104,6 +104,10 @@ class ApiService {
       '/auth/refresh',
     ];
 
+    const quietEndpoints = ['/tracking/location', '/tracking/live-locations'];
+    const isQuietEndpoint = (url?: string) =>
+      quietEndpoints.some((endpoint) => url?.includes(endpoint));
+
     // Enhanced network request tracking
     const networkRequests = new Map<string, { startTime: number; url: string; method: string }>();
 
@@ -130,7 +134,7 @@ class ApiService {
           const tokens = await securityManager.getTokens();
           if (tokens && tokens.accessToken) {
             config.headers.Authorization = `${tokens.tokenType || 'Bearer'} ${tokens.accessToken}`;
-            if (__DEV__) {
+            if (__DEV__ && !isQuietEndpoint(config.url)) {
               console.log(`🔑 Token found for ${config.method?.toUpperCase()} ${config.url}`, {
                 tokenLength: tokens.accessToken.length,
                 expiresAt: new Date(tokens.expiresAt).toISOString(),
@@ -142,7 +146,7 @@ class ApiService {
             console.log(`⚠️ No token found for ${config.method?.toUpperCase()} ${config.url} (protected endpoint)`);
           }
           
-          if (__DEV__) {
+          if (__DEV__ && !isQuietEndpoint(config.url)) {
             // Enhanced network logging with full details
             const fullUrl = `${this.baseURL}${config.url}`;
             const requestLog: any = {
@@ -196,7 +200,7 @@ class ApiService {
     // Response interceptor to handle token refresh and errors
     this.api.interceptors.response.use(
       (response: AxiosResponse) => {
-        if (__DEV__) {
+        if (__DEV__ && !isQuietEndpoint(response.config.url)) {
           const requestId = response.config.headers['X-Request-ID'] as string;
           const requestInfo = networkRequests.get(requestId);
           const duration = requestInfo ? Date.now() - requestInfo.startTime : 0;
@@ -300,64 +304,24 @@ class ApiService {
   }
 
   private handleError(error: AxiosError): Error {
-    let message = 'An unexpected error occurred';
-    
-    if (error.response) {
-      // Server responded with error status
-      const status = error.response.status;
-      const data = error.response.data as any;
-      
-      switch (status) {
-        case 400:
-          message = data?.message || 'Bad request';
-          break;
-        case 401:
-          message = 'Unauthorized access';
-          break;
-        case 403:
-          message = 'Access forbidden';
-          break;
-        case 404:
-          message = 'Resource not found';
-          break;
-        case 422:
-          message = data?.message || 'Validation error';
-          break;
-        case 429:
-          message = 'Too many requests. Please try again later.';
-          break;
-        case 500:
-          message = 'Internal server error';
-          break;
-        case 502:
-        case 503:
-        case 504:
-          message = 'Service temporarily unavailable';
-          break;
-        default:
-          message = data?.message || `Server error (${status})`;
-      }
-    } else if (error.request) {
-      // Network error - provide more helpful message
-      if (__DEV__) {
-        console.error('🌐 Network Error Details:', {
-          url: error.config?.url,
-          baseURL: this.baseURL,
-          method: error.config?.method,
-          message: error.message
-        });
-      }
-      message = `Network error. Please check your connection and ensure the backend server is running at ${this.baseURL}`;
-    } else {
-      // Other error
-      message = error.message || 'An unexpected error occurred';
-    }
-    
-    const customError = new Error(message);
-    (customError as any).status = error.response?.status;
+    const parsed = parseApiError(error, this.baseURL);
+    const customError = new Error(parsed.message);
+    (customError as any).status = parsed.statusCode;
     (customError as any).data = error.response?.data;
-    
+    (customError as any).isNetworkError = parsed.isNetworkError;
+    if (parsed.errors) {
+      (customError as any).errors = parsed.errors;
+    }
     return customError;
+  }
+
+  /** Read API error text after axios interceptor wraps the response */
+  private getErrorMessage(error: unknown, fallback: string): string {
+    const message = extractErrorMessage(error);
+    if (!message || message === 'An unexpected error occurred. Please try again.') {
+      return fallback;
+    }
+    return message;
   }
 
   // Authentication Methods
@@ -438,7 +402,7 @@ class ApiService {
       return {
         success: false,
         data: null,
-        message: error.response?.data?.error || error.response?.data?.message || 'Failed to create shift',
+        message: this.getErrorMessage(error, 'Failed to create shift'),
       };
     }
   }
@@ -447,14 +411,19 @@ class ApiService {
   // Client shift creation (Option B - Direct Assignment)
   async createClientShift(data: {
     siteId: string;
-    guardId?: string; // Optional - admin can assign later
+    guardId?: string;
     scheduledStartTime: string;
     scheduledEndTime: string;
     description?: string;
     notes?: string;
+    repeatPattern?: 'week' | 'month';
   }): Promise<ApiResponse<any>> {
     try {
-      const response = await this.api.post('/clients/shifts', data);
+      const endpoint = data.repeatPattern ? '/clients/shifts/bulk' : '/clients/shifts';
+      const payload = data.repeatPattern
+        ? { ...data }
+        : { siteId: data.siteId, guardId: data.guardId, scheduledStartTime: data.scheduledStartTime, scheduledEndTime: data.scheduledEndTime, description: data.description, notes: data.notes };
+      const response = await this.api.post(endpoint, payload);
       return {
         success: true,
         data: response.data.data,
@@ -464,7 +433,32 @@ class ApiService {
       return {
         success: false,
         data: null,
-        message: error.response?.data?.error || error.response?.data?.message || 'Failed to create shift',
+        message: this.getErrorMessage(error, 'Failed to create shift'),
+      };
+    }
+  }
+
+  async createAdminBulkShifts(data: {
+    guardId?: string;
+    siteId?: string;
+    scheduledStartTime: string;
+    scheduledEndTime: string;
+    description?: string;
+    notes?: string;
+    repeatPattern: 'week' | 'month';
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.post('/admin/shifts/bulk', data);
+      return {
+        success: true,
+        data: response.data.data,
+        message: response.data.message || 'Shifts scheduled successfully',
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: this.getErrorMessage(error, 'Failed to schedule shifts'),
       };
     }
   }
@@ -481,7 +475,7 @@ class ApiService {
       return {
         success: false,
         data: null,
-        message: error.response?.data?.error || error.response?.data?.message || 'Failed to assign guard',
+        message: this.getErrorMessage(error, 'Failed to assign guard'),
       };
     }
   }
@@ -521,6 +515,86 @@ class ApiService {
         success: false,
         data: [],
         message: error.response?.data?.error || error.response?.data?.message || 'Failed to fetch shifts',
+      };
+    }
+  }
+
+  async updateAdminShift(shiftId: string, data: {
+    guardId?: string | null;
+    siteId?: string;
+    scheduledStartTime?: string;
+    scheduledEndTime?: string;
+    description?: string;
+    notes?: string;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.put(`/admin/shifts/${shiftId}`, data);
+      return {
+        success: true,
+        data: response.data.data,
+        message: response.data.message || 'Shift updated successfully',
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: this.getErrorMessage(error, 'Failed to update shift'),
+      };
+    }
+  }
+
+  async deleteAdminShift(shiftId: string): Promise<ApiResponse<null>> {
+    try {
+      const response = await this.api.delete(`/admin/shifts/${shiftId}`);
+      return {
+        success: true,
+        data: null,
+        message: response.data.message || 'Shift deleted successfully',
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: this.getErrorMessage(error, 'Failed to delete shift'),
+      };
+    }
+  }
+
+  async updateClientShift(shiftId: string, data: {
+    scheduledStartTime?: string;
+    scheduledEndTime?: string;
+    description?: string;
+    notes?: string;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.put(`/clients/shifts/${shiftId}`, data);
+      return {
+        success: true,
+        data: response.data.data,
+        message: response.data.message || 'Shift updated successfully',
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: this.getErrorMessage(error, 'Failed to update shift'),
+      };
+    }
+  }
+
+  async deleteClientShift(shiftId: string): Promise<ApiResponse<null>> {
+    try {
+      const response = await this.api.delete(`/clients/shifts/${shiftId}`);
+      return {
+        success: true,
+        data: null,
+        message: response.data.message || 'Shift deleted successfully',
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: this.getErrorMessage(error, 'Failed to delete shift'),
       };
     }
   }
@@ -590,7 +664,10 @@ class ApiService {
       return {
         success: false,
         data: null,
-        message: error.response?.data?.message || 'Failed to create site',
+        message:
+          error.response?.data?.message ||
+          error.response?.data?.error ||
+          'Failed to create site',
       };
     }
   }
@@ -1293,21 +1370,32 @@ class ApiService {
   }
 
   // Notification Methods
-  async getNotifications(isRead?: boolean, type?: string, page: number = 1, limit: number = 10): Promise<ApiResponse<Notification[]>> {
+  async getNotifications(
+    options: {
+      unreadOnly?: boolean;
+      type?: string;
+      page?: number;
+      limit?: number;
+    } = {}
+  ): Promise<ApiResponse<Notification[]> & { unreadCount?: number }> {
     try {
+      const { unreadOnly, type, page = 1, limit = 50 } = options;
       const query = new URLSearchParams();
-      if (isRead !== undefined) query.append('isRead', String(isRead));
+      if (unreadOnly) query.append('unreadOnly', 'true');
       if (type) query.append('type', type);
       query.append('page', String(page));
       query.append('limit', String(limit));
 
       const response = await this.api.get(`/notifications?${query.toString()}`);
-      // Backend returns: { success: true, data: [...], pagination: {...}, unreadCount: ... }
-      // The 'data' field contains the array of notifications directly
       const notifications = response.data.data || [];
+      const unreadCount =
+        typeof response.data.unreadCount === 'number'
+          ? response.data.unreadCount
+          : undefined;
       return {
         success: true,
         data: Array.isArray(notifications) ? notifications : [],
+        unreadCount,
         message: 'Notifications fetched successfully',
       };
     } catch (error: any) {
@@ -1316,6 +1404,25 @@ class ApiService {
         success: false,
         data: [],
         message: error.response?.data?.message || error.message || 'Failed to fetch notifications'
+      };
+    }
+  }
+
+  async getUnreadNotificationCount(): Promise<ApiResponse<number>> {
+    try {
+      const response = await this.api.get('/notifications?limit=1&page=1');
+      const unreadCount =
+        typeof response.data.unreadCount === 'number' ? response.data.unreadCount : 0;
+      return {
+        success: true,
+        data: unreadCount,
+        message: 'Unread count fetched successfully',
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: 0,
+        message: error.response?.data?.message || error.message || 'Failed to fetch unread count',
       };
     }
   }
@@ -1364,6 +1471,22 @@ class ApiService {
         success: false,
         data: null,
         message: error.response?.data?.message || 'Failed to delete notification'
+      };
+    }
+  }
+
+  async clearAllNotifications(): Promise<ApiResponse<{ count: number }>> {
+    try {
+      const response = await this.api.delete('/notifications');
+      return {
+        success: true,
+        data: response.data.data ?? { count: 0 },
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: { count: 0 },
+        message: error.response?.data?.message || 'Failed to clear notifications',
       };
     }
   }
@@ -1458,6 +1581,23 @@ class ApiService {
     }
   }
 
+  async getClientGuardProfile(guardId: string): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.get(`/clients/guards/${guardId}`);
+      return {
+        success: true,
+        data: response.data.data,
+        message: 'Guard profile loaded',
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.error || error.response?.data?.message || 'Failed to load guard profile',
+      };
+    }
+  }
+
   async getClientReports(page: number = 1, limit: number = 50): Promise<ApiResponse<any>> {
     try {
       const response = await this.api.get(`/clients/my-reports?page=${page}&limit=${limit}`);
@@ -1507,6 +1647,38 @@ class ApiService {
         success: false,
         data: null,
         message: error.response?.data?.message || 'Failed to fetch sites. Please check your connection and try again.'
+      };
+    }
+  }
+
+  async getClientShifts(options?: {
+    page?: number;
+    limit?: number;
+    startDate?: string;
+    endDate?: string;
+    status?: string;
+    siteId?: string;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const params = new URLSearchParams();
+      if (options?.page) params.append('page', String(options.page));
+      if (options?.limit) params.append('limit', String(options.limit));
+      if (options?.startDate) params.append('startDate', options.startDate);
+      if (options?.endDate) params.append('endDate', options.endDate);
+      if (options?.status) params.append('status', options.status);
+      if (options?.siteId) params.append('siteId', options.siteId);
+
+      const query = params.toString();
+      const response = await this.api.get(`/clients/my-shifts${query ? `?${query}` : ''}`);
+      return {
+        success: true,
+        data: response.data.data,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to fetch shifts. Please check your connection and try again.',
       };
     }
   }
@@ -1707,19 +1879,100 @@ class ApiService {
     };
     message?: string;
     shiftId?: string; // Optional: pass current shift ID for site-specific notifications
-  }): Promise<ApiResponse<any>> {
+  }, options?: { signal?: AbortSignal }): Promise<ApiResponse<any> & { code?: string }> {
     try {
-      const response = await this.api.post('/emergency/alert', data);
+      const response = await this.api.post('/emergency/alert', data, {
+        signal: options?.signal,
+      });
       return {
         success: true,
         data: response.data.data,
         message: response.data.message || 'Emergency alert sent successfully'
       };
     } catch (error: any) {
+      const status = error.response?.status;
+      const body = error.response?.data;
+
+      if (status === 409 && (body?.code === 'ACTIVE_ALERT_EXISTS' || body?.code === 'EMERGENCY_COOLDOWN')) {
+        return {
+          success: false,
+          code: body.code,
+          data: body.data,
+          message: body.message || 'Unable to send emergency alert right now',
+        };
+      }
+
       return {
         success: false,
         data: null,
-        message: error.response?.data?.message || 'Failed to send emergency alert'
+        message: body?.message || 'Failed to send emergency alert'
+      };
+    }
+  }
+
+  async getMyActiveEmergencyAlert(): Promise<ApiResponse<any | null>> {
+    try {
+      const response = await this.api.get('/emergency/my-active');
+      return {
+        success: true,
+        data: response.data.data ?? null,
+        message: 'Active emergency alert fetched successfully',
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to fetch active emergency alert',
+      };
+    }
+  }
+
+  async getActiveEmergencyAlerts(): Promise<ApiResponse<any[]>> {
+    try {
+      const response = await this.api.get('/emergency/alerts/active');
+      return {
+        success: true,
+        data: response.data.data || [],
+        message: 'Emergency alerts fetched successfully',
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: [],
+        message: error.response?.data?.message || 'Failed to fetch emergency alerts',
+      };
+    }
+  }
+
+  async acknowledgeEmergencyAlert(alertId: string): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.post(`/emergency/alert/${alertId}/acknowledge`, {});
+      return {
+        success: true,
+        data: response.data.data,
+        message: response.data.message || 'Emergency alert acknowledged',
+      };
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const body = error?.response?.data;
+      const message = body?.message || 'Failed to acknowledge emergency alert';
+
+      if (
+        status === 409 ||
+        message.toLowerCase().includes('already acknowledged') ||
+        message.toLowerCase().includes('already resolved')
+      ) {
+        return {
+          success: true,
+          data: body?.data ?? null,
+          message,
+        };
+      }
+
+      return {
+        success: false,
+        data: null,
+        message,
       };
     }
   }
@@ -1780,7 +2033,7 @@ class ApiService {
       return {
         success: false,
         data: null,
-        message: error.response?.data?.message || 'Failed to fetch shift details'
+        message: error.response?.data?.error || error.response?.data?.message || 'Failed to fetch shift details'
       };
     }
   }
@@ -1932,6 +2185,22 @@ class ApiService {
     }
   }
 
+  async getSubscriptionOverview(): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.get('/subscription/overview');
+      return {
+        success: true,
+        data: response.data.data,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to fetch subscription limits',
+      };
+    }
+  }
+
   async getAdminSubscription(): Promise<ApiResponse<any>> {
     try {
       const response = await this.api.get('/admin/subscription');
@@ -2031,7 +2300,66 @@ class ApiService {
     }
   }
 
-  // Client/Admin report response
+  async getGuardIncidentReports(page: number = 1, limit: number = 50): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.get(`/incident-reports?page=${page}&limit=${limit}`);
+      return {
+        success: true,
+        data: response.data.data,
+        message: 'Incident reports fetched successfully',
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to fetch incident reports',
+      };
+    }
+  }
+
+  async getCompanyShiftReports(page: number = 1, limit: number = 50): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.get(`/shift-reports/company?page=${page}&limit=${limit}`);
+      return {
+        success: true,
+        data: response.data.data,
+        message: 'Shift reports fetched successfully',
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to fetch shift reports',
+      };
+    }
+  }
+
+  // Client unified report response (shift + incident)
+  async respondToClientReport(
+    reportId: string,
+    status: string,
+    responseNotes?: string
+  ): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.put(`/clients/reports/${reportId}/respond`, {
+        status,
+        responseNotes,
+      });
+      return {
+        success: true,
+        data: response.data.data,
+        message: response.data.message || 'Report response saved successfully',
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || error.response?.data?.error || 'Failed to respond to report',
+      };
+    }
+  }
+
+  // Admin/Client incident report response
   async respondToReport(reportId: string, status: string, responseNotes?: string): Promise<ApiResponse<any>> {
     try {
       const response = await this.api.put(`/incident-reports/${reportId}/respond`, {
@@ -2234,6 +2562,58 @@ class ApiService {
         success: false,
         data: null,
         message: error.response?.data?.message || 'Failed to create chat'
+      };
+    }
+  }
+
+  async getSupportChats(): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.get('/chat/support');
+      const chatData = response.data?.data || response.data || [];
+      return {
+        success: true,
+        data: Array.isArray(chatData) ? chatData : [],
+        message: 'Support chats fetched successfully',
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: [],
+        message: error.response?.data?.message || 'Failed to fetch support chats',
+      };
+    }
+  }
+
+  async openSupportChat(): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.post('/chat/support');
+      return {
+        success: true,
+        data: response.data.data,
+        message: 'Support chat opened successfully',
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to open support chat',
+      };
+    }
+  }
+
+  async openCompanySupportChat(): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.post('/chat/support/company');
+      return {
+        success: true,
+        data: response.data.data,
+        message: 'Company support chat opened successfully',
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        data: null,
+        message: error.response?.data?.message || 'Failed to open company support chat',
       };
     }
   }

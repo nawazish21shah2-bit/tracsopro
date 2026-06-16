@@ -1,17 +1,19 @@
 /**
- * Subscription Service
- * Handles free tier limits and subscription management
+ * Subscription Service — trial vs paid plan limits and usage
  */
 
 import prisma from '../config/database.js';
 import { ValidationError } from '../utils/errors.js';
-import { logger } from '../utils/logger.js';
-
-export interface SubscriptionLimits {
-  maxGuards: number;
-  maxClients: number;
-  maxSites: number;
-}
+import {
+  TRIAL_LIMITS,
+  TRIAL_DAYS_DEFAULT,
+  getLimitsForPlan,
+  getDisplayPlanLabel,
+  PLAN_FEATURES,
+  SUPPORT_CONTACT,
+  type PlanLimits,
+} from '../utils/planLimits.js';
+import type { SubscriptionPlan, SubscriptionStatus } from '@prisma/client';
 
 export interface ResourceCounts {
   guardsCount: number;
@@ -19,179 +21,69 @@ export interface ResourceCounts {
   sitesCount: number;
 }
 
+export interface SubscriptionOverview {
+  plan: SubscriptionPlan;
+  status: SubscriptionStatus;
+  displayPlan: string;
+  isTrial: boolean;
+  hasPaidSubscription: boolean;
+  limits: PlanLimits;
+  counts: ResourceCounts;
+  usage: {
+    guards: { used: number; max: number; percent: number };
+    clients: { used: number; max: number; percent: number };
+    sites: { used: number; max: number; percent: number };
+  };
+  trialEndsAt: string | null;
+  subscriptionEndDate: string | null;
+  canUpgrade: boolean;
+  planFeatures: string[];
+  support: typeof SUPPORT_CONTACT;
+  company: {
+    id: string;
+    name: string;
+    email: string;
+    phone: string | null;
+  } | null;
+}
+
 class SubscriptionService {
-  /**
-   * Get free tier limits
-   */
-  getFreeTierLimits(): SubscriptionLimits {
-    return {
-      maxGuards: 2,
-      maxClients: 1,
-      maxSites: 1,
-    };
+  getTrialLimits(): PlanLimits {
+    return { ...TRIAL_LIMITS };
   }
 
-  /**
-   * Get current resource counts for a company
-   */
   async getResourceCounts(securityCompanyId: string): Promise<ResourceCounts> {
     const [guardsCount, clientsCount, sitesCount] = await Promise.all([
       prisma.companyGuard.count({
-        where: {
-          securityCompanyId,
-          isActive: true,
-        },
+        where: { securityCompanyId, isActive: true },
       }),
       prisma.companyClient.count({
-        where: {
-          securityCompanyId,
-          isActive: true,
-        },
+        where: { securityCompanyId, isActive: true },
       }),
       prisma.companySite.count({
-        where: {
-          securityCompanyId,
-        },
+        where: { securityCompanyId },
       }),
     ]);
 
-    return {
-      guardsCount,
-      clientsCount,
-      sitesCount,
-    };
+    return { guardsCount, clientsCount, sitesCount };
   }
 
-  /**
-   * Check if company can add a guard
-   */
-  async canAddGuard(securityCompanyId: string): Promise<{ allowed: boolean; reason?: string }> {
-    const company = await prisma.securityCompany.findUnique({
-      where: { id: securityCompanyId },
-      select: {
-        subscriptionPlan: true,
-        maxGuards: true,
+  async hasPaidSubscription(securityCompanyId: string): Promise<boolean> {
+    const active = await prisma.subscription.findFirst({
+      where: {
+        securityCompanyId,
+        isActive: true,
+        stripeSubscriptionId: { not: null },
+        status: { in: ['ACTIVE', 'TRIAL'] },
       },
+      select: { id: true },
     });
-
-    if (!company) {
-      return { allowed: false, reason: 'Company not found' };
-    }
-
-    // Check if it's free tier
-    const isFreeTier = company.subscriptionPlan === 'BASIC' || company.maxGuards <= 2;
-    const limits = isFreeTier ? this.getFreeTierLimits() : { maxGuards: company.maxGuards };
-
-    const counts = await this.getResourceCounts(securityCompanyId);
-
-    if (counts.guardsCount >= limits.maxGuards) {
-      return {
-        allowed: false,
-        reason: `Free tier limit reached. You can add up to ${limits.maxGuards} guards. Please upgrade to add more.`,
-      };
-    }
-
-    return { allowed: true };
+    return Boolean(active);
   }
 
-  /**
-   * Check if company can add a client
-   */
-  async canAddClient(securityCompanyId: string): Promise<{ allowed: boolean; reason?: string }> {
-    const company = await prisma.securityCompany.findUnique({
-      where: { id: securityCompanyId },
-      select: {
-        subscriptionPlan: true,
-        maxClients: true,
-      },
-    });
-
-    if (!company) {
-      return { allowed: false, reason: 'Company not found' };
-    }
-
-    // Check if it's free tier
-    const isFreeTier = company.subscriptionPlan === 'BASIC' || company.maxClients <= 1;
-    const limits = isFreeTier ? this.getFreeTierLimits() : { maxClients: company.maxClients };
-
-    const counts = await this.getResourceCounts(securityCompanyId);
-
-    if (counts.clientsCount >= limits.maxClients) {
-      return {
-        allowed: false,
-        reason: `Free tier limit reached. You can add up to ${limits.maxClients} client. Please upgrade to add more.`,
-      };
-    }
-
-    return { allowed: true };
-  }
-
-  /**
-   * Check if company can add a site
-   */
-  async canAddSite(securityCompanyId: string): Promise<{ allowed: boolean; reason?: string }> {
-    const company = await prisma.securityCompany.findUnique({
-      where: { id: securityCompanyId },
-      select: {
-        subscriptionPlan: true,
-        maxSites: true,
-      },
-    });
-
-    if (!company) {
-      return { allowed: false, reason: 'Company not found' };
-    }
-
-    // Check if it's free tier
-    const isFreeTier = company.subscriptionPlan === 'BASIC' || company.maxSites <= 1;
-    const limits = isFreeTier ? this.getFreeTierLimits() : { maxSites: company.maxSites };
-
-    const counts = await this.getResourceCounts(securityCompanyId);
-
-    if (counts.sitesCount >= limits.maxSites) {
-      return {
-        allowed: false,
-        reason: `Free tier limit reached. You can add up to ${limits.maxSites} site. Please upgrade to add more.`,
-      };
-    }
-
-    return { allowed: true };
-  }
-
-  /**
-   * Validate and throw if limit reached
-   */
-  async validateGuardLimit(securityCompanyId: string): Promise<void> {
-    const check = await this.canAddGuard(securityCompanyId);
-    if (!check.allowed) {
-      throw new ValidationError(check.reason || 'Guard limit reached');
-    }
-  }
-
-  /**
-   * Validate and throw if limit reached
-   */
-  async validateClientLimit(securityCompanyId: string): Promise<void> {
-    const check = await this.canAddClient(securityCompanyId);
-    if (!check.allowed) {
-      throw new ValidationError(check.reason || 'Client limit reached');
-    }
-  }
-
-  /**
-   * Validate and throw if limit reached
-   */
-  async validateSiteLimit(securityCompanyId: string): Promise<void> {
-    const check = await this.canAddSite(securityCompanyId);
-    if (!check.allowed) {
-      throw new ValidationError(check.reason || 'Site limit reached');
-    }
-  }
-
-  /**
-   * Get subscription info for a company
-   */
-  async getSubscriptionInfo(securityCompanyId: string) {
+  async getEffectiveLimits(
+    securityCompanyId: string
+  ): Promise<{ limits: PlanLimits; isTrial: boolean; plan: SubscriptionPlan; status: SubscriptionStatus }> {
     const company = await prisma.securityCompany.findUnique({
       where: { id: securityCompanyId },
       select: {
@@ -207,28 +99,218 @@ class SubscriptionService {
       throw new ValidationError('Company not found');
     }
 
-    const counts = await this.getResourceCounts(securityCompanyId);
-    const isFreeTier = company.subscriptionPlan === 'BASIC';
-    const limits = isFreeTier ? this.getFreeTierLimits() : {
-      maxGuards: company.maxGuards,
-      maxClients: company.maxClients,
-      maxSites: company.maxSites,
+    const paid = await this.hasPaidSubscription(securityCompanyId);
+    const onTrial = !paid;
+
+    if (onTrial) {
+      return {
+        limits: this.getTrialLimits(),
+        isTrial: true,
+        plan: company.subscriptionPlan,
+        status: company.subscriptionStatus,
+      };
+    }
+
+    const planLimits = getLimitsForPlan(company.subscriptionPlan);
+    return {
+      limits: {
+        maxGuards: company.maxGuards || planLimits.maxGuards,
+        maxClients: company.maxClients || planLimits.maxClients,
+        maxSites: company.maxSites || planLimits.maxSites,
+      },
+      isTrial: false,
+      plan: company.subscriptionPlan,
+      status: company.subscriptionStatus,
     };
+  }
+
+  private usageRow(used: number, max: number) {
+    return {
+      used,
+      max,
+      percent: max > 0 ? Math.min(100, Math.round((used / max) * 100)) : 0,
+    };
+  }
+
+  async getSubscriptionInfo(securityCompanyId: string): Promise<SubscriptionOverview> {
+    const company = await prisma.securityCompany.findUnique({
+      where: { id: securityCompanyId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        subscriptionPlan: true,
+        subscriptionStatus: true,
+        subscriptionEndDate: true,
+        maxGuards: true,
+        maxClients: true,
+        maxSites: true,
+      },
+    });
+
+    if (!company) {
+      throw new ValidationError('Company not found');
+    }
+
+    const counts = await this.getResourceCounts(securityCompanyId);
+    const paid = await this.hasPaidSubscription(securityCompanyId);
+    const onTrial = !paid;
+    const { limits } = await this.getEffectiveLimits(securityCompanyId);
+
+    const atLimit =
+      counts.guardsCount >= limits.maxGuards ||
+      counts.clientsCount >= limits.maxClients ||
+      counts.sitesCount >= limits.maxSites;
 
     return {
       plan: company.subscriptionPlan,
       status: company.subscriptionStatus,
+      displayPlan: paid
+        ? getDisplayPlanLabel(company.subscriptionPlan, company.subscriptionStatus, true)
+        : 'Free Trial',
+      isTrial: onTrial,
+      hasPaidSubscription: paid,
       limits,
       counts,
-      isFreeTier,
-      canUpgrade: isFreeTier && (
-        counts.guardsCount >= limits.maxGuards ||
-        counts.clientsCount >= limits.maxClients ||
-        counts.sitesCount >= limits.maxSites
-      ),
+      usage: {
+        guards: this.usageRow(counts.guardsCount, limits.maxGuards),
+        clients: this.usageRow(counts.clientsCount, limits.maxClients),
+        sites: this.usageRow(counts.sitesCount, limits.maxSites),
+      },
+      trialEndsAt: company.subscriptionEndDate?.toISOString() ?? null,
+      subscriptionEndDate: company.subscriptionEndDate?.toISOString() ?? null,
+      canUpgrade: onTrial || atLimit || !paid,
+      planFeatures: onTrial
+        ? [
+            `${TRIAL_LIMITS.maxGuards} guards`,
+            `${TRIAL_LIMITS.maxClients} client`,
+            `${TRIAL_LIMITS.maxSites} site`,
+            `${TRIAL_DAYS_DEFAULT}-day trial — upgrade for more`,
+          ]
+        : PLAN_FEATURES[company.subscriptionPlan]?.highlights ?? [],
+      support: SUPPORT_CONTACT,
+      company: {
+        id: company.id,
+        name: company.name,
+        email: company.email,
+        phone: company.phone,
+      },
+      canAdd: {
+        guards: await this.canAddGuard(securityCompanyId),
+        clients: await this.canAddClient(securityCompanyId),
+        sites: await this.canAddSite(securityCompanyId),
+      },
     };
+  }
+
+  async canAddGuard(securityCompanyId: string): Promise<{ allowed: boolean; reason?: string }> {
+    const { limits, isTrial } = await this.getEffectiveLimits(securityCompanyId);
+    const counts = await this.getResourceCounts(securityCompanyId);
+
+    if (counts.guardsCount >= limits.maxGuards) {
+      return {
+        allowed: false,
+        reason: isTrial
+          ? `Trial limit reached (${limits.maxGuards} guards). Upgrade your plan in Settings → Subscription & Billing.`
+          : `Guard limit reached (${limits.maxGuards}). Upgrade your plan to add more guards.`,
+      };
+    }
+    return { allowed: true };
+  }
+
+  async canAddClient(securityCompanyId: string): Promise<{ allowed: boolean; reason?: string }> {
+    const { limits, isTrial } = await this.getEffectiveLimits(securityCompanyId);
+    const counts = await this.getResourceCounts(securityCompanyId);
+
+    if (counts.clientsCount >= limits.maxClients) {
+      return {
+        allowed: false,
+        reason: isTrial
+          ? `Trial limit reached (${limits.maxClients} client). Upgrade your plan in Settings → Subscription & Billing.`
+          : `Client limit reached (${limits.maxClients}). Upgrade your plan to add more clients.`,
+      };
+    }
+    return { allowed: true };
+  }
+
+  async canAddSite(securityCompanyId: string): Promise<{ allowed: boolean; reason?: string }> {
+    const { limits, isTrial } = await this.getEffectiveLimits(securityCompanyId);
+    const counts = await this.getResourceCounts(securityCompanyId);
+
+    if (counts.sitesCount >= limits.maxSites) {
+      return {
+        allowed: false,
+        reason: isTrial
+          ? `Trial limit reached (${limits.maxSites} site). Upgrade your plan in Settings → Subscription & Billing.`
+          : `Site limit reached (${limits.maxSites}). Upgrade your plan to add more sites.`,
+      };
+    }
+    return { allowed: true };
+  }
+
+  async validateGuardLimit(securityCompanyId: string): Promise<void> {
+    const check = await this.canAddGuard(securityCompanyId);
+    if (!check.allowed) throw new ValidationError(check.reason || 'Guard limit reached');
+  }
+
+  async validateClientLimit(securityCompanyId: string): Promise<void> {
+    const check = await this.canAddClient(securityCompanyId);
+    if (!check.allowed) throw new ValidationError(check.reason || 'Client limit reached');
+  }
+
+  async validateSiteLimit(securityCompanyId: string): Promise<void> {
+    const check = await this.canAddSite(securityCompanyId);
+    if (!check.allowed) throw new ValidationError(check.reason || 'Site limit reached');
+  }
+
+  /** Apply paid plan limits after Stripe checkout / webhook */
+  async activatePaidPlan(
+    securityCompanyId: string,
+    plan: SubscriptionPlan,
+    opts: {
+      stripeSubscriptionId: string;
+      amount: number;
+      billingCycle: 'MONTHLY' | 'YEARLY';
+      endDate?: Date | null;
+    }
+  ) {
+    const limits = getLimitsForPlan(plan);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.securityCompany.update({
+        where: { id: securityCompanyId },
+        data: {
+          subscriptionPlan: plan,
+          subscriptionStatus: 'ACTIVE',
+          subscriptionStartDate: new Date(),
+          subscriptionEndDate: opts.endDate ?? null,
+          maxGuards: limits.maxGuards,
+          maxClients: limits.maxClients,
+          maxSites: limits.maxSites,
+        },
+      });
+
+      await tx.subscription.updateMany({
+        where: { securityCompanyId, isActive: true },
+        data: { isActive: false },
+      });
+
+      await tx.subscription.create({
+        data: {
+          securityCompanyId,
+          plan,
+          status: 'ACTIVE',
+          startDate: new Date(),
+          endDate: opts.endDate ?? null,
+          amount: opts.amount,
+          billingCycle: opts.billingCycle,
+          stripeSubscriptionId: opts.stripeSubscriptionId,
+          isActive: true,
+        },
+      });
+    });
   }
 }
 
 export default new SubscriptionService();
-

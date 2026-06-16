@@ -6,16 +6,18 @@ import {
   FlatList,
   TextInput,
   TouchableOpacity,
-  Image,
   KeyboardAvoidingView,
   Platform,
   Alert,
   ActivityIndicator,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../store';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
+import ProfileAvatar from '../../components/common/ProfileAvatar';
 import { 
   ArrowLeft, 
   Mic, 
@@ -25,11 +27,16 @@ import {
   User,
   BellOff,
   Trash2,
-  Phone,
+  MessageCircle,
+  X,
 } from 'react-native-feather';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import WebSocketService from '../../services/WebSocketService';
 import DropdownMenu, { DropdownMenuItem } from '../../components/ui/DropdownMenu';
+import { EmptyState, InlineLoading } from '../../components/ui/LoadingStates';
+import { parseDisplayName } from '../../utils/parseDisplayName';
+import { parseDirectChatParticipants, resolveGuardEntityId, resolveChatParticipantProfile } from '../../utils/chatHelper';
+import { pickProfilePictureUrl } from '../../utils/profilePictureUtils';
 
 interface Message {
   id: string;
@@ -44,6 +51,10 @@ interface ChatScreenParams {
   chatId: string;
   chatName: string;
   avatar?: string;
+  guardId?: string;
+  guardUserId?: string;
+  clientUserId?: string;
+  context?: 'report' | 'site' | 'general' | 'support';
 }
 
 const IndividualChatScreen: React.FC = () => {
@@ -52,7 +63,14 @@ const IndividualChatScreen: React.FC = () => {
   const dispatch = useDispatch();
   const { user } = useSelector((state: RootState) => state.auth);
   
-  const { chatId, chatName, avatar } = route.params as ChatScreenParams;
+  const { chatId, chatName, avatar, guardId, guardUserId, clientUserId } =
+    route.params as ChatScreenParams;
+
+  const [headerName, setHeaderName] = useState(chatName);
+  const [headerAvatar, setHeaderAvatar] = useState<string | undefined>(
+    () => pickProfilePictureUrl({ avatar }) || avatar,
+  );
+  const { firstName, lastName } = parseDisplayName(headerName);
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
@@ -60,9 +78,35 @@ const IndividualChatScreen: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [profileVisible, setProfileVisible] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState({ x: 0, y: 0 });
   const flatListRef = useRef<FlatList>(null);
   const menuButtonRef = useRef<TouchableOpacity>(null);
+
+  const handleViewProfile = async () => {
+    setMenuVisible(false);
+    const role = user?.role;
+    const parsed = parseDirectChatParticipants(chatId, user?.id || '');
+
+    if (role === 'CLIENT') {
+      const targetGuardUserId = guardUserId || parsed.guardUserId;
+      let entityId = guardId;
+      if (!entityId && targetGuardUserId) {
+        entityId = (await resolveGuardEntityId(targetGuardUserId)) || undefined;
+      }
+      if (entityId) {
+        (navigation as any).navigate('ClientGuardDetails', {
+          guardId: entityId,
+          guardName: headerName,
+          userId: targetGuardUserId,
+          avatar: headerAvatar,
+        });
+        return;
+      }
+    }
+
+    setProfileVisible(true);
+  };
 
   // Build menu items for chat options
   const getChatMenuItems = (): DropdownMenuItem[] => {
@@ -71,25 +115,14 @@ const IndividualChatScreen: React.FC = () => {
         id: 'view-profile',
         label: 'View Profile',
         icon: <User width={20} height={20} color={COLORS.primary} />,
-        onPress: () => {
-          // TODO: Navigate to profile
-          Alert.alert('Profile', `View ${chatName}'s profile`);
-        },
-      },
-      {
-        id: 'call',
-        label: 'Voice Call',
-        icon: <Phone width={20} height={20} color={COLORS.success} />,
-        onPress: () => {
-          Alert.alert('Coming Soon', 'Voice calling feature will be available soon!');
-        },
+        onPress: handleViewProfile,
       },
       {
         id: 'mute',
         label: 'Mute Notifications',
         icon: <BellOff width={20} height={20} color={COLORS.textSecondary} />,
         onPress: () => {
-          Alert.alert('Notifications Muted', `Notifications for ${chatName} have been muted`);
+          Alert.alert('Muted', `Notifications muted for ${chatName}`);
         },
       },
       {
@@ -100,18 +133,15 @@ const IndividualChatScreen: React.FC = () => {
         onPress: () => {
           Alert.alert(
             'Delete Chat',
-            `Are you sure you want to delete this conversation with ${chatName}?`,
+            `Delete this conversation with ${chatName}?`,
             [
               { text: 'Cancel', style: 'cancel' },
-              { 
-                text: 'Delete', 
+              {
+                text: 'Delete',
                 style: 'destructive',
-                onPress: () => {
-                  // TODO: Implement delete chat
-                  navigation.goBack();
-                }
+                onPress: () => navigation.goBack(),
               },
-            ]
+            ],
           );
         },
       },
@@ -124,6 +154,27 @@ const IndividualChatScreen: React.FC = () => {
       setMenuVisible(true);
     });
   };
+
+  // Sync route params when navigating between chats
+  useEffect(() => {
+    setHeaderName(chatName);
+    setHeaderAvatar(pickProfilePictureUrl({ avatar }) || avatar);
+  }, [chatId, chatName, avatar]);
+
+  // Load other participant profile (avatar) from chat API
+  useEffect(() => {
+    if (!chatId || !user?.id) return;
+
+    resolveChatParticipantProfile(chatId, user.id).then((profile) => {
+      if (!profile) return;
+      if (profile.avatar) {
+        setHeaderAvatar(profile.avatar);
+      }
+      if (profile.displayName) {
+        setHeaderName(profile.displayName);
+      }
+    });
+  }, [chatId, user?.id]);
 
   // Load messages when chatId changes
   useEffect(() => {
@@ -412,7 +463,7 @@ const IndividualChatScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaWrapper>
+    <SafeAreaWrapper includeTop>
       <KeyboardAvoidingView 
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -428,17 +479,17 @@ const IndividualChatScreen: React.FC = () => {
           </TouchableOpacity>
           
           <View style={styles.headerContent}>
-            {avatar ? (
-              <Image source={{ uri: avatar }} style={styles.avatarImage} />
-            ) : (
-              <View style={styles.avatarContainer}>
-                <Text style={styles.avatarText}>
-                  {chatName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
-                </Text>
-              </View>
-            )}
+            <ProfileAvatar
+              firstName={firstName}
+              lastName={lastName}
+              profilePictureUrl={headerAvatar}
+              avatar={headerAvatar}
+              size={40}
+              backgroundColor="rgba(255,255,255,0.2)"
+              textColor={COLORS.textInverse}
+            />
             <View style={styles.headerInfo}>
-              <Text style={styles.headerTitle}>{chatName}</Text>
+              <Text style={styles.headerTitle} numberOfLines={1}>{headerName}</Text>
             </View>
           </View>
           
@@ -460,45 +511,45 @@ const IndividualChatScreen: React.FC = () => {
           alignment="right"
         />
 
-        {loading && (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color={COLORS.primary} />
-            <Text style={styles.loadingText}>Loading messages...</Text>
-          </View>
+        {loading && messages.length === 0 && (
+          <InlineLoading message="Loading messages..." style={styles.loadingContainer} />
         )}
 
         {/* Messages */}
-        {messages.length === 0 && !loading ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No messages yet</Text>
-            <Text style={styles.emptySubtext}>Start the conversation!</Text>
-          </View>
-        ) : (
-          <FlatList
-            ref={flatListRef}
-            data={messages}
-            renderItem={renderMessage}
-            keyExtractor={(item) => item.id}
-            style={styles.messagesList}
-            contentContainerStyle={styles.messagesContent}
-            showsVerticalScrollIndicator={false}
-            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-            ListEmptyComponent={
-              loading ? (
-                <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="small" color={COLORS.primary} />
-                </View>
-              ) : null
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          renderItem={renderMessage}
+          keyExtractor={(item) => item.id}
+          style={styles.messagesList}
+          contentContainerStyle={
+            messages.length === 0
+              ? [styles.messagesContent, { flexGrow: 1, justifyContent: 'center' }]
+              : styles.messagesContent
+          }
+          showsVerticalScrollIndicator={false}
+          onContentSizeChange={() => {
+            if (messages.length > 0) {
+              flatListRef.current?.scrollToEnd({ animated: false });
             }
-          />
-        )}
+          }}
+          ListEmptyComponent={
+            loading ? null : (
+              <EmptyState
+                title="No messages yet"
+                message="Say hello to start the conversation."
+                icon={<MessageCircle width={40} height={40} color={COLORS.textTertiary} />}
+              />
+            )
+          }
+        />
 
         {/* Input Area */}
         <View style={styles.inputContainer}>
           <View style={styles.inputWrapper}>
             <TextInput
               style={styles.textInput}
-              placeholder="Say something..."
+              placeholder="Type a message..."
               value={inputText}
               onChangeText={setInputText}
               multiline
@@ -536,6 +587,47 @@ const IndividualChatScreen: React.FC = () => {
           </View>
         </View>
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={profileVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setProfileVisible(false)}
+      >
+        <Pressable style={styles.profileOverlay} onPress={() => setProfileVisible(false)}>
+          <Pressable style={styles.profileSheet} onPress={e => e.stopPropagation()}>
+            <View style={styles.profileSheetHeader}>
+              <Text style={styles.profileSheetTitle}>Contact</Text>
+              <TouchableOpacity onPress={() => setProfileVisible(false)} hitSlop={12}>
+                <X width={22} height={22} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.profileSheetBody}>
+              <ProfileAvatar
+                firstName={firstName}
+                lastName={lastName}
+                profilePictureUrl={headerAvatar}
+                avatar={headerAvatar}
+                size={72}
+              />
+              <Text style={styles.profileSheetName}>{headerName}</Text>
+              <Text style={styles.profileSheetRole}>
+                {user?.role === 'GUARD'
+                  ? 'Client'
+                  : user?.role === 'ADMIN'
+                    ? 'Team member'
+                    : 'Contact'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.profileCloseButton}
+              onPress={() => setProfileVisible(false)}
+            >
+              <Text style={styles.profileCloseButtonText}>Close</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaWrapper>
   );
 };
@@ -759,6 +851,58 @@ const styles = StyleSheet.create({
   },
   sendButtonInactive: {
     backgroundColor: COLORS.textTertiary,
+  },
+  profileOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  profileSheet: {
+    backgroundColor: COLORS.backgroundPrimary,
+    borderTopLeftRadius: BORDER_RADIUS.xl,
+    borderTopRightRadius: BORDER_RADIUS.xl,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.lg,
+    paddingBottom: SPACING.xxxxl,
+  },
+  profileSheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.lg,
+  },
+  profileSheetTitle: {
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+  },
+  profileSheetBody: {
+    alignItems: 'center',
+    paddingVertical: SPACING.lg,
+  },
+  profileSheetName: {
+    marginTop: SPACING.md,
+    fontSize: TYPOGRAPHY.fontSize.xl,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    textAlign: 'center',
+  },
+  profileSheetRole: {
+    marginTop: SPACING.xs,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
+  },
+  profileCloseButton: {
+    marginTop: SPACING.lg,
+    backgroundColor: COLORS.backgroundSecondary,
+    borderRadius: BORDER_RADIUS.lg,
+    paddingVertical: SPACING.md,
+    alignItems: 'center',
+  },
+  profileCloseButtonText: {
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    color: COLORS.primary,
   },
 });
 

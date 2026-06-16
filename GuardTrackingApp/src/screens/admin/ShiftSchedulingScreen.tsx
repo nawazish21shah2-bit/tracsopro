@@ -20,6 +20,7 @@ import { RootState, AppDispatch } from '../../store';
 import { logoutUser } from '../../store/slices/authSlice';
 import { globalStyles, COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { ErrorHandler } from '../../utils/errorHandler';
+import { showSchedulingErrorAlert, showShiftActionError } from '../../utils/schedulingErrorAlert';
 import apiService from '../../services/api';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
@@ -27,6 +28,15 @@ import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 import { ShiftsIcon, UserIcon, EmergencyIcon, LocationIcon, ClockIcon, PlusIcon, CheckCircleIcon, InfoIcon } from '../../components/ui/AppIcons';
 import { ArrowLeftIcon, ArrowRightIcon, RefreshCwIcon, AlertTriangleIcon } from '../../components/ui/FeatherIcons';
+import SectionHeader from '../../components/ui/SectionHeader';
+import ShiftFormFields, { ShiftFormValues } from '../../components/shifts/ShiftFormFields';
+import ShiftOptionPicker from '../../components/shifts/ShiftOptionPicker';
+import {
+  combineDateTime,
+  getDefaultShiftSchedule,
+  getRepeatSuccessMessage,
+  validateShiftSchedule,
+} from '../../utils/shiftFormUtils';
 
 interface ScheduledShift {
   id: string;
@@ -124,15 +134,21 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
   const [selectedShiftForAssignment, setSelectedShiftForAssignment] = useState<ScheduledShift | null>(null);
   const [selectedGuardIdForAssignment, setSelectedGuardIdForAssignment] = useState<string>('');
 
-  const [newShift, setNewShift] = useState({
+  // Edit modal state
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingShift, setEditingShift] = useState<ScheduledShift | null>(null);
+  const [editForm, setEditForm] = useState({ startTime: '', endTime: '', notes: '' });
+
+  const buildEmptyShiftForm = (date = selectedDate): ShiftFormValues & { guardId: string; siteId: string } => ({
     guardId: '',
     siteId: '',
-    startTime: '09:00',
-    endTime: '17:00',
-    date: selectedDate,
-    shiftType: 'regular' as ScheduledShift['shiftType'],
+    ...getDefaultShiftSchedule(date),
+    description: '',
     notes: '',
+    scheduleRepeat: 'none',
   });
+
+  const [newShift, setNewShift] = useState(buildEmptyShiftForm);
 
   useEffect(() => {
     initializeScheduling();
@@ -366,11 +382,11 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
     if (!guard || !site) return conflicts;
 
     // Check guard availability
-    const availability = guard.availability[shiftData.date];
+    const availability = guard.availability[shiftData.startDate];
     if (!availability?.available) {
       conflicts.push({
         type: 'guard_unavailable',
-        message: `Guard is not available on ${shiftData.date}${availability?.reason ? `: ${availability.reason}` : ''}`,
+        message: `Guard is not available on ${shiftData.startDate}${availability?.reason ? `: ${availability.reason}` : ''}`,
         severity: 'error',
       });
     }
@@ -388,7 +404,7 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
     // Check site capacity
     const existingShiftsAtSite = shifts.filter(s => 
       s.siteId === shiftData.siteId && 
-      s.date === shiftData.date &&
+      s.date === shiftData.startDate &&
       s.status !== 'cancelled' &&
       isTimeOverlap(s.startTime, s.endTime, shiftData.startTime, shiftData.endTime)
     );
@@ -424,7 +440,8 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
       end.setDate(end.getDate() + 1);
     }
     
-    return (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+    const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+    return Math.round(hours * 10) / 10;
   };
 
   const isTimeOverlap = (start1: string, end1: string, start2: string, end2: string): boolean => {
@@ -440,77 +457,99 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
     return s1 < e2 && s2 < e1;
   };
 
+  const openCreateShiftModal = () => {
+    setNewShift(buildEmptyShiftForm(selectedDate));
+    setShowCreateModal(true);
+  };
+
+  const handleNewShiftFormChange = <K extends keyof ShiftFormValues>(
+    field: K,
+    value: ShiftFormValues[K],
+  ) => {
+    setNewShift((prev) => ({ ...prev, [field]: value }));
+  };
+
   const handleCreateShift = async () => {
+    const validation = validateShiftSchedule(
+      newShift.startDate,
+      newShift.startTime,
+      newShift.endDate,
+      newShift.endTime,
+    );
+    if (!validation.valid) {
+      Alert.alert('Error', validation.message);
+      return;
+    }
+
+    const site = sites.find((s) => s.id === newShift.siteId);
+    if (!site) {
+      Alert.alert('Error', 'Please select a site');
+      return;
+    }
+
     try {
-      const conflicts = detectConflicts(newShift);
-      const hasErrors = conflicts.some(c => c.severity === 'error');
-      
+      setLoading(true);
+      const conflicts = newShift.guardId ? detectConflicts(newShift) : [];
+      const hasErrors = conflicts.some((c) => c.severity === 'error');
+
       if (hasErrors) {
         Alert.alert(
           'Scheduling Conflicts',
-          conflicts.filter(c => c.severity === 'error').map(c => c.message).join('\n'),
-          [{ text: 'OK' }]
+          conflicts.filter((c) => c.severity === 'error').map((c) => c.message).join('\n'),
+          [{ text: 'OK' }],
         );
         return;
       }
 
-      const site = sites.find(s => s.id === newShift.siteId);
-      
-      if (!site) {
-        Alert.alert('Error', 'Please select a site');
-        return;
-      }
+      const scheduledStartTime = combineDateTime(newShift.startDate, newShift.startTime);
+      const scheduledEndTime = combineDateTime(newShift.endDate, newShift.endTime);
+      const description = newShift.description.trim() || undefined;
+      const notes = newShift.notes.trim() || undefined;
 
-      // Guard is optional - admin can assign later
-      const guard = newShift.guardId ? guards.find(g => g.id === newShift.guardId) : null;
-
-      // Persist to backend (admin shift create) - guardId is optional
-      const scheduledStartTime = `${newShift.date}T${newShift.startTime}:00`;
-      const scheduledEndTime = `${newShift.date}T${newShift.endTime}:00`;
-
-      const apiResponse = await apiService.createAdminShift({
-        guardId: newShift.guardId || undefined, // Optional - can assign later
-        siteId: site.id, // Link shift to site (will automatically link to client)
-        locationName: site.name, // Fallback if siteId lookup fails
-        locationAddress: site.address, // Fallback if siteId lookup fails
-        scheduledStartTime,
-        scheduledEndTime,
-        description: newShift.shiftType,
-        notes: newShift.notes,
-      });
+      const apiResponse =
+        newShift.scheduleRepeat === 'week' || newShift.scheduleRepeat === 'month'
+          ? await apiService.createAdminBulkShifts({
+              guardId: newShift.guardId || undefined,
+              siteId: site.id,
+              scheduledStartTime,
+              scheduledEndTime,
+              description,
+              notes,
+              repeatPattern: newShift.scheduleRepeat,
+            })
+          : await apiService.createAdminShift({
+              guardId: newShift.guardId || undefined,
+              siteId: site.id,
+              locationName: site.name,
+              locationAddress: site.address,
+              scheduledStartTime,
+              scheduledEndTime,
+              description,
+              notes,
+            });
 
       if (!apiResponse.success) {
-        Alert.alert('Error', apiResponse.message || 'Failed to create shift in backend');
+        showSchedulingErrorAlert(apiResponse.message || 'Failed to create shift');
         return;
       }
 
-      // Reload shifts from backend to get the actual created shift
       await Promise.all([loadShifts(), loadUnassignedShifts()]);
-      
       setShowCreateModal(false);
-      
-      // Reset form
-      setNewShift({
-        guardId: '',
-        siteId: '',
-        startTime: '09:00',
-        endTime: '17:00',
-        date: selectedDate,
-        shiftType: 'regular',
-        notes: '',
-      });
+      setNewShift(buildEmptyShiftForm(selectedDate));
 
-      Alert.alert(
-        'Shift Created',
-        newShift.guardId
-          ? (conflicts.length > 0 
-              ? `Shift created successfully with ${conflicts.length} warning(s)`
-              : 'Shift created successfully and saved to backend')
-          : 'Shift created successfully. Assign a guard from the Unassigned tab.'
-      );
+      const baseMessage = getRepeatSuccessMessage(newShift.scheduleRepeat);
+      const detailMessage = newShift.guardId
+        ? conflicts.length > 0
+          ? `${baseMessage} (${conflicts.length} warning(s))`
+          : baseMessage
+        : `${baseMessage} Assign a guard from the Unassigned tab if needed.`;
+
+      Alert.alert('Shift Created', detailMessage);
     } catch (error) {
-      ErrorHandler.handleError(error, 'create_shift');
-      Alert.alert('Error', 'Failed to create shift');
+      ErrorHandler.handleError(error, 'create_shift', false);
+      showShiftActionError('Create Shift', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -526,11 +565,11 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
         setShowAssignGuardModal(false);
         setSelectedShiftForAssignment(null);
       } else {
-        Alert.alert('Error', response.message || 'Failed to assign guard');
+        showSchedulingErrorAlert(response.message || 'Failed to assign guard');
       }
     } catch (error) {
-      ErrorHandler.handleError(error, 'assign_guard');
-      Alert.alert('Error', 'Failed to assign guard to shift');
+      ErrorHandler.handleError(error, 'assign_guard', false);
+      showShiftActionError('Assign Guard', error);
     } finally {
       setLoading(false);
     }
@@ -539,6 +578,79 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
   const openAssignGuardModal = (shift: ScheduledShift) => {
     setSelectedShiftForAssignment(shift);
     setShowAssignGuardModal(true);
+  };
+
+  const openEditModal = (shift: ScheduledShift) => {
+    setEditingShift(shift);
+    setEditForm({
+      startTime: shift.startTime,
+      endTime: shift.endTime,
+      notes: shift.notes || '',
+    });
+    setShowEditModal(true);
+  };
+
+  const handleEditShift = async () => {
+    if (!editingShift) return;
+    try {
+      setLoading(true);
+      // Build ISO datetime strings combining shift date with new times
+      const scheduledStartTime = `${editingShift.date}T${editForm.startTime}:00`;
+      const scheduledEndTime = `${editingShift.date}T${editForm.endTime}:00`;
+
+      const response = await apiService.updateAdminShift(editingShift.id, {
+        scheduledStartTime,
+        scheduledEndTime,
+        notes: editForm.notes,
+      });
+
+      if (response.success) {
+        await Promise.all([loadShifts(), loadUnassignedShifts()]);
+        setShowEditModal(false);
+        setEditingShift(null);
+        Alert.alert('Success', 'Shift updated successfully');
+      } else {
+        showSchedulingErrorAlert(response.message || 'Failed to update shift');
+      }
+    } catch (error) {
+      showShiftActionError('Update Shift', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteShift = (shift: ScheduledShift) => {
+    Alert.alert(
+      'Delete Shift',
+      `Are you sure you want to delete the shift at ${shift.siteName}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setLoading(true);
+              const response = await apiService.deleteAdminShift(shift.id);
+              if (response.success) {
+                await Promise.all([loadShifts(), loadUnassignedShifts()]);
+                Alert.alert('Deleted', 'Shift deleted successfully');
+              } else {
+                showShiftActionError('Delete Shift', response.message || 'Failed to delete shift');
+              }
+            } catch (error) {
+              showShiftActionError('Delete Shift', error);
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleViewDetails = (item: ScheduledShift) => {
+    navigation.navigate('ShiftDetails', { shiftId: item.id });
   };
 
   const getStatusColor = (status: ScheduledShift['status']) => {
@@ -663,6 +775,28 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
                 ))}
               </View>
             )}
+            
+            <View style={styles.shiftActionsRow}>
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => handleViewDetails(item)}
+              >
+                <InfoIcon size={14} color={COLORS.primary} />
+                <Text style={styles.actionButtonText}>Details</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => openEditModal(item)}
+              >
+                <Text style={styles.actionButtonText}>Edit</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.deleteButton]}
+                onPress={() => handleDeleteShift(item)}
+              >
+                <Text style={styles.deleteButtonText}>Delete</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
         keyExtractor={(item) => item.id}
@@ -745,6 +879,28 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
               <UserIcon size={16} color={COLORS.primary} style={{ marginRight: SPACING.xs }} />
               <Text style={styles.assignGuardButtonText}>Assign Guard</Text>
             </TouchableOpacity>
+
+            <View style={styles.shiftActionsRow}>
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => handleViewDetails(item)}
+              >
+                <InfoIcon size={14} color={COLORS.primary} />
+                <Text style={styles.actionButtonText}>Details</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => openEditModal(item)}
+              >
+                <Text style={styles.actionButtonText}>Edit</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.deleteButton]}
+                onPress={() => handleDeleteShift(item)}
+              >
+                <Text style={styles.deleteButtonText}>Delete</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
         keyExtractor={(item) => item.id}
@@ -854,182 +1010,119 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
     );
   };
 
-  const renderCreateShiftModal = () => (
-    <Modal
-      visible={showCreateModal}
-      animationType="slide"
-      presentationStyle="pageSheet"
-    >
-      <View style={styles.modalContainer}>
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Create New Shift</Text>
-          <TouchableOpacity onPress={() => setShowCreateModal(false)}>
-            <Text style={styles.closeButton}>✕</Text>
-          </TouchableOpacity>
-        </View>
-        
-        <ScrollView style={styles.modalContent}>
-          <View style={styles.formSection}>
-            <View style={styles.formLabelContainer}>
-              <UserIcon size={18} color={COLORS.primary} style={{ marginRight: SPACING.xs }} />
-              <Text style={styles.formLabel}>Select Guard (Optional)</Text>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
-              <TouchableOpacity
-                style={[
-                  styles.optionItem,
-                  !newShift.guardId && styles.optionItemSelected,
-                ]}
-                onPress={() => setNewShift(prev => ({ ...prev, guardId: '' }))}
-              >
-                <Text style={[
-                  styles.optionText,
-                  !newShift.guardId && styles.optionTextSelected,
-                ]}>No Guard</Text>
-                <Text style={[
-                  styles.optionSubtext,
-                  !newShift.guardId && styles.optionSubtextSelected,
-                ]}>Assign later</Text>
-              </TouchableOpacity>
-              {guards.map((item) => (
-                <TouchableOpacity
-                  key={item.id}
-                  style={[
-                    styles.optionItem,
-                    newShift.guardId === item.id && styles.optionItemSelected,
-                  ]}
-                  onPress={() => setNewShift(prev => ({ ...prev, guardId: item.id }))}
-                >
-                  <Text style={[
-                    styles.optionText,
-                    newShift.guardId === item.id && styles.optionTextSelected,
-                  ]}>{item.name}</Text>
-                  <Text style={[
-                    styles.optionSubtext,
-                    newShift.guardId === item.id && styles.optionSubtextSelected,
-                  ]}>
-                    {item.currentWeekHours}/{item.maxHoursPerWeek}h this week
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+  const renderCreateShiftModal = () => {
+    const guardOptions = guards.map((guard) => ({
+      id: guard.id,
+      label: guard.name,
+      sublabel: `${guard.currentWeekHours}/${guard.maxHoursPerWeek}h this week`,
+    }));
+
+    const siteOptions = sites.map((site) => ({
+      id: site.id,
+      label: site.name,
+      sublabel: site.address,
+    }));
+
+    const conflicts = newShift.guardId && newShift.siteId ? detectConflicts(newShift) : [];
+
+    return (
+      <Modal
+        visible={showCreateModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Create Shift</Text>
+            <TouchableOpacity onPress={() => setShowCreateModal(false)}>
+              <Text style={styles.closeButton}>✕</Text>
+            </TouchableOpacity>
           </View>
 
-          <View style={styles.formSection}>
-            <View style={styles.formLabelContainer}>
-              <LocationIcon size={18} color={COLORS.primary} style={{ marginRight: SPACING.xs }} />
-              <Text style={styles.formLabel}>Select Site</Text>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
-              {sites.map((item) => (
-                <TouchableOpacity
-                  key={item.id}
-                  style={[
-                    styles.optionItem,
-                    newShift.siteId === item.id && styles.optionItemSelected,
-                  ]}
-                  onPress={() => setNewShift(prev => ({ ...prev, siteId: item.id }))}
-                >
-                  <Text style={[
-                    styles.optionText,
-                    newShift.siteId === item.id && styles.optionTextSelected,
-                  ]}>{item.name}</Text>
-                  <Text style={[
-                    styles.optionSubtext,
-                    newShift.siteId === item.id && styles.optionSubtextSelected,
-                  ]}>{item.priority} priority</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-
-          <View style={styles.timeSection}>
-            <View style={styles.timeInput}>
-              <View style={styles.formLabelContainer}>
-                <ClockIcon size={18} color={COLORS.primary} style={{ marginRight: SPACING.xs }} />
-                <Text style={styles.formLabel}>Start Time</Text>
-              </View>
-              <View style={styles.timeInputContainer}>
-                <ClockIcon size={16} color={COLORS.textSecondary} style={{ marginRight: SPACING.xs }} />
-                <TextInput
-                  style={styles.timeField}
-                  value={newShift.startTime}
-                  onChangeText={(text) => setNewShift(prev => ({ ...prev, startTime: text }))}
-                  placeholder="09:00"
-                  placeholderTextColor={COLORS.textSecondary}
-                />
-              </View>
-            </View>
-            <View style={styles.timeInput}>
-              <View style={styles.formLabelContainer}>
-                <ClockIcon size={18} color={COLORS.primary} style={{ marginRight: SPACING.xs }} />
-                <Text style={styles.formLabel}>End Time</Text>
-              </View>
-              <View style={styles.timeInputContainer}>
-                <ClockIcon size={16} color={COLORS.textSecondary} style={{ marginRight: SPACING.xs }} />
-                <TextInput
-                  style={styles.timeField}
-                  value={newShift.endTime}
-                  onChangeText={(text) => setNewShift(prev => ({ ...prev, endTime: text }))}
-                  placeholder="17:00"
-                  placeholderTextColor={COLORS.textSecondary}
-                />
-              </View>
-            </View>
-          </View>
-
-          {newShift.guardId && newShift.siteId && (
-            <View style={styles.conflictPreview}>
-              <View style={styles.formLabelContainer}>
-                <InfoIcon size={18} color={COLORS.info} style={{ marginRight: SPACING.xs }} />
-                <Text style={styles.conflictPreviewTitle}>Conflict Check</Text>
-              </View>
-              {detectConflicts(newShift).map((conflict, index) => (
-                <View key={index} style={styles.conflictItem}>
-                  {conflict.severity === 'error' ? (
-                    <AlertTriangleIcon size={16} color={COLORS.error} style={{ marginRight: SPACING.xs }} />
-                  ) : (
-                    <AlertTriangleIcon size={16} color={COLORS.warning} style={{ marginRight: SPACING.xs }} />
-                  )}
-                  <Text
-                    style={[
-                      styles.conflictPreviewText,
-                      { color: conflict.severity === 'error' ? COLORS.error : COLORS.warning }
-                    ]}
-                  >
-                    {conflict.message}
-                  </Text>
-                </View>
-              ))}
-              {detectConflicts(newShift).length === 0 && (
-                <View style={styles.conflictItem}>
-                  <CheckCircleIcon size={16} color={COLORS.success} style={{ marginRight: SPACING.xs }} />
-                  <Text style={[styles.conflictPreviewText, { color: COLORS.success }]}>
-                    No conflicts detected - Ready to create
-                  </Text>
-                </View>
-              )}
-            </View>
-          )}
-
-          <TouchableOpacity
-            style={[styles.createButton, loading && styles.createButtonDisabled]}
-            onPress={handleCreateShift}
-            disabled={loading}
+          <ScrollView
+            style={styles.modalContent}
+            contentContainerStyle={styles.modalContentInner}
+            keyboardShouldPersistTaps="handled"
           >
-            {loading ? (
-              <RefreshCwIcon size={20} color={COLORS.textInverse} style={{ marginRight: SPACING.xs }} />
-            ) : (
-              <PlusIcon size={20} color={COLORS.textInverse} style={{ marginRight: SPACING.xs }} />
-            )}
-            <Text style={styles.createButtonText}>
-              {loading ? 'Creating...' : 'Create Shift'}
-            </Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </View>
-    </Modal>
-  );
+            <SectionHeader title="Assignment" subtitle="Pick site and optionally assign a guard" />
+
+            <View style={styles.createFormCard}>
+              <ShiftOptionPicker
+                label="Site"
+                placeholder="Select site"
+                options={siteOptions}
+                selectedId={newShift.siteId}
+                onSelect={(id) => setNewShift((prev) => ({ ...prev, siteId: id || '' }))}
+                required
+              />
+              <ShiftOptionPicker
+                label="Guard"
+                placeholder="Select guard (optional)"
+                options={guardOptions}
+                selectedId={newShift.guardId}
+                onSelect={(id) => setNewShift((prev) => ({ ...prev, guardId: id || '' }))}
+                allowNone
+                noneLabel="No guard yet"
+                noneSublabel="Assign later from Unassigned tab"
+              />
+            </View>
+
+            <ShiftFormFields values={newShift} onChange={handleNewShiftFormChange} />
+
+            {newShift.guardId && newShift.siteId ? (
+              <View style={styles.conflictPreview}>
+                <View style={styles.formLabelContainer}>
+                  <InfoIcon size={18} color={COLORS.info} style={{ marginRight: SPACING.xs }} />
+                  <Text style={styles.conflictPreviewTitle}>Conflict check</Text>
+                </View>
+                {conflicts.length === 0 ? (
+                  <View style={styles.conflictItem}>
+                    <CheckCircleIcon size={16} color={COLORS.success} style={{ marginRight: SPACING.xs }} />
+                    <Text style={[styles.conflictPreviewText, { color: COLORS.success }]}>
+                      No conflicts detected
+                    </Text>
+                  </View>
+                ) : (
+                  conflicts.map((conflict, index) => (
+                    <View key={index} style={styles.conflictItem}>
+                      <AlertTriangleIcon
+                        size={16}
+                        color={conflict.severity === 'error' ? COLORS.error : COLORS.warning}
+                        style={{ marginRight: SPACING.xs }}
+                      />
+                      <Text
+                        style={[
+                          styles.conflictPreviewText,
+                          { color: conflict.severity === 'error' ? COLORS.error : COLORS.warning },
+                        ]}
+                      >
+                        {conflict.message}
+                      </Text>
+                    </View>
+                  ))
+                )}
+              </View>
+            ) : null}
+
+            <TouchableOpacity
+              style={[styles.createButton, loading && styles.createButtonDisabled]}
+              onPress={handleCreateShift}
+              disabled={loading}
+            >
+              {loading ? (
+                <RefreshCwIcon size={20} color={COLORS.textInverse} style={{ marginRight: SPACING.xs }} />
+              ) : (
+                <PlusIcon size={20} color={COLORS.textInverse} style={{ marginRight: SPACING.xs }} />
+              )}
+              <Text style={styles.createButtonText}>
+                {loading ? 'Creating...' : 'Create Shift'}
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </Modal>
+    );
+  };
 
   return (
     <SafeAreaWrapper>
@@ -1058,35 +1151,26 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
             key: 'calendar', 
             label: 'Calendar', 
             icon: ShiftsIcon,
-            iconBgColor: (isActive: boolean) => isActive ? 'rgba(255, 255, 255, 0.2)' : COLORS.secondary,
-            iconColor: (isActive: boolean) => isActive ? COLORS.textInverse : COLORS.primary,
           },
           { 
             key: 'conflicts', 
             label: 'Conflicts', 
             icon: EmergencyIcon,
-            iconBgColor: (isActive: boolean) => isActive ? 'rgba(255, 255, 255, 0.2)' : '#FEEBEB',
-            iconColor: (isActive: boolean) => isActive ? COLORS.textInverse : COLORS.error,
           },
           { 
             key: 'guards', 
             label: 'Guards', 
             icon: UserIcon,
-            iconBgColor: (isActive: boolean) => isActive ? 'rgba(255, 255, 255, 0.2)' : '#DCFCE7',
-            iconColor: (isActive: boolean) => isActive ? COLORS.textInverse : COLORS.success,
           },
           { 
             key: 'unassigned', 
             label: `Unassigned${unassignedShifts.length > 0 ? ` (${unassignedShifts.length})` : ''}`, 
             icon: AlertTriangleIcon,
-            iconBgColor: (isActive: boolean) => isActive ? 'rgba(255, 255, 255, 0.2)' : '#FFF3CD',
-            iconColor: (isActive: boolean) => isActive ? COLORS.textInverse : COLORS.warning,
           },
         ].map((view) => {
           const isActive = selectedView === view.key;
           const IconComponent = view.icon;
-          const iconBgColor = view.iconBgColor(isActive);
-          const iconColor = view.iconColor(isActive);
+          const iconColor = isActive ? COLORS.textInverse : COLORS.primary;
           return (
             <TouchableOpacity
               key={view.key}
@@ -1096,18 +1180,11 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
               ]}
               onPress={() => setSelectedView(view.key as any)}
             >
-              <View style={styles.viewTabIconContainer}>
-                <View style={[
-                  styles.viewTabIcon, 
-                  { backgroundColor: iconBgColor },
-                  isActive && styles.viewTabIconActive
-                ]}>
-                  <IconComponent size={18} color={iconColor} />
-                </View>
-              </View>
+              <IconComponent size={20} color={iconColor} style={{ marginBottom: SPACING.xs }} />
               <Text style={[
                 styles.viewTabText,
                 isActive && styles.viewTabTextActive,
+                { textAlign: 'center' }
               ]}>
                 {view.label}
               </Text>
@@ -1126,7 +1203,7 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
       {/* Sticky Action Button */}
       <TouchableOpacity 
         style={styles.stickyAddButton}
-        onPress={() => setShowCreateModal(true)}
+        onPress={openCreateShiftModal}
       >
         <PlusIcon size={20} color={COLORS.textInverse} style={{ marginRight: SPACING.xs }} />
         <Text style={styles.stickyAddButtonText}>Add Shift</Text>
@@ -1177,29 +1254,13 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.sm + 2,
-    borderRadius: BORDER_RADIUS.lg - 1,
-    minHeight: 59,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.md,
     justifyContent: 'center',
     backgroundColor: COLORS.backgroundSecondary,
   },
   viewTabActive: {
     backgroundColor: COLORS.primary,
-  },
-  viewTabIconContainer: {
-    marginBottom: SPACING.sm + 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  viewTabIcon: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: BORDER_RADIUS.md,
-  },
-  viewTabIconActive: {
-    // Background color is set dynamically in component
   },
   viewTabText: {
     fontSize: TYPOGRAPHY.fontSize.xs,
@@ -1310,6 +1371,37 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.fontSize.xs,
     marginBottom: SPACING.xs,
   },
+  shiftActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    marginTop: SPACING.sm,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderLight,
+    gap: SPACING.md,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+  },
+  actionButtonText: {
+    color: COLORS.primary,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    marginLeft: 4,
+  },
+  deleteButton: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: BORDER_RADIUS.sm,
+  },
+  deleteButtonText: {
+    color: COLORS.error,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+  },
   emptyState: {
     padding: SPACING.xl,
     alignItems: 'center',
@@ -1353,6 +1445,20 @@ const styles = StyleSheet.create({
   modalContent: {
     flex: 1,
     padding: SPACING.md,
+  },
+  modalContentInner: {
+    paddingBottom: SPACING.xxxxl,
+  },
+  createFormCard: {
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
+    marginBottom: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.primary,
+    ...SHADOWS.small,
   },
   formSection: {
     marginBottom: SPACING.lg,

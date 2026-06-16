@@ -9,19 +9,42 @@ import swaggerUi from 'swagger-ui-express';
 import routes from './routes/index';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { logger } from './utils/logger.js';
+import { apiRateLimiter } from './middleware/rateLimit.js';
+import { handleStripeWebhook } from './controllers/paymentController.js';
 
 dotenv.config();
+
+const parseCorsOrigins = (): string | string[] | boolean => {
+  const configured = process.env.CORS_ORIGIN?.trim();
+  if (!configured) {
+    return process.env.NODE_ENV === 'production' ? false : '*';
+  }
+  if (configured === '*') {
+    return process.env.NODE_ENV === 'production' ? false : '*';
+  }
+  if (configured.includes(',')) {
+    return configured.split(',').map((origin) => origin.trim()).filter(Boolean);
+  }
+  return configured;
+};
 
 const app = express();
 
 // Security middleware
 app.use(helmet());
 
-// CORS
+// CORS — restrict origins in production; allow all in local development only
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
+  origin: parseCorsOrigins(),
   credentials: true,
 }));
+
+// Stripe webhook requires raw body for signature verification (before JSON parser)
+app.post(
+  '/api/payments/webhook',
+  express.raw({ type: 'application/json' }),
+  handleStripeWebhook
+);
 
 // Body parsing
 app.use(express.json());
@@ -205,6 +228,9 @@ app.get('/api-docs.json', (req, res) => {
 
 // Static file serving for uploads (profile pictures, etc.)
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+
+// Global API rate limiting
+app.use('/api', apiRateLimiter);
 
 // API routes
 app.use('/api', routes);

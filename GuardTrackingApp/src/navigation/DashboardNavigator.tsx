@@ -2,22 +2,21 @@
 // Dashboard Navigator
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text, View, StyleSheet } from 'react-native';
+import { Text, StyleSheet } from 'react-native';
+import TabBarIcon from '../components/navigation/TabBarIcon';
+import { COLORS, TYPOGRAPHY, SPACING } from '../styles/globalStyles';
 import GuardHomeScreen from '../screens/dashboard/GuardHomeScreen';
 import MyShiftsScreen from '../screens/dashboard/MyShiftsScreen';
 import ReportsScreen from '../screens/dashboard/ReportsScreen';
-// REMOVED: AvailableShiftsScreen - Job board system removed (Option B)
-// REMOVED: ChatListScreen - Chat tab removed from bottom navigation
 import CheckInScreen from '../screens/dashboard/CheckInScreen';
 import GuardSettingsScreen from '../screens/guard/GuardSettingsScreen';
 import NotificationSettingsScreen from '../screens/settings/NotificationSettingsScreen';
 import ProfileEditScreen from '../screens/settings/ProfileEditScreen';
 import ChangePasswordScreen from '../screens/settings/ChangePasswordScreen';
 import SupportContactScreen from '../screens/settings/SupportContactScreen';
+import SupportHubScreen from '../screens/support/SupportHubScreen';
+import SupportTicketDetailScreen from '../screens/support/SupportTicketDetailScreen';
 import NotificationListScreen from '../screens/notifications/NotificationListScreen';
-import { HomeIcon, ShiftsIcon, ReportsIcon, CheckInIcon, SettingsIcon, ChatIcon } from '../components/ui/AppIcons';
-import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../styles/globalStyles';
 import ChatListScreen from '../screens/chat/ChatListScreen';
 import ChatScreen from '../screens/chat/ChatScreen';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -38,6 +37,12 @@ export type SettingsStackParamList = {
   GuardProfileEdit: undefined;
   GuardChangePassword: undefined;
   GuardSupportContact: undefined;
+  SupportHubScreen: { variant?: 'guard'; mode?: 'mine' | 'inbox' | 'platform' };
+  SupportTicketDetailScreen: {
+    ticketId: string;
+    variant?: 'guard';
+    mode?: 'mine' | 'inbox' | 'platform';
+  };
   Notifications: undefined;
 };
 
@@ -69,6 +74,15 @@ const SettingsStackNavigator: React.FC = () => {
       <SettingsStack.Screen
         name="GuardSupportContact"
         component={() => <SupportContactScreen variant="guard" />}
+      />
+      <SettingsStack.Screen
+        name="SupportHubScreen"
+        component={SupportHubScreen}
+        initialParams={{ variant: 'guard', mode: 'mine' }}
+      />
+      <SettingsStack.Screen
+        name="SupportTicketDetailScreen"
+        component={SupportTicketDetailScreen}
       />
       <SettingsStack.Screen
         name="Notifications"
@@ -120,11 +134,7 @@ const DashboardNavigator: React.FC = () => {
         name="Home"
         component={GuardHomeScreen}
         options={{
-          tabBarIcon: ({ focused }) => (
-            <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
-              <HomeIcon size={20} color={focused ? COLORS.primary : COLORS.textSecondary} />
-            </View>
-          ),
+          tabBarIcon: ({ focused }) => <TabBarIcon name="home" focused={focused} />,
           tabBarLabel: ({ focused }) => (
             <Text
               numberOfLines={1}
@@ -139,11 +149,7 @@ const DashboardNavigator: React.FC = () => {
         name="Check In/Out"
         component={CheckInScreen}
         options={{
-          tabBarIcon: ({ focused }) => (
-            <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
-              <CheckInIcon size={20} color={focused ? COLORS.primary : COLORS.textSecondary} />
-            </View>
-          ),
+          tabBarIcon: ({ focused }) => <TabBarIcon name="mapPin" focused={focused} />,
           tabBarLabel: ({ focused }) => (
             <Text
               numberOfLines={1}
@@ -158,11 +164,7 @@ const DashboardNavigator: React.FC = () => {
         name="My Shifts"
         component={MyShiftsScreen}
         options={{
-          tabBarIcon: ({ focused }) => (
-            <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
-              <ShiftsIcon size={20} color={focused ? COLORS.primary : COLORS.textSecondary} />
-            </View>
-          ),
+          tabBarIcon: ({ focused }) => <TabBarIcon name="calendar" focused={focused} />,
           tabBarLabel: ({ focused }) => (
             <Text
               numberOfLines={1}
@@ -177,11 +179,7 @@ const DashboardNavigator: React.FC = () => {
         name="Reports"
         component={ReportsScreen}
         options={{
-          tabBarIcon: ({ focused }) => (
-            <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
-              <ReportsIcon size={20} color={focused ? COLORS.primary : COLORS.textSecondary} />
-            </View>
-          ),
+          tabBarIcon: ({ focused }) => <TabBarIcon name="fileText" focused={focused} />,
           tabBarLabel: ({ focused }) => (
             <Text
               numberOfLines={1}
@@ -196,11 +194,7 @@ const DashboardNavigator: React.FC = () => {
         name="Chat"
         component={ChatStackNavigator}
         options={{
-          tabBarIcon: ({ focused }) => (
-            <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
-              <ChatIcon size={20} color={focused ? COLORS.primary : COLORS.textSecondary} />
-            </View>
-          ),
+          tabBarIcon: ({ focused }) => <TabBarIcon name="messageCircle" focused={focused} />,
           tabBarLabel: ({ focused }) => (
             <Text
               numberOfLines={1}
@@ -215,11 +209,7 @@ const DashboardNavigator: React.FC = () => {
         name="Settings"
         component={SettingsStackNavigator}
         options={{
-          tabBarIcon: ({ focused }) => (
-            <View style={[styles.tabIconWrapper, focused && styles.tabIconWrapperActive]}>
-              <SettingsIcon size={20} color={focused ? COLORS.primary : COLORS.textSecondary} />
-            </View>
-          ),
+          tabBarIcon: ({ focused }) => <TabBarIcon name="settings" focused={focused} />,
           tabBarLabel: ({ focused }) => (
             <Text
               numberOfLines={1}
@@ -239,17 +229,6 @@ const DashboardNavigator: React.FC = () => {
 export default DashboardNavigator;
 
 const styles = StyleSheet.create({
-  tabIconWrapper: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: BORDER_RADIUS.round,
-    backgroundColor: COLORS.backgroundSecondary,
-  },
-  tabIconWrapperActive: {
-    backgroundColor: COLORS.primaryLight,
-  },
   tabLabel: {
     fontSize: 10,
     fontWeight: TYPOGRAPHY.fontWeight.medium,

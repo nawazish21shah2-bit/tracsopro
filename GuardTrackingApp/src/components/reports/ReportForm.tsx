@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { ReportType } from '../../types/shift.types';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
-import { IncidentIcon, EmergencyIcon } from '../ui/AppIcons';
+import ReportsActionBar from './ReportsActionBar';
 
 interface ReportFormProps {
   onSubmit: (content: string, reportType: ReportType) => void;
@@ -22,32 +22,11 @@ const ReportForm: React.FC<ReportFormProps> = ({ onSubmit, loading = false }) =>
     setContent('');
   };
 
-  const handleIncidentReport = () => {
+  const handleIncidentShortcut = () => {
     setReportType(ReportType.INCIDENT);
     if (!content.trim()) {
-      setContent('We had no incident occurred on the site, during my shift hours');
+      setContent('No incidents occurred during my shift.');
     }
-  };
-
-  const handleEmergencyAlert = () => {
-    setReportType(ReportType.EMERGENCY);
-    Alert.alert(
-      'Emergency Alert',
-      'Are you sure you want to send an emergency alert?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Send Alert', 
-          style: 'destructive',
-          onPress: () => {
-            if (!content.trim()) {
-              setContent('Emergency situation reported');
-            }
-            onSubmit(content.trim() || 'Emergency situation reported', ReportType.EMERGENCY);
-          }
-        }
-      ]
-    );
   };
 
   return (
@@ -67,26 +46,15 @@ const ReportForm: React.FC<ReportFormProps> = ({ onSubmit, loading = false }) =>
         <Text style={styles.characterCount}>{content.length}/500</Text>
       </View>
 
-      {/* Action Buttons */}
-      <View style={styles.actionButtons}>
-        <TouchableOpacity 
-          style={styles.incidentButton} 
-          onPress={handleIncidentReport}
-          disabled={loading}
-        >
-          <IncidentIcon size={20} color={COLORS.textInverse} />
-          <Text style={styles.incidentButtonText}>Add Incident Report</Text>
-        </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.incidentShortcut}
+        onPress={handleIncidentShortcut}
+        disabled={loading}
+      >
+        <Text style={styles.incidentShortcutText}>Use incident report template</Text>
+      </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={styles.emergencyButton} 
-          onPress={handleEmergencyAlert}
-          disabled={loading}
-        >
-          <EmergencyIcon size={20} color={COLORS.textInverse} />
-          <Text style={styles.emergencyButtonText}>Emergency Alert</Text>
-        </TouchableOpacity>
-      </View>
+      <ReportsActionBar layout="stack" requireActiveShift emergencySize="small" />
 
       {/* Submit Button */}
       {content.trim() && (
@@ -131,42 +99,15 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     marginTop: SPACING.xs,
   },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
-    marginBottom: SPACING.lg,
-  },
-  incidentButton: {
-    flex: 1,
-    flexDirection: 'row',
+  incidentShortcut: {
+    marginBottom: SPACING.md,
+    paddingVertical: SPACING.sm,
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.info,
-    borderRadius: BORDER_RADIUS.md,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.sm,
   },
-  incidentButtonText: {
+  incidentShortcutText: {
     fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold as any,
-    color: COLORS.textInverse,
-    marginLeft: SPACING.xs,
-  },
-  emergencyButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.error,
-    borderRadius: BORDER_RADIUS.md,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.sm,
-  },
-  emergencyButtonText: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold as any,
-    color: COLORS.textInverse,
-    marginLeft: SPACING.xs,
+    color: COLORS.primary,
+    fontWeight: TYPOGRAPHY.fontWeight.medium as any,
   },
   submitButton: {
     backgroundColor: COLORS.primary,

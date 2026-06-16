@@ -1,78 +1,45 @@
-# START HERE - Next Steps After Option B ✅
+# START HERE
 
-## 🎉 Option B Implementation Complete!
+Use this file as the single entry point for new developers and release prep.
 
-**Status**: ✅ 100% Complete
-- Code: ✅
-- Database: ✅
-- Migration: ✅
+## 1) Local Run
 
----
-
-## 🚀 IMMEDIATE NEXT ACTIONS
-
-### Step 1: Test Option B (30 min)
-**Goal**: Verify everything works
-
-1. **Start Backend:**
+1. Start backend:
    ```bash
    cd backend
+   npm install
    npm run dev:db
    ```
-
-2. **Start Frontend:**
+2. Start mobile app:
    ```bash
    cd GuardTrackingApp
+   npm install
    npm start
    ```
-
-3. **Test Core Flows:**
-   - Client creates shift (with/without guard)
-   - Admin creates shift
-   - Guard views shifts
-   - Check-in/out
-
-**See**: `TESTING_CHECKLIST.md` for detailed tests
-
----
-
-### Step 2: Configure Email (30 min) - CRITICAL
-**Why**: OTP, invitations, password reset won't work without this
-
-**Quick Setup:**
-1. Sign up for SendGrid (free: 100 emails/day)
-2. Get API key
-3. Update `backend/.env`:
-   ```env
-   SMTP_HOST=smtp.sendgrid.net
-   SMTP_PORT=587
-   SMTP_USER=apikey
-   SMTP_PASS=SG.your-key-here
-   SMTP_FROM=noreply@yourdomain.com
+3. Launch app:
+   ```bash
+   npm run android
+   # or
+   npm run ios
    ```
 
-**See**: `QUICK_START_GUIDE.md` for details
+## 2) Must-read docs
 
----
+- `QUICK_START_GUIDE.md` - day-to-day setup and smoke test
+- `LOCAL_DEV_SETUP.md` - local networking and environment notes
+- `TESTING_PLAN.md` - test scenarios and flow checks
+- `RELEASE_READINESS_CHECKLIST.md` - pre-client release gate
+- `ENVIRONMENT_VARIABLES.md` - required backend/frontend environment values
 
-### Step 3: Production Setup (2-3 hours)
-**Critical Items:**
-- [ ] Production database
-- [ ] Environment variables
-- [ ] Android keystore
-- [ ] iOS certificates
+## 3) Release-critical notes
 
-**See**: `WHAT_I_HAVE_VS_WHAT_I_NEED.md` for full list
+- Do not ship with local LAN backend settings in `GuardTrackingApp/src/config/apiConfig.ts`.
+- Do not ship with debug release signing in Android Gradle config.
+- Run DB migrations using deploy-safe workflow before production rollout.
 
----
+## 4) Current focus
 
-## 📊 CURRENT STATUS
-
-**Option B**: ✅ Complete  
-**Testing**: ⏳ Ready  
-**Launch Prep**: ⏳ 0%
-
----
-
-**Start with testing, then configure email!** 🚀
+- Security hardening
+- Release configuration cleanup
+- Client handoff readiness
 

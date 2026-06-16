@@ -28,6 +28,10 @@ import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import { useNotificationBell } from '../../hooks/useNotificationBell';
+import { useSubscriptionLimits } from '../../hooks/useSubscriptionLimits';
+import { showActionErrorAlert } from '../../utils/subscriptionLimitAlert';
+import { SubscriptionResource } from '../../utils/subscriptionUtils';
 import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
 import { RefreshControl } from 'react-native';
 
@@ -60,6 +64,10 @@ const InvitationManagementScreen: React.FC = () => {
   const navigation = useNavigation<InvitationManagementScreenNavigationProp>();
   const { user } = useSelector((state: RootState) => state.auth);
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+  const { onNotificationPress, notificationCount } = useNotificationBell({
+    notificationsRoute: 'AdminNotifications',
+  });
+  const { ensureCanAdd, refresh: refreshLimits } = useSubscriptionLimits();
   
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'active' | 'used' | 'expired'>('all');
@@ -143,6 +151,19 @@ const InvitationManagementScreen: React.FC = () => {
     await loadInvitations();
   };
 
+  const invitationResource = (role: 'GUARD' | 'CLIENT'): SubscriptionResource =>
+    role === 'GUARD' ? 'guards' : 'clients';
+
+  const handleOpenCreateModal = async () => {
+    const allowed = await ensureCanAdd(
+      invitationResource(newInvitation.role),
+      navigation
+    );
+    if (allowed) {
+      setShowCreateModal(true);
+    }
+  };
+
   const handleCreateInvitation = async () => {
     if (creatingInvitation) {
       return;
@@ -166,6 +187,12 @@ const InvitationManagementScreen: React.FC = () => {
       return;
     }
 
+    const allowed = await ensureCanAdd(
+      invitationResource(newInvitation.role),
+      navigation
+    );
+    if (!allowed) return;
+
     setCreatingInvitation(true);
     try {
       const response = await apiService.createInvitation({
@@ -176,7 +203,10 @@ const InvitationManagementScreen: React.FC = () => {
       });
 
       if (!response.success || !response.data) {
-        Alert.alert('Error', response.message || 'Failed to create invitation');
+        showActionErrorAlert('Create Invitation', response.message || 'Failed to create invitation', {
+          role: user?.role,
+          onUpgrade: () => navigation.navigate('AdminSubscription'),
+        });
         return;
       }
 
@@ -193,6 +223,7 @@ const InvitationManagementScreen: React.FC = () => {
         maxUses: '1',
       });
       setShowCreateModal(false);
+      await refreshLimits();
 
       // Show success with code
       Alert.alert(
@@ -212,26 +243,10 @@ const InvitationManagementScreen: React.FC = () => {
       );
     } catch (error: any) {
       console.error('Create invitation error:', error);
-      const errorMessage = error.message || error.response?.data?.error || 'Failed to create invitation';
-      
-      // Check if error is about free tier limit
-      if (errorMessage.includes('maximum limit') || errorMessage.includes('subscription plan') || errorMessage.includes('upgrade')) {
-        Alert.alert(
-          'Free Tier Limit Reached',
-          errorMessage + '\n\nWould you like to upgrade your plan?',
-          [
-            { text: 'Later', style: 'cancel' },
-            { 
-              text: 'Upgrade', 
-              onPress: () => {
-                navigation.navigate('AdminSubscription' as never);
-              }
-            }
-          ]
-        );
-      } else {
-        Alert.alert('Error', errorMessage);
-      }
+      showActionErrorAlert('Create Invitation', error, {
+        role: user?.role,
+        onUpgrade: () => navigation.navigate('AdminSubscription'),
+      });
     } finally {
       setCreatingInvitation(false);
     }
@@ -480,6 +495,8 @@ const InvitationManagementScreen: React.FC = () => {
         title="Invitation Management"
         showLogo={false}
         onMenuPress={openDrawer}
+        onNotificationPress={onNotificationPress}
+        notificationCount={notificationCount}
         profileDrawer={
           <AdminProfileDrawer
             visible={isDrawerVisible}
@@ -587,7 +604,7 @@ const InvitationManagementScreen: React.FC = () => {
       {/* Sticky Action Button */}
       <TouchableOpacity 
         style={[styles.stickyAddButton, creatingInvitation && styles.stickyAddButtonDisabled]}
-        onPress={() => setShowCreateModal(true)}
+        onPress={handleOpenCreateModal}
         disabled={creatingInvitation}
         activeOpacity={creatingInvitation ? 1 : 0.7}
       >

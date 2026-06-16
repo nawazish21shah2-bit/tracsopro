@@ -123,7 +123,12 @@ export const AdminProfileDrawer: React.FC<AdminProfileDrawerProps> = ({
 
   const handleContactSupport = () => {
     onClose();
-    navigation.navigate('ChatListScreen');
+    navigation.navigate('SupportHubScreen', { variant: 'admin', mode: 'inbox' });
+  };
+
+  const handlePlatformSupport = () => {
+    onClose();
+    navigation.navigate('SupportHubScreen', { variant: 'admin', mode: 'platform' });
   };
 
   const handleProfilePictureSelected = async (imageUri: string) => {
@@ -243,9 +248,15 @@ export const AdminProfileDrawer: React.FC<AdminProfileDrawerProps> = ({
     },
     {
       id: 'support',
-      label: 'Contact Support',
+      label: 'Company Support Inbox',
       icon: <FeatherIcon name="messageCircle" size={20} color={COLORS.textPrimary} />,
       onPress: handleContactSupport,
+    },
+    {
+      id: 'platform-support',
+      label: 'Platform Support',
+      icon: <FeatherIcon name="headphones" size={20} color={COLORS.textPrimary} />,
+      onPress: handlePlatformSupport,
     },
     {
       id: 'logout',

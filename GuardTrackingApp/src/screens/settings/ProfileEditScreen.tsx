@@ -19,9 +19,7 @@ import * as theme from '../../styles/globalStyles';
 import { settingsService, ProfileSettings } from '../../services/settingsService';
 import { updateUserProfile } from '../../store/slices/authSlice';
 import { User } from 'react-native-feather';
-import { useProfileDrawer } from '../../hooks/useProfileDrawer';
-import GuardProfileDrawer from '../../components/guard/GuardProfileDrawer';
-import { SettingsStackParamList } from '../../navigation/DashboardNavigator';
+import { useRoleScreenHeader, RoleHeaderVariant } from '../../hooks/useRoleScreenHeader';
 
 // Safely access design tokens for StyleSheet.create
 const COLORS = theme.COLORS || {
@@ -44,7 +42,7 @@ const BORDER_RADIUS = theme.BORDER_RADIUS || { sm: 8, md: 12 };
 const SHADOWS = theme.SHADOWS || { small: {} };
 
 interface ProfileEditScreenProps {
-  variant?: 'client' | 'guard' | 'admin';
+  variant?: 'client' | 'guard' | 'admin' | 'superAdmin';
   profileDrawer?: React.ReactNode;
   onSave?: () => void;
 }
@@ -55,9 +53,20 @@ const ProfileEditScreen: React.FC<ProfileEditScreenProps> = ({
   onSave,
 }) => {
   const dispatch = useDispatch<AppDispatch>();
-  const navigation = useNavigation<StackNavigationProp<SettingsStackParamList>>();
+  const navigation = useNavigation();
   const { user } = useSelector((state: RootState) => state.auth);
-  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+  const roleVariant: RoleHeaderVariant =
+    variant === 'superAdmin'
+      ? 'superAdmin'
+      : variant === 'admin'
+        ? 'admin'
+        : variant === 'guard'
+          ? 'guard'
+          : 'client';
+  const { headerProps: roleHeaderProps } = useRoleScreenHeader('Edit Profile', roleVariant);
+  const headerProps = profileDrawer
+    ? { ...roleHeaderProps, profileDrawer, onMenuPress: roleHeaderProps.onMenuPress }
+    : roleHeaderProps;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
@@ -68,34 +77,7 @@ const ProfileEditScreen: React.FC<ProfileEditScreenProps> = ({
     language: 'en',
   });
 
-  // Create drawer for guard variant if not provided
-  const renderProfileDrawer = () => {
-    if (profileDrawer) return profileDrawer;
-
-    if (variant === 'guard') {
-      return (
-        <GuardProfileDrawer
-          visible={isDrawerVisible}
-          onClose={closeDrawer}
-          onNavigateToProfile={() => {
-            closeDrawer();
-            // Already on profile edit
-          }}
-          onNavigateToNotifications={() => {
-            closeDrawer();
-            navigation.navigate('GuardNotificationSettings');
-          }}
-          onNavigateToSupport={() => {
-            closeDrawer();
-            navigation.navigate('GuardSupportContact');
-          }}
-        />
-      );
-    }
-
-    return null;
-  };
-
+  // profileDrawer prop allows parent stacks to override the default drawer
   useEffect(() => {
     loadProfile();
   }, []);
@@ -184,7 +166,7 @@ const ProfileEditScreen: React.FC<ProfileEditScreenProps> = ({
   if (loading) {
     return (
       <SafeAreaWrapper>
-        <SharedHeader variant={variant} title="Edit Profile" onNotificationPress={() => navigation.navigate('Notifications')} profileDrawer={renderProfileDrawer()} />
+        <SharedHeader {...headerProps} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
@@ -194,7 +176,7 @@ const ProfileEditScreen: React.FC<ProfileEditScreenProps> = ({
 
   return (
     <SafeAreaWrapper>
-      <SharedHeader variant={variant} title="Edit Profile" onNotificationPress={() => navigation.navigate('Notifications')} profileDrawer={renderProfileDrawer()} />
+      <SharedHeader {...headerProps} />
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.card}>
           <View style={styles.inputGroup}>

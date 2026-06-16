@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,15 +12,16 @@ import {
   Platform,
   RefreshControl,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { UserIcon, LocationIcon, ReportsIcon, EmergencyIcon } from '../../components/ui/AppIcons';
 import StatsCard from '../../components/ui/StatsCard';
-import GuardCard from '../../components/client/GuardCard';
-import ShiftsTableRow from '../../components/client/ShiftsTableRow';
+import StatsGrid, { statCardStyle } from '../../components/ui/StatsGrid';
 import InteractiveMapView from '../../components/client/InteractiveMapView';
 import ShiftCard from '../../components/client/ShiftCard';
+import ShiftsTableRow from '../../components/client/ShiftsTableRow';
 import { fetchDashboardStats, fetchMyGuards } from '../../store/slices/clientSlice';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -29,8 +30,16 @@ import { ClientStackParamList } from '../../navigation/ClientStackNavigator';
 import SharedHeader from '../../components/ui/SharedHeader';
 import ClientProfileDrawer from '../../components/client/ClientProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import { useNotificationBell } from '../../hooks/useNotificationBell';
 import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
+import { useLiveGuardLocations } from '../../hooks/useLiveGuardLocations';
+import { liveGuardMapById } from '../../utils/liveGuardLocationMapper';
+import { isValidCoordinate } from '../../utils/liveGuardLocationMapper';
+import { parseCoordinate } from '../../utils/mapRegionUtils';
+import EmergencyAlertsPanel from '../../components/emergency/EmergencyAlertsPanel';
+import apiService from '../../services/api';
+import { useSubscriptionLimits } from '../../hooks/useSubscriptionLimits';
 
 const { width } = Dimensions.get('window');
 
@@ -64,8 +73,44 @@ const ClientDashboard: React.FC = () => {
   const navigation = useNavigation<StackNavigationProp<ClientStackParamList>>();
   const dispatch = useDispatch<AppDispatch>();
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+  const { onNotificationPress, notificationCount } = useNotificationBell({
+    notificationsRoute: 'ClientNotifications',
+  });
   const [refreshing, setRefreshing] = useState(false);
   const [loadingTimeout, setLoadingTimeout] = useState(false);
+  const [emergencyAlerts, setEmergencyAlerts] = useState<any[]>([]);
+  const [emergencyLoading, setEmergencyLoading] = useState(false);
+  const [acknowledgingAlertId, setAcknowledgingAlertId] = useState<string | null>(null);
+  const [ackCooldownUntilById, setAckCooldownUntilById] = useState<Record<string, number>>({});
+  const { ensureCanAdd } = useSubscriptionLimits();
+
+  const supplementalLiveGuards = useMemo(
+    () =>
+      guards
+        .filter((guard) =>
+          isValidCoordinate(guard.guardLatitude, guard.guardLongitude)
+        )
+        .map((guard) => ({
+          guardId: guard.id,
+          userId: guard.userId,
+          guardName: guard.name,
+          latitude: parseCoordinate(guard.guardLatitude)!,
+          longitude: parseCoordinate(guard.guardLongitude)!,
+          siteName: guard.site,
+          status:
+            guard.status === 'Active'
+              ? ('active' as const)
+              : ('offline' as const),
+          timestamp: Date.now(),
+          accuracy: 0,
+        })),
+    [guards]
+  );
+
+  const { guards: liveGuards, refresh: refreshLiveLocations } =
+    useLiveGuardLocations({ supplementalGuards: supplementalLiveGuards });
+
+  const liveGuardById = useMemo(() => liveGuardMapById(liveGuards), [liveGuards]);
 
   // Add timeout to prevent infinite loading
   useEffect(() => {
@@ -83,6 +128,23 @@ const ClientDashboard: React.FC = () => {
     }
   }, [loading]);
 
+  const loadEmergencyAlerts = useCallback(async () => {
+    setEmergencyLoading(true);
+    try {
+      const response = await apiService.getActiveEmergencyAlerts();
+      if (response.success && Array.isArray(response.data)) {
+        setEmergencyAlerts(response.data);
+      } else {
+        setEmergencyAlerts([]);
+      }
+    } catch (err) {
+      console.error('Error loading emergency alerts:', err);
+      setEmergencyAlerts([]);
+    } finally {
+      setEmergencyLoading(false);
+    }
+  }, []);
+
   const loadDashboardData = useCallback(async () => {
     try {
       // Load data with individual error handling so one failure doesn't block the other
@@ -97,12 +159,12 @@ const ClientDashboard: React.FC = () => {
       });
 
       // Wait for both, but don't fail if one fails
-      await Promise.allSettled([statsPromise, guardsPromise]);
+      await Promise.allSettled([statsPromise, guardsPromise, loadEmergencyAlerts()]);
     } catch (error) {
       console.error('Error loading dashboard data:', error);
       // Don't block the UI - allow user to see the screen even if data fails to load
     }
-  }, [dispatch]);
+  }, [dispatch, loadEmergencyAlerts]);
 
   useEffect(() => {
     loadDashboardData();
@@ -118,21 +180,98 @@ const ClientDashboard: React.FC = () => {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await loadDashboardData();
+      await Promise.all([loadDashboardData(), refreshLiveLocations()]);
     } catch (error) {
       console.error('Error refreshing dashboard:', error);
     } finally {
       setRefreshing(false);
     }
-  }, [loadDashboardData]);
+  }, [loadDashboardData, refreshLiveLocations]);
 
-  const handleAddNewSite = () => {
-    navigation.navigate('AddSite');
+  const getCooldownFromMessage = (message?: string): number => {
+    if (!message) return 0;
+    const match = message.match(/(\d+)\s*second/i);
+    return match ? Number(match[1]) : 0;
   };
 
-  const handleGuardPress = (guardId: string) => {
-    // Navigate to guard details when available
-    console.log('Guard pressed:', guardId);
+  const getRemainingCooldownSeconds = (alertId: string): number => {
+    const until = ackCooldownUntilById[alertId];
+    if (!until) return 0;
+    const remainingMs = until - Date.now();
+    return remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0;
+  };
+
+  const applyAckCooldown = (alertId: string, seconds: number) => {
+    if (seconds <= 0) return;
+    setAckCooldownUntilById((prev) => ({
+      ...prev,
+      [alertId]: Date.now() + seconds * 1000,
+    }));
+  };
+
+  const handleAcknowledgeEmergency = (alertId: string) => {
+    if (acknowledgingAlertId) {
+      return;
+    }
+
+    const remaining = getRemainingCooldownSeconds(alertId);
+    if (remaining > 0) {
+      Alert.alert('Please Wait', `You can retry this action in ${remaining} seconds.`);
+      return;
+    }
+
+    Alert.alert(
+      'Acknowledge Emergency',
+      'Confirm you have received this alert and are taking action.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Acknowledge',
+          onPress: async () => {
+            if (acknowledgingAlertId) {
+              return;
+            }
+
+            setAcknowledgingAlertId(alertId);
+            try {
+              const result = await apiService.acknowledgeEmergencyAlert(alertId);
+              if (result.success) {
+                const alreadyHandled =
+                  result.message?.toLowerCase().includes('already') ?? false;
+                const responseCooldown = getCooldownFromMessage(result.message);
+                applyAckCooldown(alertId, responseCooldown || (alreadyHandled ? 20 : 8));
+                Alert.alert(
+                  alreadyHandled ? 'Already Acknowledged' : 'Acknowledged',
+                  alreadyHandled
+                    ? 'This emergency alert was already acknowledged.'
+                    : 'Emergency alert has been acknowledged.'
+                );
+                await loadEmergencyAlerts();
+              } else {
+                Alert.alert('Error', result.message || 'Failed to acknowledge alert.');
+              }
+            } finally {
+              setAcknowledgingAlertId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleAddNewSite = async () => {
+    const allowed = await ensureCanAdd('sites');
+    if (allowed) {
+      navigation.navigate('AddSite');
+    }
+  };
+
+  const handleGuardPress = (guardId: string, shiftId?: string) => {
+    if (shiftId) {
+      navigation.navigate('ShiftDetails', { shiftId });
+      return;
+    }
+    Alert.alert('Shift unavailable', 'No shift details are linked to this guard yet.');
   };
 
   // Check for network errors
@@ -146,8 +285,8 @@ const ClientDashboard: React.FC = () => {
       <SharedHeader
         variant="client"
         showLogo={true}
-        onNotificationPress={() => navigation.navigate('ClientNotifications')}
-        notificationCount={5}
+        onNotificationPress={onNotificationPress}
+        notificationCount={notificationCount}
         profileDrawer={
           <ClientProfileDrawer
             visible={isDrawerVisible}
@@ -192,44 +331,45 @@ const ClientDashboard: React.FC = () => {
         }
       >
         {/* Stats Cards */}
-        <View style={styles.statsContainer}>
-          <View style={styles.statsRow}>
-            <View style={styles.statsColumn}>
-              <StatsCard
-                label="Guards Active"
-                value={dashboardStats?.guardsOnDuty || 0}
-                icon={<UserIcon size={20} color={COLORS.success} />}
-                variant="success"
-              />
-            </View>
-            <View style={styles.statsColumn}>
-              <StatsCard
-                label="Missed"
-                value={dashboardStats?.missedShifts || 0}
-                icon={<EmergencyIcon size={20} color={COLORS.error} />}
-                variant="danger"
-              />
-            </View>
-          </View>
-          <View style={styles.statsRow}>
-            <View style={styles.statsColumn}>
-              <StatsCard
-                label="Active Sites"
-                value={dashboardStats?.activeSites || 0}
-                icon={<LocationIcon size={20} color={COLORS.info} />}
-                variant="info"
-              />
-            </View>
-            <View style={styles.statsColumn}>
-              <StatsCard
-                label="Reports"
-                value={dashboardStats?.newReports || 0}
-                icon={<ReportsIcon size={20} color={COLORS.textSecondary} />}
-                variant="neutral"
-              />
-            </View>
-          </View>
-        </View>
+        <StatsGrid inset={false} style={styles.statsContainer}>
+          <StatsCard
+            label="Guards Active"
+            value={dashboardStats?.guardsOnDuty ?? 0}
+            icon={<UserIcon size={20} color={COLORS.success} />}
+            variant="success"
+            style={statCardStyle}
+          />
+          <StatsCard
+            label="Missed"
+            value={dashboardStats?.missedShifts ?? 0}
+            icon={<EmergencyIcon size={20} color={COLORS.error} />}
+            variant="danger"
+            style={statCardStyle}
+          />
+          <StatsCard
+            label="Active Sites"
+            value={dashboardStats?.activeSites ?? 0}
+            icon={<LocationIcon size={20} color={COLORS.info} />}
+            variant="info"
+            style={statCardStyle}
+          />
+          <StatsCard
+            label="Reports"
+            value={dashboardStats?.newReports ?? 0}
+            icon={<ReportsIcon size={20} color={COLORS.textSecondary} />}
+            variant="neutral"
+            style={statCardStyle}
+          />
+        </StatsGrid>
+
+        <EmergencyAlertsPanel
+          alerts={emergencyAlerts}
+          loading={emergencyLoading}
+          title="Active Emergency"
+          onAcknowledge={handleAcknowledgeEmergency}
+          onViewReports={() => navigation.navigate('Reports' as never)}
+          acknowledgingAlertId={acknowledgingAlertId}
+        />
 
         {/* Loading Overlay - Only show if loading and no timeout */}
         <LoadingOverlay
@@ -270,7 +410,9 @@ const ClientDashboard: React.FC = () => {
             </View>
           ) : guards && guards.length > 0 ? (
             guards.map((guard) => {
-              // Transform guard data to shift card format
+              const livePosition =
+                liveGuardById.get(guard.id) ??
+                (guard.userId ? liveGuardById.get(guard.userId) : undefined);
               const shiftCardData = {
                 id: guard.id,
                 guardId: guard.id,
@@ -278,10 +420,12 @@ const ClientDashboard: React.FC = () => {
                 guardAvatar: guard.avatar,
                 siteName: guard.site || 'Unknown Site',
                 siteAddress: guard.siteAddress || guard.site || 'Address not available',
-                siteLatitude: guard.siteLatitude,
-                siteLongitude: guard.siteLongitude,
-                guardLatitude: guard.guardLatitude,
-                guardLongitude: guard.guardLongitude,
+                siteLatitude: parseCoordinate(guard.siteLatitude),
+                siteLongitude: parseCoordinate(guard.siteLongitude),
+                guardLatitude:
+                  livePosition?.latitude ?? parseCoordinate(guard.guardLatitude),
+                guardLongitude:
+                  livePosition?.longitude ?? parseCoordinate(guard.guardLongitude),
                 shiftTime: guard.shiftTime || '--:--',
                 startTime: guard.startTime || guard.shiftTime?.split(' - ')[0] || '08:00 Am',
                 endTime: guard.endTime || guard.shiftTime?.split(' - ')[1] || '07:00 Pm',
@@ -297,19 +441,19 @@ const ClientDashboard: React.FC = () => {
                 <ShiftCard
                   key={guard.id}
                   shift={shiftCardData}
-                  onPress={() => handleGuardPress(guard.id)}
+                  onPress={() => handleGuardPress(guard.id, guard.shiftId)}
                   onViewLocation={() => {
-                    // Navigate to full map view or show location details
-                    console.log('View location for:', guard.site);
-                    // TODO: Navigate to full map view when route is available
+                    if (guard.shiftId) {
+                      navigation.navigate('ShiftDetails', { shiftId: guard.shiftId });
+                    }
                   }}
                   onMapPress={() => {
-                    // Open full screen map view
-                    console.log('Map pressed for shift:', guard.id);
-                    // TODO: Navigate to full map view when route is available
+                    if (guard.shiftId) {
+                      navigation.navigate('ShiftDetails', { shiftId: guard.shiftId });
+                    }
                   }}
                   onGuardPress={(guardId) => {
-                    handleGuardPress(guardId);
+                    handleGuardPress(guardId, guard.shiftId);
                   }}
                   showMap={true}
                   mapHeight={200}
@@ -329,8 +473,11 @@ const ClientDashboard: React.FC = () => {
           <InteractiveMapView
             height={200}
             showControls={true}
+            liveGuards={liveGuards}
+            enableLiveTracking={false}
             onGuardSelect={(guardId: string) => {
-              handleGuardPress(guardId);
+              const guard = guards.find((g) => g.id === guardId);
+              handleGuardPress(guardId, guard?.shiftId);
             }}
           />
         </View>
@@ -366,7 +513,7 @@ const ClientDashboard: React.FC = () => {
                       checkInTime: guard.checkInTime,
                       checkOutTime: guard.checkOutTime,
                     }}
-                    onPress={() => handleGuardPress(guard.id)}
+                    onPress={() => handleGuardPress(guard.id, guard.shiftId)}
                   />
                 )) : (
                   <View style={styles.emptyState}>

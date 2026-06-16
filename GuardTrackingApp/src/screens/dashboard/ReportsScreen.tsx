@@ -15,29 +15,38 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { GuardStackParamList } from '../../navigation/GuardStackNavigator';
 import { RootState } from '../../store';
-import apiService from '../../services/api';
-import { 
-  fetchGuardReports, 
-  createReport,
-  clearError 
-} from '../../store/slices/shiftReportSlice';
 import { fetchActiveShift } from '../../store/slices/shiftSlice';
+import { createReport, clearError } from '../../store/slices/shiftReportSlice';
+import ReportsActionBar from '../../components/reports/ReportsActionBar';
+import ReportFeedCard from '../../components/reports/ReportFeedCard';
+import SectionHeader from '../../components/ui/SectionHeader';
+import { useGuardReportsFeed, toIncidentDetailReport } from '../../hooks/useGuardReportsFeed';
+import {
+  getReportStatusColor,
+  getReportStatusLabel,
+} from '../../utils/reportUtils';
 import { globalStyles, COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import SharedHeader from '../../components/ui/SharedHeader';
 import GuardProfileDrawer from '../../components/guard/GuardProfileDrawer';
-import { MapPinIcon, AlertTriangleIcon, AlertCircleIcon, FileTextIcon } from '../../components/ui/FeatherIcons';
+import { MapPinIcon, FileTextIcon, ClockIcon } from '../../components/ui/FeatherIcons';
 import { FeatherIcon } from '../../components/ui/FeatherIcons';
 import { ReportType } from '../../types/shift.types';
-import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
+import { LoadingOverlay, ErrorState, NetworkError, EmptyState, InlineLoading } from '../../components/ui/LoadingStates';
+import { useNotificationBell } from '../../hooks/useNotificationBell';
+import ReportMediaPicker from '../../components/reports/ReportMediaPicker';
+import { ReportMediaItem, uploadReportMediaItems } from '../../utils/reportMediaUtils';
+import apiService from '../../services/api';
 
-type ReportsScreenNavigationProp = StackNavigationProp<any, 'Reports'>;
+type ReportsScreenNavigationProp = StackNavigationProp<GuardStackParamList, 'GuardTabs'>;
 
 const ReportsScreen: React.FC = () => {
   const navigation = useNavigation<ReportsScreenNavigationProp>();
   const dispatch = useDispatch();
   
   const [reportText, setReportText] = useState('');
+  const [reportMedia, setReportMedia] = useState<ReportMediaItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   // Redux state
@@ -48,13 +57,18 @@ const ReportsScreen: React.FC = () => {
   } = useSelector((state: RootState) => state.shifts);
   
   const {
-    reports,
-    loading: reportsLoading,
-    error: reportsError,
-    submitLoading,
-  } = useSelector((state: RootState) => state.shiftReports);
+    reports: unifiedReports,
+    loading: feedLoading,
+    error: feedError,
+    refresh: refreshReportsFeed,
+  } = useGuardReportsFeed(50);
 
+  const reportsLoading = feedLoading;
+  const reportsError = feedError;
+
+  const { submitLoading } = useSelector((state: RootState) => state.shiftReports);
   const { user } = useSelector((state: RootState) => state.auth);
+  const { notificationCount } = useNotificationBell({ refreshOnFocus: false });
 
   // Load data on mount
   useEffect(() => {
@@ -63,10 +77,8 @@ const ReportsScreen: React.FC = () => {
 
   const initializeData = async () => {
     try {
-      await Promise.all([
-        dispatch(fetchActiveShift() as any),
-        dispatch(fetchGuardReports(50) as any),
-      ]);
+      await dispatch(fetchActiveShift() as any);
+      await refreshReportsFeed();
     } catch (error) {
       console.error('Error initializing data:', error);
     }
@@ -76,10 +88,8 @@ const ReportsScreen: React.FC = () => {
     try {
       setRefreshing(true);
       dispatch(clearError());
-      await Promise.all([
-        dispatch(fetchActiveShift() as any),
-        dispatch(fetchGuardReports(50) as any),
-      ]);
+      await dispatch(fetchActiveShift() as any);
+      await refreshReportsFeed();
     } catch (error) {
       console.error('Refresh error:', error);
     } finally {
@@ -104,92 +114,37 @@ const ReportsScreen: React.FC = () => {
     }
 
     try {
-      const result = await dispatch(createReport({
+      await dispatch(createReport({
         shiftId: activeShift.id,
         reportType: ReportType.SHIFT,
         content: reportText.trim(),
       }) as any).unwrap();
-      
+
+      if (reportMedia.length > 0) {
+        const uploaded = await uploadReportMediaItems(reportMedia);
+        if (uploaded.length > 0) {
+          await apiService.post('/incident-reports', {
+            reportType: 'Shift Documentation',
+            description: reportText.trim(),
+            location: {
+              name: activeShift.locationName || 'Shift site',
+              address: activeShift.locationAddress || '',
+            },
+            mediaFiles: uploaded,
+          });
+        }
+      }
+
       setReportText('');
+      setReportMedia([]);
       Alert.alert('Success', 'Report submitted successfully');
-      // Refresh reports list
-      await dispatch(fetchGuardReports(50) as any);
+      await refreshReportsFeed();
     } catch (error: any) {
       const errorMessage = error?.message || error?.payload || 'Failed to submit report. Please try again.';
       Alert.alert('Error', errorMessage);
     }
   };
 
-  const handleAddIncidentReport = () => {
-    navigation.navigate('AddIncidentReport');
-  };
-
-  const handleEmergencyAlert = async () => {
-    Alert.alert(
-      'Emergency Alert',
-      'Are you sure you want to send an emergency alert? This will notify all supervisors and administrators.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Send Alert', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // Get current location if available
-              // For now, using default location - in production, get from LocationService
-              const location = {
-                latitude: 0, // Will be replaced with actual location
-                longitude: 0, // Will be replaced with actual location
-                accuracy: 10,
-                address: 'Current location'
-              };
-
-              // Try to get actual location
-              try {
-                const Geolocation = require('react-native-geolocation-service').default;
-                const position = await new Promise<any>((resolve, reject) => {
-                  Geolocation.getCurrentPosition(
-                    resolve,
-                    reject,
-                    {
-                      enableHighAccuracy: true,
-                      timeout: 10000,
-                      maximumAge: 0
-                    }
-                  );
-                });
-                location.latitude = position.coords.latitude;
-                location.longitude = position.coords.longitude;
-                location.accuracy = position.coords.accuracy || 10;
-              } catch (locError) {
-                console.warn('Could not get location:', locError);
-              }
-
-              const result = await apiService.triggerEmergencyAlert({
-                type: 'PANIC',
-                severity: 'CRITICAL',
-                location: {
-                  latitude: location.latitude,
-                  longitude: location.longitude,
-                  accuracy: location.accuracy,
-                  address: location.address
-                },
-                message: 'Emergency alert triggered by guard'
-              });
-
-              if (result.success) {
-                Alert.alert('Emergency Alert Sent', 'Help is on the way! All supervisors have been notified.');
-              } else {
-                Alert.alert('Error', result.message || 'Failed to send emergency alert. Please try again.');
-              }
-            } catch (error: any) {
-              Alert.alert('Error', error.message || 'Failed to send emergency alert. Please try again.');
-            }
-          }
-        },
-      ]
-    );
-  };
 
   const handleNotificationPress = () => {
     navigation.navigate('Notifications' as never);
@@ -226,29 +181,28 @@ const ReportsScreen: React.FC = () => {
     }
   };
 
-  const getReportTypeLabel = (reportType: string) => {
-    switch (reportType) {
-      case 'INCIDENT':
-        return 'Incident report';
-      case 'EMERGENCY':
-        return 'Emergency report';
-      default:
-        return 'Shift report';
-    }
+  const handleReportPress = (report: any) => {
+    navigation.navigate('IncidentReportDetail', {
+      report: toIncidentDetailReport(report),
+    });
   };
 
   const renderCurrentShiftCard = () => {
     if (!activeShift) {
       return (
         <View style={styles.emptyShiftCard}>
-          <Text style={styles.emptyShiftText}>No active shift</Text>
-          <Text style={styles.emptyShiftSubtext}>Check in to a shift to submit reports</Text>
+          <EmptyState
+            title="No active shift"
+            message="Check in to a shift to submit reports and use emergency actions."
+            icon={<ClockIcon size={40} color={COLORS.textTertiary} />}
+          />
         </View>
       );
     }
 
     return (
       <View style={styles.currentShiftCard}>
+        <SectionHeader title="Current Shift" subtitle="Submit your shift report below" />
         <View style={styles.locationHeader}>
           <View style={styles.locationInfo}>
             <View style={styles.locationIconCircle}>
@@ -259,8 +213,8 @@ const ReportsScreen: React.FC = () => {
               <Text style={styles.locationAddress}>{activeShift.locationAddress || 'No address'}</Text>
             </View>
           </View>
-          <View style={styles.statusBadge}>
-            <Text style={styles.statusText}>Active</Text>
+          <View style={[styles.statusBadge, { backgroundColor: COLORS.success + '18' }]}>
+            <Text style={[styles.statusText, { color: COLORS.success }]}>Active</Text>
           </View>
         </View>
 
@@ -288,6 +242,16 @@ const ReportsScreen: React.FC = () => {
           textAlignVertical="top"
         />
 
+        <ReportMediaPicker
+          items={reportMedia}
+          onChange={setReportMedia}
+          shiftId={activeShift.id}
+          maxItems={4}
+          compact
+          title="Attach photos"
+          hint="Optional evidence with your shift report"
+        />
+
         <TouchableOpacity
           style={[styles.submitButton, submitLoading && styles.submitButtonDisabled]}
           onPress={handleSubmitReport}
@@ -299,95 +263,52 @@ const ReportsScreen: React.FC = () => {
           </Text>
         </TouchableOpacity>
 
-        <View style={styles.actionButtons}>
-          <TouchableOpacity 
-            style={styles.incidentButton} 
-            onPress={handleAddIncidentReport}
-            activeOpacity={0.8}
-          >
-            <FileTextIcon size={16} color={COLORS.primaryDark} />
-            <Text style={styles.incidentButtonText}>Add Incident Report</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.emergencyButton} 
-            onPress={handleEmergencyAlert}
-            activeOpacity={0.8}
-          >
-            <AlertCircleIcon size={16} color={COLORS.error} />
-            <Text style={styles.emergencyButtonText}>Emergency Alert</Text>
-          </TouchableOpacity>
-        </View>
+        <ReportsActionBar layout="stack" requireActiveShift showHeader={false} />
       </View>
     );
   };
 
   const renderSubmittedReports = () => {
-    if (reportsLoading && reports.length === 0) {
+    if (reportsLoading && unifiedReports.length === 0) {
       return (
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading reports...</Text>
-        </View>
+        <InlineLoading size="large" message="Loading reports..." style={styles.loadingContainer} />
       );
     }
 
-    if (reports.length === 0) {
+    if (unifiedReports.length === 0) {
       return (
-        <View style={styles.emptyReportsContainer}>
-          <Text style={styles.emptyReportsText}>No submitted reports</Text>
-          <Text style={styles.emptyReportsSubtext}>Your submitted reports will appear here</Text>
+        <View style={styles.submittedReportsContainer}>
+          <SectionHeader title="Submitted Reports" subtitle="Your report history" />
+          <EmptyState
+            title="No reports yet"
+            message="Shift and incident reports you submit will appear here."
+            icon={<FileTextIcon size={40} color={COLORS.textTertiary} />}
+          />
         </View>
       );
     }
 
     return (
       <View style={styles.submittedReportsContainer}>
-        <Text style={styles.sectionTitle}>Submitted Reports</Text>
+        <SectionHeader
+          title="Submitted Reports"
+          subtitle={`${unifiedReports.length} report${unifiedReports.length !== 1 ? 's' : ''}`}
+        />
 
-        {reports.map((report) => {
-          const shift = report.shift;
-          // Get location from shift - shift has locationName and locationAddress directly
-          const locationName = shift?.locationName || shift?.location?.name || 'Unknown Location';
-          const locationAddress = shift?.locationAddress || shift?.location?.address || 'No address';
-
-          return (
-            <View key={report.id} style={styles.reportCard}>
-              <View style={styles.locationHeader}>
-                <View style={styles.locationInfo}>
-                  <View style={styles.locationIconCircle}>
-                    <MapPinIcon size={20} color={COLORS.textPrimary} />
-                  </View>
-                  <View style={styles.locationText}>
-                    <Text style={styles.locationName}>{locationName}</Text>
-                    <Text style={styles.locationAddress}>{locationAddress}</Text>
-                  </View>
-                </View>
-              </View>
-
-              <Text style={styles.reportText}>{report.content}</Text>
-
-              <View style={styles.reportFooter}>
-                <TouchableOpacity 
-                  style={styles.reportType}
-                  onPress={() => {
-                    // TODO: Navigate to report details or show dropdown
-                    console.log('Report type clicked:', report.id);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <FileTextIcon size={14} color={COLORS.primary} />
-                  <Text style={styles.reportTypeText}>
-                    {getReportTypeLabel(report.reportType)}
-                  </Text>
-                  <FeatherIcon name="chevronDown" size={12} color={COLORS.textSecondary} />
-                </TouchableOpacity>
-                <Text style={styles.reportTime}>
-                  {formatDate(report.submittedAt)}
-                </Text>
-              </View>
-            </View>
-          );
-        })}
+        {unifiedReports.map((report) => (
+          <ReportFeedCard
+            key={`${report.source}-${report.id}`}
+            locationName={report.locationName || 'Unknown Location'}
+            locationAddress={report.locationAddress}
+            source={report.source}
+            title={report.title}
+            description={report.description}
+            statusLabel={getReportStatusLabel(report.status, report.source)}
+            statusColor={getReportStatusColor(report.status)}
+            submittedAt={report.submittedAt}
+            onPress={() => handleReportPress(report)}
+          />
+        ))}
       </View>
     );
   };
@@ -398,7 +319,7 @@ const ReportsScreen: React.FC = () => {
                          reportsError?.toLowerCase().includes('econnrefused') ||
                          reportsError?.toLowerCase().includes('enotfound');
 
-  if (reportsError && reports.length === 0 && !reportsLoading) {
+  if (reportsError && unifiedReports.length === 0 && !reportsLoading) {
     return (
       <View style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor={COLORS.backgroundPrimary} />
@@ -406,6 +327,7 @@ const ReportsScreen: React.FC = () => {
           variant="guard"
           title="My Reports"
           onNotificationPress={handleNotificationPress}
+          notificationCount={notificationCount}
           profileDrawer={
             <GuardProfileDrawer
               visible={false}
@@ -436,6 +358,7 @@ const ReportsScreen: React.FC = () => {
         variant="guard"
         title="My Reports"
         onNotificationPress={handleNotificationPress}
+        notificationCount={notificationCount}
         profileDrawer={
           <GuardProfileDrawer
             visible={false}
@@ -478,13 +401,15 @@ const styles = StyleSheet.create({
   },
   currentShiftCard: {
     backgroundColor: COLORS.backgroundPrimary,
-    borderRadius: BORDER_RADIUS.md,
+    borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.lg,
     marginTop: SPACING.lg,
     marginBottom: SPACING.xl,
     borderWidth: 1,
     borderColor: COLORS.borderCard,
-    // Border only, no shadow for minimal style
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.primary,
+    ...SHADOWS.small,
   },
   locationHeader: {
     flexDirection: 'row',
@@ -664,6 +589,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.xs,
+    flex: 1,
+    flexWrap: 'wrap',
   },
   reportTypeText: {
     fontSize: TYPOGRAPHY.fontSize.sm,
@@ -673,6 +600,51 @@ const styles = StyleSheet.create({
   reportTime: {
     fontSize: TYPOGRAPHY.fontSize.xs,
     color: COLORS.textSecondary,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+  },
+  reportStatusBadge: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 3,
+    borderRadius: BORDER_RADIUS.round,
+    marginLeft: SPACING.xs,
+  },
+  reportStatusText: {
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+  },
+  reportMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: SPACING.sm,
+  },
+  reportTypeLabel: {
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textSecondary,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+  },
+  reportDescription: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textPrimary,
+    lineHeight: TYPOGRAPHY.lineHeight.relaxed * TYPOGRAPHY.fontSize.sm,
+    marginBottom: SPACING.sm,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+  },
+  reportTimestamp: {
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textSecondary,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+  },
+  historyBadge: {
+    backgroundColor: COLORS.primaryLight,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+    borderRadius: BORDER_RADIUS.round,
+  },
+  historyBadgeText: {
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.primaryDark,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
     fontFamily: TYPOGRAPHY.fontPrimary,
   },
   emptyShiftCard: {

@@ -2,10 +2,11 @@
  * Admin Analytics Screen - Performance analytics and reporting
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Dimensions } from 'react-native';
-import { useSelector } from 'react-redux';
-import { RootState } from '../../store';
+import { useSelector, useDispatch } from 'react-redux';
+import { RootState, AppDispatch } from '../../store';
+import { fetchDashboardStats } from '../../store/slices/adminSlice';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { ReportsIcon, EmergencyIcon, CheckCircleIcon, UserIcon, ClockIcon } from '../../components/ui/AppIcons';
 import { CalendarIcon, FileTextIcon } from '../../components/ui/FeatherIcons';
@@ -13,7 +14,10 @@ import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
-import AdminStatsCard from '../../components/ui/AdminStatsCard';
+import { useNotificationBell } from '../../hooks/useNotificationBell';
+import StatsCard from '../../components/ui/StatsCard';
+import StatsGrid, { statCardStyle } from '../../components/ui/StatsGrid';
+import operationsService, { OperationsMetrics } from '../../services/operationsService';
 
 interface ReportData {
   id: string;
@@ -25,25 +29,55 @@ interface ReportData {
 }
 
 const AdminAnalyticsScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+  const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
+  const { dashboardMetrics } = useSelector((state: RootState) => state.admin);
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+  const { onNotificationPress, notificationCount } = useNotificationBell({
+    notificationsRoute: 'AdminNotifications',
+  });
   
   const [loading, setLoading] = useState(false);
+  const [metricsLoading, setMetricsLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month' | 'year'>('week');
   const [reports, setReports] = useState<ReportData[]>([]);
-  
-  const [metrics, setMetrics] = useState({
-    totalReports: 156,
-    completedReports: 142,
-    pendingReports: 8,
-    failedReports: 6,
-    averageResponseTime: '2.4h',
-    reportAccuracy: '94.2%',
-  });
+  const [opsMetrics, setOpsMetrics] = useState<OperationsMetrics | null>(null);
+
+  const metrics = useMemo(() => {
+    const total = dashboardMetrics?.todayIncidents ?? 0;
+    const pending = dashboardMetrics?.pendingIncidents ?? 0;
+    const completed = Math.max(0, total - pending);
+    const emergencies = dashboardMetrics?.emergencyAlerts ?? 0;
+    const responseMin = opsMetrics?.averageResponseTime ?? 0;
+    const accuracy = total > 0 ? Math.round((completed / total) * 100) : null;
+
+    return {
+      totalReports: total,
+      completedReports: completed,
+      pendingReports: pending,
+      failedReports: emergencies,
+      averageResponseTime: responseMin > 0 ? `${responseMin.toFixed(1)} min` : '—',
+      reportAccuracy: accuracy != null ? `${accuracy}%` : '—',
+    };
+  }, [dashboardMetrics, opsMetrics]);
 
   useEffect(() => {
+    loadMetrics();
     loadReports();
   }, [selectedPeriod]);
+
+  const loadMetrics = async () => {
+    try {
+      setMetricsLoading(true);
+      await dispatch(fetchDashboardStats()).unwrap();
+      const ops = await operationsService.getOperationsMetrics();
+      setOpsMetrics(ops);
+    } catch (error) {
+      console.error('Error loading analytics metrics:', error);
+    } finally {
+      setMetricsLoading(false);
+    }
+  };
 
   const loadReports = async () => {
     try {
@@ -120,9 +154,8 @@ const AdminAnalyticsScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
         title="Analytics & Reports"
         showLogo={false}
         onMenuPress={openDrawer}
-        onNotificationPress={() => {
-          // Handle notification press
-        }}
+        onNotificationPress={onNotificationPress}
+        notificationCount={notificationCount}
         profileDrawer={
           <AdminProfileDrawer
             visible={isDrawerVisible}
@@ -169,48 +202,50 @@ const AdminAnalyticsScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
         showsVerticalScrollIndicator={false}
       >
         {/* Metrics Cards */}
-        <View style={styles.metricsGrid}>
-          <View style={styles.metricCardWrapper}>
-            <AdminStatsCard
+        {metricsLoading ? (
+          <View style={styles.metricsLoading}>
+            <ActivityIndicator size="small" color={COLORS.primary} />
+          </View>
+        ) : (
+          <StatsGrid contentStyle={styles.metricsGrid}>
+            <StatsCard
               icon={<ReportsIcon size={24} color={COLORS.primary} />}
               value={metrics.totalReports.toString()}
-              label="Total Reports"
-              subLabel="All time"
-              iconBgColor="#DBEAFE"
-              iconColor={COLORS.primary}
+              label="Today's Reports"
+              subLabel="Incidents & emergencies"
+              variant="info"
+              layout="vertical"
+              style={statCardStyle}
             />
-          </View>
-          <View style={styles.metricCardWrapper}>
-            <AdminStatsCard
+            <StatsCard
               icon={<CheckCircleIcon size={24} color={COLORS.success} />}
               value={metrics.completedReports.toString()}
-              label="Completed"
-              subLabel="Successfully generated"
-              iconBgColor="#DCFCE7"
-              iconColor={COLORS.success}
+              label="Reviewed"
+              subLabel="Resolved today"
+              variant="success"
+              layout="vertical"
+              style={statCardStyle}
             />
-          </View>
-          <View style={styles.metricCardWrapper}>
-            <AdminStatsCard
+            <StatsCard
               icon={<ClockIcon size={24} color={COLORS.warning} />}
               value={metrics.pendingReports.toString()}
               label="Pending"
-              subLabel="In progress"
-              iconBgColor="#FEF3C7"
-              iconColor={COLORS.warning}
+              subLabel="Awaiting review"
+              variant="warning"
+              layout="vertical"
+              style={statCardStyle}
             />
-          </View>
-          <View style={styles.metricCardWrapper}>
-            <AdminStatsCard
+            <StatsCard
               icon={<EmergencyIcon size={24} color={COLORS.error} />}
               value={metrics.failedReports.toString()}
-              label="Failed"
-              subLabel="Requires attention"
-              iconBgColor="#FEE2E2"
-              iconColor={COLORS.error}
+              label="Active Alerts"
+              subLabel="Open emergencies"
+              variant="danger"
+              layout="vertical"
+              style={statCardStyle}
             />
-          </View>
-        </View>
+          </StatsGrid>
+        )}
 
         {/* Performance Metrics */}
         <View style={styles.section}>
@@ -342,10 +377,14 @@ const styles = StyleSheet.create({
   metricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.lg,
-    gap: SPACING.md,
+    gap: SPACING.sm,
     justifyContent: 'space-between',
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.md,
+  },
+  metricsLoading: {
+    paddingVertical: SPACING.xl,
+    alignItems: 'center',
   },
   metricCardWrapper: {
     width: (Dimensions.get('window').width - (SPACING.lg * 2) - SPACING.md) / 2,

@@ -102,6 +102,10 @@ router.get('/search', chatController.searchChats);
  */
 router.post('/', chatController.createChat);
 
+router.get('/support', chatController.getSupportChats);
+router.post('/support', chatController.openSupportChat);
+router.post('/support/company', chatController.openCompanySupportChat);
+
 /**
  * @swagger
  * /chat/{chatId}:

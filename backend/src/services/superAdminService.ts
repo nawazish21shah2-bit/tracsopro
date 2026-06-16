@@ -1,16 +1,43 @@
 import { PrismaClient } from '@prisma/client';
-import * as bcrypt from 'bcryptjs';
-import * as jwt from 'jsonwebtoken';
 import { AuthService } from './authService.js';
+import PaymentService from './paymentService.js';
+import {
+  parsePeriod,
+  getPeriodRanges,
+  metricWithGrowth,
+  getChartBucketCount,
+  buildChartLabels,
+  getBucketDateRange,
+} from '../utils/superAdminAnalyticsUtils.js';
 
 const prisma = new PrismaClient();
 
 export class SuperAdminService {
   /**
-   * Get platform overview statistics
+   * Check if platform maintenance mode is enabled
    */
-  static async getPlatformOverview() {
+  static async isMaintenanceModeEnabled(): Promise<boolean> {
     try {
+      const settings = await this.getPlatformSettings();
+      const general = settings.GENERAL || {};
+      const val =
+        general['maintenance.mode'] ??
+        general['GENERAL.maintenance.mode'];
+      return String(val).toLowerCase() === 'true';
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Get platform overview statistics with period-based growth
+   */
+  static async getPlatformOverview(params: { period?: string } = {}) {
+    try {
+      const period = parsePeriod(params.period);
+      const { currentStart, currentEnd, previousStart, previousEnd } =
+        getPeriodRanges(period);
+
       const [
         totalCompanies,
         activeCompanies,
@@ -20,8 +47,17 @@ export class SuperAdminService {
         activeGuards,
         totalClients,
         totalSites,
-        totalRevenue,
-        recentActivity
+        activeSites,
+        allTimeRevenue,
+        recentActivity,
+        currentPeriodRevenue,
+        previousPeriodRevenue,
+        companiesCurrent,
+        companiesPrevious,
+        activeUsersCurrent,
+        activeUsersPrevious,
+        activeGuardsCurrent,
+        activeGuardsPrevious,
       ] = await Promise.all([
         prisma.securityCompany.count(),
         prisma.securityCompany.count({ where: { isActive: true } }),
@@ -30,18 +66,67 @@ export class SuperAdminService {
         prisma.guard.count(),
         prisma.guard.count({ where: { status: 'ACTIVE' } }),
         prisma.client.count(),
+        prisma.site.count(),
         prisma.site.count({ where: { isActive: true } }),
         prisma.billingRecord.aggregate({
           where: { status: 'PAID' },
-          _sum: { amount: true }
+          _sum: { amount: true },
         }),
         prisma.systemAuditLog.findMany({
           take: 10,
-          orderBy: { timestamp: 'desc' }
-        })
+          orderBy: { timestamp: 'desc' },
+        }),
+        prisma.billingRecord.aggregate({
+          where: {
+            status: 'PAID',
+            paidDate: { gte: currentStart, lte: currentEnd },
+          },
+          _sum: { amount: true },
+        }),
+        prisma.billingRecord.aggregate({
+          where: {
+            status: 'PAID',
+            paidDate: { gte: previousStart, lte: previousEnd },
+          },
+          _sum: { amount: true },
+        }),
+        prisma.securityCompany.count({
+          where: { createdAt: { gte: currentStart, lte: currentEnd } },
+        }),
+        prisma.securityCompany.count({
+          where: { createdAt: { gte: previousStart, lte: previousEnd } },
+        }),
+        prisma.user.count({
+          where: {
+            isActive: true,
+            createdAt: { lte: currentEnd },
+          },
+        }),
+        prisma.user.count({
+          where: {
+            isActive: true,
+            createdAt: { lte: previousEnd },
+          },
+        }),
+        prisma.guard.count({
+          where: {
+            status: 'ACTIVE',
+            createdAt: { lte: currentEnd },
+          },
+        }),
+        prisma.guard.count({
+          where: {
+            status: 'ACTIVE',
+            createdAt: { lte: previousEnd },
+          },
+        }),
       ]);
 
+      const revenueCurrent = currentPeriodRevenue._sum.amount || 0;
+      const revenuePrevious = previousPeriodRevenue._sum.amount || 0;
+
       return {
+        period,
         overview: {
           totalCompanies,
           activeCompanies,
@@ -51,9 +136,16 @@ export class SuperAdminService {
           activeGuards,
           totalClients,
           totalSites,
-          totalRevenue: totalRevenue._sum.amount || 0
+          activeSites,
+          totalRevenue: allTimeRevenue._sum.amount || 0,
         },
-        recentActivity
+        growth: {
+          revenue: metricWithGrowth(revenueCurrent, revenuePrevious),
+          companies: metricWithGrowth(companiesCurrent, companiesPrevious),
+          users: metricWithGrowth(activeUsersCurrent, activeUsersPrevious),
+          guards: metricWithGrowth(activeGuardsCurrent, activeGuardsPrevious),
+        },
+        recentActivity,
       };
     } catch (error) {
       console.error('Error getting platform overview:', error);
@@ -283,50 +375,110 @@ export class SuperAdminService {
   }
 
   /**
-   * Get platform analytics
+   * Get platform analytics with computed time series
    */
   static async getPlatformAnalytics(params: {
     startDate?: Date;
     endDate?: Date;
+    period?: string;
     metricType?: string;
   }) {
     try {
-      const { startDate, endDate, metricType } = params;
-      
-      const where: any = {};
-      
-      if (startDate && endDate) {
-        where.timestamp = {
-          gte: startDate,
-          lte: endDate
-        };
-      }
-      
-      if (metricType) {
-        where.metricType = metricType;
+      const period = parsePeriod(params.period);
+      const endDate = params.endDate || new Date();
+      const startDate =
+        params.startDate ||
+        getPeriodRanges(period).currentStart;
+      const { previousStart, previousEnd } = getPeriodRanges(period);
+
+      const bucketCount = getChartBucketCount(period);
+      const labels = buildChartLabels(period, startDate, bucketCount);
+
+      const revenueData: number[] = [];
+      const userData: number[] = [];
+
+      for (let i = 0; i < bucketCount; i++) {
+        const { bucketStart, bucketEnd } = getBucketDateRange(
+          period,
+          startDate,
+          endDate,
+          i,
+          bucketCount
+        );
+
+        const [revenueAgg, userCount] = await Promise.all([
+          prisma.billingRecord.aggregate({
+            where: {
+              status: 'PAID',
+              paidDate: { gte: bucketStart, lte: bucketEnd },
+            },
+            _sum: { amount: true },
+          }),
+          prisma.user.count({
+            where: { createdAt: { lte: bucketEnd } },
+          }),
+        ]);
+
+        revenueData.push(revenueAgg._sum.amount || 0);
+        userData.push(userCount);
       }
 
-      const analytics = await prisma.platformAnalytics.findMany({
-        where,
-        orderBy: { timestamp: 'desc' },
-        take: 100
-      });
-
-      // Group by metric type and calculate aggregates
-      const grouped = analytics.reduce((acc, item) => {
-        if (!acc[item.metricType]) {
-          acc[item.metricType] = [];
-        }
-        acc[item.metricType].push(item);
-        return acc;
-      }, {} as any);
+      const [
+        revenueCurrent,
+        revenuePrevious,
+        usersCurrent,
+        usersPrevious,
+        companiesCurrent,
+        companiesPrevious,
+        guardsCurrent,
+        guardsPrevious,
+      ] = await Promise.all([
+        prisma.billingRecord.aggregate({
+          where: {
+            status: 'PAID',
+            paidDate: { gte: startDate, lte: endDate },
+          },
+          _sum: { amount: true },
+        }),
+        prisma.billingRecord.aggregate({
+          where: {
+            status: 'PAID',
+            paidDate: { gte: previousStart, lte: previousEnd },
+          },
+          _sum: { amount: true },
+        }),
+        prisma.user.count({ where: { createdAt: { lte: endDate } } }),
+        prisma.user.count({ where: { createdAt: { lte: previousEnd } } }),
+        prisma.securityCompany.count({
+          where: { createdAt: { lte: endDate } },
+        }),
+        prisma.securityCompany.count({
+          where: { createdAt: { lte: previousEnd } },
+        }),
+        prisma.guard.count({
+          where: { status: 'ACTIVE', createdAt: { lte: endDate } },
+        }),
+        prisma.guard.count({
+          where: { status: 'ACTIVE', createdAt: { lte: previousEnd } },
+        }),
+      ]);
 
       return {
-        analytics: grouped,
+        period,
         summary: {
-          totalMetrics: analytics.length,
-          dateRange: { startDate, endDate }
-        }
+          revenue: metricWithGrowth(
+            revenueCurrent._sum.amount || 0,
+            revenuePrevious._sum.amount || 0
+          ),
+          users: metricWithGrowth(usersCurrent, usersPrevious),
+          companies: metricWithGrowth(companiesCurrent, companiesPrevious),
+          guards: metricWithGrowth(guardsCurrent, guardsPrevious),
+        },
+        charts: {
+          revenue: { labels, data: revenueData },
+          users: { labels, data: userData },
+        },
+        dateRange: { startDate, endDate },
       };
     } catch (error) {
       console.error('Error getting platform analytics:', error);
@@ -409,36 +561,64 @@ export class SuperAdminService {
     resource?: string;
     userId?: string;
     companyId?: string;
+    search?: string;
   }) {
     try {
-      const { page = 1, limit = 50, action, resource, userId, companyId } = params;
+      const { page = 1, limit = 50, action, resource, userId, companyId, search } = params;
       const skip = (page - 1) * limit;
 
       const where: any = {};
-      
-      if (action) where.action = action;
+
+      if (action && action !== 'ALL') {
+        if (['LOGIN', 'LOGOUT'].includes(action)) {
+          where.action = action;
+        } else {
+          where.action = { contains: action, mode: 'insensitive' };
+        }
+      }
       if (resource) where.resource = resource;
       if (userId) where.userId = userId;
       if (companyId) where.securityCompanyId = companyId;
+      if (search) {
+        where.OR = [
+          { action: { contains: search, mode: 'insensitive' } },
+          { resource: { contains: search, mode: 'insensitive' } },
+        ];
+      }
 
       const [logs, total] = await Promise.all([
         prisma.systemAuditLog.findMany({
           where,
           skip,
           take: limit,
-          orderBy: { timestamp: 'desc' }
+          orderBy: { timestamp: 'desc' },
         }),
-        prisma.systemAuditLog.count({ where })
+        prisma.systemAuditLog.count({ where }),
       ]);
 
+      const userIds = [...new Set(logs.map((l) => l.userId).filter(Boolean))] as string[];
+      const users =
+        userIds.length > 0
+          ? await prisma.user.findMany({
+              where: { id: { in: userIds } },
+              select: { id: true, firstName: true, lastName: true, email: true },
+            })
+          : [];
+      const userMap = new Map(users.map((u) => [u.id, u]));
+
+      const enrichedLogs = logs.map((log) => ({
+        ...log,
+        user: log.userId ? userMap.get(log.userId) || null : null,
+      }));
+
       return {
-        logs,
+        logs: enrichedLogs,
         pagination: {
           page,
           limit,
           total,
-          pages: Math.ceil(total / limit)
-        }
+          pages: Math.ceil(total / limit),
+        },
       };
     } catch (error) {
       console.error('Error getting audit logs:', error);
@@ -482,17 +662,21 @@ export class SuperAdminService {
     try {
       const settings = await prisma.platformSettings.findMany({
         where: { isGlobal: true },
-        orderBy: { category: 'asc' }
+        orderBy: { category: 'asc' },
       });
 
-      // Group by category
       const grouped = settings.reduce((acc, setting) => {
         if (!acc[setting.category]) {
           acc[setting.category] = {};
         }
-        acc[setting.category][setting.key] = setting.value;
+        let normalizedKey = setting.key;
+        const categoryPrefix = `${setting.category}.`;
+        if (normalizedKey.startsWith(categoryPrefix)) {
+          normalizedKey = normalizedKey.slice(categoryPrefix.length);
+        }
+        acc[setting.category][normalizedKey] = setting.value;
         return acc;
-      }, {} as any);
+      }, {} as Record<string, Record<string, string>>);
 
       return grouped;
     } catch (error) {
@@ -504,42 +688,41 @@ export class SuperAdminService {
   /**
    * Update platform settings
    */
-  static async updatePlatformSettings(settings: { [key: string]: any }) {
+  static async updatePlatformSettings(settings: { [key: string]: Record<string, unknown> }) {
     try {
-      const ops: Promise<any>[] = [];
+      const ops: Promise<unknown>[] = [];
 
       for (const [category, categorySettings] of Object.entries(settings)) {
-        for (const [key, value] of Object.entries(categorySettings as any)) {
-          const fullKey = `${category}.${key}`;
-          ops.push((async () => {
-            const existing = await prisma.platformSettings.findFirst({
-              where: { securityCompanyId: null, key: fullKey },
-              select: { id: true },
-            });
-            if (existing) {
-              return prisma.platformSettings.update({
-                where: { id: existing.id },
-                data: { value: String(value) },
+        for (const [key, value] of Object.entries(categorySettings)) {
+          ops.push(
+            (async () => {
+              const existing = await prisma.platformSettings.findFirst({
+                where: {
+                  securityCompanyId: null,
+                  OR: [{ key }, { key: `${category}.${key}` }],
+                },
+                select: { id: true, key: true },
               });
-            } else {
+              if (existing) {
+                return prisma.platformSettings.update({
+                  where: { id: existing.id },
+                  data: { value: String(value), key },
+                });
+              }
               return prisma.platformSettings.create({
                 data: {
-                  key: fullKey,
+                  key,
                   value: String(value),
-                  category: category as any,
+                  category: category as 'GENERAL' | 'SECURITY' | 'BILLING' | 'NOTIFICATIONS' | 'INTEGRATIONS' | 'FEATURES',
                   isGlobal: true,
                 },
               });
-            }
-          })());
+            })()
+          );
         }
       }
 
       await Promise.all(ops);
-
-      // Log the action (userId should be passed from route handler)
-      // This will be called from route handler with userId
-
       return { success: true };
     } catch (error) {
       console.error('Error updating platform settings:', error);
@@ -686,14 +869,6 @@ export class SuperAdminService {
               subscriptionPlan: true,
               subscriptionStatus: true
             }
-          },
-          subscription: {
-            select: {
-              id: true,
-              plan: true,
-              status: true,
-              billingCycle: true
-            }
           }
         }
       });
@@ -702,7 +877,20 @@ export class SuperAdminService {
         throw new Error('Payment record not found');
       }
 
-      return record;
+      let subscription = null;
+      if (record.subscriptionId) {
+        subscription = await prisma.subscription.findUnique({
+          where: { id: record.subscriptionId },
+          select: {
+            id: true,
+            plan: true,
+            status: true,
+            billingCycle: true
+          }
+        });
+      }
+
+      return { ...record, subscription };
     } catch (error) {
       console.error('Error getting payment record:', error);
       throw error;
@@ -870,6 +1058,202 @@ export class SuperAdminService {
       console.error('Error getting payment analytics:', error);
       throw new Error('Failed to get payment analytics');
     }
+  }
+
+  /**
+   * Export platform data snapshot
+   */
+  static async exportPlatformData(userId?: string) {
+    try {
+      const exportId = `export_${Date.now()}`;
+      const [
+        companies,
+        userCounts,
+        billingSummary,
+        auditLogs,
+      ] = await Promise.all([
+        prisma.securityCompany.findMany({
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            subscriptionPlan: true,
+            subscriptionStatus: true,
+            isActive: true,
+            createdAt: true,
+          },
+        }),
+        prisma.user.groupBy({
+          by: ['role'],
+          _count: true,
+        }),
+        prisma.billingRecord.groupBy({
+          by: ['status'],
+          _sum: { amount: true },
+          _count: true,
+        }),
+        prisma.systemAuditLog.findMany({
+          take: 500,
+          orderBy: { timestamp: 'desc' },
+        }),
+      ]);
+
+      const payload = {
+        exportId,
+        exportedAt: new Date().toISOString(),
+        companies,
+        userCounts,
+        billingSummary,
+        auditLogs,
+      };
+
+      await this.logAction({
+        userId,
+        action: 'EXPORT_PLATFORM_DATA',
+        resource: 'PlatformExport',
+        resourceId: exportId,
+        newValues: { companyCount: companies.length, auditLogCount: auditLogs.length },
+      });
+
+      return {
+        exportId,
+        status: 'completed',
+        data: payload,
+      };
+    } catch (error) {
+      console.error('Error exporting platform data:', error);
+      throw new Error('Failed to export platform data');
+    }
+  }
+
+  /**
+   * Get company subscription info + plan catalog (super admin)
+   */
+  static async getCompanySubscriptionInfo(companyId: string) {
+    const company = await this.getSecurityCompany(companyId);
+    const svc = PaymentService.getInstance();
+    const availablePlans = svc.getPlanCatalog();
+    const subscription = company.subscriptions?.[0] || null;
+
+    return {
+      company: {
+        id: company.id,
+        name: company.name,
+        email: company.email,
+        subscriptionPlan: company.subscriptionPlan,
+        subscriptionStatus: company.subscriptionStatus,
+        isActive: company.isActive,
+      },
+      subscription: subscription
+        ? {
+            plan: subscription.plan,
+            status: subscription.status,
+            startDate: subscription.startDate,
+            endDate: subscription.endDate,
+            stripeSubscriptionId: subscription.stripeSubscriptionId,
+          }
+        : null,
+      availablePlans,
+    };
+  }
+
+  /**
+   * Create Stripe checkout session for a company (super admin on behalf)
+   */
+  static async createCompanySubscriptionCheckout(
+    companyId: string,
+    params: { priceId: string; trialDays?: number }
+  ) {
+    const company = await prisma.securityCompany.findUnique({
+      where: { id: companyId },
+      select: { id: true, name: true },
+    });
+    if (!company) {
+      throw new Error('Company not found');
+    }
+
+    const svc = PaymentService.getInstance();
+    return svc.createSubscriptionCheckoutSession({
+      securityCompanyId: companyId,
+      priceId: params.priceId,
+      trialDays: params.trialDays ?? 14,
+      successUrl:
+        process.env.STRIPE_SUCCESS_URL ||
+        `${process.env.FRONTEND_URL || 'https://example.com'}/admin/subscription?success=true`,
+      cancelUrl:
+        process.env.STRIPE_CANCEL_URL ||
+        `${process.env.FRONTEND_URL || 'https://example.com'}/admin/subscription?canceled=true`,
+    });
+  }
+
+  /**
+   * Get Stripe billing portal for a company
+   */
+  static async getCompanyBillingPortal(companyId: string) {
+    const company = await prisma.securityCompany.findUnique({
+      where: { id: companyId },
+      select: { id: true },
+    });
+    if (!company) {
+      throw new Error('Company not found');
+    }
+
+    const svc = PaymentService.getInstance();
+    return svc.createBillingPortalSession({
+      securityCompanyId: companyId,
+      returnUrl:
+        process.env.BILLING_PORTAL_RETURN_URL ||
+        `${process.env.FRONTEND_URL || 'https://example.com'}/admin/subscription`,
+    });
+  }
+
+  /**
+   * Search users for impersonation / admin lookup
+   */
+  static async searchUsers(params: {
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const { search, page = 1, limit = 20 } = params;
+    const skip = (page - 1) * limit;
+
+    const where: any = { isActive: true };
+    if (search) {
+      where.OR = [
+        { email: { contains: search, mode: 'insensitive' } },
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          role: true,
+          isActive: true,
+        },
+      }),
+      prisma.user.count({ where }),
+    ]);
+
+    return {
+      users,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    };
   }
 }
 

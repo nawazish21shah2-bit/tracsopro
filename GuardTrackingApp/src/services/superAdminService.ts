@@ -4,7 +4,14 @@
 
 import apiService from './api';
 
+export interface MetricGrowth {
+  current: number;
+  previous: number;
+  growth: number;
+}
+
 export interface PlatformOverview {
+  period?: string;
   totalCompanies: number;
   activeCompanies: number;
   totalUsers: number;
@@ -13,7 +20,14 @@ export interface PlatformOverview {
   activeGuards: number;
   totalClients: number;
   totalSites: number;
+  activeSites: number;
   totalRevenue: number;
+  growth?: {
+    revenue: MetricGrowth;
+    companies: MetricGrowth;
+    users: MetricGrowth;
+    guards: MetricGrowth;
+  };
   recentActivity: Array<{
     id: string;
     action: string;
@@ -22,6 +36,20 @@ export interface PlatformOverview {
     timestamp: string;
     details?: any;
   }>;
+}
+
+export interface PlatformAnalyticsResponse {
+  period: string;
+  summary: {
+    revenue: MetricGrowth;
+    users: MetricGrowth;
+    companies: MetricGrowth;
+    guards: MetricGrowth;
+  };
+  charts: {
+    revenue: { labels: string[]; data: number[] };
+    users: { labels: string[]; data: number[] };
+  };
 }
 
 export interface SecurityCompany {
@@ -73,22 +101,34 @@ export interface AuditLog {
   resourceId?: string;
   timestamp: string;
   userId?: string;
+  userName?: string;
+  userEmail?: string;
   securityCompanyId?: string;
   oldValues?: any;
   newValues?: any;
+  ipAddress?: string;
+  userAgent?: string;
+}
+
+function safeParseJson(value: unknown): unknown {
+  if (value == null) return undefined;
+  if (typeof value === 'object') return value;
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
 }
 
 class SuperAdminService {
-  /**
-   * Get platform overview statistics
-   */
-  static async getPlatformOverview(): Promise<PlatformOverview> {
+  static async getPlatformOverview(params: { period?: string } = {}): Promise<PlatformOverview> {
     try {
-      const response = await apiService.get('/super-admin/overview');
+      const response = await apiService.get('/super-admin/overview', { params });
       const data = response.data;
-      
-      // Transform backend response to frontend format
+
       return {
+        period: data.period,
         totalCompanies: data.overview?.totalCompanies || 0,
         activeCompanies: data.overview?.activeCompanies || 0,
         totalUsers: data.overview?.totalUsers || 0,
@@ -97,14 +137,16 @@ class SuperAdminService {
         activeGuards: data.overview?.activeGuards || 0,
         totalClients: data.overview?.totalClients || 0,
         totalSites: data.overview?.totalSites || 0,
+        activeSites: data.overview?.activeSites || 0,
         totalRevenue: data.overview?.totalRevenue || 0,
+        growth: data.growth,
         recentActivity: (data.recentActivity || []).map((activity: any) => ({
           id: activity.id,
           action: activity.action,
           resource: activity.resource,
           userId: activity.userId,
           timestamp: activity.timestamp,
-          details: activity.newValues ? (typeof activity.newValues === 'string' ? JSON.parse(activity.newValues) : activity.newValues) : undefined,
+          details: safeParseJson(activity.newValues),
         })),
       };
     } catch (error) {
@@ -113,10 +155,6 @@ class SuperAdminService {
     }
   }
 
-  /**
-   * Get all security companies with pagination and filters
-   */
-  // Instance method used by screens
   async getSecurityCompanies(params: {
     page?: number;
     limit?: number;
@@ -125,33 +163,15 @@ class SuperAdminService {
     plan?: string;
   } = {}): Promise<{
     companies: SecurityCompany[];
-    pagination: {
-      page: number;
-      limit: number;
-      total: number;
-      pages: number;
-    };
+    pagination: { page: number; limit: number; total: number; pages: number };
   }> {
-    try {
-      const response = await apiService.get('/super-admin/companies', {
-        params,
-      });
-      const companies = (response.data.companies || []).map((company: any) => 
-        SuperAdminService.transformCompany(company)
-      );
-      return {
-        companies,
-        pagination: response.data.pagination
-      };
-    } catch (error) {
-      console.error('Error fetching companies:', error);
-      throw error;
-    }
+    const response = await apiService.get('/super-admin/companies', { params });
+    const companies = (response.data.companies || []).map((company: any) =>
+      SuperAdminService.transformCompany(company)
+    );
+    return { companies, pagination: response.data.pagination };
   }
 
-  /**
-   * Create a new security company
-   */
   async createSecurityCompany(data: {
     name: string;
     email: string;
@@ -166,74 +186,39 @@ class SuperAdminService {
     maxClients?: number;
     maxSites?: number;
   }): Promise<SecurityCompany> {
-    try {
-      const response = await apiService.post('/super-admin/companies', data);
-      return SuperAdminService.transformCompany(response.data);
-    } catch (error) {
-      console.error('Error creating security company:', error);
-      throw error;
-    }
+    const response = await apiService.post('/super-admin/companies', data);
+    return SuperAdminService.transformCompany(response.data);
   }
 
-  /**
-   * Update security company
-   */
   async updateSecurityCompany(companyId: string, data: Partial<SecurityCompany>): Promise<SecurityCompany> {
-    try {
-      const response = await apiService.put(`/super-admin/companies/${companyId}`, data);
-      return SuperAdminService.transformCompany(response.data);
-    } catch (error) {
-      console.error('Error updating security company:', error);
-      throw error;
-    }
+    const response = await apiService.put(`/super-admin/companies/${companyId}`, data);
+    return SuperAdminService.transformCompany(response.data);
   }
 
-  /**
-   * Toggle security company status (activate/suspend)
-   */
+  async deleteSecurityCompany(companyId: string): Promise<{ id: string }> {
+    const response = await apiService.delete(`/super-admin/companies/${companyId}`);
+    return response.data;
+  }
+
   async toggleCompanyStatus(companyId: string, isActive: boolean): Promise<SecurityCompany> {
-    try {
-      const response = await apiService.patch(`/super-admin/companies/${companyId}/status`, { isActive });
-      return SuperAdminService.transformCompany(response.data);
-    } catch (error) {
-      console.error('Error toggling company status:', error);
-      throw error;
-    }
+    const response = await apiService.patch(`/super-admin/companies/${companyId}/status`, { isActive });
+    return SuperAdminService.transformCompany(response.data);
   }
 
-  /**
-   * Get platform analytics
-   */
   async getPlatformAnalytics(params: {
     startDate?: string;
     endDate?: string;
-    metricType?: string;
-  } = {}): Promise<any> {
-    try {
-      const response = await apiService.get('/super-admin/analytics', { params });
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching platform analytics:', error);
-      throw error;
-    }
+    period?: string;
+  } = {}): Promise<PlatformAnalyticsResponse> {
+    const response = await apiService.get('/super-admin/analytics', { params });
+    return response.data;
   }
 
-  /**
-   * Get billing overview
-   */
   async getBillingOverview(): Promise<BillingOverview> {
-    try {
-      const response = await apiService.get('/super-admin/billing');
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching billing overview:', error);
-      throw error;
-    }
+    const response = await apiService.get('/super-admin/billing');
+    return response.data;
   }
 
-  /**
-   * Get payment records with filters
-   */
   async getPaymentRecords(params: {
     page?: number;
     limit?: number;
@@ -245,77 +230,40 @@ class SuperAdminService {
     search?: string;
   } = {}): Promise<{
     records: any[];
-    pagination: {
-      page: number;
-      limit: number;
-      total: number;
-      pages: number;
-    };
+    pagination: { page: number; limit: number; total: number; pages: number };
   }> {
-    try {
-      const response = await apiService.get('/super-admin/payments', { params });
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching payment records:', error);
-      throw error;
-    }
+    const response = await apiService.get('/super-admin/payments', { params });
+    return response.data;
   }
 
-  /**
-   * Get payment record by ID
-   */
   async getPaymentRecordById(paymentId: string): Promise<any> {
-    try {
-      const response = await apiService.get(`/super-admin/payments/${paymentId}`);
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching payment record:', error);
-      throw error;
-    }
+    const response = await apiService.get(`/super-admin/payments/${paymentId}`);
+    return response.data;
   }
 
-  /**
-   * Update payment status
-   */
   async updatePaymentStatus(
     paymentId: string,
     status: string,
     paidDate?: string,
     paymentMethod?: string
   ): Promise<any> {
-    try {
-      const response = await apiService.patch(`/super-admin/payments/${paymentId}/status`, {
-        status,
-        paidDate,
-        paymentMethod,
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Error updating payment status:', error);
-      throw error;
-    }
+    const response = await apiService.patch(`/super-admin/payments/${paymentId}/status`, {
+      status,
+      paidDate,
+      paymentMethod,
+    });
+    return response.data;
   }
 
-  /**
-   * Get payment analytics
-   */
   async getPaymentAnalytics(params: {
     startDate?: string;
     endDate?: string;
     companyId?: string;
   } = {}): Promise<any> {
-    try {
-      const response = await apiService.get('/super-admin/payments/analytics', { params });
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching payment analytics:', error);
-      throw error;
-    }
+    const response = await apiService.get('/super-admin/payments/analytics', { params });
+    return response.data;
   }
 
-  /**
-   * Get system audit logs
-   */
   async getAuditLogs(params: {
     page?: number;
     limit?: number;
@@ -323,80 +271,103 @@ class SuperAdminService {
     resource?: string;
     userId?: string;
     companyId?: string;
+    search?: string;
   } = {}): Promise<{
     logs: AuditLog[];
-    pagination: {
-      page: number;
-      limit: number;
-      total: number;
-      pages: number;
-    };
+    pagination: { page: number; limit: number; total: number; pages: number };
   }> {
-    try {
-      const response = await apiService.get('/super-admin/audit-logs', { params });
-      const logs = (response.data.logs || []).map((log: any) => ({
+    const response = await apiService.get('/super-admin/audit-logs', { params });
+    const logs = (response.data.logs || []).map((log: any) => {
+      const user = log.user;
+      const userName = user
+        ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email
+        : log.userId
+          ? 'User'
+          : 'System';
+      return {
         id: log.id,
         action: log.action,
         resource: log.resource,
         resourceId: log.resourceId,
         timestamp: log.timestamp,
         userId: log.userId,
+        userName,
+        userEmail: user?.email,
         securityCompanyId: log.securityCompanyId,
-        oldValues: log.oldValues ? (typeof log.oldValues === 'string' ? JSON.parse(log.oldValues) : log.oldValues) : undefined,
-        newValues: log.newValues ? (typeof log.newValues === 'string' ? JSON.parse(log.newValues) : log.newValues) : undefined,
-      }));
-      return {
-        logs,
-        pagination: response.data.pagination
+        oldValues: safeParseJson(log.oldValues),
+        newValues: safeParseJson(log.newValues),
+        ipAddress: log.ipAddress,
+        userAgent: log.userAgent,
       };
-    } catch (error) {
-      console.error('Error fetching audit logs:', error);
-      throw error;
-    }
+    });
+    return { logs, pagination: response.data.pagination };
   }
 
-  /**
-   * Get platform settings
-   */
   async getPlatformSettings(): Promise<any> {
-    try {
-      const response = await apiService.get('/super-admin/settings');
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching platform settings:', error);
-      throw error;
-    }
+    const response = await apiService.get('/super-admin/settings');
+    return response.data;
   }
 
-  /**
-   * Update platform settings
-   */
   async updatePlatformSettings(settings: any): Promise<{ success: boolean }> {
-    try {
-      const response = await apiService.put('/super-admin/settings', settings);
-      return response.data;
-    } catch (error) {
-      console.error('Error updating platform settings:', error);
-      throw error;
-    }
+    const response = await apiService.put('/super-admin/settings', settings);
+    return response.data;
   }
 
-  /**
-   * Get company by ID
-   */
   async getCompanyById(companyId: string): Promise<SecurityCompany> {
-    try {
-      const response = await apiService.get(`/super-admin/companies/${companyId}`);
-      return SuperAdminService.transformCompany(response.data);
-    } catch (error) {
-      console.error('Error fetching company:', error);
-      throw error;
-    }
+    const response = await apiService.get(`/super-admin/companies/${companyId}`);
+    return SuperAdminService.transformCompany(response.data);
   }
 
-  /**
-   * Transform backend company data to frontend format
-   */
+  async getCompanySubscription(companyId: string): Promise<any> {
+    const response = await apiService.get(`/super-admin/companies/${companyId}/subscription`);
+    return response.data;
+  }
+
+  async createCompanySubscriptionCheckout(
+    companyId: string,
+    data: { priceId: string; trialDays?: number }
+  ): Promise<{ id: string; url: string | null }> {
+    const response = await apiService.post(
+      `/super-admin/companies/${companyId}/subscription/checkout`,
+      data
+    );
+    return response.data;
+  }
+
+  async getCompanyBillingPortal(companyId: string): Promise<{ url: string }> {
+    const response = await apiService.get(`/super-admin/companies/${companyId}/billing-portal`);
+    return response.data;
+  }
+
+  async searchUsers(params: {
+    search?: string;
+    page?: number;
+    limit?: number;
+  } = {}): Promise<{
+    users: Array<{
+      id: string;
+      email: string;
+      firstName: string;
+      lastName: string;
+      role: string;
+      isActive: boolean;
+    }>;
+    pagination: { page: number; limit: number; total: number; pages: number };
+  }> {
+    const response = await apiService.get('/super-admin/users', { params });
+    return response.data;
+  }
+
+  async impersonateUser(targetUserId: string): Promise<any> {
+    const response = await apiService.post('/super-admin/impersonate', { targetUserId });
+    return response.data;
+  }
+
+  async exportPlatformData(): Promise<any> {
+    const response = await apiService.post('/super-admin/export-data');
+    return response.data;
+  }
+
   private static transformCompany(data: any): SecurityCompany {
     return {
       id: data.id,
@@ -410,34 +381,20 @@ class SuperAdminService {
       country: data.country,
       subscriptionPlan: data.subscriptionPlan,
       subscriptionStatus: data.subscriptionStatus,
-      subscriptionStartDate: data.subscriptionStartDate ? new Date(data.subscriptionStartDate).toISOString() : new Date().toISOString(),
-      subscriptionEndDate: data.subscriptionEndDate ? new Date(data.subscriptionEndDate).toISOString() : undefined,
+      subscriptionStartDate: data.subscriptionStartDate
+        ? new Date(data.subscriptionStartDate).toISOString()
+        : new Date().toISOString(),
+      subscriptionEndDate: data.subscriptionEndDate
+        ? new Date(data.subscriptionEndDate).toISOString()
+        : undefined,
       maxGuards: data.maxGuards || 0,
       maxClients: data.maxClients || 0,
       maxSites: data.maxSites || 0,
       isActive: data.isActive !== undefined ? data.isActive : true,
       createdAt: data.createdAt ? new Date(data.createdAt).toISOString() : new Date().toISOString(),
       updatedAt: data.updatedAt ? new Date(data.updatedAt).toISOString() : new Date().toISOString(),
-      _count: data._count || {
-        users: 0,
-        guards: 0,
-        clients: 0,
-        sites: 0
-      }
+      _count: data._count || { users: 0, guards: 0, clients: 0, sites: 0 },
     };
-  }
-
-  /**
-   * Export platform data
-   */
-  async exportPlatformData(): Promise<any> {
-    try {
-      const response = await apiService.post('/super-admin/export-data');
-      return response.data;
-    } catch (error) {
-      console.error('Error exporting platform data:', error);
-      throw error;
-    }
   }
 }
 

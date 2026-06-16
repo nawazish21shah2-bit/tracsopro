@@ -4,6 +4,7 @@ import { securityManager } from '../utils/security';
 import api from './api';
 
 import { getApiBaseUrl } from '../config/apiConfig';
+import { extractErrorMessage } from '../utils/errorHandler';
 
 const API_BASE_URL = getApiBaseUrl();
 
@@ -67,7 +68,12 @@ class SiteService {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      throw new Error(
+        extractErrorMessage({
+          response: { status: response.status, data: errorData },
+          message: errorData.message || errorData.error,
+        })
+      );
     }
 
     return response.json();

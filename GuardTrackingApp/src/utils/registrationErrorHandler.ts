@@ -4,7 +4,7 @@
  */
 
 import { Alert } from 'react-native';
-import { getActionableErrorMessage, isErrorType } from './errorHandler';
+import { getActionableErrorMessage, isErrorType, parseApiError } from './errorHandler';
 
 export interface RegistrationErrorOptions {
   error: any;
@@ -16,6 +16,7 @@ export interface RegistrationErrorOptions {
  * Display user-friendly registration error alert
  */
 export function showRegistrationError({ error, navigation, onLoginPress }: RegistrationErrorOptions): void {
+  const parsed = parseApiError(error);
   const actionableError = getActionableErrorMessage(error);
   const errorMessage = actionableError.message;
 
@@ -60,8 +61,14 @@ export function showRegistrationError({ error, navigation, onLoginPress }: Regis
     return;
   }
 
-  // Network/Connection errors
-  if (isErrorType(error, ['network', 'connection', 'server', 'timeout', 'econnrefused', 'etimedout'])) {
+  // Invalid invitation code
+  if (isErrorType(error, ['invalid invitation', 'invitation code', 'invitation is for'])) {
+    Alert.alert(actionableError.title, errorMessage, [{ text: 'OK' }]);
+    return;
+  }
+
+  // Network/Connection errors — only when truly unreachable
+  if (parsed.isNetworkError || isErrorType(error, ['cannot connect', 'cannot reach', 'econnrefused', 'etimedout'])) {
     Alert.alert(
       actionableError.title,
       errorMessage,

@@ -11,6 +11,8 @@ import { cacheService } from './cacheService';
 import notificationService from './notificationService';
 import WebSocketService from './WebSocketService';
 import { store } from '../store';
+import apiService from './api';
+import { getAuthGuardId } from '../utils/getAuthGuardId';
 
 interface LocationData {
   latitude: number;
@@ -50,6 +52,11 @@ class LocationTrackingService {
   private config: LocationTrackingConfig;
   private lastKnownLocation: LocationData | null = null;
   private trackingStartTime: number | null = null;
+  private lastBackendSyncAt = 0;
+  private lastWsSyncAt = 0;
+  private lastLocationLogAt = 0;
+  private readonly backendSyncIntervalMs = 20000;
+  private readonly wsSyncIntervalMs = 5000;
 
   constructor() {
     this.config = {
@@ -79,7 +86,9 @@ class LocationTrackingService {
       // Load tracking configuration
       await this.loadConfig();
 
-      console.log('📍 Location tracking service initialized');
+      if (__DEV__) {
+        console.log('📍 Location tracking service initialized');
+      }
       return true;
     } catch (error) {
       ErrorHandler.handleError(error, 'location_tracking_init');
@@ -119,7 +128,9 @@ class LocationTrackingService {
   async startTracking(shiftId?: string): Promise<boolean> {
     try {
       if (this.isTracking) {
-        console.log('📍 Location tracking already active');
+        if (__DEV__) {
+          console.log('📍 Location tracking already active');
+        }
         return true;
       }
 
@@ -152,8 +163,12 @@ class LocationTrackingService {
 
       this.isTracking = true;
       this.trackingStartTime = Date.now();
+
+      WebSocketService.connect();
       
-      console.log('📍 Real-time location tracking started');
+      if (__DEV__) {
+        console.log('📍 Real-time location tracking started');
+      }
       
       // Send notification
       await notificationService.sendImmediateNotification(
@@ -241,7 +256,13 @@ class LocationTrackingService {
       // Send to backend if online
       await this.syncLocationToBackend(locationData, shiftId);
 
-      console.log(`📍 Location updated: ${locationData.latitude.toFixed(6)}, ${locationData.longitude.toFixed(6)} (±${locationData.accuracy}m)`);
+      const now = Date.now();
+      if (__DEV__ && now - this.lastLocationLogAt >= 15000) {
+        this.lastLocationLogAt = now;
+        console.log(
+          `📍 Location updated: ${locationData.latitude.toFixed(6)}, ${locationData.longitude.toFixed(6)} (±${locationData.accuracy}m)`,
+        );
+      }
     } catch (error) {
       ErrorHandler.handleError(error, 'handle_location_update', false);
     }
@@ -445,34 +466,52 @@ class LocationTrackingService {
    */
   private async syncLocationToBackend(location: LocationData, shiftId?: string): Promise<void> {
     try {
-      // Get guard ID from store
       const state = store.getState();
-      const guardId = state.auth.user?.id;
-      
+      const guardId = getAuthGuardId(state.auth.user);
+
       if (!guardId) {
-        console.warn('No guard ID available for location update');
+        if (__DEV__) {
+          console.warn('No guard ID available for location update');
+        }
         return;
       }
 
-      // Send via WebSocket if connected (real-time)
-      if (WebSocketService.isSocketConnected()) {
-        WebSocketService.sendLocationUpdate({
-          guardId,
-          latitude: location.latitude,
-          longitude: location.longitude,
-          accuracy: location.accuracy,
-          timestamp: location.timestamp || Date.now(),
-          batteryLevel: undefined, // Could be added if battery monitoring is available
-        });
-      } else {
-        // Fallback to sync queue if WebSocket is not connected
+      const payload = {
+        guardId,
+        latitude: location.latitude,
+        longitude: location.longitude,
+        accuracy: location.accuracy,
+        timestamp: location.timestamp || Date.now(),
+      };
+
+      const now = Date.now();
+
+      if (
+        WebSocketService.isSocketConnected() &&
+        now - this.lastWsSyncAt >= this.wsSyncIntervalMs
+      ) {
+        this.lastWsSyncAt = now;
+        WebSocketService.sendLocationUpdate(payload);
+      } else if (!WebSocketService.isSocketConnected()) {
         await cacheService.addToSyncQueue('location_update', {
           guardId,
           shiftId,
           location,
-          timestamp: Date.now(),
+          timestamp: now,
         });
       }
+
+      if (now - this.lastBackendSyncAt < this.backendSyncIntervalMs) {
+        return;
+      }
+
+      this.lastBackendSyncAt = now;
+      await apiService.recordLocation(guardId, {
+        latitude: payload.latitude,
+        longitude: payload.longitude,
+        accuracy: payload.accuracy,
+        timestamp: payload.timestamp,
+      });
     } catch (error) {
       ErrorHandler.handleError(error, 'sync_location_backend', false);
     }

@@ -13,8 +13,14 @@ import PaymentMethodsScreen from '../screens/client/PaymentMethodsScreen';
 import NotificationSettingsScreen from '../screens/settings/NotificationSettingsScreen';
 import ProfileEditScreen from '../screens/settings/ProfileEditScreen';
 import SupportContactScreen from '../screens/settings/SupportContactScreen';
+import SupportHubScreen from '../screens/support/SupportHubScreen';
+import SupportTicketDetailScreen from '../screens/support/SupportTicketDetailScreen';
 import CompanyDetailsScreen from '../screens/settings/CompanyDetailsScreen';
 import ChangePasswordScreen from '../screens/settings/ChangePasswordScreen';
+import ShiftDetailsScreen from '../screens/shifts/ShiftDetailsScreen';
+import EditShiftScreen from '../screens/shifts/EditShiftScreen';
+import ClientMyShiftsScreen from '../screens/client/ClientMyShiftsScreen';
+import ClientGuardDetailsScreen from '../screens/client/ClientGuardDetailsScreen';
 
 export type ClientStackParamList = {
   ClientTabs: undefined;
@@ -25,18 +31,34 @@ export type ClientStackParamList = {
   NotificationSettings: undefined;
   ProfileEdit: undefined;
   SupportContact: undefined;
+  SupportHubScreen: { variant?: 'client'; mode?: 'mine' | 'inbox' | 'platform' };
+  SupportTicketDetailScreen: {
+    ticketId: string;
+    variant?: 'client';
+    mode?: 'mine' | 'inbox' | 'platform';
+  };
   CompanyDetails: undefined;
   ClientChangePassword: undefined;
   IndividualChatScreen: {
     chatId: string;
     chatName: string;
     avatar?: string;
-    context?: 'report' | 'site' | 'general';
+    context?: 'report' | 'site' | 'general' | 'support';
   };
   ChatListScreen: undefined;
   Payment: undefined;
   InvoiceDetails: { invoiceId: string };
   PaymentMethods: undefined;
+  ShiftDetails: { shiftId: string; shift?: any };
+  EditShift: { shiftId: string; shift?: any };
+  ClientMyShifts: undefined;
+  ClientGuardDetails: {
+    guardId: string;
+    guardName?: string;
+    userId?: string;
+    avatar?: string;
+    shiftId?: string;
+  };
 };
 
 const Stack = createStackNavigator<ClientStackParamList>();
@@ -70,6 +92,17 @@ const ClientStackNavigator: React.FC = () => {
       <Stack.Screen 
         name="SupportContact" 
         component={SupportContactScreen} 
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="SupportHubScreen"
+        component={SupportHubScreen}
+        initialParams={{ variant: 'client', mode: 'mine' }}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="SupportTicketDetailScreen"
+        component={SupportTicketDetailScreen}
         options={{ headerShown: false }}
       />
       <Stack.Screen 
@@ -107,6 +140,10 @@ const ClientStackNavigator: React.FC = () => {
         component={() => <ChangePasswordScreen variant="client" />} 
         options={{ headerShown: false }}
       />
+      <Stack.Screen name="ShiftDetails" component={ShiftDetailsScreen} />
+      <Stack.Screen name="EditShift" component={EditShiftScreen} />
+      <Stack.Screen name="ClientMyShifts" component={ClientMyShiftsScreen} />
+      <Stack.Screen name="ClientGuardDetails" component={ClientGuardDetailsScreen} />
     </Stack.Navigator>
   );
 };

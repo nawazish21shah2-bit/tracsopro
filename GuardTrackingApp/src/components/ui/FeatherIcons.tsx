@@ -23,6 +23,8 @@ import {
   ArrowLeft,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
+  ArrowUp,
   Plus,
   Minus,
   X,
@@ -73,6 +75,13 @@ import {
   ExternalLink,
   Copy,
   Clipboard,
+  DollarSign,
+  CreditCard,
+  Save,
+  MoreHorizontal,
+  XCircle,
+  Users,
+  Info,
   Folder,
   File,
   Image,
@@ -133,6 +142,8 @@ const iconMap = {
   arrowLeft: ArrowLeft,
   chevronDown: ChevronDown,
   chevronRight: ChevronRight,
+  chevronUp: ChevronUp,
+  arrowUp: ArrowUp,
   
   // Basic Actions
   plus: Plus,
@@ -203,6 +214,13 @@ const iconMap = {
   externalLink: ExternalLink,
   copy: Copy,
   clipboard: Clipboard,
+  dollarSign: DollarSign,
+  creditCard: CreditCard,
+  save: Save,
+  moreHorizontal: MoreHorizontal,
+  xCircle: XCircle,
+  users: Users,
+  info: Info,
   
   // Files & Media
   folder: Folder,
@@ -229,6 +247,8 @@ const iconMap = {
   cpu: Cpu,
   power: Power,
 };
+
+export type FeatherIconName = keyof typeof iconMap;
 
 export const FeatherIcon: React.FC<FeatherIconProps> = ({
   name,

@@ -15,12 +15,12 @@ router.put('/:id', authorize('ADMIN'), guardController.updateGuard);
 router.delete('/:id', authorize('ADMIN'), guardController.deleteGuard);
 
 // Emergency contacts
-router.post('/:id/emergency-contacts', guardController.addEmergencyContact);
+router.post('/:id/emergency-contacts', authorize('ADMIN', 'GUARD'), guardController.addEmergencyContact);
 
 // Qualifications
-router.post('/:id/qualifications', guardController.addQualification);
+router.post('/:id/qualifications', authorize('ADMIN', 'GUARD'), guardController.addQualification);
 
 // Performance
-router.get('/:id/performance', guardController.getGuardPerformance);
+router.get('/:id/performance', authorize('ADMIN', 'GUARD'), guardController.getGuardPerformance);
 
 export default router;

@@ -1,41 +1,80 @@
 import React from 'react';
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
-import { COLORS, BORDER_RADIUS, SPACING, TYPOGRAPHY } from '../../styles/globalStyles';
+import { COLORS, BORDER_RADIUS, SPACING, TYPOGRAPHY, SHADOWS } from '../../styles/globalStyles';
 
 interface StatsCardProps {
   label: string;
   value: number | string;
   icon?: React.ReactNode;
-  variant?: 'success' | 'danger' | 'info' | 'neutral';
+  variant?: 'success' | 'danger' | 'info' | 'neutral' | 'warning';
   style?: ViewStyle;
-  twoLineLabel?: boolean; // Optional prop to enable two-line label (each word per line)
+  /** Split label into one word per line (used in compact ops grids). */
+  twoLineLabel?: boolean;
+  /** Secondary line below label (admin dashboard style). */
+  subLabel?: string;
+  /** Horizontal = icon + label + value; vertical = icon/value row + label stack. */
+  layout?: 'horizontal' | 'vertical';
 }
 
 const getVariantColors = (variant: StatsCardProps['variant']) => {
   switch (variant) {
     case 'success':
-      return { iconBg: '#DCFCE7', iconColor: '#16A34A' }; // Green
+      return { iconBg: '#DCFCE7', accent: COLORS.success };
     case 'danger':
-      return { iconBg: '#FEE2E2', iconColor: '#DC2626' }; // Red
+      return { iconBg: '#FEE2E2', accent: COLORS.error };
     case 'info':
-      return { iconBg: '#DBEAFE', iconColor: '#1976D2' }; // Blue
+      return { iconBg: '#DBEAFE', accent: COLORS.info };
+    case 'warning':
+      return { iconBg: '#FEF3C7', accent: COLORS.warning };
     default:
-      return { iconBg: '#F3F4F6', iconColor: '#6B7280' }; // Gray
+      return { iconBg: '#F3F4F6', accent: COLORS.textSecondary };
   }
 };
 
-const StatsCard: React.FC<StatsCardProps> = ({ label, value, icon, variant = 'neutral', style, twoLineLabel = false }) => {
+const StatsCard: React.FC<StatsCardProps> = ({
+  label,
+  value,
+  icon,
+  variant = 'neutral',
+  style,
+  twoLineLabel = false,
+  subLabel,
+  layout = 'horizontal',
+}) => {
   const colors = getVariantColors(variant);
-
-  // Split label into words for two-line display only if twoLineLabel prop is true
   const labelWords = twoLineLabel ? label.split(' ') : [label];
 
-  return (
-    <View style={[styles.card, style]}>
-      {icon && (
-        <View style={[styles.iconContainer, { backgroundColor: colors.iconBg }]}>
-          {icon}
+  if (layout === 'vertical') {
+    return (
+      <View style={[styles.card, styles.cardVertical, { borderLeftColor: colors.accent }, style]}>
+        <View style={styles.verticalTopRow}>
+          {icon ? (
+            <View style={[styles.iconContainer, { backgroundColor: colors.iconBg }]}>{icon}</View>
+          ) : (
+            <View style={styles.iconSpacer} />
+          )}
+          <Text style={styles.verticalValue} numberOfLines={1}>
+            {value}
+          </Text>
         </View>
+        <View style={styles.verticalTextContainer}>
+          <Text style={styles.label} numberOfLines={2}>
+            {label}
+          </Text>
+          {subLabel ? (
+            <Text style={[styles.subLabel, { color: colors.accent }]} numberOfLines={1}>
+              {subLabel}
+            </Text>
+          ) : null}
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.card, { borderLeftColor: colors.accent }, style]}>
+      {icon && (
+        <View style={[styles.iconContainer, { backgroundColor: colors.iconBg }]}>{icon}</View>
       )}
       <View style={styles.textContainer}>
         {twoLineLabel ? (
@@ -45,10 +84,19 @@ const StatsCard: React.FC<StatsCardProps> = ({ label, value, icon, variant = 'ne
             </Text>
           ))
         ) : (
-          <Text style={styles.label} numberOfLines={2}>{label}</Text>
+          <Text style={styles.label} numberOfLines={2}>
+            {label}
+          </Text>
         )}
+        {subLabel ? (
+          <Text style={[styles.subLabel, { color: colors.accent }]} numberOfLines={1}>
+            {subLabel}
+          </Text>
+        ) : null}
       </View>
-      <Text style={styles.value} numberOfLines={1}>{value}</Text>
+      <Text style={styles.value} numberOfLines={1}>
+        {value}
+      </Text>
     </View>
   );
 };
@@ -58,47 +106,82 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 12,
-    borderRadius: 12,
+    padding: SPACING.md,
+    borderRadius: BORDER_RADIUS.lg,
     borderWidth: 1,
-    borderColor: '#DCDCDC',
+    borderColor: COLORS.borderCard,
+    borderLeftWidth: 3,
     backgroundColor: COLORS.backgroundPrimary,
-    // Drop shadow: X 0, Y 4, Blur 4, Spread 0, Color DCDCDC at 25% opacity
-    shadowColor: '#DCDCDC',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 2,
+    ...SHADOWS.small,
     minHeight: 80,
+  },
+  cardVertical: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    minHeight: 94,
+    padding: SPACING.sm,
+  },
+  verticalTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: SPACING.sm,
+  },
+  verticalTextContainer: {
+    flexDirection: 'column',
+  },
+  verticalValue: {
+    flex: 1,
+    fontSize: TYPOGRAPHY.fontSize.xl,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    lineHeight: 24,
+    letterSpacing: -0.41,
+    textAlign: 'right',
   },
   iconContainer: {
     width: 36,
     height: 36,
-    borderRadius: 8,
+    borderRadius: BORDER_RADIUS.md,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
+    marginRight: SPACING.sm,
+  },
+  iconSpacer: {
+    width: 36,
+    height: 36,
+    marginRight: SPACING.sm,
   },
   textContainer: {
     flex: 1,
     justifyContent: 'center',
-    marginRight: 4,
+    marginRight: SPACING.xs,
     minWidth: 0,
   },
   label: {
-    fontSize: 12,
+    fontSize: TYPOGRAPHY.fontSize.xs,
     fontFamily: TYPOGRAPHY.fontPrimary,
     fontWeight: TYPOGRAPHY.fontWeight.regular,
-    color: '#7A7A7A',
+    color: COLORS.textSecondary,
     lineHeight: 16,
     letterSpacing: -0.41,
     flexShrink: 1,
+  },
+  subLabel: {
+    fontSize: 11,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.regular,
+    lineHeight: 13,
+    letterSpacing: -0.41,
+    marginTop: 2,
   },
   value: {
     fontSize: 22,
     fontFamily: TYPOGRAPHY.fontPrimary,
     fontWeight: TYPOGRAPHY.fontWeight.bold,
-    color: '#323232',
+    color: COLORS.textPrimary,
     lineHeight: 29,
     textAlign: 'right',
     flexShrink: 0,

@@ -2,40 +2,38 @@ import { Request, Response, NextFunction } from 'express';
 import authService from '../services/authService.js';
 import otpService from '../services/otpService.js';
 import { AuthRequest } from '../middleware/auth.js';
+import { logger } from '../utils/logger.js';
 
 export class AuthController {
   async register(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      console.log('🔥 REGISTER REQUEST RECEIVED:', JSON.stringify(req.body, null, 2));
+      logger.info('Register request received', { email: req.body?.email, role: req.body?.role });
       const result = await authService.register(req.body);
-      console.log('🔥 REGISTER RESULT:', JSON.stringify(result, null, 2));
+      const userId = (result as { userId?: string; user?: { id: string } }).userId
+        ?? (result as { user?: { id: string } }).user?.id;
+      logger.info('Register successful', { email: req.body?.email, userId });
       res.status(201).json({
         success: true,
         data: result,
       });
     } catch (error) {
-      console.log('🔥 REGISTER ERROR:', error);
+      logger.error('Register error', { error });
       next(error);
     }
   }
 
   async login(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      console.log('🔵 LOGIN CONTROLLER - req.body:', JSON.stringify(req.body));
-      debugger;
-      const result = await authService.login(req.body);
       const { email } = req.body as { email?: string };
-      console.log('AuthLogin', {
-        email,
-        userId: (result as any)?.user?.id,
-        role: (result as any)?.user?.role,
-      });
+      logger.info('Login attempt', { email });
+      const result = await authService.login(req.body);
+      logger.info('Login successful', { email, userId: result.user.id, role: result.user.role });
       res.json({
         success: true,
         data: result,
       });
     } catch (error) {
-      console.log('🔴 LOGIN ERROR:', error);
+      logger.error('Login error', { error });
       next(error);
     }
   }
@@ -55,7 +53,15 @@ export class AuthController {
 
   async logout(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      // In a real implementation, you might want to blacklist the token
+      const { refreshToken } = req.body;
+      if (!refreshToken) {
+        res.status(400).json({
+          success: false,
+          message: 'Refresh token is required for logout',
+        });
+        return;
+      }
+      await authService.logout(refreshToken);
       res.json({
         success: true,
         data: null,

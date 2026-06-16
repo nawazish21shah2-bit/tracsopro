@@ -1,8 +1,21 @@
 import { Router } from 'express';
 import authController from '../controllers/authController.js';
 import { authenticate } from '../middleware/auth.js';
+import { authRateLimiter } from '../middleware/rateLimit.js';
+import SuperAdminService from '../services/superAdminService.js';
 
 const router = Router();
+
+router.use(authRateLimiter);
+
+router.get('/maintenance-status', async (_req, res) => {
+  try {
+    const maintenanceMode = await SuperAdminService.isMaintenanceModeEnabled();
+    res.json({ success: true, data: { maintenanceMode } });
+  } catch {
+    res.json({ success: true, data: { maintenanceMode: false } });
+  }
+});
 
 /**
  * @swagger
@@ -170,10 +183,23 @@ router.post('/refresh', authController.refreshToken);
  * /auth/logout:
  *   post:
  *     summary: Logout user
- *     description: Invalidate current session (client should discard tokens)
+ *     description: Invalidate current refresh token and end the session
  *     tags: [Authentication]
  *     security:
  *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - refreshToken
+ *             properties:
+ *               refreshToken:
+ *                 type: string
+ *                 description: Refresh token to revoke
+ *                 example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
  *     responses:
  *       200:
  *         description: Logout successful
@@ -187,6 +213,12 @@ router.post('/refresh', authController.refreshToken);
  *                   example: true
  *                 data:
  *                   type: null
+ *       400:
+ *         description: Missing refresh token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       401:
  *         description: Unauthorized - Invalid or missing token
  *         content:

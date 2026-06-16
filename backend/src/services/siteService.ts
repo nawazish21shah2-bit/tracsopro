@@ -1,6 +1,7 @@
 import prisma from '../config/database.js';
 import { logger } from '../utils/logger.js';
 import { NotFoundError, ValidationError, UnauthorizedError } from '../utils/errors.js';
+import subscriptionService from './subscriptionService.js';
 
 interface CreateSiteData {
   name: string;
@@ -38,6 +39,14 @@ export class SiteService {
           securityCompanyId: true,
         },
       });
+
+      if (companyClients.length === 0) {
+        throw new ValidationError('Client is not linked to a security company');
+      }
+
+      for (const companyClient of companyClients) {
+        await subscriptionService.validateSiteLimit(companyClient.securityCompanyId);
+      }
 
       // Create site and link to all companies the client belongs to
       const site = await prisma.$transaction(async (tx) => {
@@ -139,7 +148,13 @@ export class SiteService {
   }
 
   // Get site by ID with authorization check
-  async getSiteById(siteId: string, userId: string, userRole: string) {
+  async getSiteById(
+    siteId: string,
+    userId: string,
+    userRole: string,
+    securityCompanyId?: string,
+    guardId?: string
+  ) {
     try {
       const site = await prisma.site.findUnique({
         where: { id: siteId },
@@ -158,8 +173,35 @@ export class SiteService {
         throw new NotFoundError('Site not found');
       }
 
-      // Authorization check
-      if (userRole !== 'ADMIN' && site.client.user.id !== userId) {
+      if (userRole === 'CLIENT') {
+        if (site.client.user.id !== userId) {
+          throw new UnauthorizedError('Access denied');
+        }
+      } else if (userRole === 'ADMIN') {
+        if (!securityCompanyId) {
+          throw new UnauthorizedError('Access denied');
+        }
+        const companySite = await prisma.companySite.findFirst({
+          where: { siteId, securityCompanyId },
+        });
+        if (!companySite) {
+          throw new UnauthorizedError('Access denied');
+        }
+      } else if (userRole === 'GUARD') {
+        if (!guardId) {
+          throw new UnauthorizedError('Access denied');
+        }
+        const assignedShift = await prisma.shift.findFirst({
+          where: {
+            siteId,
+            guardId,
+            status: { in: ['SCHEDULED', 'IN_PROGRESS'] },
+          },
+        });
+        if (!assignedShift) {
+          throw new UnauthorizedError('Access denied');
+        }
+      } else if (userRole !== 'SUPER_ADMIN') {
         throw new UnauthorizedError('Access denied');
       }
 
@@ -240,25 +282,36 @@ export class SiteService {
     }
   }
 
-  // Get all sites (for guards to browse available shifts)
-  async getAllActiveSites(page = 1, limit = 10, search?: string) {
+  // Get active sites for guards within their security company
+  async getAllActiveSites(
+    page = 1,
+    limit = 10,
+    search?: string,
+    securityCompanyId?: string
+  ) {
     try {
       const skip = (page - 1) * limit;
-      
+
       const whereClause: any = {
         isActive: true,
         shifts: {
           some: {
-            status: { in: ['SCHEDULED', 'IN_PROGRESS'] }
-          }
-        }
+            status: { in: ['SCHEDULED', 'IN_PROGRESS'] },
+          },
+        },
       };
+
+      if (securityCompanyId) {
+        whereClause.companySites = {
+          some: { securityCompanyId },
+        };
+      }
 
       if (search) {
         whereClause.OR = [
           { name: { contains: search, mode: 'insensitive' } },
           { address: { contains: search, mode: 'insensitive' } },
-          { description: { contains: search, mode: 'insensitive' } }
+          { description: { contains: search, mode: 'insensitive' } },
         ];
       }
 

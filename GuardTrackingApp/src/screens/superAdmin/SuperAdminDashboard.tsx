@@ -29,6 +29,7 @@ import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SuperAdminProfileDrawer from '../../components/superAdmin/SuperAdminProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import { useNotificationBell } from '../../hooks/useNotificationBell';
 import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
 
 interface RecentActivity {
@@ -44,6 +45,9 @@ const SuperAdminDashboard: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+  const { onNotificationPress, notificationCount } = useNotificationBell({
+    notificationsRoute: 'SuperAdminNotifications',
+  });
   const navigation = useNavigation();
   const [overview, setOverview] = useState<Omit<PlatformOverview, 'recentActivity'> | null>(null);
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
@@ -55,8 +59,7 @@ const SuperAdminDashboard: React.FC = () => {
   const loadDashboardData = async () => {
     try {
       setError(null);
-      const data = await SuperAdminService.getPlatformOverview();
-      // Extract overview data (excluding recentActivity)
+      const data = await SuperAdminService.getPlatformOverview({ period: selectedPeriod });
       const { recentActivity, ...overviewData } = data;
       setOverview(overviewData);
       setRecentActivity(recentActivity);
@@ -83,8 +86,14 @@ const SuperAdminDashboard: React.FC = () => {
     return Math.round(current / (1 + growth / 100));
   };
 
-  const renderMetricCard = (title: string, current: number, previous: number, format: 'currency' | 'number' = 'number') => {
-    const growth = calculateGrowth(current, previous);
+  const renderMetricCard = (
+    title: string,
+    current: number,
+    growthMetric: { current: number; previous: number; growth: number } | undefined,
+    format: 'currency' | 'number' = 'number'
+  ) => {
+    const previous = growthMetric?.previous ?? getPreviousPeriodValue(current, 0);
+    const growth = growthMetric?.growth ?? calculateGrowth(current, previous);
     const isPositive = growth >= 0;
     const formatValue = (value: number) => {
       if (format === 'currency') {
@@ -182,10 +191,8 @@ const SuperAdminDashboard: React.FC = () => {
           variant="superAdmin"
           showLogo={true}
           onMenuPress={openDrawer}
-          onNotificationPress={() => {
-            navigation.navigate('SuperAdminNotifications' as never);
-          }}
-          notificationCount={0}
+          onNotificationPress={onNotificationPress}
+          notificationCount={notificationCount}
           profileDrawer={
             <SuperAdminProfileDrawer
               visible={isDrawerVisible}
@@ -210,10 +217,8 @@ const SuperAdminDashboard: React.FC = () => {
           variant="superAdmin"
           showLogo={true}
           onMenuPress={openDrawer}
-          onNotificationPress={() => {
-            navigation.navigate('SuperAdminNotifications' as never);
-          }}
-          notificationCount={0}
+          onNotificationPress={onNotificationPress}
+          notificationCount={notificationCount}
           profileDrawer={
             <SuperAdminProfileDrawer
               visible={isDrawerVisible}
@@ -246,10 +251,8 @@ const SuperAdminDashboard: React.FC = () => {
         variant="superAdmin"
         showLogo={true}
         onMenuPress={openDrawer}
-        onNotificationPress={() => {
-          navigation.navigate('SuperAdminNotifications' as never);
-        }}
-        notificationCount={0}
+        onNotificationPress={onNotificationPress}
+        notificationCount={notificationCount}
         profileDrawer={
           <SuperAdminProfileDrawer
             visible={isDrawerVisible}
@@ -292,24 +295,24 @@ const SuperAdminDashboard: React.FC = () => {
           <View style={styles.metricsContainer}>
             {renderMetricCard(
               'Revenue',
-              overview.totalRevenue || 0,
-              getPreviousPeriodValue(overview.totalRevenue || 0, 27.5),
+              (overview.growth?.revenue?.current ?? overview.totalRevenue) || 0,
+              overview.growth?.revenue,
               'currency'
             )}
             {renderMetricCard(
               'Total Users',
-              (overview.activeUsers || 0) + (overview.totalClients || 0) + (overview.activeGuards || 0),
-              getPreviousPeriodValue((overview.activeUsers || 0) + (overview.totalClients || 0) + (overview.activeGuards || 0), 12.3)
+              overview.totalUsers || 0,
+              overview.growth?.users
             )}
             {renderMetricCard(
               'Companies',
               overview.totalCompanies || 0,
-              getPreviousPeriodValue(overview.totalCompanies || 0, 8.7)
+              overview.growth?.companies
             )}
             {renderMetricCard(
               'Guards',
               overview.activeGuards || 0,
-              getPreviousPeriodValue(overview.activeGuards || 0, 15.2)
+              overview.growth?.guards
             )}
           </View>
         )}
@@ -325,7 +328,7 @@ const SuperAdminDashboard: React.FC = () => {
               </View>
               <View style={styles.summaryItem}>
                 <Text style={styles.summaryLabel}>Active Sites</Text>
-                <Text style={styles.summaryValue}>{overview?.totalSites || 0}</Text>
+                <Text style={styles.summaryValue}>{overview?.activeSites || 0}</Text>
               </View>
             </View>
           </View>
@@ -372,7 +375,9 @@ const SuperAdminDashboard: React.FC = () => {
             </TouchableOpacity>
             <TouchableOpacity 
               style={styles.quickActionCard}
-              onPress={() => navigation.navigate('PlatformAnalytics' as never)}
+              onPress={() =>
+                navigation.navigate('SuperAdminTabs' as never, { screen: 'Analytics' } as never)
+              }
             >
               <View style={styles.quickActionIcon}>
                 <ReportsIcon size={24} color={COLORS.primary} />
@@ -381,7 +386,9 @@ const SuperAdminDashboard: React.FC = () => {
             </TouchableOpacity>
             <TouchableOpacity 
               style={styles.quickActionCard}
-              onPress={() => navigation.navigate('BillingManagement' as never)}
+              onPress={() =>
+                navigation.navigate('SuperAdminTabs' as never, { screen: 'Billing' } as never)
+              }
             >
               <View style={styles.quickActionIcon}>
                 <ShiftsIcon size={24} color={COLORS.primary} />
@@ -390,7 +397,9 @@ const SuperAdminDashboard: React.FC = () => {
             </TouchableOpacity>
             <TouchableOpacity 
               style={styles.quickActionCard}
-              onPress={() => navigation.navigate('SystemSettings' as never)}
+              onPress={() =>
+                navigation.navigate('SuperAdminTabs' as never, { screen: 'Settings' } as never)
+              }
             >
               <View style={styles.quickActionIcon}>
                 <HomeIcon size={24} color={COLORS.primary} />

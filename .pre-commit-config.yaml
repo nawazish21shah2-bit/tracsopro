@@ -1,0 +1,18 @@
+# Install: pip install pre-commit  (or brew install pre-commit)
+# Setup:   pre-commit install
+# Run all:  pre-commit run --all-files
+
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.24.2
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      - id: node-secret-scan
+        name: Node secret pattern scan
+        entry: node backend/scripts/scan-secrets.mjs --staged
+        language: system
+        pass_filenames: false
+        always_run: true

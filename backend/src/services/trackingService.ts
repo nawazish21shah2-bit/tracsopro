@@ -111,59 +111,98 @@ export class TrackingService {
     return latest;
   }
 
-  async getActiveGuardsLocations(securityCompanyId?: string) {
-    // Multi-tenant: Get guards from specific company (if provided)
-    // Get all guards currently on duty
-    const whereClause: any = {
-      status: 'ON_DUTY',
+  private locationFromCheckIn(checkInLocation: unknown) {
+    if (!checkInLocation || typeof checkInLocation !== 'object') return null;
+    const checkIn = checkInLocation as Record<string, unknown>;
+    const latitude = checkIn.latitude;
+    const longitude = checkIn.longitude;
+    if (typeof latitude !== 'number' || typeof longitude !== 'number') return null;
+    if (latitude === 0 && longitude === 0) return null;
+
+    const timestampRaw = checkIn.timestamp;
+    const timestamp =
+      typeof timestampRaw === 'string' || timestampRaw instanceof Date
+        ? new Date(timestampRaw)
+        : new Date();
+
+    return {
+      latitude,
+      longitude,
+      accuracy: typeof checkIn.accuracy === 'number' ? checkIn.accuracy : 0,
+      timestamp,
+    };
+  }
+
+  /** Guards on IN_PROGRESS shifts with latest GPS or check-in fallback */
+  private async getOnDutyGuardsWithLocations(securityCompanyId?: string, clientId?: string) {
+    const shiftWhere: Record<string, unknown> = {
+      status: 'IN_PROGRESS',
+      guardId: { not: null },
     };
 
-    // Multi-tenant: Filter by company if provided
+    if (clientId) {
+      shiftWhere.clientId = clientId;
+    }
+
     if (securityCompanyId) {
-      whereClause.companyGuards = {
-        some: {
-          securityCompanyId,
-          isActive: true,
+      shiftWhere.guard = {
+        companyGuards: {
+          some: { securityCompanyId, isActive: true },
         },
       };
     }
 
-    const activeGuards = await prisma.guard.findMany({
-      where: whereClause,
+    const activeShifts = await prisma.shift.findMany({
+      where: shiftWhere,
       include: {
-        user: {
-          select: {
-            firstName: true,
-            lastName: true,
+        guard: {
+          include: {
+            user: { select: { firstName: true, lastName: true } },
           },
         },
-        companyGuards: securityCompanyId ? {
-          where: { securityCompanyId, isActive: true },
-          take: 1,
-        } : false,
+        site: { select: { name: true, latitude: true, longitude: true } },
       },
     });
 
-    // Get latest location for each guard
-    const locationsPromises = activeGuards.map(async (guard) => {
-      const latest = await prisma.trackingRecord.findFirst({
-        where: { guardId: guard.id },
-        orderBy: {
-          timestamp: 'desc',
-        },
-      });
+    const seenGuardIds = new Set<string>();
+    const rows = await Promise.all(
+      activeShifts.map(async (shift) => {
+        if (!shift.guard || !shift.guardId) return null;
+        if (seenGuardIds.has(shift.guardId)) return null;
+        seenGuardIds.add(shift.guardId);
 
-      return {
-        guardId: guard.id,
-        guardName: `${guard.user.firstName} ${guard.user.lastName}`,
-        employeeId: guard.employeeId,
-        location: latest,
-      };
-    });
+        const latest = await prisma.trackingRecord.findFirst({
+          where: { guardId: shift.guardId },
+          orderBy: { timestamp: 'desc' },
+        });
 
-    const locations = await Promise.all(locationsPromises);
+        const location =
+          latest ||
+          this.locationFromCheckIn(shift.checkInLocation);
 
-    return locations.filter(l => l.location !== null);
+        if (!location) return null;
+
+        return {
+          guard: shift.guard,
+          shift,
+          location,
+        };
+      })
+    );
+
+    return rows.filter((row): row is NonNullable<typeof row> => row !== null);
+  }
+
+  async getActiveGuardsLocations(securityCompanyId?: string, clientId?: string) {
+    const onDuty = await this.getOnDutyGuardsWithLocations(securityCompanyId, clientId);
+
+    return onDuty.map(({ guard, shift, location }) => ({
+      guardId: guard.id,
+      guardName: `${guard.user.firstName} ${guard.user.lastName}`,
+      employeeId: guard.employeeId,
+      siteName: shift.site?.name,
+      location,
+    }));
   }
 
   async deleteOldRecords(daysToKeep: number = 30) {
@@ -259,61 +298,22 @@ export class TrackingService {
   /**
    * Get real-time location data for dashboard
    */
-  async getRealTimeLocationData() {
+  async getRealTimeLocationData(securityCompanyId?: string, clientId?: string) {
     try {
-      // Get all active guards with their latest locations
-      const activeGuards = await prisma.guard.findMany({
-        where: {
-          status: {
-            in: ['ON_DUTY', 'ACTIVE'],
-          },
+      const onDuty = await this.getOnDutyGuardsWithLocations(securityCompanyId, clientId);
+
+      return onDuty.map(({ guard, shift, location }) => ({
+        guard: {
+          id: guard.id,
+          employeeId: guard.employeeId,
+          name: `${guard.user.firstName} ${guard.user.lastName}`,
+          status: guard.status,
         },
-        include: {
-          user: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-            },
-          },
-        },
-      });
-
-      const locationData = await Promise.all(
-        activeGuards.map(async (guard) => {
-          // Get latest location
-          const latestLocation = await prisma.trackingRecord.findFirst({
-            where: { guardId: guard.id },
-            orderBy: { timestamp: 'desc' },
-          });
-
-          // Get current shift if any
-          const currentShift = await prisma.shift.findFirst({
-            where: {
-              guardId: guard.id,
-              status: 'IN_PROGRESS',
-            },
-            include: {
-              location: true,
-            },
-          });
-
-          return {
-            guard: {
-              id: guard.id,
-              employeeId: guard.employeeId,
-              name: `${guard.user.firstName} ${guard.user.lastName}`,
-              status: guard.status,
-            },
-            location: latestLocation,
-            currentShift: currentShift,
-            lastUpdate: latestLocation?.timestamp,
-          };
-        })
-      );
-
-      return locationData.filter(data => data.location !== null);
+        location,
+        currentShift: shift,
+        siteName: shift.site?.name,
+        lastUpdate: location.timestamp,
+      }));
     } catch (error) {
       logger.error('Failed to get real-time location data:', error);
       throw error;
@@ -387,7 +387,7 @@ export class TrackingService {
   /**
    * Get location analytics for admin dashboard
    */
-  async getLocationAnalytics(startDate?: Date, endDate?: Date) {
+  async getLocationAnalytics(startDate?: Date, endDate?: Date, securityCompanyId?: string) {
     try {
       const where: any = {};
 
@@ -395,6 +395,17 @@ export class TrackingService {
         where.timestamp = {};
         if (startDate) where.timestamp.gte = startDate;
         if (endDate) where.timestamp.lte = endDate;
+      }
+
+      if (securityCompanyId) {
+        where.guard = {
+          companyGuards: {
+            some: {
+              securityCompanyId,
+              isActive: true,
+            },
+          },
+        };
       }
 
       // Total location records

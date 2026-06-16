@@ -30,38 +30,83 @@ const CompanyManagementScreen: React.FC = () => {
   const [companies, setCompanies] = useState<SecurityCompany[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<string>('all');
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
 
-  const loadCompanies = async () => {
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const loadCompanies = async (reset = false) => {
     try {
+      const currentPage = reset ? 1 : page;
+      if (reset) {
+        setLoading(true);
+      } else if (currentPage > 1) {
+        setLoadingMore(true);
+      }
       const data = await superAdminService.getSecurityCompanies({
-        search: searchQuery,
+        page: currentPage,
+        limit: 20,
+        search: debouncedSearch || undefined,
         status: selectedFilter !== 'all' ? selectedFilter : undefined,
       });
-      setCompanies(data.companies);
+      if (reset) {
+        setCompanies(data.companies);
+        setPage(1);
+      } else {
+        setCompanies((prev) => [...prev, ...data.companies]);
+      }
+      setHasMore(data.pagination.page < data.pagination.pages);
     } catch (error) {
       console.error('Error loading companies:', error);
       Alert.alert('Error', 'Failed to load companies');
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setLoadingMore(false);
     }
   };
 
   useEffect(() => {
-    loadCompanies();
-  }, [searchQuery, selectedFilter]);
+    loadCompanies(true);
+  }, [debouncedSearch, selectedFilter]);
 
   useFocusEffect(
     React.useCallback(() => {
-      loadCompanies();
+      loadCompanies(true);
     }, [])
   );
 
   const onRefresh = () => {
     setRefreshing(true);
-    loadCompanies();
+    loadCompanies(true);
+  };
+
+  const handleLoadMore = () => {
+    if (!loadingMore && hasMore && !loading) {
+      const nextPage = page + 1;
+      setPage(nextPage);
+      superAdminService
+        .getSecurityCompanies({
+          page: nextPage,
+          limit: 20,
+          search: debouncedSearch || undefined,
+          status: selectedFilter !== 'all' ? selectedFilter : undefined,
+        })
+        .then((data) => {
+          setCompanies((prev) => [...prev, ...data.companies]);
+          setHasMore(data.pagination.page < data.pagination.pages);
+        })
+        .catch(() => Alert.alert('Error', 'Failed to load more companies'))
+        .finally(() => setLoadingMore(false));
+      setLoadingMore(true);
+    }
   };
 
   const handleToggleStatus = async (companyId: string, currentStatus: boolean) => {
@@ -217,6 +262,13 @@ const CompanyManagementScreen: React.FC = () => {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
+        onScroll={({ nativeEvent }) => {
+          const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+          if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 40) {
+            handleLoadMore();
+          }
+        }}
+        scrollEventThrottle={400}
       >
         <View style={styles.companiesContainer}>
           {companies.map((company) => (

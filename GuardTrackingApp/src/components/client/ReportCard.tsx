@@ -1,12 +1,15 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { PersonIcon } from '../ui/AppIcons';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import ProfileAvatar from '../common/ProfileAvatar';
+import { parseDisplayName } from '../../utils/parseDisplayName';
 import StatusBadge from './StatusBadge';
-import { globalStyles } from '../../styles/globalStyles';
+import { globalStyles, COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
+import { getReportSourceLabel } from '../../utils/reportUtils';
 
 interface ReportCardProps {
   report: {
     id: string;
+    source?: 'shift' | 'incident';
     type: 'Medical Emergency' | 'Incident' | 'Violation' | 'Maintenance';
     guardName: string;
     guardAvatar?: string;
@@ -42,20 +45,25 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, onPress, onRespond, onC
   const getTypeColor = () => {
     switch (report.type) {
       case 'Medical Emergency':
-        return '#D32F2F';
+        return COLORS.error;
       case 'Incident':
-        return '#FF9500';
+        return COLORS.warning;
       case 'Violation':
-        return '#FF9500';
+        return COLORS.warning;
       case 'Maintenance':
-        return '#1976D2';
+        return COLORS.info;
       default:
-        return '#666666';
+        return COLORS.textSecondary;
     }
   };
 
   return (
-    <TouchableOpacity style={[globalStyles.card, styles.card]} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={[styles.card]} onPress={onPress} activeOpacity={0.7}>
+      {report.source ? (
+        <View style={styles.sourceRow}>
+          <Text style={styles.sourceLabel}>{getReportSourceLabel(report.source)}</Text>
+        </View>
+      ) : null}
       <View style={styles.header}>
         <View style={styles.typeContainer}>
           <View style={[styles.typeIcon, { backgroundColor: getTypeColor() + '15' }]}>
@@ -79,13 +87,11 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, onPress, onRespond, onC
       <View style={styles.guardSection}>
         <Text style={styles.guardOnDutyLabel}>Guard On Duty</Text>
         <View style={styles.guardInfo}>
-          <View style={styles.avatar}>
-            {report.guardAvatar ? (
-              <Image source={{ uri: report.guardAvatar }} style={styles.avatarImage} />
-            ) : (
-              <PersonIcon size={20} color="#666" />
-            )}
-          </View>
+          <ProfileAvatar
+            {...parseDisplayName(report.guardName)}
+            profilePictureUrl={report.guardAvatar}
+            size={40}
+          />
           <View style={styles.guardDetails}>
             <Text style={styles.guardName}>{report.guardName}</Text>
             {report.checkInTime && (
@@ -110,13 +116,32 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, onPress, onRespond, onC
 
 const styles = StyleSheet.create({
   card: {
-    marginBottom: 12,
+    marginBottom: SPACING.md,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.primary,
+    ...SHADOWS.small,
+  },
+  sourceRow: {
+    marginBottom: SPACING.sm,
+  },
+  sourceLabel: {
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.primaryDark,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: SPACING.md,
   },
   typeContainer: {
     flexDirection: 'row',
@@ -126,10 +151,10 @@ const styles = StyleSheet.create({
   typeIcon: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: BORDER_RADIUS.md,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: SPACING.md,
   },
   typeEmoji: {
     fontSize: 18,
@@ -138,82 +163,98 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   typeText: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    marginBottom: 2,
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
   siteText: {
-    fontSize: 12,
-    color: '#666666',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textSecondary,
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
   statusContainer: {
     alignItems: 'flex-end',
   },
   respondButton: {
-    backgroundColor: '#D32F2F',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginTop: 8,
+    backgroundColor: COLORS.error,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderRadius: BORDER_RADIUS.round,
+    marginTop: SPACING.sm,
+    ...SHADOWS.small,
   },
   respondButtonText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
+    color: COLORS.textInverse,
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
   guardSection: {
-    marginBottom: 12,
+    marginBottom: SPACING.md,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderCard,
   },
   guardOnDutyLabel: {
-    fontSize: 12,
-    color: '#666666',
-    marginBottom: 8,
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.sm,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   guardInfo: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F5F5F5',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.secondary,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
+    marginRight: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
   },
   avatarImage: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
   },
   guardDetails: {
     flex: 1,
   },
   guardName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333333',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
     marginBottom: 2,
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
   checkInTime: {
-    fontSize: 12,
-    color: '#2E7D32',
-    fontWeight: '500',
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.success,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
   description: {
-    fontSize: 14,
-    color: '#333333',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
     lineHeight: 20,
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
   chatButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#1976D2',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 8,
+    marginLeft: SPACING.sm,
+    ...SHADOWS.small,
   },
   chatButtonText: {
     fontSize: 16,

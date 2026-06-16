@@ -1,329 +1,165 @@
 import React from 'react';
-import { View } from 'react-native';
-import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import Ionicons from 'react-native-vector-icons/Ionicons';
-import FontAwesome from 'react-native-vector-icons/FontAwesome';
-// SVG assets (Figma exports) for guard-side UI
-import HomeSvg from '../../assets/icons/House.svg';
-import CalendarSvg from '../../assets/icons/CalendarDots.svg';
-import ReportsSvg from '../../assets/icons/carbon_report.svg';
-import JobsSvg from '../../assets/icons/ReadCvLogo.svg';
-import UserSvg from '../../assets/icons/UserCheck.svg';
-import MenuSvg from '../../assets/icons/mage_dashboard.svg';
-import BellSvg from '../../assets/icons/BellSimple.svg';
-import MapPinSvg from '../../assets/icons/MapPin.svg';
-import ClockSvg from '../../assets/icons/ClockCountdown.svg';
-import WarningSvg from '../../assets/icons/Warning.svg';
-import CheckCircleSvg from '../../assets/icons/CheckCircle.svg';
-import XCircleSvg from '../../assets/icons/XCircle.svg';
-import PersonSvg from '../../assets/icons/bi_person.svg';
-import PasswordSvg from '../../assets/icons/carbon_password.svg';
-import EyeSvg from '../../assets/icons/Eye.svg';
-import EyeSlashSvg from '../../assets/icons/EyeSlash.svg';
-import SettingsSvg from '../../assets/icons/ep_setting.svg';
-import ArrowSquareOutSvg from '../../assets/icons/ArrowSquareOut.svg';
-import SolarArrowUpOutlineSvg from '../../assets/icons/solar_arrow-up-outline.svg';
+import { ViewStyle } from 'react-native';
+import { FeatherIcon, FeatherIconName } from './FeatherIcons';
 
-// Icon types supported by our app
-type IconType = 'material' | 'material-community' | 'ionicons' | 'fontawesome';
-
-interface IconProps {
-  type: IconType;
-  name: string;
+interface CommonIconProps {
   size?: number;
   color?: string;
-  style?: any;
+  style?: ViewStyle;
 }
 
-// Main Icon component that renders the appropriate icon based on type
+type IconType = 'material' | 'material-community' | 'ionicons' | 'fontawesome';
+
+interface IconProps extends CommonIconProps {
+  type: IconType;
+  name: string;
+}
+
+const STROKE_WIDTH = 2;
+
+const createFeatherIcon = (
+  name: FeatherIconName,
+  defaultColor = '#000000',
+): React.FC<CommonIconProps> => {
+  const IconComponent: React.FC<CommonIconProps> = ({
+    size = 24,
+    color = defaultColor,
+    style,
+  }) => (
+    <FeatherIcon
+      name={name}
+      size={size}
+      color={color}
+      style={style}
+      strokeWidth={STROKE_WIDTH}
+    />
+  );
+
+  IconComponent.displayName = `AppIcons.${name}`;
+  return IconComponent;
+};
+
+/** Maps legacy Material / Ionic icon names to Feather equivalents */
+const LEGACY_ICON_MAP: Record<string, FeatherIconName> = {
+  info: 'info',
+  'mail-outline': 'mail',
+  'photo-camera': 'camera',
+  groups: 'users',
+  'person-outline': 'user',
+  'vpn-key': 'key',
+  'cloud-upload': 'upload',
+  badge: 'creditCard',
+  verified: 'checkCircle',
+  search: 'search',
+  edit: 'edit',
+  add: 'plus',
+  'chevron-right': 'chevronRight',
+  'expand-more': 'chevronDown',
+  'keyboard-arrow-up': 'chevronUp',
+  'keyboard-arrow-down': 'chevronDown',
+  logout: 'logOut',
+  'arrow-back': 'arrowLeft',
+  save: 'save',
+  'attach-money': 'dollarSign',
+  'credit-card': 'creditCard',
+  'file-download': 'download',
+  mic: 'mic',
+  send: 'send',
+  'more-horiz': 'moreHorizontal',
+  check: 'check',
+  dashboard: 'activity',
+  'confirmation-number': 'fileText',
+  'insert-chart-outlined': 'barChart',
+  security: 'shield',
+  business: 'briefcase',
+  'admin-panel-settings': 'settings',
+  'lock-outline': 'lock',
+  'lock-closed-outline': 'lock',
+  'help-outline': 'info',
+};
+
 export const AppIcon: React.FC<IconProps> = ({
-  type,
   name,
   size = 24,
   color = '#000000',
   style,
 }) => {
-  const iconStyle = style as any;
-
-  switch (type) {
-    case 'material':
-      return <MaterialIcons name={name} size={size} color={color} style={iconStyle} />;
-    case 'material-community':
-      return <MaterialCommunityIcons name={name} size={size} color={color} style={iconStyle} />;
-    case 'ionicons':
-      return <Ionicons name={name} size={size} color={color} style={iconStyle} />;
-    case 'fontawesome':
-      return <FontAwesome name={name} size={size} color={color} style={iconStyle} />;
-    default:
-      return <MaterialIcons name="error" size={size} color={color} style={iconStyle} />;
-  }
-};
-
-// Generic SVG icon wrapper - simple and consistent
-// Uses native SVG stroke widths for uniform appearance
-type SvgIconProps = { size?: number; color?: string; style?: any };
-const SvgIcon = ({ Svg, size = 24, color, style }: SvgIconProps & { Svg: any }) => {
-  const iconColor = color || '#000000';
+  const featherName = LEGACY_ICON_MAP[name] ?? 'alertCircle';
 
   return (
-    <Svg
-      width={size}
-      height={size}
-      fill={iconColor}
-      stroke={iconColor}
-      color={iconColor}
+    <FeatherIcon
+      name={featherName}
+      size={size}
+      color={color}
       style={style}
+      strokeWidth={STROKE_WIDTH}
     />
   );
 };
 
-// Specialized icon components for common use cases
-interface CommonIconProps {
-  size?: number;
-  color?: string;
-  style?: any;
-}
-
-// Navigation icons - consistent styling with native SVG strokes
-export const HomeIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
-  <SvgIcon Svg={HomeSvg} size={size} color={color} style={style} />
-);
-
-export const DashboardIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
-  <SvgIcon Svg={MenuSvg} size={size} color={color} style={style} />
-);
-
-export const ShiftsIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
-  <SvgIcon Svg={CalendarSvg} size={size} color={color} style={style} />
-);
-
-export const ReportsIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
-  <SvgIcon Svg={ReportsSvg} size={size} color={color} style={style} />
-);
-
-export const JobsIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
-  <SvgIcon Svg={JobsSvg} size={size} color={color} style={style} />
-);
-
-export const SettingsIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
-  <SvgIcon Svg={SettingsSvg} size={size} color={color} style={style} />
-);
+// Navigation icons
+export const HomeIcon = createFeatherIcon('home');
+export const DashboardIcon = createFeatherIcon('activity');
+export const ShiftsIcon = createFeatherIcon('calendar');
+export const ReportsIcon = createFeatherIcon('fileText');
+export const JobsIcon = createFeatherIcon('briefcase');
+export const SettingsIcon = createFeatherIcon('settings');
+export const MenuIcon = createFeatherIcon('menu');
 
 // Action icons
-export const MenuIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => {
-  const lineHeight = Math.max(1, Math.round(size / 10));
-  const barWidth = size * 0.8;
-  const gap = lineHeight * 1.5;
-
-  return (
-    <View style={[{ width: size, height: size, justifyContent: 'center' }, style]}>
-      <View
-        style={{
-          width: barWidth,
-          height: lineHeight,
-          backgroundColor: color,
-          borderRadius: lineHeight / 2,
-        }}
-      />
-      <View
-        style={{
-          width: barWidth,
-          height: lineHeight,
-          backgroundColor: color,
-          borderRadius: lineHeight / 2,
-          marginTop: gap,
-        }}
-      />
-      <View
-        style={{
-          width: barWidth,
-          height: lineHeight,
-          backgroundColor: color,
-          borderRadius: lineHeight / 2,
-          marginTop: gap,
-        }}
-      />
-    </View>
-  );
-};
-
-export const NotificationIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
-  <SvgIcon Svg={BellSvg} size={size} color={color} style={style} />
-);
-
-export const LocationIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
-  <SvgIcon Svg={MapPinSvg} size={size} color={color} style={style} />
-);
-
-export const ClockIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
-  <SvgIcon Svg={ClockSvg} size={size} color={color} style={style} />
-);
-
-export const CheckInIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
-  <SvgIcon Svg={ClockSvg} size={size} color={color} style={style} />
-);
-
-export const IncidentIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
-  <SvgIcon Svg={ReportsSvg} size={size} color={color} style={style} />
-);
-
-export const EmergencyIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
-  <SvgIcon Svg={WarningSvg} size={size} color={color} style={style} />
-);
-
-export const UserIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
-  <SvgIcon Svg={UserSvg} size={size} color={color} style={style} />
-);
-
-export const ArrowRightIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
-  <SvgIcon Svg={ArrowSquareOutSvg} size={size} color={color} style={style} />
-);
-
-export const ArrowUpOutlineIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
-  <SolarArrowUpOutlineSvg width={size} height={size} color={color} stroke={color} fill="none" style={style} />
-);
-
-export const ExternalLinkIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
-  <SvgIcon Svg={ArrowSquareOutSvg} size={size} color={color} style={style} />
-);
+export const NotificationIcon = createFeatherIcon('bell');
+export const LocationIcon = createFeatherIcon('mapPin');
+export const ClockIcon = createFeatherIcon('clock');
+export const CheckInIcon = createFeatherIcon('clock');
+export const IncidentIcon = createFeatherIcon('fileText');
+export const EmergencyIcon = createFeatherIcon('alertTriangle');
+export const UserIcon = createFeatherIcon('user');
+export const ArrowRightIcon = createFeatherIcon('arrowRight');
+export const ArrowUpOutlineIcon = createFeatherIcon('arrowUp');
+export const ExternalLinkIcon = createFeatherIcon('externalLink');
 
 // Status icons
-export const CheckCircleIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#4CAF50', style }) => (
-  <SvgIcon Svg={CheckCircleSvg} size={size} color={color} style={style} />
-);
+export const CheckCircleIcon = createFeatherIcon('checkCircle', '#4CAF50');
+export const ErrorCircleIcon = createFeatherIcon('xCircle', '#F44336');
+export const InfoIcon = createFeatherIcon('info', '#2196F3');
 
-export const ErrorCircleIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#F44336', style }) => (
-  <SvgIcon Svg={XCircleSvg} size={size} color={color} style={style} />
-);
+// Form icons
+export const EmailIcon = createFeatherIcon('mail');
+export const PasswordIcon = createFeatherIcon('lock');
+export const PersonIcon = createFeatherIcon('user');
+export const EyeIcon = createFeatherIcon('eye');
+export const EyeSlashIcon = createFeatherIcon('eyeOff');
+export const CameraIcon = createFeatherIcon('camera');
+export const DocumentIcon = createFeatherIcon('fileText');
 
-export const InfoIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#2196F3', style }) => (
-  <AppIcon type="material" name="info" size={size} color={color} style={style} />
-);
+// Account type icons
+export const CompanyIcon = createFeatherIcon('users');
+export const IndividualIcon = createFeatherIcon('user');
+export const OTPIcon = createFeatherIcon('key');
+export const UploadIcon = createFeatherIcon('upload');
+export const IDCardIcon = createFeatherIcon('creditCard');
+export const CertificationIcon = createFeatherIcon('checkCircle');
 
-// Form icons - Updated to match Figma designs
-export const EmailIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
-  <AppIcon type="material" name="mail-outline" size={size} color={color} style={style} />
-);
+// Utility icons
+export const SearchIcon = createFeatherIcon('search');
+export const EditIcon = createFeatherIcon('edit');
+export const PlusIcon = createFeatherIcon('plus');
+export const ChevronRightIcon = createFeatherIcon('chevronRight');
+export const ChevronDownIcon = createFeatherIcon('chevronDown');
+export const LogoutIcon = createFeatherIcon('logOut');
+export const ArrowLeftIcon = createFeatherIcon('arrowLeft');
+export const SaveIcon = createFeatherIcon('save');
+export const DollarIcon = createFeatherIcon('dollarSign');
+export const CreditCardIcon = createFeatherIcon('creditCard');
+export const UsersIcon = createFeatherIcon('users');
+export const DownloadIcon = createFeatherIcon('download');
+export const MicIcon = createFeatherIcon('mic');
+export const SendIcon = createFeatherIcon('send');
+export const MoreHorizontalIcon = createFeatherIcon('moreHorizontal');
+export const ChatIcon = createFeatherIcon('messageCircle');
+export const CopyIcon = createFeatherIcon('copy');
+export const TrashIcon = createFeatherIcon('trash2');
 
-export const PasswordIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
-  <SvgIcon Svg={PasswordSvg} size={size} color={color} style={style} />
-);
-
-export const PersonIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
-  <SvgIcon Svg={PersonSvg} size={size} color={color} style={style} />
-);
-
-// Visibility icons for password fields
-export const EyeIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
-  <SvgIcon Svg={EyeSvg} size={size} color={color} style={style} />
-);
-
-export const EyeSlashIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
-  <SvgIcon Svg={EyeSlashSvg} size={size} color={color} style={style} />
-);
-
-export const CameraIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
-  <AppIcon type="material" name="photo-camera" size={size} color={color} style={style} />
-);
-
-export const DocumentIcon: React.FC<CommonIconProps> = ({ size = 24, color, style }) => (
-  <SvgIcon Svg={ReportsSvg} size={size} color={color} style={style} />
-);
-
-// Additional icons for Figma designs
-export const CompanyIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
-  <AppIcon type="material" name="groups" size={size} color={color} style={style} />
-);
-
-export const IndividualIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
-  <AppIcon type="material" name="person-outline" size={size} color={color} style={style} />
-);
-
-export const OTPIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
-  <AppIcon type="material" name="vpn-key" size={size} color={color} style={style} />
-);
-
-export const UploadIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
-  <AppIcon type="material" name="cloud-upload" size={size} color={color} style={style} />
-);
-
-export const IDCardIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
-  <AppIcon type="material" name="badge" size={size} color={color} style={style} />
-);
-
-export const CertificationIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
-  <AppIcon type="material" name="verified" size={size} color={color} style={style} />
-);
-
-// Additional common utility icons (Material)
-export const SearchIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
-  <AppIcon type="material" name="search" size={size} color={color} style={style} />
-);
-
-export const EditIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
-  <AppIcon type="material" name="edit" size={size} color={color} style={style} />
-);
-
-export const PlusIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
-  <AppIcon type="material" name="add" size={size} color={color} style={style} />
-);
-
-export const ChevronRightIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
-  <AppIcon type="material" name="chevron-right" size={size} color={color} style={style} />
-);
-
-export const ChevronDownIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
-  <AppIcon type="material" name="expand-more" size={size} color={color} style={style} />
-);
-
-export const LogoutIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
-  <AppIcon type="material" name="logout" size={size} color={color} style={style} />
-);
-
-// Additional app-wide icons mapped to Material glyphs
-export const ArrowLeftIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
-  <AppIcon type="material" name="arrow-back" size={size} color={color} style={style} />
-);
-
-export const SaveIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
-  <AppIcon type="material" name="save" size={size} color={color} style={style} />
-);
-
-export const DollarIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
-  <AppIcon type="material" name="attach-money" size={size} color={color} style={style} />
-);
-
-export const CreditCardIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
-  <AppIcon type="material" name="credit-card" size={size} color={color} style={style} />
-);
-
-export const UsersIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
-  <AppIcon type="material" name="groups" size={size} color={color} style={style} />
-);
-
-export const DownloadIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
-  <AppIcon type="material" name="file-download" size={size} color={color} style={style} />
-);
-
-export const MicIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
-  <AppIcon type="material" name="mic" size={size} color={color} style={style} />
-);
-
-export const SendIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
-  <AppIcon type="material" name="send" size={size} color={color} style={style} />
-);
-
-export const MoreHorizontalIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => (
-  <AppIcon type="material" name="more-horiz" size={size} color={color} style={style} />
-);
-
-export const ChatIcon: React.FC<CommonIconProps> = ({ size = 24, color = '#000000', style }) => {
-  const FeatherMessageCircle = require('react-native-feather').MessageCircle;
-  return <FeatherMessageCircle width={size} height={size} stroke={color} strokeWidth={1.5} style={style} />;
-};
-
-// Export a default object for easy imports
 const AppIcons = {
   HomeIcon,
   DashboardIcon,
@@ -374,6 +210,8 @@ const AppIcons = {
   SendIcon,
   MoreHorizontalIcon,
   ChatIcon,
+  CopyIcon,
+  TrashIcon,
 };
 
 export default AppIcons;

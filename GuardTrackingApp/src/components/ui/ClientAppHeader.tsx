@@ -3,6 +3,7 @@ import { ViewStyle } from 'react-native';
 import SharedHeader from './SharedHeader';
 import ClientProfileDrawer from '../client/ClientProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import { useNotificationBell } from '../../hooks/useNotificationBell';
 
 interface ClientAppHeaderProps {
   title?: string;
@@ -39,9 +40,10 @@ export const ClientAppHeader: React.FC<ClientAppHeaderProps> = ({
   leftIcon,
   rightIcon,
   style,
-  notificationCount = 5,
+  notificationCount,
 }) => {
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+  const bell = useNotificationBell({ notificationsRoute: 'ClientNotifications' });
 
   return (
     <>
@@ -49,17 +51,17 @@ export const ClientAppHeader: React.FC<ClientAppHeaderProps> = ({
         variant="client"
         title={title}
         showLogo={showLogo}
-        onNotificationPress={onNotificationPress}
+        onNotificationPress={onNotificationPress ?? bell.onNotificationPress}
         leftIcon={leftIcon}
         rightIcon={rightIcon}
         style={style}
-        notificationCount={notificationCount}
+        notificationCount={notificationCount ?? bell.notificationCount}
         onNavigateToProfile={onNavigateToProfile}
         onNavigateToSites={onNavigateToSites}
         onNavigateToGuards={onNavigateToGuards}
         onNavigateToReports={onNavigateToReports}
         onNavigateToAnalytics={onNavigateToAnalytics}
-        onNavigateToNotifications={onNavigateToNotifications}
+        onNavigateToNotifications={onNavigateToNotifications ?? bell.onNotificationPress}
         onNavigateToSupport={onNavigateToSupport}
         profileDrawer={
           <ClientProfileDrawer
@@ -70,7 +72,7 @@ export const ClientAppHeader: React.FC<ClientAppHeaderProps> = ({
             onNavigateToGuards={onNavigateToGuards}
             onNavigateToReports={onNavigateToReports}
             onNavigateToAnalytics={onNavigateToAnalytics}
-            onNavigateToNotifications={onNavigateToNotifications}
+            onNavigateToNotifications={onNavigateToNotifications ?? bell.onNotificationPress}
             onNavigateToSupport={onNavigateToSupport}
           />
         }

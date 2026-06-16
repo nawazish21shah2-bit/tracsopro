@@ -2,28 +2,21 @@ import { Request, Response } from 'express';
 import shiftService from '../services/shiftService.js';
 import { logger } from '../utils/logger.js';
 import { AuthRequest } from '../middleware/auth.js';
+import { resolveSecurityCompanyId } from '../utils/companyAuth.js';
 
 export const createShift = async (req: AuthRequest, res: Response) => {
   try {
     // SUPER_ADMIN can create shifts for any company (must provide securityCompanyId in body)
     // Regular ADMIN uses their own securityCompanyId
-    let securityCompanyId = req.securityCompanyId;
-    
-    if (req.user?.role === 'SUPER_ADMIN') {
-      securityCompanyId = req.body.securityCompanyId;
-      if (!securityCompanyId) {
-        return res.status(400).json({
-          success: false,
-          error: 'Security company ID is required in request body for SUPER_ADMIN.',
-        });
-      }
-    } else if (!securityCompanyId) {
-      return res.status(403).json({
+    const companyResult = resolveSecurityCompanyId(req, req.body.securityCompanyId);
+    if (companyResult.error) {
+      return res.status(companyResult.status || 400).json({
         success: false,
-        error: 'Security company ID not found. Admin must be linked to a company.',
+        error: companyResult.error,
       });
     }
 
+    const securityCompanyId = companyResult.securityCompanyId as string;
     const { guardId, siteId, locationName, locationAddress, scheduledStartTime, scheduledEndTime, description, notes, clientId } = req.body;
 
     // Admin can create shift with or without guard (can assign later)
@@ -50,7 +43,7 @@ export const createShift = async (req: AuthRequest, res: Response) => {
       scheduledEndTime,
       locationName,
       locationAddress,
-      securityCompanyId: req.securityCompanyId,
+      securityCompanyId,
     });
 
     const shift = await shiftService.createShift({
@@ -80,9 +73,81 @@ export const createShift = async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     logger.error('Admin create shift error:', error);
+    const message = error.message || 'Failed to create shift';
     return res.status(400).json({
       success: false,
-      error: error.message || 'Failed to create shift',
+      error: message,
+      message,
+    });
+  }
+};
+
+export const createBulkShifts = async (req: AuthRequest, res: Response) => {
+  try {
+    const companyResult = resolveSecurityCompanyId(req, req.body.securityCompanyId);
+    if (companyResult.error) {
+      return res.status(companyResult.status || 400).json({
+        success: false,
+        error: companyResult.error,
+      });
+    }
+
+    const securityCompanyId = companyResult.securityCompanyId as string;
+    const {
+      guardId,
+      siteId,
+      locationName,
+      locationAddress,
+      scheduledStartTime,
+      scheduledEndTime,
+      description,
+      notes,
+      clientId,
+      repeatPattern,
+    } = req.body;
+
+    if (!repeatPattern || !['week', 'month'].includes(repeatPattern)) {
+      return res.status(400).json({
+        success: false,
+        error: 'repeatPattern must be "week" or "month"',
+      });
+    }
+
+    if (!scheduledStartTime || !scheduledEndTime) {
+      return res.status(400).json({
+        success: false,
+        error: 'scheduledStartTime and scheduledEndTime are required',
+      });
+    }
+
+    const result = await shiftService.createBulkShifts(
+      {
+        guardId: guardId || undefined,
+        siteId,
+        clientId: clientId || undefined,
+        locationName: locationName || '',
+        locationAddress: locationAddress || '',
+        scheduledStartTime: new Date(scheduledStartTime),
+        scheduledEndTime: new Date(scheduledEndTime),
+        description,
+        notes,
+        repeatPattern,
+      },
+      securityCompanyId
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: `${result.count} shifts scheduled successfully`,
+      data: result,
+    });
+  } catch (error: any) {
+    logger.error('Admin bulk create shift error:', error);
+    const message = error.message || 'Failed to create bulk shifts';
+    return res.status(400).json({
+      success: false,
+      error: message,
+      message,
     });
   }
 };
@@ -194,23 +259,15 @@ export const get30DaySchedule = async (req: AuthRequest, res: Response) => {
  */
 export const assignGuardToShift = async (req: AuthRequest, res: Response) => {
   try {
-    let securityCompanyId = req.securityCompanyId;
-    
-    if (req.user?.role === 'SUPER_ADMIN') {
-      securityCompanyId = req.body.securityCompanyId;
-      if (!securityCompanyId) {
-        return res.status(400).json({
-          success: false,
-          error: 'Security company ID is required in request body for SUPER_ADMIN.',
-        });
-      }
-    } else if (!securityCompanyId) {
-      return res.status(403).json({
+    const companyResult = resolveSecurityCompanyId(req, req.body.securityCompanyId);
+    if (companyResult.error) {
+      return res.status(companyResult.status || 400).json({
         success: false,
-        error: 'Security company ID not found. Admin must be linked to a company.',
+        error: companyResult.error,
       });
     }
 
+    const securityCompanyId = companyResult.securityCompanyId as string;
     const { shiftId } = req.params;
     const { guardId } = req.body;
 
@@ -230,9 +287,11 @@ export const assignGuardToShift = async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     logger.error('Admin assign guard error:', error);
+    const message = error.message || 'Failed to assign guard to shift';
     return res.status(400).json({
       success: false,
-      error: error.message || 'Failed to assign guard to shift',
+      error: message,
+      message,
     });
   }
 };
@@ -242,19 +301,19 @@ export const assignGuardToShift = async (req: AuthRequest, res: Response) => {
  */
 export const getUnassignedShifts = async (req: AuthRequest, res: Response) => {
   try {
-    let securityCompanyId = req.securityCompanyId;
-    
-    if (req.user?.role === 'SUPER_ADMIN') {
-      securityCompanyId = req.body.securityCompanyId || req.query.securityCompanyId as string;
-    }
-
-    if (!securityCompanyId) {
-      return res.status(403).json({
+    const companyResult = resolveSecurityCompanyId(
+      req,
+      (req.body.securityCompanyId || req.query.securityCompanyId) as string,
+      'Security company ID is required in request body or query for SUPER_ADMIN.'
+    );
+    if (companyResult.error) {
+      return res.status(companyResult.status || 400).json({
         success: false,
-        error: 'Security company ID not found',
+        error: companyResult.error,
       });
     }
 
+    const securityCompanyId = companyResult.securityCompanyId as string;
     const { date, startDate, endDate } = req.query;
 
     let start: Date;
@@ -310,10 +369,65 @@ export const getUnassignedShifts = async (req: AuthRequest, res: Response) => {
   }
 };
 
+
+export const updateShift = async (req: AuthRequest, res: Response) => {
+  try {
+    const companyResult = resolveSecurityCompanyId(req, req.body.securityCompanyId);
+    if (companyResult.error) {
+      return res.status(companyResult.status || 400).json({ success: false, error: companyResult.error });
+    }
+
+    const { shiftId } = req.params;
+    const { guardId, siteId, scheduledStartTime, scheduledEndTime, description, notes } = req.body;
+
+    const updated = await shiftService.updateShift(
+      shiftId,
+      {
+        guardId: guardId !== undefined ? guardId : undefined,
+        siteId,
+        scheduledStartTime: scheduledStartTime ? new Date(scheduledStartTime) : undefined,
+        scheduledEndTime: scheduledEndTime ? new Date(scheduledEndTime) : undefined,
+        description,
+        notes,
+      },
+      { securityCompanyId: companyResult.securityCompanyId as string }
+    );
+
+    return res.status(200).json({ success: true, message: 'Shift updated successfully', data: updated });
+  } catch (error: any) {
+    logger.error('Admin update shift error:', error);
+    const status = error.name === 'NotFoundError' ? 404 : error.name === 'ValidationError' ? 400 : 500;
+    const message = error.message || 'Failed to update shift';
+    return res.status(status).json({ success: false, error: message, message });
+  }
+};
+
+export const deleteShift = async (req: AuthRequest, res: Response) => {
+  try {
+    const companyResult = resolveSecurityCompanyId(req);
+    if (companyResult.error) {
+      return res.status(companyResult.status || 400).json({ success: false, error: companyResult.error });
+    }
+
+    const { shiftId } = req.params;
+
+    await shiftService.deleteShift(shiftId, { securityCompanyId: companyResult.securityCompanyId as string });
+
+    return res.status(200).json({ success: true, message: 'Shift deleted successfully' });
+  } catch (error: any) {
+    logger.error('Admin delete shift error:', error);
+    const status = error.name === 'NotFoundError' ? 404 : error.name === 'ValidationError' ? 400 : 500;
+    return res.status(status).json({ success: false, error: error.message || 'Failed to delete shift' });
+  }
+};
+
 export default {
   createShift,
+  createBulkShifts,
   getShifts,
   get30DaySchedule,
   assignGuardToShift,
   getUnassignedShifts,
+  updateShift,
+  deleteShift,
 };

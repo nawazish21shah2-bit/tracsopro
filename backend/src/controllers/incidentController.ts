@@ -1,10 +1,17 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import incidentService from '../services/incidentService.js';
 import { AuthRequest } from '../middleware/auth.js';
+import { resolveTenantCompanyId } from '../utils/tenantScope.js';
 
 export class IncidentController {
-  async getAllIncidents(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getAllIncidents(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
+      const tenant = resolveTenantCompanyId(req, { allowSuperAdminUnscoped: true });
+      if (tenant.error) {
+        res.status(tenant.status || 403).json({ success: false, message: tenant.error });
+        return;
+      }
+
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 50;
       const filters = {
@@ -14,7 +21,12 @@ export class IncidentController {
         reportedBy: req.query.reportedBy as string,
       };
 
-      const result = await incidentService.getAllIncidents(page, limit, filters);
+      const result = await incidentService.getAllIncidents(
+        page,
+        limit,
+        filters,
+        tenant.securityCompanyId
+      );
       res.json({
         success: true,
         data: result,
@@ -24,9 +36,15 @@ export class IncidentController {
     }
   }
 
-  async getIncidentById(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getIncidentById(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const incident = await incidentService.getIncidentById(req.params.id);
+      const tenant = resolveTenantCompanyId(req, { allowSuperAdminUnscoped: true });
+
+      const incident = await incidentService.getIncidentById(req.params.id, {
+        userId: req.userId!,
+        role: req.user?.role || '',
+        securityCompanyId: tenant.securityCompanyId,
+      });
       res.json({
         success: true,
         data: incident,
@@ -48,9 +66,19 @@ export class IncidentController {
     }
   }
 
-  async updateIncident(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async updateIncident(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const incident = await incidentService.updateIncident(req.params.id, req.body);
+      const tenant = resolveTenantCompanyId(req);
+      if (tenant.error) {
+        res.status(tenant.status || 403).json({ success: false, message: tenant.error });
+        return;
+      }
+
+      const incident = await incidentService.updateIncident(
+        req.params.id,
+        req.body,
+        tenant.securityCompanyId
+      );
       res.json({
         success: true,
         data: incident,
@@ -60,9 +88,15 @@ export class IncidentController {
     }
   }
 
-  async addEvidence(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async addEvidence(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const evidence = await incidentService.addEvidence(req.params.id, req.body);
+      const tenant = resolveTenantCompanyId(req, { allowSuperAdminUnscoped: true });
+
+      const evidence = await incidentService.addEvidence(req.params.id, req.body, {
+        userId: req.userId!,
+        role: req.user?.role || '',
+        securityCompanyId: tenant.securityCompanyId,
+      });
       res.status(201).json({
         success: true,
         data: evidence,
@@ -72,12 +106,22 @@ export class IncidentController {
     }
   }
 
-  async getIncidentStats(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getIncidentStats(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
+      const tenant = resolveTenantCompanyId(req);
+      if (tenant.error) {
+        res.status(tenant.status || 403).json({ success: false, message: tenant.error });
+        return;
+      }
+
       const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
       const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
 
-      const stats = await incidentService.getIncidentStats(startDate, endDate);
+      const stats = await incidentService.getIncidentStats(
+        startDate,
+        endDate,
+        tenant.securityCompanyId
+      );
       res.json({
         success: true,
         data: stats,

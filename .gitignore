@@ -85,7 +85,9 @@ yarn-error.log*
 **/*.ipa
 
 # React Native / Android
+**/.gradle
 **/.gradle/
+**/.cxx
 **/.cxx/
 **/.kotlin/
 **/build/

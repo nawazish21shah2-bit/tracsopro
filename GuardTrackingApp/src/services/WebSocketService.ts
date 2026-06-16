@@ -1,9 +1,11 @@
 // WebSocket Service for Real-time Communication
 import { io, Socket } from 'socket.io-client';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { logger } from '../utils/logger';
 import { store } from '../store';
 import { updateLiveLocations, setGeofenceEvent } from '../store/slices/locationSlice';
+import { addNotification, fetchUnreadCount } from '../store/slices/notificationSlice';
+import { NotificationType } from '../types';
+import { securityManager } from '../utils/security';
 
 interface LocationUpdate {
   guardId: string;
@@ -59,6 +61,9 @@ class WebSocketService {
   private userRole: string | null = null;
   private connectionState: 'disconnected' | 'connecting' | 'connected' | 'reconnecting' = 'disconnected';
   private messageQueue: Array<{ event: string; data: any }> = [];
+  private liveLocationListeners: Set<(data: any[]) => void> = new Set();
+  private guardLocationListeners: Set<(data: any) => void> = new Set();
+  private listenersRegistered: boolean = false;
 
   constructor() {
     this.setupEventHandlers();
@@ -69,27 +74,29 @@ class WebSocketService {
    */
   async connect(): Promise<void> {
     try {
-      // Get user data from storage
-      const userData = await AsyncStorage.getItem('userData');
-      const tokenData = await AsyncStorage.getItem('tokenData');
+      if (this.socket?.connected) {
+        return;
+      }
 
-      if (!userData || !tokenData) {
+      if (this.socket && !this.socket.connected) {
+        this.socket.connect();
+        return;
+      }
+
+      const user = await securityManager.getUserData();
+      const token = await securityManager.getTokens();
+
+      if (!user?.id || !token?.accessToken) {
         logger.warn('No user data or token found for WebSocket connection');
         return;
       }
 
-      const user = JSON.parse(userData);
-      const token = JSON.parse(tokenData);
-
       this.userId = user.id;
       this.userRole = user.role;
 
-      // Get WebSocket URL from centralized configuration
-      // See src/config/apiConfig.ts to configure production URLs
       const { getWebSocketUrl } = require('../config/apiConfig');
       const baseURL = getWebSocketUrl();
 
-      // Create socket connection
       this.socket = io(baseURL, {
         transports: ['websocket', 'polling'],
         timeout: 10000,
@@ -99,6 +106,7 @@ class WebSocketService {
       });
 
       this.setupSocketEventHandlers();
+      this.registerEventListeners();
       
       logger.info('WebSocket connection initiated');
     } catch (error) {
@@ -111,9 +119,11 @@ class WebSocketService {
    */
   disconnect(): void {
     if (this.socket) {
+      this.unregisterEventListeners();
       this.socket.disconnect();
       this.socket = null;
       this.isConnected = false;
+      this.listenersRegistered = false;
       logger.info('WebSocket disconnected');
     }
   }
@@ -195,10 +205,8 @@ class WebSocketService {
     if (!this.socket || !this.userId || !this.userRole) return;
 
     try {
-      const tokenData = await AsyncStorage.getItem('tokenData');
-      if (!tokenData) return;
-
-      const token = JSON.parse(tokenData);
+      const token = await securityManager.getTokens();
+      if (!token?.accessToken) return;
 
       this.socket.emit('authenticate', {
         token: token.accessToken,
@@ -457,8 +465,13 @@ class WebSocketService {
    */
   private onGuardLocationUpdate(data: any): void {
     logger.debug('Received guard location update:', data);
-    // Handle real-time location updates in UI
-    // Could update maps, notifications, etc.
+    this.guardLocationListeners.forEach((listener) => {
+      try {
+        listener(data);
+      } catch (error) {
+        logger.error('Guard location listener error:', error);
+      }
+    });
   }
 
   private onGeofenceEvent(data: GeofenceEvent): void {
@@ -485,21 +498,42 @@ class WebSocketService {
   private onLiveLocationsUpdate(data: any[]): void {
     logger.debug('Received live locations update');
     
-    // Update Redux store with live locations
     store.dispatch(updateLiveLocations(data));
+    this.liveLocationListeners.forEach((listener) => {
+      try {
+        listener(data);
+      } catch (error) {
+        logger.error('Live locations listener error:', error);
+      }
+    });
+  }
+
+  subscribeLiveLocations(listener: (data: any[]) => void): () => void {
+    this.liveLocationListeners.add(listener);
+    return () => {
+      this.liveLocationListeners.delete(listener);
+    };
+  }
+
+  subscribeGuardLocationUpdates(listener: (data: any) => void): () => void {
+    this.guardLocationListeners.add(listener);
+    return () => {
+      this.guardLocationListeners.delete(listener);
+    };
   }
 
   /**
    * Register event listeners
    */
   registerEventListeners(): void {
-    if (!this.socket) return;
+    if (!this.socket || this.listenersRegistered) return;
 
     this.socket.on('guard_location_update', this.onGuardLocationUpdate);
     this.socket.on('geofence_event', this.onGeofenceEvent);
     this.socket.on('emergency_alert', this.onEmergencyAlert);
     this.socket.on('live_locations_update', this.onLiveLocationsUpdate);
     this.socket.on('live_locations_data', this.onLiveLocationsUpdate);
+    this.listenersRegistered = true;
     this.socket.on('shift_status_changed', (data) => {
       logger.info('Shift status changed:', data);
     });
@@ -508,9 +542,32 @@ class WebSocketService {
     });
     this.socket.on('notification', (data) => {
       logger.info('Notification received:', data);
+      const payload = data?.data || {};
+      const backendType = String(data?.type || payload?.type || '').toLowerCase();
+      const typeMap: Record<string, NotificationType> = {
+        shift_reminder: NotificationType.SHIFT_REMINDER,
+        incident_alert: NotificationType.INCIDENT_ALERT,
+        emergency: NotificationType.EMERGENCY,
+        message: NotificationType.MESSAGE,
+        system: NotificationType.SYSTEM,
+      };
+      store.dispatch(
+        addNotification({
+          id: payload.notificationId || data?.id || `ws_${Date.now()}`,
+          userId: data?.userId || 'system',
+          title: data?.title || 'Notification',
+          message: data?.message || '',
+          type: typeMap[backendType] || NotificationType.SYSTEM,
+          data: payload,
+          isRead: false,
+          createdAt: payload.createdAt ? new Date(payload.createdAt) : new Date(),
+        })
+      );
+      store.dispatch(fetchUnreadCount());
     });
-    
-    // Messaging event listeners
+
+    // Messaging event listeners (backend emits new_message)
+    this.socket.on('new_message', this.onChatMessage.bind(this));
     this.socket.on('chat_message', this.onChatMessage.bind(this));
     this.socket.on('typing_indicator', this.onTypingIndicator.bind(this));
     this.socket.on('message_read', this.onMessageRead.bind(this));
@@ -570,9 +627,12 @@ class WebSocketService {
     this.socket.off('emergency_alert', this.onEmergencyAlert);
     this.socket.off('live_locations_update', this.onLiveLocationsUpdate);
     this.socket.off('live_locations_data', this.onLiveLocationsUpdate);
+    this.listenersRegistered = false;
     this.socket.off('shift_status_changed');
     this.socket.off('emergency_broadcast');
     this.socket.off('notification');
+    this.socket.off('new_message');
+    this.socket.off('chat_message');
   }
 
   /**

@@ -1,16 +1,27 @@
 /**
  * Script to fetch Stripe Price IDs from your Stripe account
  * Run this to get all your price IDs for the .env file
- * 
+ *
  * Usage: node scripts/get-stripe-prices.js
  */
 
 import Stripe from 'stripe';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import dotenv from 'dotenv';
 
-// Your Stripe secret key
-// ⚠️ IMPORTANT: Set STRIPE_SECRET_KEY in your .env file or replace the placeholder below
-// Get your key from: https://dashboard.stripe.com/test/apikeys
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_YOUR_STRIPE_SECRET_KEY_HERE');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
+
+const secretKey = process.env.STRIPE_SECRET_KEY;
+if (!secretKey || secretKey.includes('YOUR_STRIPE_SECRET_KEY')) {
+  console.error('❌ STRIPE_SECRET_KEY is missing or still a placeholder in backend/.env');
+  console.error('   Get your test key from: https://dashboard.stripe.com/test/apikeys');
+  process.exit(1);
+}
+
+const stripe = new Stripe(secretKey);
 
 async function getStripePrices() {
   try {

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import trackingService from '../services/trackingService.js';
 import { AuthRequest } from '../middleware/auth.js';
+import { resolveSecurityCompanyId } from '../utils/companyAuth.js';
 import prisma from '../config/database.js';
 
 export class TrackingController {
@@ -31,10 +32,18 @@ export class TrackingController {
       const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
       const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
       const limit = parseInt(req.query.limit as string) || 100;
-      const securityCompanyId = req.securityCompanyId; // Multi-tenant filter
+      const companyResult = resolveSecurityCompanyId(req);
+      if (companyResult.error) {
+        res.status(companyResult.status || 400).json({
+          success: false,
+          error: companyResult.error,
+        });
+        return;
+      }
+      const securityCompanyId = companyResult.securityCompanyId;
 
       // Multi-tenant: Validate guard belongs to admin's company (unless SUPER_ADMIN)
-      if (req.user?.role !== 'SUPER_ADMIN' && securityCompanyId) {
+      if (req.user?.role !== 'SUPER_ADMIN') {
         const guard = await prisma.guard.findUnique({
           where: { id: guardId },
           include: {
@@ -67,10 +76,18 @@ export class TrackingController {
   async getLatestLocation(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { guardId } = req.params;
-      const securityCompanyId = req.securityCompanyId; // Multi-tenant filter
+      const companyResult = resolveSecurityCompanyId(req);
+      if (companyResult.error) {
+        res.status(companyResult.status || 400).json({
+          success: false,
+          error: companyResult.error,
+        });
+        return;
+      }
+      const securityCompanyId = companyResult.securityCompanyId;
 
       // Multi-tenant: Validate guard belongs to admin's company (unless SUPER_ADMIN)
-      if (req.user?.role !== 'SUPER_ADMIN' && securityCompanyId) {
+      if (req.user?.role !== 'SUPER_ADMIN') {
         const guard = await prisma.guard.findUnique({
           where: { id: guardId },
           include: {
@@ -103,7 +120,8 @@ export class TrackingController {
   async getActiveGuardsLocations(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const securityCompanyId = req.securityCompanyId; // Multi-tenant filter
-      const locations = await trackingService.getActiveGuardsLocations(securityCompanyId);
+      const clientId = req.user?.role === 'CLIENT' ? req.clientId : undefined;
+      const locations = await trackingService.getActiveGuardsLocations(securityCompanyId, clientId);
 
       res.json({
         success: true,
@@ -140,10 +158,18 @@ export class TrackingController {
       const { guardId } = req.params;
       const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
       const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
-      const securityCompanyId = req.securityCompanyId; // Multi-tenant filter
+      const companyResult = resolveSecurityCompanyId(req);
+      if (companyResult.error) {
+        res.status(companyResult.status || 400).json({
+          success: false,
+          error: companyResult.error,
+        });
+        return;
+      }
+      const securityCompanyId = companyResult.securityCompanyId;
 
       // Multi-tenant: Validate guard belongs to admin's company (unless SUPER_ADMIN)
-      if (req.user?.role !== 'SUPER_ADMIN' && securityCompanyId) {
+      if (req.user?.role !== 'SUPER_ADMIN') {
         const guard = await prisma.guard.findUnique({
           where: { id: guardId },
           include: {
@@ -173,9 +199,22 @@ export class TrackingController {
     }
   }
 
-  async getRealTimeLocationData(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getRealTimeLocationData(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const locationData = await trackingService.getRealTimeLocationData();
+      const companyResult = resolveSecurityCompanyId(req);
+      if (companyResult.error) {
+        res.status(companyResult.status || 400).json({
+          success: false,
+          error: companyResult.error,
+        });
+        return;
+      }
+
+      const clientId = req.user?.role === 'CLIENT' ? req.clientId : undefined;
+      const locationData = await trackingService.getRealTimeLocationData(
+        companyResult.securityCompanyId,
+        clientId
+      );
 
       res.json({
         success: true,
@@ -202,12 +241,20 @@ export class TrackingController {
     }
   }
 
-  async getLocationAnalytics(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getLocationAnalytics(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
       const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
+      const companyResult = resolveSecurityCompanyId(req);
+      if (companyResult.error) {
+        res.status(companyResult.status || 400).json({
+          success: false,
+          error: companyResult.error,
+        });
+        return;
+      }
 
-      const analytics = await trackingService.getLocationAnalytics(startDate, endDate);
+      const analytics = await trackingService.getLocationAnalytics(startDate, endDate, companyResult.securityCompanyId);
 
       res.json({
         success: true,

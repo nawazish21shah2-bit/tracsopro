@@ -15,7 +15,7 @@ import shiftReducer from './slices/shiftSlice';
 import shiftReportReducer from './slices/shiftReportSlice';
 import clientReducer from './slices/clientSlice';
 import emergencyReducer from './slices/emergencySlice';
-import chatReducer from './slices/chatSliceNew';
+import chatReducer from './slices/chatSlice';
 import adminReducer from './slices/adminSlice';
 
 // Persist configuration

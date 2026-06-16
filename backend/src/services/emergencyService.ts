@@ -1,7 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/database.js';
 import websocketService from './websocketService.js';
-
-const prisma = new PrismaClient();
+import { ConflictError, NotFoundError } from '../utils/errors.js';
 
 export interface EmergencyAlert {
   id: string;
@@ -25,6 +24,17 @@ export interface EmergencyAlert {
 
 export class EmergencyService {
   private static instance: EmergencyService;
+  private static readonly DEFAULT_EMERGENCY_RESUBMIT_COOLDOWN_SECONDS = 120;
+
+  private static getEmergencyResubmitCooldownMs(): number {
+    const parsed = Number(process.env.EMERGENCY_RESUBMIT_COOLDOWN_SECONDS);
+    const cooldownSeconds =
+      Number.isFinite(parsed) && parsed >= 0
+        ? parsed
+        : EmergencyService.DEFAULT_EMERGENCY_RESUBMIT_COOLDOWN_SECONDS;
+
+    return Math.floor(cooldownSeconds * 1000);
+  }
 
   constructor() {
     // WebSocket service is imported as default export
@@ -35,6 +45,45 @@ export class EmergencyService {
       EmergencyService.instance = new EmergencyService();
     }
     return EmergencyService.instance;
+  }
+
+  /**
+   * Find the guard's currently open emergency incident, if any.
+   */
+  async findGuardActiveEmergencyAlert(guardId: string): Promise<EmergencyAlert | null> {
+    const guard = await prisma.guard.findUnique({
+      where: { id: guardId },
+      select: { userId: true },
+    });
+
+    if (!guard) {
+      return null;
+    }
+
+    const incident = await prisma.incident.findFirst({
+      where: {
+        reportedBy: guard.userId,
+        status: { in: ['REPORTED', 'INVESTIGATING'] },
+        type: { in: ['SECURITY_BREACH', 'MEDICAL_EMERGENCY', 'FIRE', 'OTHER'] },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!incident) {
+      return null;
+    }
+
+    return {
+      id: incident.id,
+      guardId,
+      type: this.mapIncidentTypeToEmergencyType(incident.type),
+      severity: incident.severity as EmergencyAlert['severity'],
+      location: { latitude: 0, longitude: 0 },
+      message: incident.description || undefined,
+      status: incident.status === 'REPORTED' ? 'ACTIVE' : 'ACKNOWLEDGED',
+      createdAt: incident.createdAt,
+      acknowledgedAt: incident.acknowledgedAt || undefined,
+    };
   }
 
   /**
@@ -67,6 +116,40 @@ export class EmergencyService {
 
       if (!guard) {
         throw new Error('Guard not found');
+      }
+
+      const existingActive = await this.findGuardActiveEmergencyAlert(data.guardId);
+      if (existingActive) {
+        throw new ConflictError(
+          'You already have an active emergency alert. Responders have been notified.',
+          existingActive
+        );
+      }
+
+      const recentlyResolved = await prisma.incident.findFirst({
+        where: {
+          reportedBy: guard.userId,
+          status: { in: ['RESOLVED', 'CLOSED'] },
+          type: { in: ['SECURITY_BREACH', 'MEDICAL_EMERGENCY', 'FIRE', 'OTHER'] },
+          resolvedAt: { not: null },
+        },
+        orderBy: { resolvedAt: 'desc' },
+      });
+
+      if (recentlyResolved?.resolvedAt) {
+        const cooldownMs = EmergencyService.getEmergencyResubmitCooldownMs();
+        const elapsedMs = Date.now() - recentlyResolved.resolvedAt.getTime();
+        if (elapsedMs < cooldownMs) {
+          const remainingMs = cooldownMs - elapsedMs;
+          const retryAfterSeconds = Math.ceil(remainingMs / 1000);
+          throw new ConflictError(
+            'A recent emergency alert was just resolved. Please wait before submitting again.',
+            {
+              retryAfterSeconds,
+              lastResolvedAt: recentlyResolved.resolvedAt.toISOString(),
+            }
+          );
+        }
       }
 
       // Get active shift and site information for site-specific notifications
@@ -192,8 +275,23 @@ export class EmergencyService {
       });
 
       // Broadcast to site-specific admin/client sockets
-      // Note: WebSocket broadcasting will be implemented when websocketService is properly configured
-      console.log(`Broadcasting emergency alert for site: ${siteName || 'Unknown'} (Site ID: ${siteId || 'N/A'})`);
+      websocketService.broadcastToAdmins('emergency_alert', {
+        alertId: emergencyAlert.id,
+        guardId: data.guardId,
+        type: data.type,
+        severity: data.severity,
+        location: data.location,
+        message: data.message,
+        siteId,
+        siteName,
+        status: 'ACTIVE',
+        timestamp: alert.createdAt.toISOString(),
+      });
+
+      websocketService.sendToSpecificGuard(data.guardId, 'emergency_triggered', {
+        alertId: emergencyAlert.id,
+        status: 'ACTIVE',
+      });
 
       // Log emergency event
       console.log(`🚨 EMERGENCY ALERT: ${data.type} - Guard: ${guard.user.firstName} ${guard.user.lastName} (${guard.employeeId})`);
@@ -210,22 +308,119 @@ export class EmergencyService {
    */
   async acknowledgeEmergencyAlert(alertId: string, acknowledgedBy: string): Promise<void> {
     try {
-      await prisma.incident.update({
-        where: { id: alertId },
+      const result = await prisma.incident.updateMany({
+        where: {
+          id: alertId,
+          status: 'REPORTED',
+        },
         data: {
           status: 'INVESTIGATING',
-          updatedAt: new Date(),
+          acknowledgedBy,
+          acknowledgedAt: new Date(),
         },
       });
 
-      // Broadcast acknowledgment
-      console.log('Broadcasting emergency acknowledgment');
+      if (result.count === 0) {
+        const existing = await prisma.incident.findUnique({
+          where: { id: alertId },
+          select: { status: true, acknowledgedBy: true },
+        });
+
+        if (!existing) {
+          throw new NotFoundError('Emergency alert not found');
+        }
+
+        if (existing.status === 'INVESTIGATING') {
+          // Already dispatched — treat as success so UI can refresh cleanly
+          return;
+        }
+
+        if (existing.status === 'RESOLVED' || existing.status === 'CLOSED') {
+          throw new ConflictError('Emergency alert is already resolved');
+        }
+
+        throw new ConflictError('Unable to acknowledge emergency alert');
+      }
+
+      websocketService.broadcastToAdmins('emergency_acknowledged', {
+        alertId,
+        acknowledgedBy,
+        acknowledgedAt: new Date().toISOString(),
+      });
 
       console.log(`✓ Emergency alert ${alertId} acknowledged by ${acknowledgedBy}`);
     } catch (error) {
       console.error('Error acknowledging emergency alert:', error);
       throw error;
     }
+  }
+
+  /**
+   * Verify caller can act on an emergency incident (matches active-alerts scoping).
+   */
+  async canAccessEmergencyAlert(
+    alertId: string,
+    context: {
+      securityCompanyId?: string;
+      role: string;
+      userId?: string;
+      clientId?: string;
+    }
+  ): Promise<boolean> {
+    const incident = await prisma.incident.findUnique({
+      where: { id: alertId },
+      include: {
+        reporter: {
+          select: {
+            id: true,
+            guard: {
+              select: { id: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!incident?.reporter?.guard) {
+      return false;
+    }
+
+    const guardId = incident.reporter.guard.id;
+
+    if (context.securityCompanyId) {
+      const companyGuard = await prisma.companyGuard.findFirst({
+        where: {
+          guardId,
+          securityCompanyId: context.securityCompanyId,
+          isActive: true,
+        },
+        select: { id: true },
+      });
+
+      if (!companyGuard) {
+        return false;
+      }
+    }
+
+    if (context.role === 'CLIENT') {
+      if (!context.clientId) {
+        return false;
+      }
+
+      const guardOnClientShift = await prisma.shift.findFirst({
+        where: {
+          clientId: context.clientId,
+          guardId,
+        },
+        select: { id: true },
+      });
+
+      if (!guardOnClientShift) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   /**
@@ -238,18 +433,48 @@ export class EmergencyService {
     status: 'RESOLVED' | 'FALSE_ALARM' = 'RESOLVED'
   ): Promise<void> {
     try {
-      await prisma.incident.update({
-        where: { id: alertId },
+      const existingDescription = await this.getIncidentDescription(alertId);
+      const targetStatus = status === 'RESOLVED' ? 'RESOLVED' : 'CLOSED';
+
+      const result = await prisma.incident.updateMany({
+        where: {
+          id: alertId,
+          status: { in: ['REPORTED', 'INVESTIGATING'] },
+        },
         data: {
-          status: status === 'RESOLVED' ? 'RESOLVED' : 'CLOSED',
+          status: targetStatus,
+          resolvedBy,
           resolvedAt: new Date(),
-          description: `${await this.getIncidentDescription(alertId)}\n\nResolution: ${resolution}`,
-          updatedAt: new Date(),
+          description: `${existingDescription}\n\nResolution: ${resolution}`,
         },
       });
 
-      // Broadcast resolution
-      console.log('Broadcasting emergency resolution');
+      if (result.count === 0) {
+        const existing = await prisma.incident.findUnique({
+          where: { id: alertId },
+          select: { status: true, resolvedBy: true },
+        });
+
+        if (!existing) {
+          throw new NotFoundError('Emergency alert not found');
+        }
+
+        if (existing.status === 'RESOLVED' || existing.status === 'CLOSED') {
+          if (existing.resolvedBy === resolvedBy) {
+            return;
+          }
+          throw new ConflictError('Emergency alert already resolved by another user');
+        }
+
+        throw new ConflictError('Unable to resolve emergency alert');
+      }
+
+      websocketService.broadcastToAdmins('emergency_resolved', {
+        alertId,
+        resolvedBy,
+        status: targetStatus,
+        resolvedAt: new Date().toISOString(),
+      });
 
       console.log(`✓ Emergency alert ${alertId} resolved by ${resolvedBy}: ${status}`);
     } catch (error) {
@@ -261,7 +486,7 @@ export class EmergencyService {
   /**
    * Get active emergency alerts
    */
-  async getActiveEmergencyAlerts(securityCompanyId?: string): Promise<EmergencyAlert[]> {
+  async getActiveEmergencyAlerts(securityCompanyId?: string, clientId?: string): Promise<EmergencyAlert[]> {
     try {
       // Multi-tenant: Filter by company if provided
       let guardIds: string[] | undefined;
@@ -271,6 +496,23 @@ export class EmergencyService {
           select: { guardId: true },
         });
         guardIds = companyGuards.map(cg => cg.guardId);
+      }
+
+      // Client isolation: only alerts from guards assigned to this client's shifts
+      if (clientId) {
+        const clientShifts = await prisma.shift.findMany({
+          where: { clientId, guardId: { not: null } },
+          select: { guardId: true },
+        });
+        const clientGuardIds = [...new Set(clientShifts.map(s => s.guardId).filter(Boolean))] as string[];
+
+        if (clientGuardIds.length === 0) {
+          return [];
+        }
+
+        guardIds = guardIds
+          ? guardIds.filter(id => clientGuardIds.includes(id))
+          : clientGuardIds;
       }
 
       const whereClause: any = {
@@ -303,7 +545,10 @@ export class EmergencyService {
         where: whereClause,
         include: {
           reporter: {
-            include: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
               guard: true,
             },
           },
@@ -313,21 +558,32 @@ export class EmergencyService {
         },
       });
 
-      return incidents.map(incident => ({
-        id: incident.id,
-        guardId: incident.reporter.guard?.id || '',
-        type: this.mapIncidentTypeToEmergencyType(incident.type),
-        severity: incident.severity,
-        location: {
-          latitude: 0, // You'll need to store this in the incident
-          longitude: 0,
-        },
-        message: incident.description,
-        status: incident.status === 'REPORTED' ? 'ACTIVE' : 'ACKNOWLEDGED',
-        createdAt: incident.createdAt,
-        acknowledgedAt: incident.status === 'INVESTIGATING' ? incident.updatedAt : undefined,
-        resolvedAt: incident.resolvedAt || undefined,
-      }));
+      return incidents.map(incident => {
+        const guardName = incident.reporter
+          ? `${incident.reporter.firstName || ''} ${incident.reporter.lastName || ''}`.trim() || 'Unknown Guard'
+          : 'Unknown Guard';
+
+        return {
+          id: incident.id,
+          guardId: incident.reporter.guard?.id || '',
+          guardName,
+          type: this.mapIncidentTypeToEmergencyType(incident.type),
+          severity: incident.severity,
+          location: {
+            latitude: 0,
+            longitude: 0,
+          },
+          message: incident.description,
+          status: incident.status === 'REPORTED' ? 'ACTIVE' : 'ACKNOWLEDGED',
+          createdAt: incident.createdAt,
+          timestamp: incident.createdAt.getTime(),
+          acknowledged: incident.status !== 'REPORTED',
+          acknowledgedAt: incident.acknowledgedAt || undefined,
+          acknowledgedBy: incident.acknowledgedBy || undefined,
+          resolvedAt: incident.resolvedAt || undefined,
+          resolvedBy: incident.resolvedBy || undefined,
+        };
+      });
     } catch (error) {
       console.error('Error getting active emergency alerts:', error);
       throw error;
@@ -411,8 +667,9 @@ export class EmergencyService {
   ): Promise<void> {
     try {
       const { siteId, clientId, siteName } = siteInfo;
+      const actorUserId = guard.user.id;
 
-      // Notify the client who owns the site
+      // Notify the client who owns the site (not the guard who triggered the alert)
       if (clientId) {
         const client = await prisma.client.findUnique({
           where: { id: clientId },
@@ -424,27 +681,32 @@ export class EmergencyService {
         });
 
         if (client) {
-          // Use centralized notification service
           const NotificationService = (await import('./notificationService.js')).default;
-          await NotificationService.createNotification({
-            userId: client.userId,
-            type: 'EMERGENCY',
-            title: `🚨 EMERGENCY ALERT: ${alert.type}`,
-            message: `Emergency alert at ${siteName || 'your site'}: ${guard.user.firstName} ${guard.user.lastName} has triggered a ${alert.severity.toLowerCase()} ${alert.type.toLowerCase()} alert.`,
-            data: {
-              alertId: alert.id,
-              guardId: alert.guardId,
-              type: alert.type,
-              severity: alert.severity,
-              location: alert.location,
-              siteId: siteId,
-              siteName: siteName,
+          const sent = await NotificationService.createNotification(
+            {
+              userId: client.userId,
+              type: 'EMERGENCY',
+              title: `🚨 EMERGENCY ALERT: ${alert.type}`,
+              message: `Emergency alert at ${siteName || 'your site'}: ${guard.user.firstName} ${guard.user.lastName} has triggered a ${alert.severity.toLowerCase()} ${alert.type.toLowerCase()} alert.`,
+              data: {
+                alertId: alert.id,
+                guardId: alert.guardId,
+                type: alert.type,
+                severity: alert.severity,
+                location: alert.location,
+                siteId: siteId,
+                siteName: siteName,
+              },
+              priority: alert.severity === 'CRITICAL' ? 'urgent' : 'high',
+              sendPush: true,
             },
-            priority: alert.severity === 'CRITICAL' ? 'urgent' : 'high',
-            sendPush: true,
-          });
+            undefined,
+            actorUserId
+          );
 
-          console.log(`📱 Emergency notification sent to client: ${client.user.email}`);
+          if (sent) {
+            console.log(`📱 Emergency notification sent to client: ${client.user.email}`);
+          }
         }
       } else {
         console.warn(`⚠️  No client found for site (Site ID: ${siteId}) - client notification skipped`);
@@ -485,9 +747,8 @@ export class EmergencyService {
         const adminUserIds = companyAdmins.map(cu => cu.userId).filter(Boolean);
 
         if (adminUserIds.length > 0) {
-          // Use centralized notification service for bulk notifications
           const NotificationService = (await import('./notificationService.js')).default;
-          await NotificationService.createBulkNotifications(
+          const sent = await NotificationService.createBulkNotifications(
             adminUserIds,
             {
               type: 'EMERGENCY',
@@ -506,10 +767,13 @@ export class EmergencyService {
               priority: alert.severity === 'CRITICAL' ? 'urgent' : 'high',
               sendPush: true,
             },
-            guardCompany.securityCompanyId
+            guardCompany.securityCompanyId,
+            actorUserId
           );
 
-          console.log(`📱 Emergency notifications sent to ${adminUserIds.length} admin(s) for site: ${siteName || 'Unknown'}`);
+          console.log(
+            `📱 Emergency notifications sent to ${sent.length} admin(s) for site: ${siteName || 'Unknown'}`
+          );
         }
       } else {
         console.warn(`⚠️  Guard ${guard.id} not linked to a company - admin notifications skipped`);

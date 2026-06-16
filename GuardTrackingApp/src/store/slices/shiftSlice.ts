@@ -235,24 +235,16 @@ export const createIncidentReport = createAsyncThunk(
 );
 
 export const startBreak = createAsyncThunk(
-  'shift/startBreak',
-  async (data: { shiftId: string; breakType: 'lunch' | 'short' | 'emergency' }, { rejectWithValue }) => {
-    try {
-      return await shiftService.startBreak(data);
-    } catch (error: any) {
-      return rejectWithValue(error.response?.data?.error || 'Failed to start break');
-    }
+  'shift/startBreakLegacy',
+  async (_data: { shiftId: string; breakType: 'lunch' | 'short' | 'emergency' }, { rejectWithValue }) => {
+    return rejectWithValue('Use startShiftBreak instead');
   }
 );
 
 export const endBreak = createAsyncThunk(
-  'shift/endBreak',
-  async (breakId: string, { rejectWithValue }) => {
-    try {
-      return await shiftService.endBreak(breakId);
-    } catch (error: any) {
-      return rejectWithValue(error.response?.data?.error || 'Failed to end break');
-    }
+  'shift/endBreakLegacy',
+  async (_breakId: string, { rejectWithValue }) => {
+    return rejectWithValue('Use endShiftBreak instead');
   }
 );
 
@@ -299,7 +291,7 @@ export const checkOutFromShiftWithLocation = createAsyncThunk(
 
 // Phase 2: Break Management
 export const startShiftBreak = createAsyncThunk(
-  'shift/startBreak',
+  'shift/startShiftBreak',
   async (data: { shiftId: string; breakType: string; location?: { latitude: number; longitude: number; accuracy: number }; notes?: string }, { rejectWithValue }) => {
     try {
       return await shiftService.startBreak(data.shiftId, data.breakType, data.location, data.notes);
@@ -310,7 +302,7 @@ export const startShiftBreak = createAsyncThunk(
 );
 
 export const endShiftBreak = createAsyncThunk(
-  'shift/endBreak',
+  'shift/endShiftBreak',
   async (data: { shiftId: string; breakId: string; location?: { latitude: number; longitude: number; accuracy: number }; notes?: string }, { rejectWithValue }) => {
     try {
       return await shiftService.endBreak(data.shiftId, data.breakId, data.location, data.notes);
@@ -573,6 +565,34 @@ const shiftSlice = createSlice({
       })
       .addCase(fetchShiftStatistics.rejected, (state, action) => {
         state.statisticsLoading = false;
+        state.error = action.payload as string;
+      });
+
+    builder
+      .addCase(startShiftBreak.pending, (state) => {
+        state.breakLoading = true;
+        state.error = null;
+      })
+      .addCase(startShiftBreak.fulfilled, (state, action) => {
+        state.breakLoading = false;
+        state.currentBreak = action.payload;
+      })
+      .addCase(startShiftBreak.rejected, (state, action) => {
+        state.breakLoading = false;
+        state.error = action.payload as string;
+      });
+
+    builder
+      .addCase(endShiftBreak.pending, (state) => {
+        state.breakLoading = true;
+        state.error = null;
+      })
+      .addCase(endShiftBreak.fulfilled, (state) => {
+        state.breakLoading = false;
+        state.currentBreak = null;
+      })
+      .addCase(endShiftBreak.rejected, (state, action) => {
+        state.breakLoading = false;
         state.error = action.payload as string;
       });
   },

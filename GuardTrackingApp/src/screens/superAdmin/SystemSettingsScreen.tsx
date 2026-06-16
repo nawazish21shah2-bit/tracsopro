@@ -3,8 +3,8 @@
  * Hybrid design: Standard list items + System toggles + Action buttons
  */
 
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, ActivityIndicator, Share } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { ChevronRight, User, Bell, HelpCircle, LogOut, Lock, Trash2, Download } from 'react-native-feather';
 import { useNavigation } from '@react-navigation/native';
@@ -13,8 +13,7 @@ import type { AppDispatch } from '../../store';
 import { logoutUser } from '../../store/slices/authSlice';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
-import SuperAdminProfileDrawer from '../../components/superAdmin/SuperAdminProfileDrawer';
-import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import { useRoleScreenHeader } from '../../hooks/useRoleScreenHeader';
 import { superAdminService } from '../../services/superAdminService';
 import { cacheService } from '../../services/cacheService';
 import { SuperAdminStackParamList } from '../../navigation/SuperAdminNavigator';
@@ -57,12 +56,24 @@ const defaultSettings = {
 const SystemSettingsScreen: React.FC = () => {
   const navigation = useNavigation<StackNavigationProp<SuperAdminStackParamList>>();
   const dispatch = useDispatch<AppDispatch>();
-  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+  const { headerProps } = useRoleScreenHeader('System Settings', 'superAdmin');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [clearingCache, setClearingCache] = useState(false);
   const [exportingData, setExportingData] = useState(false);
   const [settings, setSettings] = useState(defaultSettings);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const settingsRef = useRef(settings);
+
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     loadSettings();
@@ -87,26 +98,25 @@ const SystemSettingsScreen: React.FC = () => {
     }
   };
 
-  const saveSettings = async () => {
+  const saveSettings = useCallback(async (nextSettings = settingsRef.current) => {
     try {
       setSaving(true);
       await superAdminService.updatePlatformSettings({
         GENERAL: {
-          'notifications.email': settings.emailNotifications.toString(),
-          'notifications.push': settings.pushNotifications.toString(),
-          'maintenance.mode': settings.maintenanceMode.toString(),
-          'backup.auto': settings.autoBackup.toString(),
-          'debug.mode': settings.debugMode.toString(),
+          'notifications.email': nextSettings.emailNotifications.toString(),
+          'notifications.push': nextSettings.pushNotifications.toString(),
+          'maintenance.mode': nextSettings.maintenanceMode.toString(),
+          'backup.auto': nextSettings.autoBackup.toString(),
+          'debug.mode': nextSettings.debugMode.toString(),
         },
       });
-      Alert.alert('Success', 'Settings saved successfully');
     } catch (error) {
       console.error('Error saving settings:', error);
       Alert.alert('Error', 'Failed to save settings');
     } finally {
       setSaving(false);
     }
-  };
+  }, []);
 
   const handleLogout = async () => {
     Alert.alert(
@@ -131,8 +141,11 @@ const SystemSettingsScreen: React.FC = () => {
   };
 
   const handleToggleSetting = (key: keyof typeof defaultSettings, value: boolean) => {
-    setSettings(prev => ({ ...prev, [key]: value }));
-    setTimeout(() => saveSettings(), 500);
+    const next = { ...settingsRef.current, [key]: value };
+    setSettings(next);
+    settingsRef.current = next;
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => saveSettings(next), 500);
   };
 
   const handleProfile = () => {
@@ -147,8 +160,8 @@ const SystemSettingsScreen: React.FC = () => {
     navigation.navigate('SuperAdminChangePassword');
   };
 
-  const handleSupport = () => {
-    navigation.navigate('SuperAdminSupportContact');
+  const handleSupportRequests = () => {
+    navigation.navigate('SupportHubScreen', { variant: 'superAdmin', mode: 'platform' });
   };
 
   const handleClearCache = async () => {
@@ -180,7 +193,7 @@ const SystemSettingsScreen: React.FC = () => {
   const handleExportData = async () => {
     Alert.alert(
       'Export Data',
-      'This will export all platform data. You will receive an email when the export is complete.',
+      'This will export a snapshot of platform data.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -188,13 +201,16 @@ const SystemSettingsScreen: React.FC = () => {
           onPress: async () => {
             try {
               setExportingData(true);
-              if (superAdminService.exportPlatformData) {
-                await superAdminService.exportPlatformData();
-              }
-              Alert.alert('Export Started', 'Data export has been initiated. You will receive an email when complete.');
+              const result = await superAdminService.exportPlatformData();
+              const summary = `Companies: ${result.data?.companies?.length || 0}, Audit logs: ${result.data?.auditLogs?.length || 0}`;
+              await Share.share({
+                message: JSON.stringify(result.data, null, 2),
+                title: `Platform Export ${result.exportId}`,
+              });
+              Alert.alert('Export Complete', summary);
             } catch (error) {
               console.error('Error exporting data:', error);
-              Alert.alert('Error', 'Failed to start data export. Please try again.');
+              Alert.alert('Error', 'Failed to export platform data. Please try again.');
             } finally {
               setExportingData(false);
             }
@@ -208,7 +224,7 @@ const SystemSettingsScreen: React.FC = () => {
     { id: '1', title: 'SuperAdmin Profile', icon: <User width={20} height={20} color={COLORS.textSecondary} />, onPress: handleProfile },
     { id: '2', title: 'Notifications', icon: <Bell width={20} height={20} color={COLORS.textSecondary} />, onPress: handleNotifications },
     { id: '3', title: 'Change Password', icon: <Lock width={20} height={20} color={COLORS.textSecondary} />, onPress: handleChangePassword },
-    { id: '4', title: 'Contact Support', icon: <HelpCircle width={20} height={20} color={COLORS.textSecondary} />, onPress: handleSupport },
+    { id: '4', title: 'Platform Support Inbox', icon: <HelpCircle width={20} height={20} color={COLORS.textSecondary} />, onPress: handleSupportRequests },
   ];
 
   const toggleSettings: ToggleSetting[] = [
@@ -222,7 +238,7 @@ const SystemSettingsScreen: React.FC = () => {
   if (loading) {
     return (
       <SafeAreaWrapper>
-        <SharedHeader variant="superAdmin" title="System Settings" profileDrawer={null} />
+        <SharedHeader {...headerProps} hideProfileDrawer />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
@@ -232,17 +248,7 @@ const SystemSettingsScreen: React.FC = () => {
 
   return (
     <SafeAreaWrapper>
-      <SharedHeader
-        variant="superAdmin"
-        title="System Settings"
-        profileDrawer={
-          <SuperAdminProfileDrawer
-            visible={isDrawerVisible}
-            onClose={closeDrawer}
-            onNavigateToSystemSettings={() => closeDrawer()}
-          />
-        }
-      />
+      <SharedHeader {...headerProps} />
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Standard Menu Items */}
         <View style={styles.card}>

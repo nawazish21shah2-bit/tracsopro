@@ -70,9 +70,22 @@ export class GuardService {
     };
   }
 
-  async getGuardById(id: string) {
-    const guard = await prisma.guard.findUnique({
-      where: { id },
+  private buildGuardCompanyWhere(id: string, securityCompanyId?: string) {
+    const where: any = { id };
+    if (securityCompanyId) {
+      where.companyGuards = {
+        some: {
+          securityCompanyId,
+          isActive: true,
+        },
+      };
+    }
+    return where;
+  }
+
+  async getGuardById(id: string, securityCompanyId?: string) {
+    const guard = await prisma.guard.findFirst({
+      where: this.buildGuardCompanyWhere(id, securityCompanyId),
       include: {
         user: {
           select: {
@@ -159,9 +172,9 @@ export class GuardService {
     return updated;
   }
 
-  async updateGuard(id: string, data: any) {
-    const guard = await prisma.guard.findUnique({
-      where: { id },
+  async updateGuard(id: string, data: any, securityCompanyId?: string) {
+    const guard = await prisma.guard.findFirst({
+      where: this.buildGuardCompanyWhere(id, securityCompanyId),
     });
 
     if (!guard) {
@@ -192,9 +205,9 @@ export class GuardService {
     return updated;
   }
 
-  async deleteGuard(id: string) {
-    const guard = await prisma.guard.findUnique({
-      where: { id },
+  async deleteGuard(id: string, securityCompanyId?: string) {
+    const guard = await prisma.guard.findFirst({
+      where: this.buildGuardCompanyWhere(id, securityCompanyId),
     });
 
     if (!guard) {
@@ -210,9 +223,9 @@ export class GuardService {
     return { message: 'Guard deleted successfully' };
   }
 
-  async addEmergencyContact(guardId: string, data: any) {
-    const guard = await prisma.guard.findUnique({
-      where: { id: guardId },
+  async addEmergencyContact(guardId: string, data: any, securityCompanyId?: string) {
+    const guard = await prisma.guard.findFirst({
+      where: this.buildGuardCompanyWhere(guardId, securityCompanyId),
     });
 
     if (!guard) {
@@ -233,9 +246,9 @@ export class GuardService {
     return contact;
   }
 
-  async addQualification(guardId: string, data: any) {
-    const guard = await prisma.guard.findUnique({
-      where: { id: guardId },
+  async addQualification(guardId: string, data: any, securityCompanyId?: string) {
+    const guard = await prisma.guard.findFirst({
+      where: this.buildGuardCompanyWhere(guardId, securityCompanyId),
     });
 
     if (!guard) {
@@ -257,9 +270,9 @@ export class GuardService {
     return qualification;
   }
 
-  async getGuardPerformance(guardId: string, months: number = 6) {
-    const guard = await prisma.guard.findUnique({
-      where: { id: guardId },
+  async getGuardPerformance(guardId: string, months: number = 6, securityCompanyId?: string) {
+    const guard = await prisma.guard.findFirst({
+      where: this.buildGuardCompanyWhere(guardId, securityCompanyId),
     });
 
     if (!guard) {

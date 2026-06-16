@@ -13,7 +13,7 @@ router.put('/:id', authenticate, incidentReportController.updateIncidentReport);
 router.delete('/:id', authenticate, incidentReportController.deleteIncidentReport);
 
 // Respond to report (Client/Admin)
-router.put('/:id/respond', authenticate, incidentReportController.respondToReport);
+router.put('/:id/respond', authenticate, authorize('ADMIN', 'CLIENT'), incidentReportController.respondToReport);
 
 // Admin routes
 router.get('/admin/all', authenticate, authorize('ADMIN'), incidentReportController.getAllIncidentReports);

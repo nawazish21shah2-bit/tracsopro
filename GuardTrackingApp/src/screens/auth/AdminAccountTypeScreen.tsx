@@ -5,16 +5,17 @@ import {
   StyleSheet,
   TouchableOpacity,
   StatusBar,
-  Image,
+  ScrollView,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { CompanyIcon } from '../../components/ui/AppIcons';
 import Button from '../../components/common/Button';
+import AuthHeader from '../../components/auth/AuthHeader';
+import AuthFooter from '../../components/auth/AuthFooter';
 import { AuthStackParamList } from '../../types';
-import Logo from '../../assets/images/tracSOpro-logo.png';
-import { authStyles, AUTH_HEADING_TO_FORM } from '../../styles/authStyles';
-import { COLORS } from '../../styles/globalStyles';
+import { authStyles } from '../../styles/authStyles';
+import { COLORS, SPACING } from '../../styles/globalStyles';
 
 type AdminAccountTypeScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'AdminAccountType'>;
 
@@ -35,22 +36,19 @@ const AdminAccountTypeScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      
-      {/* Logo */}
-      <View style={authStyles.logoContainer}>
-        <Image source={Logo} style={authStyles.logoImage} resizeMode="contain" />
-      </View>
 
-      {/* Title */}
-      <View style={styles.titleContainer}>
-        <Text style={styles.title}>COMPANY ADMIN</Text>
-        <Text style={styles.subtitle}>
-          Register as a company administrator to manage{'\n'}your organization's security operations.
-        </Text>
-      </View>
+      <ScrollView
+        contentContainerStyle={styles.scrollContainer}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <AuthHeader
+          title="COMPANY ADMIN"
+          subtitle="Register as a company administrator to manage your organization's security operations."
+        />
 
-      {/* Account Type Options */}
-      <View style={styles.optionsContainer}>
+        {/* Account Type Options */}
+        <View style={styles.optionsContainer}>
         {/* Company Account */}
         <TouchableOpacity
           style={[
@@ -75,29 +73,25 @@ const AdminAccountTypeScreen: React.FC = () => {
             Manage your company's security operations,{'\n'}guards, and shifts
           </Text>
         </TouchableOpacity>
-      </View>
-
-      {/* Continue Button */}
-      <View style={styles.buttonContainer}>
-        <Button
-          title="Continue"
-          onPress={handleContinue}
-          fullWidth
-          size="large"
-          disabled={!selectedType}
-          style={styles.continueButton}
-        />
-      </View>
-
-      {/* Footer */}
-      <View style={styles.footer}>
-        <View style={styles.footerRow}>
-          <Text style={styles.footerText}>Already have an account? </Text>
-          <TouchableOpacity onPress={navigateToLogin} activeOpacity={0.7}>
-            <Text style={styles.loginText}>Login</Text>
-          </TouchableOpacity>
         </View>
-      </View>
+
+        <View style={authStyles.authActions}>
+          <Button
+            title="Continue"
+            onPress={handleContinue}
+            fullWidth
+            size="large"
+            disabled={!selectedType}
+            style={authStyles.submitButton}
+          />
+        </View>
+
+        <AuthFooter
+          text="Already have an account?"
+          linkText="Login"
+          onLinkPress={navigateToLogin}
+        />
+      </ScrollView>
     </View>
   );
 };
@@ -106,16 +100,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 24,
   },
-  titleContainer: {
-    alignItems: 'center',
-    marginBottom: AUTH_HEADING_TO_FORM,
+  scrollContainer: {
+    flexGrow: 1,
+    paddingBottom: SPACING.lg,
   },
   optionsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginBottom: 80,
+    paddingHorizontal: SPACING.lg,
+    marginBottom: SPACING.xxxxl,
   },
   optionCard: {
     flex: 1,
@@ -155,34 +149,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     textAlign: 'center',
     color: '#6B7280',
-  },
-  buttonContainer: {
-    marginBottom: 40,
-  },
-  continueButton: {
-    marginBottom: 0,
-  },
-  footer: {
-    alignItems: 'center',
-    marginBottom: 40,
-  },
-  footerText: {
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  loginText: {
-    fontFamily: 'Inter',
-    fontWeight: '600',
-    fontSize: 14,
-    color: '#1C6CA9',
-  },
-  footerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexWrap: 'nowrap',
   },
 });
 

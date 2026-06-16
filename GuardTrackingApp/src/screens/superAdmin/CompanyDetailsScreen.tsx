@@ -4,14 +4,19 @@
 
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { useRoute, useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
 import { superAdminService, SecurityCompany } from '../../services/superAdminService';
+import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
+import SharedHeader from '../../components/ui/SharedHeader';
+import { SuperAdminStackParamList } from '../../navigation/SuperAdminNavigator';
+
+type NavProp = StackNavigationProp<SuperAdminStackParamList>;
 
 const CompanyDetailsScreen: React.FC = () => {
   const route = useRoute();
-  const navigation = useNavigation();
+  const navigation = useNavigation<NavProp>();
   const [company, setCompany] = useState<SecurityCompany | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
@@ -43,7 +48,7 @@ const CompanyDetailsScreen: React.FC = () => {
 
   const handleToggleStatus = () => {
     if (!company) return;
-    
+
     const action = company.isActive ? 'suspend' : 'activate';
     Alert.alert(
       `${action.charAt(0).toUpperCase() + action.slice(1)} Company`,
@@ -70,32 +75,64 @@ const CompanyDetailsScreen: React.FC = () => {
     );
   };
 
+  const handleDelete = () => {
+    if (!company) return;
+    Alert.alert(
+      'Delete Company',
+      `Permanently delete ${company.name}? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setUpdating(true);
+              await superAdminService.deleteSecurityCompany(company.id);
+              Alert.alert('Deleted', 'Company removed', [
+                { text: 'OK', onPress: () => navigation.goBack() },
+              ]);
+            } catch (error: any) {
+              Alert.alert('Error', error.response?.data?.error || 'Failed to delete company');
+            } finally {
+              setUpdating(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaWrapper>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
           <Text style={styles.loadingText}>Loading Company Details...</Text>
         </View>
-      </SafeAreaView>
+      </SafeAreaWrapper>
     );
   }
 
   if (!company) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaWrapper>
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>Company not found</Text>
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Text style={styles.backButtonText}>Go Back</Text>
           </TouchableOpacity>
         </View>
-      </SafeAreaView>
+      </SafeAreaWrapper>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaWrapper>
+      <SharedHeader variant="superAdmin" title="Company Details" />
+      <TouchableOpacity style={styles.navBack} onPress={() => navigation.goBack()}>
+        <Text style={styles.navBackText}>← Back</Text>
+      </TouchableOpacity>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={styles.title}>{company.name}</Text>
@@ -204,6 +241,18 @@ const CompanyDetailsScreen: React.FC = () => {
 
         <View style={styles.actionsSection}>
           <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => navigation.navigate('EditCompany', { companyId: company.id })}
+          >
+            <Text style={styles.secondaryButtonText}>Edit Company</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => navigation.navigate('BuyPlan', { companyId: company.id })}
+          >
+            <Text style={styles.secondaryButtonText}>Manage Subscription</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             style={[styles.actionButton, company.isActive ? styles.suspendButton : styles.activateButton]}
             onPress={handleToggleStatus}
             disabled={updating}
@@ -216,9 +265,12 @@ const CompanyDetailsScreen: React.FC = () => {
               </Text>
             )}
           </TouchableOpacity>
+          <TouchableOpacity style={styles.deleteButton} onPress={handleDelete} disabled={updating}>
+            <Text style={styles.deleteButtonText}>Delete Company</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </SafeAreaWrapper>
   );
 };
 
@@ -364,6 +416,39 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     color: '#FFFFFF',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+  },
+  navBack: {
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+  },
+  navBackText: {
+    color: COLORS.primary,
+    fontSize: TYPOGRAPHY.fontSize.md,
+  },
+  secondaryButton: {
+    paddingVertical: SPACING.md,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    marginBottom: SPACING.sm,
+  },
+  secondaryButtonText: {
+    color: COLORS.primary,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+  },
+  deleteButton: {
+    paddingVertical: SPACING.md,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: `${COLORS.error}15`,
+    marginTop: SPACING.sm,
+  },
+  deleteButtonText: {
+    color: COLORS.error,
     fontSize: TYPOGRAPHY.fontSize.md,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },

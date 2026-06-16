@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { PersonIcon } from '../ui/AppIcons';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import ProfileAvatar from '../common/ProfileAvatar';
+import { parseDisplayName } from '../../utils/parseDisplayName';
 import StatusBadge from './StatusBadge';
 
 interface NotificationCardProps {
@@ -20,13 +21,11 @@ const NotificationCard: React.FC<NotificationCardProps> = ({ notification, onPre
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.content}>
-        <View style={styles.avatar}>
-          {notification.guardAvatar ? (
-            <Image source={{ uri: notification.guardAvatar }} style={styles.avatarImage} />
-          ) : (
-            <PersonIcon size={24} color="#666" />
-          )}
-        </View>
+        <ProfileAvatar
+          {...parseDisplayName(notification.guardName)}
+          profilePictureUrl={notification.guardAvatar}
+          size={48}
+        />
         <View style={styles.details}>
           <Text style={styles.guardName}>{notification.guardName}</Text>
           <Text style={styles.action}>{notification.action}</Text>
@@ -58,6 +57,7 @@ const styles = StyleSheet.create({
   content: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
   },
   avatar: {
     width: 48,

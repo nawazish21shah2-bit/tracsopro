@@ -3,6 +3,8 @@ import { Server as SocketIOServer } from 'socket.io';
 import { Server as HTTPServer } from 'http';
 import { logger } from '../utils/logger.js';
 import trackingService from './trackingService.js';
+import prisma from '../config/database.js';
+import { verifyToken } from '../utils/jwt.js';
 
 interface LocationUpdate {
   guardId: string;
@@ -21,11 +23,19 @@ interface GeofenceEvent {
   timestamp: number;
 }
 
+interface SocketMeta {
+  userId: string;
+  role: string;
+  clientId?: string;
+  securityCompanyId?: string;
+}
+
 class WebSocketService {
   private io: SocketIOServer | null = null;
   private connectedClients: Map<string, string> = new Map(); // socketId -> userId
-  private guardSockets: Map<string, string> = new Map(); // guardId -> socketId
-  private adminSockets: Set<string> = new Set(); // socketIds of admin users
+  private socketMeta: Map<string, SocketMeta> = new Map();
+  private guardSockets: Map<string, string> = new Map(); // guardId/userId -> socketId
+  private adminSockets: Set<string> = new Set(); // socketIds of admin/client viewers
 
   initialize(server: HTTPServer): void {
     this.io = new SocketIOServer(server, {
@@ -48,23 +58,85 @@ class WebSocketService {
       logger.debug(`Client connected: ${socket.id}`);
 
       // Handle authentication
-      socket.on('authenticate', async (data: { token: string; userId: string; role: string }) => {
+      socket.on('authenticate', async (data: { token: string; userId?: string; role?: string }) => {
         try {
-          // TODO: Verify JWT token here
-          // For now, we'll trust the client data
+          if (!data?.token) {
+            throw new Error('Missing authentication token');
+          }
+          const tokenPayload = verifyToken(data.token);
+          if (tokenPayload.type !== 'access') {
+            throw new Error('Invalid token type');
+          }
+          const tokenUserId = tokenPayload.sub;
+          if (!tokenUserId) {
+            throw new Error('Invalid token payload');
+          }
+
+          let clientId: string | undefined;
+          let securityCompanyId: string | undefined;
+
+          const user = await prisma.user.findUnique({
+            where: { id: tokenUserId },
+            select: {
+              id: true,
+              role: true,
+              isActive: true,
+              client: { select: { id: true } },
+              guard: { select: { id: true } },
+              companyUsers: {
+                where: { isActive: true },
+                select: { securityCompanyId: true },
+                take: 1,
+              },
+            },
+          });
+          if (!user || !user.isActive) {
+            throw new Error('User not found or inactive');
+          }
+          if (data.userId && data.userId !== user.id) {
+            throw new Error('Token user mismatch');
+          }
+          if (data.role && data.role !== user.role) {
+            throw new Error('Token role mismatch');
+          }
+
+          if (user?.client) {
+            clientId = user.client.id;
+            const companyClient = await prisma.companyClient.findFirst({
+              where: { clientId: user.client.id, isActive: true },
+              select: { securityCompanyId: true },
+            });
+            securityCompanyId = companyClient?.securityCompanyId;
+          } else if (user?.role === 'ADMIN' && user.companyUsers.length > 0) {
+            securityCompanyId = user.companyUsers[0].securityCompanyId;
+          } else if (user?.guard) {
+            const companyGuard = await prisma.companyGuard.findFirst({
+              where: { guardId: user.guard.id, isActive: true },
+              select: { securityCompanyId: true },
+            });
+            securityCompanyId = companyGuard?.securityCompanyId;
+          }
+
+          this.connectedClients.set(socket.id, user.id);
+          this.socketMeta.set(socket.id, {
+            userId: user.id,
+            role: user.role,
+            clientId,
+            securityCompanyId,
+          });
           
-          this.connectedClients.set(socket.id, data.userId);
-          
-          if (data.role === 'GUARD') {
-            // Find guard record by userId
-            // This would need to be implemented with proper guard lookup
-            this.guardSockets.set(data.userId, socket.id);
+          if (user.role === 'GUARD') {
+            // Keep both keys for compatibility with callers using either guardId or userId
+            this.guardSockets.set(user.id, socket.id);
+            if (user.guard?.id) {
+              this.guardSockets.set(user.guard.id, socket.id);
+            }
             socket.join('guards');
-            logger.info(`Guard ${data.userId} connected`);
-          } else if (data.role === 'ADMIN' || data.role === 'CLIENT') {
+            logger.info(`Guard ${user.id} connected`);
+          } else if (user.role === 'ADMIN' || user.role === 'CLIENT') {
             this.adminSockets.add(socket.id);
             socket.join('admins');
-            logger.info(`Admin/Client ${data.userId} connected`);
+            logger.info(`${user.role} ${user.id} connected`);
           }
 
           socket.emit('authenticated', { success: true });
@@ -114,7 +186,11 @@ class WebSocketService {
       // Handle client requests for live data
       socket.on('request_live_locations', async () => {
         try {
-          const liveData = await trackingService.getRealTimeLocationData();
+          const meta = this.socketMeta.get(socket.id);
+          const liveData = await trackingService.getRealTimeLocationData(
+            meta?.securityCompanyId,
+            meta?.role === 'CLIENT' ? meta?.clientId : undefined
+          );
           socket.emit('live_locations_data', liveData);
         } catch (error) {
           logger.error('Failed to get live locations:', error);
@@ -167,10 +243,28 @@ class WebSocketService {
     });
   }
 
+  private async resolveGuardId(guardIdOrUserId: string): Promise<string> {
+    const byId = await prisma.guard.findUnique({
+      where: { id: guardIdOrUserId },
+      select: { id: true },
+    });
+    if (byId) return byId.id;
+
+    const byUser = await prisma.guard.findUnique({
+      where: { userId: guardIdOrUserId },
+      select: { id: true },
+    });
+    if (byUser) return byUser.id;
+
+    return guardIdOrUserId;
+  }
+
   private async handleLocationUpdate(socketId: string, data: LocationUpdate): Promise<void> {
     try {
+      const guardId = await this.resolveGuardId(data.guardId);
+
       // Record location in database
-      await trackingService.recordLocation(data.guardId, {
+      await trackingService.recordLocation(guardId, {
         latitude: data.latitude,
         longitude: data.longitude,
         accuracy: data.accuracy,
@@ -180,12 +274,15 @@ class WebSocketService {
 
       // Broadcast to all admins and clients
       this.broadcastToAdmins('guard_location_update', {
-        guardId: data.guardId,
-        location: data,
+        guardId,
+        location: {
+          ...data,
+          guardId,
+        },
         timestamp: Date.now(),
       });
 
-      logger.debug(`Location update broadcasted for guard: ${data.guardId}`);
+      logger.debug(`Location update broadcasted for guard: ${guardId}`);
     } catch (error) {
       logger.error('Failed to handle location update:', error);
       throw error;
@@ -259,6 +356,7 @@ class WebSocketService {
         logger.info(`Admin/Client ${userId} disconnected`);
       }
 
+      this.socketMeta.delete(socketId);
       this.connectedClients.delete(socketId);
     }
 
@@ -316,12 +414,22 @@ class WebSocketService {
     logger.warn(`Broadcasted incident alert: Incident ${data.incidentId}, Guard ${data.guardId}`);
   }
 
-  // Broadcast live location updates periodically
+  // Broadcast live location updates periodically (scoped per viewer socket)
   startLiveLocationBroadcast(): void {
     setInterval(async () => {
+      if (!this.io || this.adminSockets.size === 0) return;
+
       try {
-        const liveData = await trackingService.getRealTimeLocationData();
-        this.broadcastToAdmins('live_locations_update', liveData);
+        for (const socketId of this.adminSockets) {
+          const meta = this.socketMeta.get(socketId);
+          if (!meta) continue;
+
+          const liveData = await trackingService.getRealTimeLocationData(
+            meta.securityCompanyId,
+            meta.role === 'CLIENT' ? meta.clientId : undefined
+          );
+          this.io.to(socketId).emit('live_locations_update', liveData);
+        }
       } catch (error) {
         logger.error('Failed to broadcast live locations:', error);
       }

@@ -221,15 +221,10 @@ export const createChat = async (req: AuthenticatedRequest, res: Response) => {
       });
     }
 
-    // Add current user to participants if not already included
-    const allParticipants = participantIds.includes(userId) 
-      ? participantIds 
-      : [...participantIds, userId];
-
     const chat = await chatService.createChat({
       type,
       name,
-      participantIds: allParticipants,
+      participantIds,
       createdBy: userId,
       securityCompanyId, // Pass for validation
     });
@@ -331,8 +326,95 @@ export const getChatById = async (req: AuthenticatedRequest, res: Response) => {
   }
 };
 
+/**
+ * Get platform support chats (admin: own thread; super admin: all admin requests)
+ */
+export const getSupportChats = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const securityCompanyId = req.securityCompanyId;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID not found',
+      });
+    }
+
+    const chats = await chatService.getSupportChats(userId, securityCompanyId);
+
+    res.json({
+      success: true,
+      data: chats,
+    });
+  } catch (error) {
+    logger.error('Error getting support chats:', error);
+    res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to get support chats',
+      error: process.env.NODE_ENV === 'development' ? error : undefined,
+    });
+  }
+};
+
+/**
+ * Open platform support chat (admin only)
+ */
+export const openSupportChat = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const securityCompanyId = req.securityCompanyId;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID not found',
+      });
+    }
+
+    const chat = await chatService.openSupportChat(userId, securityCompanyId);
+
+    res.status(201).json({
+      success: true,
+      data: chat,
+    });
+  } catch (error) {
+    logger.error('Error opening support chat:', error);
+    const message = error instanceof Error ? error.message : 'Failed to open support chat';
+    const status = message.includes('Only company admins') ? 403 : 500;
+    res.status(status).json({
+      success: false,
+      message,
+      error: process.env.NODE_ENV === 'development' ? error : undefined,
+    });
+  }
+};
+
+export const openCompanySupportChat = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const securityCompanyId = req.securityCompanyId;
+
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'User ID not found' });
+    }
+
+    const chat = await chatService.openCompanySupportChat(userId, securityCompanyId);
+    res.status(201).json({ success: true, data: chat });
+  } catch (error) {
+    logger.error('Error opening company support chat:', error);
+    res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to open company support chat',
+    });
+  }
+};
+
 export default {
   getUserChats,
+  getSupportChats,
+  openSupportChat,
+  openCompanySupportChat,
   getChatMessages,
   sendMessage,
   markMessagesAsRead,

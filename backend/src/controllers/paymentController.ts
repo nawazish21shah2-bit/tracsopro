@@ -2,8 +2,10 @@ import { Request, Response } from 'express';
 import { logger } from '../utils/logger.js';
 import PaymentService from '../services/paymentService.js';
 import prisma from '../config/database.js';
+import { AuthRequest } from '../middleware/auth.js';
+import { resolveSecurityCompanyId } from '../utils/companyAuth.js';
 
-interface AuthenticatedRequest extends Request {
+interface AuthenticatedRequest extends AuthRequest {
   user?: {
     id: string;
     role: string;
@@ -31,15 +33,15 @@ export const getPlans = async (_req: AuthenticatedRequest, res: Response) => {
 export const createSubscriptionCheckout = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { priceId, trialDays } = req.body;
-    const securityCompanyId = (req as any).securityCompanyId || req.body.securityCompanyId;
-    
+    const securityCompanyId = req.securityCompanyId;
+
     if (!securityCompanyId) {
       return res.status(400).json({ 
         success: false, 
         message: 'Security company ID not found. User must be associated with a security company.' 
       });
     }
-    
+
     if (!priceId) {
       return res.status(400).json({ success: false, message: 'priceId is required' });
     }
@@ -64,8 +66,8 @@ export const createSubscriptionCheckout = async (req: AuthenticatedRequest, res:
  */
 export const getBillingPortal = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const securityCompanyId = (req as any).securityCompanyId || (req.query as any).securityCompanyId;
-    
+    const securityCompanyId = req.securityCompanyId;
+
     if (!securityCompanyId) {
       return res.status(400).json({ 
         success: false, 
@@ -92,7 +94,15 @@ export const createPaymentIntent = async (req: AuthenticatedRequest, res: Respon
   try {
     const { amount, currency = 'usd', description, metadata } = req.body;
     const clientId = req.user?.clientId || req.user?.id;
-    const securityCompanyId = (req as any).securityCompanyId; // Multi-tenant filter
+    const companyResult = resolveSecurityCompanyId(req);
+    if (companyResult.error) {
+      res.status(companyResult.status || 400).json({
+        success: false,
+        message: companyResult.error,
+      });
+      return;
+    }
+    const securityCompanyId = companyResult.securityCompanyId;
 
     if (!clientId) {
       return res.status(400).json({
@@ -102,7 +112,7 @@ export const createPaymentIntent = async (req: AuthenticatedRequest, res: Respon
     }
 
     // Multi-tenant: Validate client belongs to company (if not SUPER_ADMIN)
-    if (securityCompanyId && req.user?.role !== 'SUPER_ADMIN') {
+    if (req.user?.role !== 'SUPER_ADMIN') {
       const companyClient = await prisma.companyClient.findFirst({
         where: {
           clientId,
@@ -158,7 +168,7 @@ export const createInvoice = async (req: AuthenticatedRequest, res: Response) =>
   try {
     const { items, description, dueDate, currency = 'usd', clientId: bodyClientId } = req.body;
     const clientId = bodyClientId || req.user?.clientId || req.user?.id;
-    const securityCompanyId = (req as any).securityCompanyId; // Multi-tenant filter
+    const securityCompanyId = req.securityCompanyId;
 
     if (!clientId) {
       return res.status(400).json({
@@ -167,8 +177,15 @@ export const createInvoice = async (req: AuthenticatedRequest, res: Response) =>
       });
     }
 
+    if (req.user?.role === 'ADMIN' && !securityCompanyId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Admin must be linked to a security company.',
+      });
+    }
+
     // Multi-tenant: Admin creating invoice - validate client belongs to admin's company
-    if (securityCompanyId && req.user?.role !== 'SUPER_ADMIN') {
+    if (req.user?.role === 'ADMIN') {
       const companyClient = await prisma.companyClient.findFirst({
         where: {
           clientId,
@@ -229,7 +246,7 @@ export const generateMonthlyInvoice = async (req: AuthenticatedRequest, res: Res
   try {
     const { year, month, clientId: bodyClientId } = req.body;
     const clientId = bodyClientId || req.user?.clientId || req.user?.id;
-    const securityCompanyId = (req as any).securityCompanyId; // Multi-tenant filter
+    const securityCompanyId = req.securityCompanyId;
 
     if (!clientId) {
       return res.status(400).json({
@@ -238,8 +255,15 @@ export const generateMonthlyInvoice = async (req: AuthenticatedRequest, res: Res
       });
     }
 
+    if (req.user?.role === 'ADMIN' && !securityCompanyId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Admin must be linked to a security company.',
+      });
+    }
+
     // Multi-tenant: Admin generating invoice - validate client belongs to admin's company
-    if (securityCompanyId && req.user?.role !== 'SUPER_ADMIN') {
+    if (req.user?.role === 'ADMIN') {
       const companyClient = await prisma.companyClient.findFirst({
         where: {
           clientId,
@@ -387,26 +411,28 @@ export const setupAutomaticPayments = async (req: AuthenticatedRequest, res: Res
 };
 
 /**
- * Handle Stripe webhook
+ * Stripe webhook — raw body route registered in app.ts before JSON middleware
  */
-export const handleWebhook = async (req: Request, res: Response) => {
+export const handleStripeWebhook = async (req: Request, res: Response) => {
   try {
-    const signature = req.headers['stripe-signature'];
-    const payload = req.body;
+    const signature = req.headers['stripe-signature'] as string | undefined;
+    const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from('');
 
-    // Mock webhook handling
-    logger.info('Webhook received:', { signature, payload });
+    const svc = PaymentService.getInstance();
+    const result = await svc.processWebhookFromRawBody(rawBody, signature);
 
-    // In real implementation, verify webhook signature and process events
-    res.json({ received: true });
-  } catch (error) {
-    logger.error('Error handling webhook:', error);
+    res.json({ received: true, duplicate: result.duplicate ?? false });
+  } catch (error: any) {
+    logger.error('Error handling Stripe webhook:', error);
     res.status(400).json({
       success: false,
-      message: 'Webhook handling failed',
+      message: error.message || 'Webhook handling failed',
     });
   }
 };
+
+/** @deprecated Use handleStripeWebhook — mounted at app level with raw body */
+export const handleWebhook = handleStripeWebhook;
 
 /**
  * Get invoices for client
@@ -415,7 +441,7 @@ export const getInvoices = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const clientId = req.user?.clientId || req.user?.id;
     const { page = 1, limit = 10, status, clientId: queryClientId } = req.query;
-    const securityCompanyId = (req as any).securityCompanyId; // Multi-tenant filter
+    const securityCompanyId = req.securityCompanyId;
     const targetClientId = (queryClientId as string) || clientId;
 
     if (!targetClientId) {
@@ -425,8 +451,15 @@ export const getInvoices = async (req: AuthenticatedRequest, res: Response) => {
       });
     }
 
+    if (req.user?.role === 'ADMIN' && !securityCompanyId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Admin must be linked to a security company.',
+      });
+    }
+
     // Multi-tenant: Admin viewing invoices - validate client belongs to admin's company
-    if (req.user?.role === 'ADMIN' && securityCompanyId && req.user?.role !== 'SUPER_ADMIN') {
+    if (req.user?.role === 'ADMIN') {
       const companyClient = await prisma.companyClient.findFirst({
         where: {
           clientId: targetClientId,

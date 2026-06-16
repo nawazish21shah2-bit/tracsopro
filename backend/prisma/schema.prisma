@@ -28,15 +28,20 @@ model User {
   guard              Guard?
   client             Client?
   incidents          Incident[]
-  messages           Message[]
-  notifications      Notification[]
-  reports            Report[]
-  shiftReports       ShiftReport[]
-  userSettings       UserSettings?
-  supportTickets     SupportTicket[]
-  companyUsers       CompanyUser[]
-  createdInvitations Invitation[]
-  deviceTokens       DeviceToken[]
+  messages                Message[]
+  notifications           Notification[]
+  reports                 Report[]
+  shiftReports            ShiftReport[]
+  userSettings            UserSettings?
+  supportTickets          SupportTicket[]
+  supportTicketReplies    SupportTicketReply[]
+  companyUsers            CompanyUser[]
+  createdInvitations      Invitation[]
+  deviceTokens            DeviceToken[]
+  refreshTokens             RefreshToken[]
+  pushNotificationRetries PushNotificationRetry[]
+  conversationParticipants  ConversationParticipant[]
+  createdConversations      Conversation[]            @relation("ConversationCreator")
 
   @@index([email])
   @@index([role])
@@ -211,18 +216,21 @@ model TrackingRecord {
 }
 
 model Incident {
-  id          String           @id @default(uuid())
-  reportedBy  String
-  locationId  String
-  type        IncidentType
-  severity    IncidentSeverity
-  title       String
-  description String
-  status      IncidentStatus   @default(REPORTED)
-  reportedAt  DateTime         @default(now())
-  resolvedAt  DateTime?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id               String           @id @default(uuid())
+  reportedBy       String
+  locationId       String
+  type             IncidentType
+  severity         IncidentSeverity
+  title            String
+  description      String
+  status           IncidentStatus   @default(REPORTED)
+  reportedAt       DateTime         @default(now())
+  acknowledgedBy   String?
+  acknowledgedAt   DateTime?
+  resolvedBy       String?
+  resolvedAt       DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
   reporter User       @relation(fields: [reportedBy], references: [id])
   location Location   @relation(fields: [locationId], references: [id])
@@ -283,19 +291,73 @@ enum EvidenceType {
 }
 
 model Message {
-  id             String   @id @default(uuid())
+  id             String      @id @default(uuid())
   senderId       String
   conversationId String
   content        String
-  isRead         Boolean  @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  messageType    MessageType @default(TEXT)
+  isRead         Boolean     @default(false)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 
   sender User @relation(fields: [senderId], references: [id], onDelete: Cascade)
 
   @@index([senderId])
   @@index([conversationId])
   @@index([isRead])
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  FILE
+  LOCATION
+  SYSTEM
+}
+
+model Conversation {
+  id                String           @id
+  type              ConversationType @default(DIRECT)
+  name              String?
+  securityCompanyId String?
+  createdBy         String
+  lastMessageAt     DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  creator      User                      @relation("ConversationCreator", fields: [createdBy], references: [id])
+  participants ConversationParticipant[]
+
+  @@index([securityCompanyId])
+  @@index([lastMessageAt])
+  @@index([createdBy])
+}
+
+model ConversationParticipant {
+  id             String          @id @default(uuid())
+  conversationId String
+  userId         String
+  role           ParticipantRole @default(MEMBER)
+  joinedAt       DateTime        @default(now())
+  lastReadAt     DateTime?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+  @@index([conversationId])
+}
+
+enum ConversationType {
+  DIRECT
+  GROUP
+  TEAM
+}
+
+enum ParticipantRole {
+  MEMBER
+  ADMIN
 }
 
 model Notification {
@@ -519,6 +581,7 @@ model IncidentReport {
   reportType        String
   description       String
   status            String   @default("SUBMITTED")
+  statusHistory     Json?    // Added to keep track of status changes
   locationName      String?
   locationAddress   String?
   locationLatitude  Float?
@@ -568,24 +631,51 @@ model UserSettings {
 }
 
 model SupportTicket {
-  id         String          @id @default(uuid())
-  userId     String
-  subject    String
-  message    String
-  category   SupportCategory @default(GENERAL)
-  status     SupportStatus   @default(OPEN)
-  priority   SupportPriority @default(NORMAL)
-  assignedTo String?
-  resolvedAt DateTime?
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  id                String           @id @default(uuid())
+  userId            String
+  subject           String
+  message           String
+  category          SupportCategory  @default(GENERAL)
+  status            SupportStatus    @default(OPEN)
+  priority          SupportPriority  @default(NORMAL)
+  audience          SupportAudience  @default(COMPANY)
+  securityCompanyId String?
+  conversationId    String?
+  submitterRole     String?
+  assignedTo        String?
+  resolvedAt        DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user    User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replies SupportTicketReply[]
 
   @@index([userId])
   @@index([status])
   @@index([category])
   @@index([priority])
+  @@index([securityCompanyId])
+  @@index([audience])
+  @@index([conversationId])
+}
+
+model SupportTicketReply {
+  id        String   @id @default(uuid())
+  ticketId  String
+  senderId  String
+  message   String
+  createdAt DateTime @default(now())
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  sender User          @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([senderId])
+}
+
+enum SupportAudience {
+  COMPANY
+  PLATFORM
 }
 
 enum SupportCategory {
@@ -1017,4 +1107,59 @@ model DeviceToken {
   @@index([userId])
   @@index([isActive])
   @@index([platform])
+  @@index([isActive, updatedAt])
+}
+
+model PushNotificationRetry {
+  id          String          @id @default(uuid())
+  userId      String
+  title       String
+  body        String
+  type        String
+  payloadData Json?
+  priority    String          @default("normal")
+  attempts    Int             @default(0)
+  maxAttempts Int             @default(5)
+  nextRetryAt DateTime
+  lastError   String?
+  status      PushRetryStatus @default(PENDING)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextRetryAt])
+  @@index([userId])
+}
+
+enum PushRetryStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  jti       String   @unique
+  revokedAt DateTime?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([revokedAt])
+  @@index([expiresAt])
+}
+
+model StripeWebhookEvent {
+  id            String   @id @default(uuid())
+  stripeEventId String   @unique
+  type          String
+  processedAt   DateTime @default(now())
+
+  @@index([type])
+  @@index([processedAt])
 }

@@ -14,6 +14,10 @@ import NotificationSettingsScreen from '../screens/settings/NotificationSettings
 import ProfileEditScreen from '../screens/settings/ProfileEditScreen';
 import ChangePasswordScreen from '../screens/settings/ChangePasswordScreen';
 import SupportContactScreen from '../screens/settings/SupportContactScreen';
+import SupportHubScreen from '../screens/support/SupportHubScreen';
+import SupportTicketDetailScreen from '../screens/support/SupportTicketDetailScreen';
+import IncidentReportDetailScreen from '../screens/dashboard/IncidentReportDetailScreen';
+import EditShiftScreen from '../screens/shifts/EditShiftScreen';
 
 export type GuardStackParamList = {
   GuardTabs: undefined;
@@ -26,7 +30,13 @@ export type GuardStackParamList = {
     chatId: string;
     chatName: string;
     avatar?: string;
-    context?: 'report' | 'site' | 'general';
+    context?: 'report' | 'site' | 'general' | 'support';
+  };
+  SupportHubScreen: { variant?: 'guard'; mode?: 'mine' | 'inbox' | 'platform' };
+  SupportTicketDetailScreen: {
+    ticketId: string;
+    variant?: 'guard';
+    mode?: 'mine' | 'inbox' | 'platform';
   };
   ChatListScreen: undefined;
   Notifications: undefined;
@@ -35,6 +45,8 @@ export type GuardStackParamList = {
   GuardProfileEdit: undefined;
   GuardChangePassword: undefined;
   GuardSupportContact: undefined;
+  IncidentReportDetail: { report: any };
+  EditShift: { shiftId: string; shift?: any };
 };
 
 const Stack = createStackNavigator<GuardStackParamList>();
@@ -84,6 +96,23 @@ const GuardStackNavigator: React.FC = () => {
         component={() => <SupportContactScreen variant="guard" />} 
         options={{ headerShown: false }} 
       />
+      <Stack.Screen
+        name="SupportHubScreen"
+        component={SupportHubScreen}
+        initialParams={{ variant: 'guard', mode: 'mine' }}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="SupportTicketDetailScreen"
+        component={SupportTicketDetailScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="IncidentReportDetail" 
+        component={IncidentReportDetailScreen} 
+        options={{ headerShown: false }} 
+      />
+      <Stack.Screen name="EditShift" component={EditShiftScreen} />
     </Stack.Navigator>
   );
 };

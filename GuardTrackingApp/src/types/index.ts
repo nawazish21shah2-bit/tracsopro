@@ -13,6 +13,13 @@ export interface User {
   updatedAt: string;
   // Profile picture URL (optional)
   profilePictureUrl?: string | null;
+  // Guard profile when role is GUARD
+  guard?: {
+    id: string;
+    employeeId?: string;
+    status?: string;
+    profilePictureUrl?: string | null;
+  };
   // Computed property for full name
   name?: string;
 }
@@ -33,6 +40,8 @@ export interface AuthState {
   isEmailVerified: boolean;
   isLoading: boolean;
   error: string | null;
+  impersonationActive?: boolean;
+  impersonatorLabel?: string | null;
 }
 
 // Guard Management Types

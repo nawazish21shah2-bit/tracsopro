@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -9,20 +9,25 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { StackNavigationProp } from '@react-navigation/stack';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SharedHeader from '../../components/ui/SharedHeader';
-import { settingsService, SupportTicketData } from '../../services/settingsService';
-import { HelpCircle } from 'react-native-feather';
-import { useProfileDrawer } from '../../hooks/useProfileDrawer';
-import GuardProfileDrawer from '../../components/guard/GuardProfileDrawer';
-import { SettingsStackParamList } from '../../navigation/DashboardNavigator';
+import { HelpCircle, ChevronRight } from 'react-native-feather';
+import { useRoleScreenHeader, RoleHeaderVariant } from '../../hooks/useRoleScreenHeader';
+import supportApiService, { SupportTicketRecord } from '../../services/supportApiService';
+import { formatRelativeTime } from '../../utils/formatRelativeTime';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../styles/globalStyles';
 
 interface SupportContactScreenProps {
-  variant?: 'client' | 'guard' | 'admin';
+  variant?: RoleHeaderVariant;
   profileDrawer?: React.ReactNode;
   onSuccess?: () => void;
+}
+
+export interface SupportTicketData {
+  subject: string;
+  message: string;
+  category: string;
 }
 
 const SUPPORT_CATEGORIES = [
@@ -37,45 +42,61 @@ const SupportContactScreen: React.FC<SupportContactScreenProps> = ({
   profileDrawer,
   onSuccess,
 }) => {
-  const navigation = useNavigation<StackNavigationProp<SettingsStackParamList>>();
-  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+  const navigation = useNavigation<any>();
+  const { headerProps: roleHeaderProps } = useRoleScreenHeader('Contact Support', variant);
+  const headerProps = profileDrawer
+    ? { ...roleHeaderProps, profileDrawer, onMenuPress: roleHeaderProps.onMenuPress }
+    : roleHeaderProps;
+
   const [submitting, setSubmitting] = useState(false);
+  const [loadingTickets, setLoadingTickets] = useState(true);
+  const [tickets, setTickets] = useState<SupportTicketRecord[]>([]);
   const [formData, setFormData] = useState<SupportTicketData>({
     subject: '',
     message: '',
     category: 'general',
   });
 
-  // Create drawer for guard variant if not provided
-  const renderProfileDrawer = () => {
-    if (profileDrawer) return profileDrawer;
+  const ticketAudience =
+    variant === 'admin' || variant === 'superAdmin' ? 'PLATFORM' : 'COMPANY';
 
-    if (variant === 'guard') {
-      return (
-        <GuardProfileDrawer
-          visible={isDrawerVisible}
-          onClose={closeDrawer}
-          onNavigateToProfile={() => {
-            closeDrawer();
-            navigation.navigate('GuardProfileEdit');
-          }}
-          onNavigateToNotifications={() => {
-            closeDrawer();
-            navigation.navigate('GuardNotificationSettings');
-          }}
-          onNavigateToSupport={() => {
-            closeDrawer();
-            // Already on support contact
-          }}
-        />
-      );
+  const loadTickets = useCallback(async () => {
+    try {
+      setLoadingTickets(true);
+      const result = await supportApiService.getMyTickets(1, 10);
+      setTickets(result.tickets);
+    } catch {
+      setTickets([]);
+    } finally {
+      setLoadingTickets(false);
     }
+  }, []);
 
-    return null;
+  useFocusEffect(
+    useCallback(() => {
+      loadTickets();
+    }, [loadTickets]),
+  );
+
+  const openTicket = (ticket: SupportTicketRecord) => {
+    navigation.navigate('SupportTicketDetailScreen', {
+      ticketId: ticket.id,
+      variant,
+      mode: 'mine',
+    });
+  };
+
+  const openSupportHub = () => {
+    const mode =
+      variant === 'admin'
+        ? 'inbox'
+        : variant === 'superAdmin'
+          ? 'platform'
+          : 'mine';
+    navigation.navigate('SupportHubScreen', { variant, mode });
   };
 
   const handleSubmit = async () => {
-    // Validation
     if (!formData.subject.trim()) {
       Alert.alert('Validation Error', 'Please enter a subject');
       return;
@@ -95,31 +116,21 @@ const SupportContactScreen: React.FC<SupportContactScreenProps> = ({
 
     try {
       setSubmitting(true);
-      await settingsService.submitSupportRequest(formData);
-      Alert.alert(
-        'Success',
-        'Your support request has been submitted. We will get back to you soon.',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              setFormData({ subject: '', message: '', category: 'general' });
-              onSuccess?.();
-            },
-          },
-        ]
-      );
+      const created = await supportApiService.createTicket({
+        ...formData,
+        audience: ticketAudience,
+      });
+      setFormData({ subject: '', message: '', category: 'general' });
+      await loadTickets();
+      onSuccess?.();
+      Alert.alert('Success', 'Your support request has been submitted.', [
+        { text: 'View Ticket', onPress: () => openTicket(created) },
+        { text: 'OK' },
+      ]);
     } catch (error: any) {
-      console.error('Error submitting support request:', error);
-      const errorMessage = error?.message || 'Failed to submit support request. Please try again.';
-
-      // If it's a session expired error, show a more user-friendly message
+      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to submit support request.';
       if (errorMessage.includes('session has expired') || errorMessage.includes('expired')) {
-        Alert.alert(
-          'Session Expired',
-          'Your session has expired. Please login again.',
-          [{ text: 'OK' }]
-        );
+        Alert.alert('Session Expired', 'Your session has expired. Please login again.');
       } else {
         Alert.alert('Error', errorMessage);
       }
@@ -130,15 +141,50 @@ const SupportContactScreen: React.FC<SupportContactScreenProps> = ({
 
   return (
     <SafeAreaWrapper>
-      <SharedHeader variant={variant} title="Contact Support" onNotificationPress={() => navigation.navigate('Notifications')} profileDrawer={renderProfileDrawer()} />
+      <SharedHeader {...headerProps} />
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <TouchableOpacity style={styles.hubLink} onPress={openSupportHub} activeOpacity={0.85}>
+          <Text style={styles.hubLinkText}>Open Support Center</Text>
+          <ChevronRight width={18} height={18} color={COLORS.primary} />
+        </TouchableOpacity>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>My Submitted Tickets</Text>
+          {loadingTickets ? (
+            <ActivityIndicator color={COLORS.primary} style={styles.ticketLoader} />
+          ) : tickets.length === 0 ? (
+            <Text style={styles.emptyText}>No tickets yet. Submit a request below.</Text>
+          ) : (
+            tickets.map((ticket) => (
+              <TouchableOpacity
+                key={ticket.id}
+                style={styles.ticketRow}
+                onPress={() => openTicket(ticket)}
+                activeOpacity={0.85}
+              >
+                <View style={styles.ticketRowMain}>
+                  <Text style={styles.ticketSubject} numberOfLines={1}>
+                    {ticket.subject}
+                  </Text>
+                  <Text style={styles.ticketMeta}>
+                    {ticket.status.replace('_', ' ')} · {formatRelativeTime(new Date(ticket.createdAt))}
+                  </Text>
+                </View>
+                <ChevronRight width={16} height={16} color={COLORS.textTertiary} />
+              </TouchableOpacity>
+            ))
+          )}
+        </View>
+
         <View style={styles.card}>
           <View style={styles.header}>
-            <HelpCircle width={24} height={24} color="#1C6CA9" />
-            <Text style={styles.headerText}>We're here to help</Text>
+            <HelpCircle width={24} height={24} color={COLORS.primary} />
+            <Text style={styles.headerText}>Submit a new request</Text>
           </View>
           <Text style={styles.description}>
-            Please describe your issue or question, and we'll get back to you as soon as possible.
+            {variant === 'admin' || variant === 'superAdmin'
+              ? 'Contact platform support about billing, technical issues, or account help.'
+              : 'Describe your issue and your company admin will respond via ticket or live chat.'}
           </Text>
         </View>
 
@@ -174,12 +220,10 @@ const SupportContactScreen: React.FC<SupportContactScreenProps> = ({
             value={formData.subject}
             onChangeText={(text) => setFormData({ ...formData, subject: text })}
             placeholder="Brief description of your issue"
-            placeholderTextColor="#999"
+            placeholderTextColor={COLORS.textTertiary}
             maxLength={200}
           />
-          <Text style={styles.helperText}>
-            {formData.subject.length}/200 characters
-          </Text>
+          <Text style={styles.helperText}>{formData.subject.length}/200 characters</Text>
         </View>
 
         <View style={styles.card}>
@@ -189,15 +233,13 @@ const SupportContactScreen: React.FC<SupportContactScreenProps> = ({
             value={formData.message}
             onChangeText={(text) => setFormData({ ...formData, message: text })}
             placeholder="Please provide details about your issue or question..."
-            placeholderTextColor="#999"
+            placeholderTextColor={COLORS.textTertiary}
             multiline
             numberOfLines={8}
             textAlignVertical="top"
             maxLength={5000}
           />
-          <Text style={styles.helperText}>
-            {formData.message.length}/5000 characters
-          </Text>
+          <Text style={styles.helperText}>{formData.message.length}/5000 characters</Text>
         </View>
 
         <TouchableOpacity
@@ -206,7 +248,7 @@ const SupportContactScreen: React.FC<SupportContactScreenProps> = ({
           disabled={submitting}
         >
           {submitting ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
+            <ActivityIndicator size="small" color={COLORS.textInverse} />
           ) : (
             <Text style={styles.submitButtonText}>Submit Request</Text>
           )}
@@ -219,103 +261,142 @@ const SupportContactScreen: React.FC<SupportContactScreenProps> = ({
 const styles = StyleSheet.create({
   content: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
-    padding: 16,
+    backgroundColor: COLORS.backgroundSecondary,
+    padding: SPACING.lg,
+  },
+  hubLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
+    marginBottom: SPACING.md,
+  },
+  hubLinkText: {
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.primary,
   },
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  sectionTitle: {
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.sm,
+  },
+  ticketLoader: { paddingVertical: SPACING.md },
+  emptyText: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
+  },
+  ticketRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderLight,
+  },
+  ticketRowMain: { flex: 1, marginRight: SPACING.sm },
+  ticketSubject: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    color: COLORS.textPrimary,
+  },
+  ticketMeta: {
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textSecondary,
+    marginTop: 2,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: SPACING.sm,
   },
   headerText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333333',
-    marginLeft: 8,
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    marginLeft: SPACING.sm,
   },
   description: {
-    fontSize: 14,
-    color: '#666666',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
     lineHeight: 20,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333333',
-    marginBottom: 12,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.sm,
   },
   categoryContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: SPACING.sm,
   },
   categoryButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+    borderRadius: BORDER_RADIUS.md,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
-    backgroundColor: '#FFFFFF',
+    borderColor: COLORS.borderLight,
+    backgroundColor: COLORS.backgroundPrimary,
   },
   categoryButtonActive: {
-    backgroundColor: '#1C6CA9',
-    borderColor: '#1C6CA9',
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   categoryButtonText: {
-    fontSize: 14,
-    color: '#666666',
-    fontWeight: '500',
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
   categoryButtonTextActive: {
-    color: '#FFFFFF',
+    color: COLORS.textInverse,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: '#333333',
-    backgroundColor: '#FFFFFF',
+    borderColor: COLORS.borderLight,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textPrimary,
+    backgroundColor: COLORS.backgroundPrimary,
   },
   textArea: {
     minHeight: 120,
     textAlignVertical: 'top',
   },
   helperText: {
-    fontSize: 12,
-    color: '#666666',
-    marginTop: 4,
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.xs,
     textAlign: 'right',
   },
   submitButton: {
-    backgroundColor: '#1C6CA9',
-    borderRadius: 12,
-    paddingVertical: 16,
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.lg,
+    paddingVertical: SPACING.lg,
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: SPACING.xl,
   },
   submitButtonDisabled: {
     opacity: 0.6,
   },
   submitButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+    color: COLORS.textInverse,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
 });
 
 export default SupportContactScreen;
-

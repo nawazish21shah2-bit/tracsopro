@@ -274,9 +274,70 @@ class ShiftService {
   }
 
   /**
-   * Start break
+   * Map UI break labels to API BreakType values.
    */
-  async startBreak(data: {
+  private mapBreakType(breakType: string): string {
+    const key = (breakType || 'REGULAR').toUpperCase();
+    const map: Record<string, string> = {
+      REGULAR: 'REGULAR',
+      REST: 'REGULAR',
+      SHORT: 'REGULAR',
+      LUNCH: 'LUNCH',
+      EMERGENCY: 'EMERGENCY',
+      BATHROOM: 'REGULAR',
+      OTHER: 'REGULAR',
+    };
+    return map[key] || 'REGULAR';
+  }
+
+  /**
+   * Start break during an active shift
+   */
+  async startBreak(
+    shiftId: string,
+    breakType: string,
+    location?: { latitude: number; longitude: number; accuracy?: number },
+    notes?: string
+  ): Promise<any> {
+    return this.startBreakV2(
+      shiftId,
+      this.mapBreakType(breakType),
+      location
+        ? {
+            latitude: location.latitude,
+            longitude: location.longitude,
+            accuracy: location.accuracy ?? 10,
+          }
+        : undefined,
+      notes
+    );
+  }
+
+  /**
+   * End break during an active shift
+   */
+  async endBreak(
+    shiftId: string,
+    breakId: string,
+    location?: { latitude: number; longitude: number; accuracy?: number },
+    notes?: string
+  ): Promise<any> {
+    return this.endBreakV2(shiftId, breakId, location, notes);
+  }
+
+  /**
+   * Get active break for a shift (none if not on break)
+   */
+  async getActiveBreak(shiftId: string): Promise<any | null> {
+    const api = await createAuthAxios();
+    const response = await api.get<{ success: boolean; data: any | null }>(
+      `/shifts/${shiftId}/active-break`
+    );
+    return response.data.data ?? null;
+  }
+
+  /** @deprecated Use startBreak(shiftId, breakType, ...) */
+  async startBreakLegacy(data: {
     shiftId: string;
     breakType: 'lunch' | 'short' | 'emergency';
   }): Promise<any> {
@@ -285,10 +346,8 @@ class ShiftService {
     return response.data;
   }
 
-  /**
-   * End break
-   */
-  async endBreak(breakId: string): Promise<any> {
+  /** @deprecated Use endBreak(shiftId, breakId, ...) */
+  async endBreakLegacy(breakId: string): Promise<any> {
     const api = await createAuthAxios();
     const response = await api.post(`/breaks/${breakId}/end`);
     return response.data;

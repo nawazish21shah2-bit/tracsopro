@@ -5,9 +5,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, FlatList, TextInput, Alert, ActivityIndicator, RefreshControl } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import SharedHeader from '../../components/ui/SharedHeader';
+import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
+import SuperAdminProfileDrawer from '../../components/superAdmin/SuperAdminProfileDrawer';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import { useNotificationBell } from '../../hooks/useNotificationBell';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { SuperAdminStackParamList } from '../../navigation/SuperAdminNavigator';
@@ -37,6 +40,10 @@ type NavigationProp = StackNavigationProp<SuperAdminStackParamList>;
 
 const BillingManagementScreen: React.FC<{ navigation?: any }> = ({ navigation: navProp }) => {
   const navigation = useNavigation<NavigationProp>();
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+  const { onNotificationPress, notificationCount } = useNotificationBell({
+    notificationsRoute: 'SuperAdminNotifications',
+  });
   const [billingRecords, setBillingRecords] = useState<BillingRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -48,7 +55,8 @@ const BillingManagementScreen: React.FC<{ navigation?: any }> = ({ navigation: n
   const [analytics, setAnalytics] = useState<any>(null);
 
   useEffect(() => {
-    loadBillingData();
+    setPage(1);
+    loadBillingData(true);
     loadAnalytics();
   }, [selectedFilter, searchQuery]);
 
@@ -61,24 +69,22 @@ const BillingManagementScreen: React.FC<{ navigation?: any }> = ({ navigation: n
     }
   };
 
-  const loadBillingData = async (reset = false) => {
+  const loadBillingData = async (reset = false, pageOverride?: number) => {
     try {
+      const currentPage = reset ? 1 : pageOverride ?? page;
       if (reset) {
         setLoading(true);
-        setPage(1);
       } else {
         setRefreshing(true);
       }
 
-      const currentPage = reset ? 1 : page;
       const response = await superAdminService.getPaymentRecords({
         page: currentPage,
         limit: 20,
         status: selectedFilter !== 'ALL' ? selectedFilter : undefined,
         search: searchQuery || undefined,
       });
-      
-      // Transform backend data to frontend format
+
       const records: BillingRecord[] = (response.records || []).map((transaction: any) => ({
         id: transaction.id,
         companyName: transaction.securityCompany?.name || 'Unknown Company',
@@ -92,14 +98,15 @@ const BillingManagementScreen: React.FC<{ navigation?: any }> = ({ navigation: n
         invoiceNumber: transaction.invoiceNumber,
         securityCompany: transaction.securityCompany,
       }));
-      
+
       if (reset) {
         setBillingRecords(records);
+        setPage(1);
       } else {
-        setBillingRecords(prev => [...prev, ...records]);
+        setBillingRecords((prev) => [...prev, ...records]);
       }
-      
-      setHasMore(response.pagination.pages > currentPage);
+
+      setHasMore(response.pagination.page < response.pagination.pages);
     } catch (error) {
       console.error('Error loading billing data:', error);
       Alert.alert('Error', 'Failed to load payment records');
@@ -118,11 +125,9 @@ const BillingManagementScreen: React.FC<{ navigation?: any }> = ({ navigation: n
 
   const handleLoadMore = () => {
     if (!loading && hasMore) {
-      setPage(prev => {
-        const nextPage = prev + 1;
-        loadBillingData(false);
-        return nextPage;
-      });
+      const nextPage = page + 1;
+      setPage(nextPage);
+      loadBillingData(false, nextPage);
     }
   };
 
@@ -241,7 +246,10 @@ const BillingManagementScreen: React.FC<{ navigation?: any }> = ({ navigation: n
       {item.status === 'PENDING' && (
         <TouchableOpacity
           style={styles.markPaidButton}
-          onPress={() => handleMarkAsPaid(item.id)}
+          onPress={(e) => {
+            e.stopPropagation?.();
+            handleMarkAsPaid(item.id);
+          }}
           disabled={processing === item.id}
         >
           {processing === item.id ? (
@@ -249,6 +257,16 @@ const BillingManagementScreen: React.FC<{ navigation?: any }> = ({ navigation: n
           ) : (
             <Text style={styles.markPaidButtonText}>Mark as Paid</Text>
           )}
+        </TouchableOpacity>
+      )}
+      {item.securityCompany?.id && (
+        <TouchableOpacity
+          style={styles.buyPlanButton}
+          onPress={() =>
+            navigation.navigate('BuyPlan', { companyId: item.securityCompany!.id })
+          }
+        >
+          <Text style={styles.buyPlanButtonText}>Manage Subscription</Text>
         </TouchableOpacity>
       )}
     </TouchableOpacity>
@@ -277,21 +295,45 @@ const BillingManagementScreen: React.FC<{ navigation?: any }> = ({ navigation: n
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <SharedHeader variant="admin" title="" showLogo={false} />
+      <SafeAreaWrapper>
+        <SharedHeader
+          variant="superAdmin"
+          title="Billing Management"
+          showLogo={false}
+          onMenuPress={openDrawer}
+          onNotificationPress={onNotificationPress}
+          notificationCount={notificationCount}
+          profileDrawer={
+            <SuperAdminProfileDrawer
+              visible={isDrawerVisible}
+              onClose={closeDrawer}
+              onNavigateToBilling={() => closeDrawer()}
+            />
+          }
+        />
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Loading Billing Data...</Text>
         </View>
-      </SafeAreaView>
+      </SafeAreaWrapper>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaWrapper>
       <SharedHeader
-        variant="admin"
+        variant="superAdmin"
         title="Billing Management"
         showLogo={false}
+        onMenuPress={openDrawer}
+        onNotificationPress={onNotificationPress}
+        notificationCount={notificationCount}
+        profileDrawer={
+          <SuperAdminProfileDrawer
+            visible={isDrawerVisible}
+            onClose={closeDrawer}
+            onNavigateToBilling={() => closeDrawer()}
+          />
+        }
       />
       
       <View style={styles.header}>
@@ -374,7 +416,7 @@ const BillingManagementScreen: React.FC<{ navigation?: any }> = ({ navigation: n
           </View>
         }
       />
-    </SafeAreaView>
+    </SafeAreaWrapper>
   );
 };
 
@@ -398,15 +440,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   buyPlanButton: {
-    paddingHorizontal: SPACING.md,
+    marginTop: SPACING.sm,
     paddingVertical: SPACING.sm,
-    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.md,
+    backgroundColor: `${COLORS.primary}15`,
     borderRadius: BORDER_RADIUS.md,
+    alignItems: 'center',
   },
   buyPlanButtonText: {
     fontSize: TYPOGRAPHY.fontSize.sm,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
-    color: COLORS.textInverse,
+    color: COLORS.primary,
   },
   loadingContainer: {
     flex: 1,

@@ -4,6 +4,7 @@ import shiftService from '../services/shiftServiceSimple.js';
 import { logger } from '../utils/logger.js';
 import { NotFoundError } from '../utils/errors.js';
 import prisma from '../config/database.js';
+import { AuthRequest } from '../middleware/auth.js';
 
 // Helper to get guard ID from request - async version with database fallback
 async function getGuardIdAsync(req: any): Promise<string | null> {
@@ -61,21 +62,90 @@ function getGuardId(req: any): string | null {
 }
 
 /**
- * Get shift by ID
+ * Get shift by ID — guards, clients, and admins (scoped to their access)
  */
 export const getShiftById = async (req: Request, res: Response) => {
   try {
     const { id: shiftId } = req.params;
-    const guardId = await getGuardIdAsync(req as any);
+    const authReq = req as AuthRequest;
+    const role = (authReq.user?.role || '').toUpperCase();
 
-    if (!guardId) {
-      return res.status(401).json({ 
+    const rawShift = await prisma.shift.findUnique({
+      where: { id: shiftId },
+      include: {
+        site: {
+          select: {
+            clientId: true,
+            companySites: {
+              where: { isActive: true },
+              select: { securityCompanyId: true },
+            },
+          },
+        },
+        client: {
+          include: {
+            companyClients: {
+              where: { isActive: true },
+              select: { securityCompanyId: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!rawShift) {
+      return res.status(404).json({
         success: false,
-        error: 'Guard not found' 
+        error: 'Shift not found',
       });
     }
 
-    const shift = await shiftService.getShiftById(shiftId, guardId);
+    if (role === 'CLIENT') {
+      const ownsShift =
+        !!authReq.clientId &&
+        (rawShift.clientId === authReq.clientId ||
+          rawShift.site?.clientId === authReq.clientId);
+
+      if (!ownsShift) {
+        return res.status(404).json({
+          success: false,
+          error: 'Shift not found',
+        });
+      }
+    } else if (role === 'ADMIN' || role === 'SUPER_ADMIN') {
+      if (authReq.securityCompanyId) {
+        const belongsToCompany =
+          rawShift.site?.companySites?.some(
+            (cs) => cs.securityCompanyId === authReq.securityCompanyId
+          ) ||
+          rawShift.client?.companyClients?.some(
+            (cc) => cc.securityCompanyId === authReq.securityCompanyId
+          );
+
+        if (!belongsToCompany) {
+          return res.status(404).json({
+            success: false,
+            error: 'Shift not found',
+          });
+        }
+      }
+    } else {
+      const guardId = await getGuardIdAsync(authReq);
+      if (!guardId) {
+        return res.status(401).json({
+          success: false,
+          error: 'Guard not found',
+        });
+      }
+      if (rawShift.guardId !== guardId) {
+        return res.status(404).json({
+          success: false,
+          error: 'Shift not found',
+        });
+      }
+    }
+
+    const shift = await shiftService.getShiftById(shiftId);
 
     res.json({
       success: true,
@@ -89,9 +159,9 @@ export const getShiftById = async (req: Request, res: Response) => {
       });
     }
     logger.error('Error getting shift by ID:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      error: error.message || 'Failed to get shift' 
+      error: error.message || 'Failed to get shift',
     });
   }
 };
@@ -512,6 +582,36 @@ export const endBreak = async (req: Request, res: Response) => {
     res.status(400).json({
       success: false,
       error: error.message || 'Failed to end break',
+    });
+  }
+};
+
+/**
+ * Get active break for a shift (if any)
+ */
+export const getActiveBreak = async (req: Request, res: Response) => {
+  try {
+    const guardId = await getGuardIdAsync(req as any);
+    const { id: shiftId } = req.params;
+
+    if (!guardId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Guard not found',
+      });
+    }
+
+    const activeBreak = await shiftService.getActiveBreak(shiftId, guardId);
+
+    res.json({
+      success: true,
+      data: activeBreak,
+    });
+  } catch (error: any) {
+    logger.error('Error getting active break:', error);
+    res.status(400).json({
+      success: false,
+      error: error.message || 'Failed to get active break',
     });
   }
 };

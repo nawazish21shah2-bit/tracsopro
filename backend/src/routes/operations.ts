@@ -18,5 +18,8 @@ router.get('/metrics', operationsController.getOperationsMetrics);
 // Guard statuses
 router.get('/guards', operationsController.getGuardStatuses);
 
+// Live activity feed (operations center alerts tab)
+router.get('/activity', operationsController.getOperationsActivity);
+
 export default router;
 

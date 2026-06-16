@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../../store';
-import { triggerEmergencyAlert } from '../../store/slices/emergencySlice';
+import { triggerEmergencyAlert, fetchGuardActiveEmergencyAlert } from '../../store/slices/emergencySlice';
 import { getCurrentLocationSafe, requestLocationPermission } from '../../utils/safeLocationHelper';
 import { AlertTriangle, Phone, Shield, Heart } from 'react-native-feather';
 
@@ -40,16 +40,21 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
 }) => {
   const dispatch = useDispatch();
   const { user } = useSelector((state: RootState) => state.auth);
-  const { loading } = useSelector((state: RootState) => state.emergency);
+  const { submitting, guardActiveAlert } = useSelector((state: RootState) => state.emergency);
   const { activeShift } = useSelector((state: RootState) => state.shifts);
 
   const [showTypeSelector, setShowTypeSelector] = useState(false);
   const [isPressed, setIsPressed] = useState(false);
+  const isSendingRef = useRef(false);
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   // Cancellation token to ignore callbacks after unmount/close
   const cancelTokenRef = useRef<{ cancelled?: boolean }>({ cancelled: false });
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    dispatch(fetchGuardActiveEmergencyAlert() as any);
+  }, [dispatch]);
 
   useEffect(() => {
     return () => {
@@ -169,6 +174,19 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
   };
 
   const handleEmergencyPress = () => {
+    if (submitting || isSendingRef.current) {
+      return;
+    }
+
+    if (guardActiveAlert) {
+      Alert.alert(
+        'Emergency Already Active',
+        'You already have an active emergency alert. Responders have been notified and help is on the way.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     // Vibrate to provide haptic feedback
     try {
       Vibration.vibrate([0, 100, 50, 100]);
@@ -181,6 +199,10 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
   };
 
   const handleEmergencyTypeSelect = async (emergencyType: EmergencyType) => {
+    if (submitting || isSendingRef.current) {
+      return;
+    }
+
     try {
       setShowTypeSelector(false);
 
@@ -234,6 +256,12 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
   };
 
   const sendEmergencyAlert = async (emergencyType: EmergencyType, location: any) => {
+    if (isSendingRef.current || submitting) {
+      return;
+    }
+
+    isSendingRef.current = true;
+
     try {
       if (cancelTokenRef.current.cancelled) return;
       // Validate and sanitize location data
@@ -269,22 +297,27 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
       abortControllerRef.current = null;
 
       if (result && result.type === 'emergency/triggerAlert/fulfilled') {
-        // Success feedback
-        try {
-          Vibration.vibrate([0, 200, 100, 200, 100, 200]);
-        } catch (vibrationError) {
-          console.warn('Vibration error:', vibrationError);
+        const payload = result.payload as { duplicate?: boolean; id?: string };
+        const isDuplicate = !!payload?.duplicate;
+
+        if (!isDuplicate) {
+          try {
+            Vibration.vibrate([0, 200, 100, 200, 100, 200]);
+          } catch (vibrationError) {
+            console.warn('Vibration error:', vibrationError);
+          }
         }
 
         Alert.alert(
-          'Emergency Alert Sent',
-          `Your ${emergencyType.label.toLowerCase()} has been sent to all administrators. Help is on the way.`,
+          isDuplicate ? 'Alert Already Active' : 'Emergency Alert Sent',
+          isDuplicate
+            ? 'Your emergency alert is already active. Responders have been notified and help is on the way.'
+            : `Your ${emergencyType.label.toLowerCase()} has been sent to all administrators. Help is on the way.`,
           [{ text: 'OK' }]
         );
 
-        // Call callback if provided
-        if (onEmergencyTriggered && result.payload?.id) {
-          if (!cancelTokenRef.current.cancelled) onEmergencyTriggered(result.payload.id);
+        if (onEmergencyTriggered && payload?.id) {
+          if (!cancelTokenRef.current.cancelled) onEmergencyTriggered(payload.id);
         }
       } else {
         throw new Error('Failed to send emergency alert');
@@ -296,6 +329,8 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
         'Failed to send emergency alert. Please try again or contact emergency services directly.',
         [{ text: 'OK' }]
       );
+    } finally {
+      isSendingRef.current = false;
     }
   };
 
@@ -320,7 +355,7 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
                   key={type.id}
                   style={[styles.typeOption, { borderLeftColor: type.color }]}
                   onPress={() => handleEmergencyTypeSelect(type)}
-                  disabled={loading}
+                  disabled={submitting || isSendingRef.current}
                 >
                   <View style={[styles.typeIcon, { backgroundColor: type.color }]}>
                     {type.icon}
@@ -373,7 +408,7 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
           onPress={handleEmergencyPress}
-          disabled={loading}
+          disabled={submitting || isSendingRef.current}
           activeOpacity={0.8}
         >
           <AlertTriangle

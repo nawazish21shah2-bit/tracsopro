@@ -1,294 +1,255 @@
 /**
  * Chat Helper Utility
- * Centralized service for finding or creating chat rooms between users
- * Handles Client-Guard, Admin-Guard, and other chat flows
+ * Stable client↔guard conversation IDs (must match backend chatService.createChat)
  */
 
 import apiService from '../services/api';
-import { RootState } from '../store';
+import { pickProfilePictureUrl } from './profilePictureUtils';
 
 export interface ChatNavigationParams {
   chatId: string;
   chatName: string;
   avatar?: string;
-  context?: 'report' | 'site' | 'general';
+  context?: 'report' | 'site' | 'general' | 'support';
+  /** Guard entity id (for ClientGuardDetails) */
   guardId?: string;
+  /** Guard user id */
+  guardUserId?: string;
   clientId?: string;
+  clientUserId?: string;
   adminId?: string;
 }
 
-export interface ChatRoomSearchResult {
-  chatId: string;
-  chatName: string;
-  exists: boolean;
+/** Platform support thread id (one per admin user) */
+export function buildSupportChatId(adminUserId: string): string {
+  return `support_admin_${adminUserId}`;
+}
+
+export function isSupportChatId(chatId: string): boolean {
+  return chatId.startsWith('support_admin_');
+}
+
+export function getAdminSupportChatParams(adminUserId: string): ChatNavigationParams {
+  return {
+    chatId: buildSupportChatId(adminUserId),
+    chatName: 'Platform Support',
+    context: 'support',
+  };
+}
+
+/** Same ID format as backend: client_{clientUserId}_guard_{guardUserId} */
+export function buildClientGuardChatId(clientUserId: string, guardUserId: string): string {
+  return `client_${clientUserId}_guard_${guardUserId}`;
+}
+
+export function getClientGuardChatParams(
+  clientUserId: string,
+  guardUserId: string,
+  guardName: string,
+  avatar?: string,
+  context: 'report' | 'site' | 'general' = 'general',
+): ChatNavigationParams {
+  return {
+    chatId: buildClientGuardChatId(clientUserId, guardUserId),
+    chatName: guardName,
+    avatar,
+    context,
+    guardUserId,
+    clientUserId: clientUserId,
+  };
 }
 
 /**
- * Find or create a chat room between a Client and Guard
+ * Open existing client↔guard thread instantly (no room scan / no duplicate chats).
+ * @param guardUserId — guard's USER id (not guard entity id)
  */
 export async function findOrCreateClientGuardChat(
-  clientId: string,
-  guardId: string,
+  clientUserId: string,
+  guardUserId: string,
   guardName: string,
   context: 'report' | 'site' | 'general' = 'general',
-  contextId?: string
+  avatar?: string,
 ): Promise<ChatNavigationParams> {
-  try {
-    // First, try to find existing chat
-    const existingChat = await findExistingChat([clientId, guardId], 'direct');
-    
-    if (existingChat) {
-      return {
-        chatId: existingChat.chatId,
-        chatName: existingChat.chatName || guardName,
-        context,
-        guardId,
-        clientId,
-      };
-    }
-
-    // No existing chat found, create a new one
-    const createResponse = await apiService.createChat('direct', [clientId, guardId], guardName);
-    
-    if (createResponse.success && createResponse.data) {
-      return {
-        chatId: createResponse.data.id,
-        chatName: createResponse.data.name || guardName,
-        context,
-        guardId,
-        clientId,
-      };
-    }
-
-    // Fallback to pattern-based chatId if creation fails
-    return {
-      chatId: `client_guard_${guardId}_${Date.now()}`,
-      chatName: guardName,
-      context,
-      guardId,
-      clientId,
-    };
-  } catch (error) {
-    console.error('Error finding/creating client-guard chat:', error);
-    // Fallback to pattern-based chatId
-    return {
-      chatId: `client_guard_${guardId}_${Date.now()}`,
-      chatName: guardName,
-      context,
-      guardId,
-      clientId,
-    };
-  }
+  return getClientGuardChatParams(clientUserId, guardUserId, guardName, avatar, context);
 }
 
-/**
- * Find or create a chat room between an Admin and Guard
- */
+export function buildAdminGuardChatId(adminUserId: string, guardUserId: string): string {
+  return `admin_${adminUserId}_guard_${guardUserId}`;
+}
+
 export async function findOrCreateAdminGuardChat(
   adminId: string,
-  guardId: string,
-  guardName: string
+  guardUserId: string,
+  guardName: string,
 ): Promise<ChatNavigationParams> {
-  try {
-    // First, try to find existing chat
-    const existingChat = await findExistingChat([adminId, guardId], 'direct');
-    
-    if (existingChat) {
-      return {
-        chatId: existingChat.chatId,
-        chatName: existingChat.chatName || guardName,
-        context: 'general',
-        guardId,
-        adminId,
-      };
-    }
-
-    // No existing chat found, create a new one
-    const createResponse = await apiService.createChat('direct', [adminId, guardId], guardName);
-    
-    if (createResponse.success && createResponse.data) {
-      return {
-        chatId: createResponse.data.id,
-        chatName: createResponse.data.name || guardName,
-        context: 'general',
-        guardId,
-        adminId,
-      };
-    }
-
-    // Fallback to pattern-based chatId if creation fails
-    return {
-      chatId: `admin_guard_${guardId}_${Date.now()}`,
-      chatName: guardName,
-      context: 'general',
-      guardId,
-      adminId,
-    };
-  } catch (error) {
-    console.error('Error finding/creating admin-guard chat:', error);
-    // Fallback to pattern-based chatId
-    return {
-      chatId: `admin_guard_${guardId}_${Date.now()}`,
-      chatName: guardName,
-      context: 'general',
-      guardId,
-      adminId,
-    };
-  }
+  return {
+    chatId: buildAdminGuardChatId(adminId, guardUserId),
+    chatName: guardName,
+    context: 'general',
+    guardId: guardUserId,
+    adminId,
+  };
 }
 
-/**
- * Find existing chat room between participants
- */
-async function findExistingChat(
-  participantIds: string[],
-  type: 'direct' | 'group' | 'team' = 'direct'
-): Promise<ChatRoomSearchResult | null> {
-  try {
-    const response = await apiService.getChatRooms();
-    
-    if (!response.success || !response.data) {
-      return null;
-    }
-
-    // Search for existing chat with these participants
-    const existingChat = response.data.find((chat: any) => {
-      if (chat.type !== type) return false;
-      
-      const chatParticipants = chat.participants || [];
-      const participantUserIds = chatParticipants.map((p: any) => 
-        p.userId || p.id || (p.user && p.user.id)
-      ).filter(Boolean);
-
-      // Check if all participants match
-      if (participantUserIds.length !== participantIds.length) return false;
-      
-      const hasAllParticipants = participantIds.every(id => 
-        participantUserIds.includes(id)
-      );
-
-      return hasAllParticipants;
-    });
-
-    if (existingChat) {
-      // Get chat name from participants
-      let chatName = existingChat.name;
-      if (!chatName && type === 'direct' && existingChat.participants) {
-        const otherParticipant = existingChat.participants.find(
-          (p: any) => {
-            const pId = p.userId || p.id || (p.user && p.user.id);
-            return pId && !participantIds.includes(pId);
-          }
-        );
-        
-        if (otherParticipant?.user) {
-          chatName = `${otherParticipant.user.firstName || ''} ${otherParticipant.user.lastName || ''}`.trim();
-        } else if (otherParticipant?.firstName) {
-          chatName = `${otherParticipant.firstName || ''} ${otherParticipant.lastName || ''}`.trim();
-        }
-      }
-
-      return {
-        chatId: existingChat.id,
-        chatName: chatName || 'Chat',
-        exists: true,
-      };
-    }
-
-    return null;
-  } catch (error) {
-    console.error('Error finding existing chat:', error);
-    return null;
-  }
-}
-
-/**
- * Find or create a chat room between a Client and Admin
- */
 export async function findOrCreateClientAdminChat(
   clientId: string,
   adminId: string,
-  adminName: string
+  adminName: string,
 ): Promise<ChatNavigationParams> {
+  return {
+    chatId: `client_${clientId}_admin_${adminId}`,
+    chatName: adminName,
+    context: 'general',
+    adminId,
+    clientId,
+  };
+}
+
+export function parseDirectChatParticipants(
+  chatId: string,
+  currentUserId: string,
+): {
+  otherUserId?: string;
+  clientUserId?: string;
+  guardUserId?: string;
+  adminUserId?: string;
+} {
+  const parts = chatId.split('_');
+  if (parts.length >= 4 && (parts[2] === 'guard' || parts[2] === 'admin')) {
+    const userId1 = parts[1];
+    const role2 = parts[2];
+    const userId2 = parts[3];
+    const otherUserId = userId1 === currentUserId ? userId2 : userId1;
+
+    if (parts[0] === 'client' && role2 === 'guard') {
+      return { otherUserId, clientUserId: userId1, guardUserId: userId2 };
+    }
+    if (parts[0] === 'admin' && role2 === 'guard') {
+      return { otherUserId, adminUserId: userId1, guardUserId: userId2 };
+    }
+    if (parts[0] === 'client' && role2 === 'admin') {
+      return { otherUserId, clientUserId: userId1, adminUserId: userId2 };
+    }
+  }
+
+  if (chatId.startsWith('direct_') && parts.length >= 3) {
+    const userId1 = parts[1];
+    const userId2 = parts[2];
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRe.test(userId1) || !uuidRe.test(userId2)) {
+      return {};
+    }
+    return { otherUserId: userId1 === currentUserId ? userId2 : userId1 };
+  }
+
+  return {};
+}
+
+/** Resolve guard entity id from user id using client guards list. */
+export async function resolveGuardEntityId(guardUserId: string): Promise<string | null> {
   try {
-    // First, try to find existing chat
-    const existingChat = await findExistingChat([clientId, adminId], 'direct');
-    
-    if (existingChat) {
-      return {
-        chatId: existingChat.chatId,
-        chatName: existingChat.chatName || adminName,
-        context: 'general',
-        adminId,
-        clientId,
-      };
+    const response = await apiService.getClientGuards(1, 100);
+    if (!response.success || !Array.isArray(response.data)) {
+      return null;
     }
-
-    // No existing chat found, create a new one
-    const createResponse = await apiService.createChat('direct', [clientId, adminId], adminName);
-    
-    if (createResponse.success && createResponse.data) {
-      return {
-        chatId: createResponse.data.id,
-        chatName: createResponse.data.name || adminName,
-        context: 'general',
-        adminId,
-        clientId,
-      };
-    }
-
-    // Fallback to pattern-based chatId if creation fails
-    return {
-      chatId: `client_admin_${adminId}_${Date.now()}`,
-      chatName: adminName,
-      context: 'general',
-      adminId,
-      clientId,
-    };
-  } catch (error) {
-    console.error('Error finding/creating client-admin chat:', error);
-    // Fallback to pattern-based chatId
-    return {
-      chatId: `client_admin_${adminId}_${Date.now()}`,
-      chatName: adminName,
-      context: 'general',
-      adminId,
-      clientId,
-    };
+    const match = response.data.find(
+      (g: any) => g.userId === guardUserId || g.user?.id === guardUserId,
+    );
+    return match?.id || match?.guardId || null;
+  } catch {
+    return null;
   }
 }
 
-/**
- * Get chat room by ID (for navigating to existing chat)
- */
+export async function resolveChatParticipantProfile(
+  chatId: string,
+  currentUserId: string,
+): Promise<{
+  avatar?: string;
+  firstName?: string;
+  lastName?: string;
+  displayName?: string;
+} | null> {
+  try {
+    const response = await apiService.getChatRooms();
+
+    if (!response.success || !Array.isArray(response.data)) {
+      return null;
+    }
+
+    const chat = response.data.find((c: any) => c.id === chatId);
+    if (!chat) {
+      return null;
+    }
+
+    const otherParticipant = chat.participants?.find(
+      (p: any) => (p.userId || p.user?.id) !== currentUserId,
+    );
+
+    if (otherParticipant?.user) {
+      const participantUser = otherParticipant.user;
+      const avatar =
+        pickProfilePictureUrl(participantUser) ||
+        pickProfilePictureUrl(otherParticipant) ||
+        pickProfilePictureUrl({ avatar: chat.avatar });
+
+      return {
+        avatar,
+        firstName: participantUser.firstName,
+        lastName: participantUser.lastName,
+        displayName:
+          `${participantUser.firstName || ''} ${participantUser.lastName || ''}`.trim() ||
+          chat.name ||
+          undefined,
+      };
+    }
+
+    const fallbackAvatar = pickProfilePictureUrl({ avatar: chat.avatar });
+    if (fallbackAvatar) {
+      return { avatar: fallbackAvatar, displayName: chat.name };
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error resolving chat participant profile:', error);
+    return null;
+  }
+}
+
 export async function getChatRoomById(chatId: string): Promise<ChatNavigationParams | null> {
   try {
     const response = await apiService.getChatRooms();
-    
+
     if (!response.success || !response.data) {
       return null;
     }
 
     const chat = response.data.find((c: any) => c.id === chatId);
-    
+
     if (chat) {
       let chatName = chat.name;
-      if (!chatName && chat.participants) {
-        const otherParticipant = chat.participants.find(
-          (p: any) => {
-            const pId = p.userId || p.id || (p.user && p.user.id);
-            return pId; // Get first other participant
-          }
-        );
-        
+      let avatar: string | undefined;
+
+      if (chat.participants) {
+        const otherParticipant = chat.participants.find((p: any) => {
+          const pId = p.userId || p.id || (p.user && p.user.id);
+          return pId;
+        });
+
         if (otherParticipant?.user) {
-          chatName = `${otherParticipant.user.firstName || ''} ${otherParticipant.user.lastName || ''}`.trim();
+          chatName =
+            `${otherParticipant.user.firstName || ''} ${otherParticipant.user.lastName || ''}`.trim() ||
+            chatName;
+          avatar =
+            pickProfilePictureUrl(otherParticipant.user) ||
+            pickProfilePictureUrl({ avatar: chat.avatar });
         }
       }
 
       return {
         chatId: chat.id,
         chatName: chatName || 'Chat',
+        avatar,
         context: 'general',
       };
     }
@@ -299,4 +260,3 @@ export async function getChatRoomById(chatId: string): Promise<ChatNavigationPar
     return null;
   }
 }
-

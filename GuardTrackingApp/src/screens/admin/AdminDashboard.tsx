@@ -32,11 +32,13 @@ import { AppIcon } from '../../components/ui/AppIcons';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { ChevronRightIcon } from '../../components/ui/AppIcons';
 import SharedHeader from '../../components/ui/SharedHeader';
-import AdminStatsCard from '../../components/ui/AdminStatsCard';
+import StatsCard from '../../components/ui/StatsCard';
+import StatsGrid, { statCardStyle } from '../../components/ui/StatsGrid';
 import QuickActionCard from '../../components/ui/QuickActionCard';
 import RecentActivityCard from '../../components/ui/RecentActivityCard';
 import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import { useNotificationBell } from '../../hooks/useNotificationBell';
 import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
 import { RefreshControl } from 'react-native';
 
@@ -63,6 +65,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+  const { onNotificationPress, notificationCount } = useNotificationBell({
+    notificationsRoute: 'AdminNotifications',
+  });
   
   // Redux state
   const { dashboardMetrics, dashboardLoading, dashboardError, recentActivity, activityLoading } = useSelector(
@@ -203,10 +208,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
       variant="admin"
       showLogo={true}
       onMenuPress={openDrawer}
-      onNotificationPress={() => {
-        // Handle notification press
-      }}
-      notificationCount={dashboardMetrics?.emergencyAlerts || 0}
+      onNotificationPress={onNotificationPress}
+      notificationCount={notificationCount}
       profileDrawer={
         <AdminProfileDrawer
           visible={isDrawerVisible}
@@ -250,51 +253,54 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
     }
 
     const guardsOnLeave = dashboardMetrics.totalGuards - dashboardMetrics.activeGuards;
-    
+    const inactiveSites = dashboardMetrics.totalSites - dashboardMetrics.activeSites;
+
     return (
-      <View style={styles.metricsContainer}>
-        <View style={styles.metricsGrid}>
-          <AdminStatsCard
-            label="Active Guards"
-            value={`${dashboardMetrics.activeGuards}/${dashboardMetrics.totalGuards}`}
-            subLabel={guardsOnLeave > 0 ? `${guardsOnLeave} On Leave` : 'All Active'}
-            icon={<UserIcon size={20} color={COLORS.success} />}
-            iconBgColor="#DCFCE7"
-            iconColor="#16A34A"
-            style={styles.statCard}
-          />
-          
-          <AdminStatsCard
-            label="Active Sites"
-            value={`${dashboardMetrics.activeSites}/${dashboardMetrics.totalSites}`}
-            subLabel="All Operational"
-            icon={<LocationIcon size={20} color={COLORS.info} />}
-            iconBgColor="#DBEAFE"
-            iconColor="#1976D2"
-            style={styles.statCard}
-          />
-          
-          <AdminStatsCard
-            label="Today's Report"
-            value={dashboardMetrics.todayIncidents}
-            subLabel={dashboardMetrics.pendingIncidents > 0 ? `${dashboardMetrics.pendingIncidents} Pending` : 'All Reviewed'}
-            icon={<ReportsIcon size={20} color={COLORS.textSecondary} />}
-            iconBgColor="#F3F4F6"
-            iconColor="#6B7280"
-            style={styles.statCard}
-          />
-          
-          <AdminStatsCard
-            label="Scheduled Shifts"
-            value={dashboardMetrics.scheduledShifts}
-            subLabel="This Week"
-            icon={<ShiftsIcon size={20} color={COLORS.accent} />}
-            iconBgColor="#FCE7F3"
-            iconColor="#EC4899"
-            style={styles.statCard}
-          />
-        </View>
-      </View>
+      <StatsGrid contentStyle={styles.metricsGrid}>
+        <StatsCard
+          label="Active Guards"
+          value={`${dashboardMetrics.activeGuards}/${dashboardMetrics.totalGuards}`}
+          subLabel={guardsOnLeave > 0 ? `${guardsOnLeave} On Leave` : 'All Active'}
+          icon={<UserIcon size={20} color={COLORS.success} />}
+          variant="success"
+          layout="vertical"
+          style={statCardStyle}
+        />
+
+        <StatsCard
+          label="Active Sites"
+          value={`${dashboardMetrics.activeSites}/${dashboardMetrics.totalSites}`}
+          subLabel={inactiveSites > 0 ? `${inactiveSites} Inactive` : 'All Operational'}
+          icon={<LocationIcon size={20} color={COLORS.info} />}
+          variant="info"
+          layout="vertical"
+          style={statCardStyle}
+        />
+
+        <StatsCard
+          label="Today's Reports"
+          value={dashboardMetrics.todayIncidents}
+          subLabel={
+            dashboardMetrics.pendingIncidents > 0
+              ? `${dashboardMetrics.pendingIncidents} Pending`
+              : 'All Reviewed'
+          }
+          icon={<ReportsIcon size={20} color={COLORS.textSecondary} />}
+          variant="neutral"
+          layout="vertical"
+          style={statCardStyle}
+        />
+
+        <StatsCard
+          label="Scheduled Shifts"
+          value={dashboardMetrics.scheduledShifts}
+          subLabel="This Week"
+          icon={<ShiftsIcon size={20} color={COLORS.accent} />}
+          variant="warning"
+          layout="vertical"
+          style={statCardStyle}
+        />
+      </StatsGrid>
     );
   };
 

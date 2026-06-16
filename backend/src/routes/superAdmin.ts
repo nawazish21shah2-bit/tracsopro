@@ -1,21 +1,18 @@
 import express from 'express';
 import SuperAdminService from '../services/superAdminService';
-import { authenticateToken, requireSuperAdmin } from '../middleware/auth';
-import prisma from '../config/database';
+import { authenticateToken, requireSuperAdmin, AuthRequest } from '../middleware/auth';
 
 const router = express.Router();
 
-// Apply authentication and super admin check to all routes
 router.use(authenticateToken);
 router.use(requireSuperAdmin);
 
-/**
- * GET /api/super-admin/overview
- * Get platform overview statistics
- */
 router.get('/overview', async (req, res) => {
   try {
-    const overview = await SuperAdminService.getPlatformOverview();
+    const { period } = req.query;
+    const overview = await SuperAdminService.getPlatformOverview({
+      period: period as string,
+    });
     res.json(overview);
   } catch (error) {
     console.error('Error getting platform overview:', error);
@@ -23,22 +20,16 @@ router.get('/overview', async (req, res) => {
   }
 });
 
-/**
- * GET /api/super-admin/companies
- * Get all security companies with pagination and filters
- */
 router.get('/companies', async (req, res) => {
   try {
     const { page, limit, search, status, plan } = req.query;
-    
     const result = await SuperAdminService.getSecurityCompanies({
       page: page ? parseInt(page as string) : undefined,
       limit: limit ? parseInt(limit as string) : undefined,
       search: search as string,
       status: status as string,
-      plan: plan as string
+      plan: plan as string,
     });
-    
     res.json(result);
   } catch (error) {
     console.error('Error getting security companies:', error);
@@ -46,47 +37,24 @@ router.get('/companies', async (req, res) => {
   }
 });
 
-/**
- * GET /api/super-admin/companies/:id
- * Get a single security company by ID
- */
 router.get('/companies/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const company = await prisma.securityCompany.findUnique({
-      where: { id },
-      include: {
-        _count: {
-          select: {
-            users: true,
-            guards: true,
-            clients: true,
-            sites: true
-          }
-        }
-      }
-    });
-    
-    if (!company) {
-      return res.status(404).json({ error: 'Company not found' });
-    }
-    
+    const company = await SuperAdminService.getSecurityCompany(id);
     res.json(company);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error getting security company:', error);
-    res.status(500).json({ error: 'Failed to get security company' });
+    if (error.message === 'Company not found') {
+      res.status(404).json({ error: 'Company not found' });
+    } else {
+      res.status(500).json({ error: 'Failed to get security company' });
+    }
   }
 });
 
-/**
- * POST /api/super-admin/companies
- * Create a new security company
- */
-router.post('/companies', async (req, res) => {
+router.post('/companies', async (req: AuthRequest, res) => {
   try {
     const company = await SuperAdminService.createSecurityCompany(req.body);
-    
-    // Log the action
     await SuperAdminService.logAction({
       userId: req.userId,
       action: 'CREATE_COMPANY',
@@ -96,7 +64,6 @@ router.post('/companies', async (req, res) => {
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
     });
-    
     res.status(201).json(company);
   } catch (error) {
     console.error('Error creating security company:', error);
@@ -104,22 +71,11 @@ router.post('/companies', async (req, res) => {
   }
 });
 
-/**
- * PUT /api/super-admin/companies/:id
- * Update security company
- */
-router.put('/companies/:id', async (req, res) => {
+router.put('/companies/:id', async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
-    
-    // Get old company data for logging
-    const oldCompany = await prisma.securityCompany.findUnique({
-      where: { id }
-    });
-    
+    const oldCompany = await SuperAdminService.getSecurityCompany(id);
     const company = await SuperAdminService.updateSecurityCompany(id, req.body);
-    
-    // Log the action
     await SuperAdminService.logAction({
       userId: req.userId,
       action: 'UPDATE_COMPANY',
@@ -130,7 +86,6 @@ router.put('/companies/:id', async (req, res) => {
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
     });
-    
     res.json(company);
   } catch (error) {
     console.error('Error updating security company:', error);
@@ -138,29 +93,18 @@ router.put('/companies/:id', async (req, res) => {
   }
 });
 
-/**
- * GET /api/super-admin/companies/:id
- * Get a single security company by ID
- */
-router.get('/companies/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const company = await SuperAdminService.getSecurityCompany(id);
-    res.json(company);
-  } catch (error) {
-    console.error('Error getting security company:', error);
-    res.status(500).json({ error: 'Failed to get security company' });
-  }
-});
-
-/**
- * DELETE /api/super-admin/companies/:id
- * Delete a security company by ID
- */
-router.delete('/companies/:id', async (req, res) => {
+router.delete('/companies/:id', async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     const result = await SuperAdminService.deleteSecurityCompany(id);
+    await SuperAdminService.logAction({
+      userId: req.userId,
+      action: 'DELETE_COMPANY',
+      resource: 'SecurityCompany',
+      resourceId: id,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
     res.json(result);
   } catch (error) {
     console.error('Error deleting security company:', error);
@@ -168,18 +112,11 @@ router.delete('/companies/:id', async (req, res) => {
   }
 });
 
-/**
- * PATCH /api/super-admin/companies/:id/status
- * Toggle security company status (activate/suspend)
- */
-router.patch('/companies/:id/status', async (req, res) => {
+router.patch('/companies/:id/status', async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     const { isActive } = req.body;
-    
     const company = await SuperAdminService.toggleCompanyStatus(id, isActive);
-    
-    // Log the action
     await SuperAdminService.logAction({
       userId: req.userId,
       action: isActive ? 'ACTIVATE_COMPANY' : 'SUSPEND_COMPANY',
@@ -189,7 +126,6 @@ router.patch('/companies/:id/status', async (req, res) => {
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
     });
-    
     res.json(company);
   } catch (error) {
     console.error('Error toggling company status:', error);
@@ -197,20 +133,80 @@ router.patch('/companies/:id/status', async (req, res) => {
   }
 });
 
-/**
- * GET /api/super-admin/analytics
- * Get platform analytics
- */
+router.get('/companies/:id/subscription', async (req, res) => {
+  try {
+    const info = await SuperAdminService.getCompanySubscriptionInfo(req.params.id);
+    res.json(info);
+  } catch (error: any) {
+    console.error('Error getting company subscription:', error);
+    if (error.message === 'Company not found') {
+      res.status(404).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: 'Failed to get company subscription' });
+    }
+  }
+});
+
+router.post('/companies/:id/subscription/checkout', async (req: AuthRequest, res) => {
+  try {
+    const { priceId, trialDays } = req.body;
+    if (!priceId) {
+      return res.status(400).json({ error: 'priceId is required' });
+    }
+    const session = await SuperAdminService.createCompanySubscriptionCheckout(
+      req.params.id,
+      { priceId, trialDays }
+    );
+    await SuperAdminService.logAction({
+      userId: req.userId,
+      action: 'CREATE_SUBSCRIPTION_CHECKOUT',
+      resource: 'SecurityCompany',
+      resourceId: req.params.id,
+      newValues: { priceId, trialDays },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
+    res.status(201).json(session);
+  } catch (error: any) {
+    console.error('Error creating subscription checkout:', error);
+    if (error.message === 'Company not found') {
+      res.status(404).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: 'Failed to create subscription checkout' });
+    }
+  }
+});
+
+router.get('/companies/:id/billing-portal', async (req: AuthRequest, res) => {
+  try {
+    const session = await SuperAdminService.getCompanyBillingPortal(req.params.id);
+    await SuperAdminService.logAction({
+      userId: req.userId,
+      action: 'OPEN_BILLING_PORTAL',
+      resource: 'SecurityCompany',
+      resourceId: req.params.id,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
+    res.json(session);
+  } catch (error: any) {
+    console.error('Error opening billing portal:', error);
+    if (error.message === 'Company not found') {
+      res.status(404).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: 'Failed to open billing portal' });
+    }
+  }
+});
+
 router.get('/analytics', async (req, res) => {
   try {
-    const { startDate, endDate, metricType } = req.query;
-    
+    const { startDate, endDate, period } = req.query;
     const analytics = await SuperAdminService.getPlatformAnalytics({
       startDate: startDate ? new Date(startDate as string) : undefined,
       endDate: endDate ? new Date(endDate as string) : undefined,
-      metricType: metricType as string
+      period: period as string,
     });
-    
     res.json(analytics);
   } catch (error) {
     console.error('Error getting platform analytics:', error);
@@ -218,10 +214,6 @@ router.get('/analytics', async (req, res) => {
   }
 });
 
-/**
- * GET /api/super-admin/billing
- * Get billing overview
- */
 router.get('/billing', async (req, res) => {
   try {
     const billing = await SuperAdminService.getBillingOverview();
@@ -232,23 +224,18 @@ router.get('/billing', async (req, res) => {
   }
 });
 
-/**
- * GET /api/super-admin/audit-logs
- * Get system audit logs
- */
 router.get('/audit-logs', async (req, res) => {
   try {
-    const { page, limit, action, resource, userId, companyId } = req.query;
-    
+    const { page, limit, action, resource, userId, companyId, search } = req.query;
     const logs = await SuperAdminService.getAuditLogs({
       page: page ? parseInt(page as string) : undefined,
       limit: limit ? parseInt(limit as string) : undefined,
       action: action as string,
       resource: resource as string,
       userId: userId as string,
-      companyId: companyId as string
+      companyId: companyId as string,
+      search: search as string,
     });
-    
     res.json(logs);
   } catch (error) {
     console.error('Error getting audit logs:', error);
@@ -256,10 +243,6 @@ router.get('/audit-logs', async (req, res) => {
   }
 });
 
-/**
- * GET /api/super-admin/settings
- * Get platform settings
- */
 router.get('/settings', async (req, res) => {
   try {
     const settings = await SuperAdminService.getPlatformSettings();
@@ -270,15 +253,9 @@ router.get('/settings', async (req, res) => {
   }
 });
 
-/**
- * PUT /api/super-admin/settings
- * Update platform settings
- */
-router.put('/settings', async (req, res) => {
+router.put('/settings', async (req: AuthRequest, res) => {
   try {
     const result = await SuperAdminService.updatePlatformSettings(req.body);
-    
-    // Log the action
     await SuperAdminService.logAction({
       userId: req.userId,
       action: 'UPDATE_PLATFORM_SETTINGS',
@@ -287,7 +264,6 @@ router.put('/settings', async (req, res) => {
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
     });
-    
     res.json(result);
   } catch (error) {
     console.error('Error updating platform settings:', error);
@@ -295,17 +271,37 @@ router.put('/settings', async (req, res) => {
   }
 });
 
-/**
- * POST /api/super-admin/impersonate
- * Impersonate a user and get access tokens
- */
-router.post('/impersonate', async (req: any, res) => {
+router.post('/export-data', async (req: AuthRequest, res) => {
+  try {
+    const result = await SuperAdminService.exportPlatformData(req.userId);
+    res.json(result);
+  } catch (error) {
+    console.error('Error exporting platform data:', error);
+    res.status(500).json({ error: 'Failed to export platform data' });
+  }
+});
+
+router.get('/users', async (req, res) => {
+  try {
+    const { search, page, limit } = req.query;
+    const result = await SuperAdminService.searchUsers({
+      search: search as string,
+      page: page ? parseInt(page as string) : undefined,
+      limit: limit ? parseInt(limit as string) : undefined,
+    });
+    res.json(result);
+  } catch (error) {
+    console.error('Error searching users:', error);
+    res.status(500).json({ error: 'Failed to search users' });
+  }
+});
+
+router.post('/impersonate', async (req: AuthRequest, res) => {
   try {
     const { targetUserId } = req.body || {};
     if (!targetUserId) {
       return res.status(400).json({ error: 'targetUserId is required' });
     }
-
     const actingUserId = req.userId as string;
     const result = await SuperAdminService.impersonateUser({ targetUserId, actingUserId });
     res.json(result);
@@ -315,23 +311,9 @@ router.post('/impersonate', async (req: any, res) => {
   }
 });
 
-/**
- * GET /api/super-admin/payments
- * Get payment records with filters and pagination
- */
 router.get('/payments', async (req, res) => {
   try {
-    const { 
-      page, 
-      limit, 
-      status, 
-      companyId, 
-      type, 
-      startDate, 
-      endDate,
-      search 
-    } = req.query;
-    
+    const { page, limit, status, companyId, type, startDate, endDate, search } = req.query;
     const result = await SuperAdminService.getPaymentRecords({
       page: page ? parseInt(page as string) : undefined,
       limit: limit ? parseInt(limit as string) : undefined,
@@ -340,9 +322,8 @@ router.get('/payments', async (req, res) => {
       type: type as string,
       startDate: startDate ? new Date(startDate as string) : undefined,
       endDate: endDate ? new Date(endDate as string) : undefined,
-      search: search as string
+      search: search as string,
     });
-    
     res.json(result);
   } catch (error) {
     console.error('Error getting payment records:', error);
@@ -350,10 +331,21 @@ router.get('/payments', async (req, res) => {
   }
 });
 
-/**
- * GET /api/super-admin/payments/:id
- * Get payment record by ID
- */
+router.get('/payments/analytics', async (req, res) => {
+  try {
+    const { startDate, endDate, companyId } = req.query;
+    const analytics = await SuperAdminService.getPaymentAnalytics({
+      startDate: startDate ? new Date(startDate as string) : undefined,
+      endDate: endDate ? new Date(endDate as string) : undefined,
+      companyId: companyId as string,
+    });
+    res.json(analytics);
+  } catch (error) {
+    console.error('Error getting payment analytics:', error);
+    res.status(500).json({ error: 'Failed to get payment analytics' });
+  }
+});
+
 router.get('/payments/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -369,27 +361,19 @@ router.get('/payments/:id', async (req, res) => {
   }
 });
 
-/**
- * PATCH /api/super-admin/payments/:id/status
- * Update payment record status
- */
-router.patch('/payments/:id/status', async (req: any, res) => {
+router.patch('/payments/:id/status', async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     const { status, paidDate, paymentMethod } = req.body;
-    
     if (!status) {
       return res.status(400).json({ error: 'Status is required' });
     }
-
     const record = await SuperAdminService.updatePaymentStatus(
       id,
       status,
       paidDate ? new Date(paidDate) : undefined,
       paymentMethod
     );
-
-    // Log the action
     await SuperAdminService.logAction({
       userId: req.userId,
       action: 'UPDATE_PAYMENT_STATUS',
@@ -399,32 +383,10 @@ router.patch('/payments/:id/status', async (req: any, res) => {
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
     });
-    
     res.json(record);
   } catch (error) {
     console.error('Error updating payment status:', error);
     res.status(500).json({ error: 'Failed to update payment status' });
-  }
-});
-
-/**
- * GET /api/super-admin/payments/analytics
- * Get payment analytics
- */
-router.get('/payments/analytics', async (req, res) => {
-  try {
-    const { startDate, endDate, companyId } = req.query;
-    
-    const analytics = await SuperAdminService.getPaymentAnalytics({
-      startDate: startDate ? new Date(startDate as string) : undefined,
-      endDate: endDate ? new Date(endDate as string) : undefined,
-      companyId: companyId as string
-    });
-    
-    res.json(analytics);
-  } catch (error) {
-    console.error('Error getting payment analytics:', error);
-    res.status(500).json({ error: 'Failed to get payment analytics' });
   }
 });
 

@@ -25,6 +25,7 @@ import { fetchMyGuards } from '../../store/slices/clientSlice';
 import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import apiService from '../../services/api';
+import { getClientGuardChatParams } from '../../utils/chatHelper';
 
 interface GuardData {
   id: string;
@@ -115,34 +116,31 @@ const ClientGuards: React.FC = () => {
   };
 
   const handleViewProfile = (guardId: string) => {
-    // Navigate to guard profile/details screen
-    // For now, show alert - can be replaced with actual navigation when guard profile screen is ready
-    Alert.alert('Guard Profile', `View profile for guard: ${guardId}`);
-    // TODO: Navigate to guard profile screen when implemented
-    // navigation.navigate('GuardProfile', { guardId });
+    const guard = guards.find((g) => g.id === guardId);
+    navigation.navigate('ClientGuardDetails', {
+      guardId,
+      guardName: guard?.name,
+      userId: guard?.userId,
+      avatar: guard?.avatar,
+      shiftId: guard?.shiftId,
+    });
   };
 
-  const handleChatWithGuard = async (guardId: string, guardName: string) => {
-    try {
-      if (!user) {
-        Alert.alert('Error', 'User not logged in');
-        return;
-      }
-
-      // Use centralized chat helper to find or create chat
-      const { findOrCreateClientGuardChat } = await import('../../utils/chatHelper');
-      const chatParams = await findOrCreateClientGuardChat(
-        user.id,
-        guardId,
-        guardName,
-        'general'
-      );
-
-      navigation.navigate('IndividualChatScreen', chatParams);
-    } catch (error) {
-      console.error('Error navigating to chat:', error);
-      Alert.alert('Error', 'Failed to open chat. Please try again.');
+  const handleChatWithGuard = (
+    guardUserId: string,
+    guardName: string,
+    avatar?: string,
+    guardEntityId?: string,
+  ) => {
+    if (!user?.id) {
+      Alert.alert('Error', 'User not logged in');
+      return;
     }
+    const chatParams = {
+      ...getClientGuardChatParams(user.id, guardUserId, guardName, avatar, 'general'),
+      guardId: guardEntityId,
+    };
+    navigation.navigate('IndividualChatScreen', chatParams);
   };
 
   const handleCallGuard = (phone: string) => {
@@ -241,7 +239,7 @@ const ClientGuards: React.FC = () => {
               key={guard.id}
               guard={guard}
               onPress={() => handleViewProfile(guard.id)}
-              onChat={handleChatWithGuard}
+              onChat={guard.userId ? handleChatWithGuard : undefined}
               onViewProfile={handleViewProfile}
               onCall={handleCallGuard}
               showActionButtons={true}

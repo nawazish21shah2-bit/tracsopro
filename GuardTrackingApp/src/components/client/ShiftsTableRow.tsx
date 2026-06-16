@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { PersonIcon } from '../ui/AppIcons';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import ProfileAvatar from '../common/ProfileAvatar';
+import { parseDisplayName } from '../../utils/parseDisplayName';
 import StatusBadge from './StatusBadge';
 
 interface ShiftsTableRowProps {
@@ -51,13 +52,11 @@ const ShiftsTableRow: React.FC<ShiftsTableRowProps> = ({ guard, onPress }) => {
       {/* GUARD Column */}
       <View style={[styles.cell, styles.guardCell]}>
         <View style={styles.guardInfo}>
-          <View style={styles.avatar}>
-            {guard.avatar ? (
-              <Image source={{ uri: guard.avatar }} style={styles.avatarImage} />
-            ) : (
-              <PersonIcon size={20} color="#666" />
-            )}
-          </View>
+          <ProfileAvatar
+            {...parseDisplayName(guard.name)}
+            profilePictureUrl={guard.avatar}
+            size={32}
+          />
           <Text style={styles.guardName} numberOfLines={1}>{guard.name || 'N/A'}</Text>
         </View>
       </View>
@@ -137,6 +136,7 @@ const styles = StyleSheet.create({
   guardInfo: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
   },
   avatar: {
     width: 32,

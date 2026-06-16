@@ -24,7 +24,9 @@ export interface EmergencyAlert {
 export interface EmergencyState {
   alerts: EmergencyAlert[];
   activeAlerts: EmergencyAlert[];
+  guardActiveAlert: EmergencyAlert | null;
   loading: boolean;
+  submitting: boolean;
   error: string | null;
   statistics: {
     totalAlerts: number;
@@ -37,7 +39,9 @@ export interface EmergencyState {
 const initialState: EmergencyState = {
   alerts: [],
   activeAlerts: [],
+  guardActiveAlert: null,
   loading: false,
+  submitting: false,
   error: null,
   statistics: null,
 };
@@ -56,11 +60,37 @@ export const triggerEmergencyAlert = createAsyncThunk(
     options?: { signal?: AbortSignal; retries?: number };
   }) => {
     const response = await api.triggerEmergencyAlert(payload.alertData, payload.options);
-    
+
     if (!response.success) {
+      if (
+        (response.code === 'ACTIVE_ALERT_EXISTS' || response.code === 'EMERGENCY_COOLDOWN') &&
+        response.data
+      ) {
+        return {
+          ...response.data,
+          duplicate: true,
+          notice: response.message,
+        };
+      }
       throw new Error(response.message || 'Failed to trigger emergency alert');
     }
-    
+
+    return {
+      ...response.data,
+      duplicate: false,
+    };
+  }
+);
+
+export const fetchGuardActiveEmergencyAlert = createAsyncThunk(
+  'emergency/fetchGuardActiveAlert',
+  async () => {
+    const response = await api.getMyActiveEmergencyAlert();
+
+    if (!response.success) {
+      throw new Error(response.message || 'Failed to fetch active emergency alert');
+    }
+
     return response.data;
   }
 );
@@ -68,8 +98,12 @@ export const triggerEmergencyAlert = createAsyncThunk(
 export const acknowledgeEmergencyAlert = createAsyncThunk(
   'emergency/acknowledgeAlert',
   async (alertId: string) => {
-    // Mock implementation
-    await new Promise<void>(resolve => setTimeout(resolve, 500));
+    const response = await api.acknowledgeEmergencyAlert(alertId);
+
+    if (!response.success) {
+      throw new Error(response.message || 'Failed to acknowledge emergency alert');
+    }
+
     return { alertId, acknowledgedAt: new Date().toISOString() };
   }
 );
@@ -156,17 +190,40 @@ const emergencySlice = createSlice({
     builder
       // Trigger Emergency Alert
       .addCase(triggerEmergencyAlert.pending, (state) => {
-        state.loading = true;
+        state.submitting = true;
         state.error = null;
       })
       .addCase(triggerEmergencyAlert.fulfilled, (state, action) => {
-        state.loading = false;
-        state.alerts.unshift(action.payload);
-        state.activeAlerts.unshift(action.payload);
+        state.submitting = false;
+        const { duplicate, notice, ...alert } = action.payload as EmergencyAlert & {
+          duplicate?: boolean;
+          notice?: string;
+        };
+
+        if (!duplicate) {
+          state.alerts.unshift(alert);
+          state.activeAlerts.unshift(alert);
+        }
+
+        state.guardActiveAlert = alert;
+        state.error = duplicate ? notice || null : null;
       })
       .addCase(triggerEmergencyAlert.rejected, (state, action) => {
-        state.loading = false;
+        state.submitting = false;
         state.error = action.error.message || 'Failed to trigger emergency alert';
+      })
+
+      // Guard active emergency alert
+      .addCase(fetchGuardActiveEmergencyAlert.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(fetchGuardActiveEmergencyAlert.fulfilled, (state, action) => {
+        state.loading = false;
+        state.guardActiveAlert = action.payload;
+      })
+      .addCase(fetchGuardActiveEmergencyAlert.rejected, (state) => {
+        state.loading = false;
+        state.guardActiveAlert = null;
       })
 
       // Acknowledge Emergency Alert

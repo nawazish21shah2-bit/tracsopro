@@ -379,7 +379,7 @@ const PaymentScreen: React.FC = () => {
   );
 
   return (
-    <SafeAreaWrapper>
+    <SafeAreaWrapper includeTop>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Billing & Payments</Text>
         <DollarIcon size={24} color={COLORS.primary} />

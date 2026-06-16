@@ -82,7 +82,7 @@ const ClientSettings: React.FC = () => {
   };
 
   const handleSupport = () => {
-    navigation.navigate('SupportContact');
+    navigation.navigate('SupportHubScreen', { variant: 'client', mode: 'mine' });
   };
 
   const handleLogout = () => {
@@ -98,7 +98,7 @@ const ClientSettings: React.FC = () => {
     { id: '3', title: 'Manage Sites & Shifts', icon: <MapPin width={20} height={20} color="#666666" />, onPress: handleManageSites },
     { id: '4', title: 'Notifications', icon: <Bell width={20} height={20} color="#666666" />, onPress: handleNotifications },
     { id: '5', title: 'Change Password', icon: <Lock width={20} height={20} color="#666666" />, onPress: handleChangePassword },
-    { id: '6', title: 'Contact Support', icon: <HelpCircle width={20} height={20} color="#666666" />, onPress: handleSupport },
+    { id: '6', title: 'Support Center', icon: <HelpCircle width={20} height={20} color="#666666" />, onPress: handleSupport },
   ];
 
   return (

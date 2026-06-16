@@ -52,6 +52,8 @@ router.use(authenticate);
  */
 router.get('/', notificationController.getNotifications);
 router.get('/stats', notificationController.getNotificationStats);
+router.get('/push-status', notificationController.getPushStatus);
+router.post('/test-push', notificationController.sendTestPush);
 
 /**
  * @swagger
@@ -87,6 +89,20 @@ router.put('/:id/read', notificationController.markAsRead);
  *         description: All notifications marked as read
  */
 router.put('/read-all', notificationController.markAllAsRead);
+
+/**
+ * @swagger
+ * /api/notifications:
+ *   delete:
+ *     summary: Delete all notifications for the current user
+ *     tags: [Notifications]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: All notifications deleted
+ */
+router.delete('/', notificationController.clearAllNotifications);
 
 /**
  * @swagger

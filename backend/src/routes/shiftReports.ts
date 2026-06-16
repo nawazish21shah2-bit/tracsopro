@@ -6,13 +6,17 @@ import {
   getShiftReports,
   updateShiftReport,
   deleteShiftReport,
+  getCompanyShiftReports,
 } from '../controllers/shiftReportController';
-import { authenticate } from '../middleware/auth';
+import { authenticate, authorize } from '../middleware/auth';
 
 const router = express.Router();
 
 // All shift report routes require authentication
 router.use(authenticate);
+
+// Admin: company-scoped shift reports
+router.get('/company', authorize('ADMIN'), getCompanyShiftReports);
 
 /**
  * @swagger

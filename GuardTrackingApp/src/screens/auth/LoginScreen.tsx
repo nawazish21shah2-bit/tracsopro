@@ -8,9 +8,10 @@ import {
   TouchableOpacity,
   StatusBar,
   TextInput,
-  Image,
+  KeyboardAvoidingView,
+  ScrollView,
+  Platform,
 } from 'react-native';
-import { ArrowRightIcon } from '../../components/ui/AppIcons';
 import { AppIcon } from '../../components/ui/AppIcons';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigation } from '@react-navigation/native';
@@ -21,12 +22,12 @@ import { AuthStackParamList } from '../../types';
 import Input from '../../components/common/Input';
 import AuthInput from '../../components/auth/AuthInput';
 import Button from '../../components/common/Button';
+import AuthHeader from '../../components/auth/AuthHeader';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorBoundary from '../../components/common/ErrorBoundary';
 import { createLoginValidator, ValidationResult } from '../../utils/validation';
 import { useTheme } from '../../utils/theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Logo from '../../assets/images/tracSOpro-logo.png';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { authStyles, AUTH_INPUT_GAP } from '../../styles/authStyles';
 
@@ -156,106 +157,109 @@ const LoginScreen: React.FC = () => {
 
   return (
     <ErrorBoundary>
-      <View style={[styles.container, { backgroundColor: '#FFFFFF' }]}>
+      <KeyboardAvoidingView
+        style={[styles.container, { backgroundColor: '#FFFFFF' }]}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
         <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-        
-        {/* Logo */}
-        <View style={authStyles.logoContainer}>
-          <Image source={Logo} style={authStyles.logoImage} resizeMode="contain" />
-        </View>
 
-        {/* Title */}
-        <Text style={authStyles.title}>LOGIN</Text>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+        >
+          <AuthHeader title="LOGIN" />
 
-        {/* Form */}
-        <View style={styles.form}>
-          <View style={styles.inputContainer}>
-            <AuthInput
-              ref={emailInputRef as any}
-              // label="Email"
-              icon="mail-outline"
-              placeholder="Email Address"
-              value={formData.email}
-              onChangeText={(v) => handleInputChange('email', v)}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              editable={!isLoading}
-              returnKeyType="next"
-              onSubmitEditing={() => passwordInputRef.current?.focus()}
-              blurOnSubmit={false}
-            />
-          </View>
+          {/* Form */}
+          <View style={styles.form}>
+            <View style={styles.inputContainer}>
+              <AuthInput
+                ref={emailInputRef as any}
+                icon="mail-outline"
+                placeholder="Email Address"
+                value={formData.email}
+                onChangeText={(v) => handleInputChange('email', v)}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!isLoading}
+                returnKeyType="next"
+                onSubmitEditing={() => passwordInputRef.current?.focus()}
+                blurOnSubmit={false}
+              />
+            </View>
 
-          <View style={styles.inputContainer}>
-            <AuthInput
-              ref={passwordInputRef as any}
-              // label="Password"
-              icon="lock-outline"
-              placeholder="Password"
-              value={formData.password}
-              onChangeText={(v) => handleInputChange('password', v)}
-              secureTextEntry
-              showPassword={showPassword}
-              onTogglePassword={() => setShowPassword(!showPassword)}
-              autoCapitalize="none"
-              autoCorrect={false}
-              editable={!isLoading}
-              returnKeyType="done"
-              onSubmitEditing={handleLogin}
-            />
-          </View>
+            <View style={styles.inputContainer}>
+              <AuthInput
+                ref={passwordInputRef as any}
+                icon="lock-outline"
+                placeholder="Password"
+                value={formData.password}
+                onChangeText={(v) => handleInputChange('password', v)}
+                secureTextEntry
+                showPassword={showPassword}
+                onTogglePassword={() => setShowPassword(!showPassword)}
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!isLoading}
+                returnKeyType="done"
+                onSubmitEditing={handleLogin}
+              />
+            </View>
 
-          {/* Remember Me and Forgot Password */}
-          <View style={styles.optionsContainer}>
-            <TouchableOpacity 
-              onPress={() => setRememberMe(!rememberMe)} 
-              style={styles.rememberContainer}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
-                {rememberMe && (
-                  <AppIcon 
-                    type="material" 
-                    name="check" 
-                    size={16} 
-                    color="#FFFFFF" 
-                  />
-                )}
-              </View>
-              <Text style={styles.rememberText}>Remember Me</Text>
-            </TouchableOpacity>
+            {/* Remember Me and Forgot Password */}
+            <View style={styles.optionsContainer}>
+              <TouchableOpacity
+                onPress={() => setRememberMe(!rememberMe)}
+                style={styles.rememberContainer}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
+                  {rememberMe && (
+                    <AppIcon
+                      type="material"
+                      name="check"
+                      size={16}
+                      color="#FFFFFF"
+                    />
+                  )}
+                </View>
+                <Text style={styles.rememberText}>Remember Me</Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity onPress={navigateToForgotPassword} activeOpacity={0.7}>
-              <Text style={styles.forgotText}>Forgot Password?</Text>
-            </TouchableOpacity>
-          </View>
+              <TouchableOpacity onPress={navigateToForgotPassword} activeOpacity={0.7}>
+                <Text style={styles.forgotText}>Forgot Password?</Text>
+              </TouchableOpacity>
+            </View>
 
-          <Button
-            title={isLoading ? 'Signing In...' : 'Login'}
-            onPress={handleLogin}
-            disabled={isLoading}
-            loading={isLoading}
-            fullWidth
-            size="large"
-            style={{ marginTop: 40 }}
-          />
-        </View>
-
-        {/* Footer */}
-        <View style={authStyles.footer}>
-          <View style={styles.footerRow}>
-            <Text style={authStyles.footerText}>Don't have an account? </Text>
-            <TouchableOpacity 
-              onPress={navigateToRegister}
+            <Button
+              title={isLoading ? 'Signing In...' : 'Login'}
+              onPress={handleLogin}
               disabled={isLoading}
-              activeOpacity={isLoading ? 1 : 0.7}
-            >
-              <Text style={[authStyles.linkText, isLoading && styles.disabledLink]}>Register now</Text>
-            </TouchableOpacity>
+              loading={isLoading}
+              fullWidth
+              size="large"
+              style={authStyles.submitButton}
+            />
+
+            {/* Register — in scroll flow so it never overlaps when keyboard is open */}
+            <View style={authStyles.footerLinkRow}>
+              <Text style={authStyles.footerText}>Don't have an account? </Text>
+              <TouchableOpacity
+                onPress={navigateToRegister}
+                disabled={isLoading}
+                activeOpacity={isLoading ? 1 : 0.7}
+              >
+                <Text style={[authStyles.linkText, isLoading && styles.disabledLink]}>
+                  Register now
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ErrorBoundary>
   );
 };
@@ -265,10 +269,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.backgroundPrimary,
   },
-  // Logo, title, footer styles moved to authStyles.ts
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: SPACING.xxxl,
+  },
   form: {
     paddingHorizontal: SPACING.lg,
-    flex: 1,
   },
   inputContainer: {
     marginBottom: AUTH_INPUT_GAP, // 16px - consistent spacing
@@ -381,12 +387,6 @@ const styles = StyleSheet.create({
   // Footer styles moved to authStyles.ts
   disabledLink: {
     opacity: 0.5,
-  },
-  footerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexWrap: 'nowrap',
   },
 });
 

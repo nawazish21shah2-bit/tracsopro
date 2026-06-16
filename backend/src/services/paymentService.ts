@@ -1,5 +1,7 @@
 import Stripe from 'stripe';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, SubscriptionPlan } from '@prisma/client';
+import subscriptionService from './subscriptionService.js';
+import { planFromStripePriceId } from '../utils/planLimits.js';
 
 const prisma = new PrismaClient();
 
@@ -408,6 +410,41 @@ export class PaymentService {
   }
 
   /**
+   * Verify Stripe signature, dedupe by event id, then process.
+   */
+  async processWebhookFromRawBody(
+    rawBody: Buffer,
+    signature: string | undefined
+  ): Promise<{ received: boolean; duplicate?: boolean }> {
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+      throw new Error('STRIPE_WEBHOOK_SECRET is not configured');
+    }
+    if (!signature) {
+      throw new Error('Missing stripe-signature header');
+    }
+
+    const event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
+
+    const existing = await prisma.stripeWebhookEvent.findUnique({
+      where: { stripeEventId: event.id },
+    });
+    if (existing) {
+      return { received: true, duplicate: true };
+    }
+
+    await prisma.stripeWebhookEvent.create({
+      data: {
+        stripeEventId: event.id,
+        type: event.type,
+      },
+    });
+
+    await this.handleWebhook(event);
+    return { received: true };
+  }
+
+  /**
    * Process webhook events from Stripe
    */
   async handleWebhook(event: Stripe.Event): Promise<void> {
@@ -428,7 +465,16 @@ export class PaymentService {
         case 'invoice.payment_failed':
           await this.handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
           break;
-        
+
+        case 'checkout.session.completed':
+          await this.handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session);
+          break;
+
+        case 'customer.subscription.updated':
+        case 'customer.subscription.deleted':
+          await this.handleSubscriptionChanged(event.data.object as Stripe.Subscription);
+          break;
+
         default:
           console.log(`Unhandled event type: ${event.type}`);
       }
@@ -440,30 +486,128 @@ export class PaymentService {
 
   private async handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent): Promise<void> {
     console.log(`✅ Payment succeeded: ${paymentIntent.id}`);
-    // TODO: Update payment status in database
-    // TODO: Send confirmation email to client
-    // TODO: Update any related records (invoices, etc.)
+    await prisma.billingRecord.updateMany({
+      where: {
+        OR: [
+          { stripeInvoiceId: paymentIntent.id },
+          ...(paymentIntent.metadata?.billingRecordId
+            ? [{ id: paymentIntent.metadata.billingRecordId }]
+            : []),
+        ],
+      },
+      data: { status: 'PAID', paidDate: new Date() },
+    });
   }
 
   private async handlePaymentFailure(paymentIntent: Stripe.PaymentIntent): Promise<void> {
     console.log(`❌ Payment failed: ${paymentIntent.id}`);
-    // TODO: Update payment status in database
-    // TODO: Send failure notification to client and admin
-    // TODO: Handle retry logic if applicable
+    await prisma.billingRecord.updateMany({
+      where: { stripeInvoiceId: paymentIntent.id },
+      data: { status: 'OVERDUE' },
+    });
   }
 
   private async handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
     console.log(`💰 Invoice paid: ${invoice.id}`);
-    // TODO: Update invoice status in database
-    // TODO: Send receipt to client
-    // TODO: Update client account status
+    await prisma.billingRecord.updateMany({
+      where: { stripeInvoiceId: invoice.id },
+      data: { status: 'PAID', paidDate: new Date() },
+    });
+
+    if (invoice.subscription) {
+      const subscriptionId =
+        typeof invoice.subscription === 'string'
+          ? invoice.subscription
+          : invoice.subscription.id;
+      await prisma.subscription.updateMany({
+        where: { stripeSubscriptionId: subscriptionId },
+        data: { status: 'ACTIVE', isActive: true },
+      });
+    }
+  }
+
+  private async handleCheckoutSessionCompleted(session: Stripe.Checkout.Session): Promise<void> {
+    if (session.mode !== 'subscription' || !session.subscription) return;
+
+    const securityCompanyId =
+      session.metadata?.securityCompanyId ||
+      (typeof session.subscription === 'object'
+        ? session.subscription.metadata?.securityCompanyId
+        : undefined);
+
+    if (!securityCompanyId) {
+      console.warn('checkout.session.completed without securityCompanyId');
+      return;
+    }
+
+    const subscriptionId =
+      typeof session.subscription === 'string'
+        ? session.subscription
+        : session.subscription.id;
+
+    const stripeSub = await stripe.subscriptions.retrieve(subscriptionId, {
+      expand: ['items.data.price'],
+    });
+
+    await this.syncStripeSubscription(securityCompanyId, stripeSub);
+  }
+
+  private async handleSubscriptionChanged(stripeSub: Stripe.Subscription): Promise<void> {
+    const securityCompanyId = stripeSub.metadata?.securityCompanyId;
+    if (!securityCompanyId) return;
+    await this.syncStripeSubscription(securityCompanyId, stripeSub);
+  }
+
+  private async syncStripeSubscription(
+    securityCompanyId: string,
+    stripeSub: Stripe.Subscription
+  ): Promise<void> {
+    const priceId = stripeSub.items.data[0]?.price?.id;
+    const plan = planFromStripePriceId(priceId) ?? ('BASIC' as SubscriptionPlan);
+    const interval = stripeSub.items.data[0]?.price?.recurring?.interval;
+    const billingCycle = interval === 'year' ? 'YEARLY' : 'MONTHLY';
+    const amount = (stripeSub.items.data[0]?.price?.unit_amount ?? 0) / 100;
+    const endDate = stripeSub.current_period_end
+      ? new Date(stripeSub.current_period_end * 1000)
+      : null;
+
+    if (['canceled', 'unpaid', 'incomplete_expired'].includes(stripeSub.status)) {
+      await prisma.securityCompany.update({
+        where: { id: securityCompanyId },
+        data: { subscriptionStatus: 'CANCELLED' },
+      });
+      await prisma.subscription.updateMany({
+        where: { stripeSubscriptionId: stripeSub.id },
+        data: { isActive: false, status: 'CANCELLED' },
+      });
+      return;
+    }
+
+    await subscriptionService.activatePaidPlan(securityCompanyId, plan, {
+      stripeSubscriptionId: stripeSub.id,
+      amount,
+      billingCycle,
+      endDate,
+    });
   }
 
   private async handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void> {
     console.log(`💳 Invoice payment failed: ${invoice.id}`);
-    // TODO: Update invoice status in database
-    // TODO: Send payment failure notification
-    // TODO: Handle dunning management
+    await prisma.billingRecord.updateMany({
+      where: { stripeInvoiceId: invoice.id },
+      data: { status: 'OVERDUE' },
+    });
+
+    if (invoice.subscription) {
+      const subscriptionId =
+        typeof invoice.subscription === 'string'
+          ? invoice.subscription
+          : invoice.subscription.id;
+      await prisma.subscription.updateMany({
+        where: { stripeSubscriptionId: subscriptionId },
+        data: { status: 'SUSPENDED' },
+      });
+    }
   }
 
   /**
@@ -631,13 +775,15 @@ export class PaymentService {
     const customer = await this.getOrCreateCompanyCustomer(params.securityCompanyId);
     const success_url = params.successUrl || process.env.STRIPE_SUCCESS_URL || 'https://example.com/success';
     const cancel_url = params.cancelUrl || process.env.STRIPE_CANCEL_URL || 'https://example.com/cancel';
+    const trialDays = params.trialDays ?? 0;
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       customer,
       line_items: [{ price: params.priceId, quantity: 1 }],
       allow_promotion_codes: true,
+      metadata: { securityCompanyId: params.securityCompanyId },
       subscription_data: {
-        trial_period_days: params.trialDays ?? 14,
+        ...(trialDays > 0 ? { trial_period_days: trialDays } : {}),
         metadata: { securityCompanyId: params.securityCompanyId },
       },
       success_url,

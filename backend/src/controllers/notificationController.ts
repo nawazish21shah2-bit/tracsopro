@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../middleware/auth.js';
 import notificationService from '../services/notificationService.js';
+import { isFirebaseAdminInitialized } from '../config/firebase.js';
 import { logger } from '../utils/logger.js';
 import prisma from '../config/database.js';
 
@@ -102,6 +103,106 @@ export class NotificationController {
       });
     } catch (error) {
       logger.error('Error deleting notification:', error);
+      next(error);
+    }
+  }
+
+  /**
+   * Delete all notifications for the current user
+   * DELETE /api/notifications
+   */
+  async clearAllNotifications(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = req.userId!;
+      const result = await notificationService.deleteAllNotifications(userId);
+
+      res.json({
+        success: true,
+        message: `${result.count} notifications deleted`,
+        data: result,
+      });
+    } catch (error) {
+      logger.error('Error clearing all notifications:', error);
+      next(error);
+    }
+  }
+
+  /**
+   * Push diagnostics for the current user (device token + Firebase status)
+   * GET /api/notifications/push-status
+   */
+  async getPushStatus(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = req.userId!;
+      const token = await prisma.deviceToken.findFirst({
+        where: { userId, isActive: true },
+        orderBy: { updatedAt: 'desc' },
+        select: { platform: true, updatedAt: true, token: true },
+      });
+
+      res.json({
+        success: true,
+        data: {
+          firebaseConfigured: isFirebaseAdminInitialized(),
+          hasDeviceToken: Boolean(token),
+          platform: token?.platform ?? null,
+          tokenRegisteredAt: token?.updatedAt ?? null,
+          tokenPreview: token?.token ? `${token.token.slice(0, 12)}...` : null,
+        },
+      });
+    } catch (error) {
+      logger.error('Error getting push status:', error);
+      next(error);
+    }
+  }
+
+  /**
+   * Send a test push notification to the current user's device
+   * POST /api/notifications/test-push
+   */
+  async sendTestPush(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = req.userId!;
+
+      if (!isFirebaseAdminInitialized()) {
+        res.status(503).json({
+          success: false,
+          message:
+            'Firebase Admin is not configured on the server. Add backend/keys/firebase-service-account.json',
+        });
+        return;
+      }
+
+      const deviceToken = await prisma.deviceToken.findFirst({
+        where: { userId, isActive: true },
+        orderBy: { updatedAt: 'desc' },
+      });
+
+      if (!deviceToken) {
+        res.status(400).json({
+          success: false,
+          message: 'No device token for this user. Open the app on your phone and log in first.',
+        });
+        return;
+      }
+
+      const notification = await notificationService.createNotification({
+        userId,
+        type: 'SYSTEM',
+        title: 'TracSOpro Test',
+        message: 'Push notifications are working!',
+        data: { test: true },
+        sendPush: true,
+        priority: 'high',
+      });
+
+      res.json({
+        success: true,
+        message: 'Test notification sent',
+        data: { notificationId: notification?.id ?? null },
+      });
+    } catch (error) {
+      logger.error('Error sending test push:', error);
       next(error);
     }
   }

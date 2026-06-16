@@ -8,9 +8,11 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
-  Image,
 } from 'react-native';
-import { X, Search, User } from 'react-native-feather';
+import { X, Search } from 'react-native-feather';
+import ProfileAvatar from '../common/ProfileAvatar';
+import { parseDisplayName } from '../../utils/parseDisplayName';
+import { pickProfilePictureUrl } from '../../utils/profilePictureUtils';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import apiService from '../../services/api';
 import { useSelector } from 'react-redux';
@@ -105,7 +107,7 @@ const NewChatModal: React.FC<NewChatModalProps> = ({
                 userId: client.user.id,
                 name: clientName || client.user.email || `Client ${client.id}`,
                 role: 'CLIENT',
-                avatar: client.user.avatar,
+                avatar: pickProfilePictureUrl(client.user),
               });
             }
           });
@@ -123,7 +125,7 @@ const NewChatModal: React.FC<NewChatModalProps> = ({
                 userId: guardUser.id,
                 name: `${guardUser.firstName || ''} ${guardUser.lastName || ''}`.trim() || guardUser.email || 'Guard',
                 role: 'GUARD',
-                avatar: guard.profilePictureUrl || guardUser.avatar,
+                avatar: pickProfilePictureUrl(guard),
               });
             }
           });
@@ -147,7 +149,7 @@ const NewChatModal: React.FC<NewChatModalProps> = ({
                     userId: pUser.id,
                     name: `${pUser.firstName || ''} ${pUser.lastName || ''}`.trim() || pUser.email || 'Admin',
                     role: 'ADMIN',
-                    avatar: pUser.avatar,
+                    avatar: pickProfilePictureUrl(pUser),
                   });
                 }
               });
@@ -173,7 +175,7 @@ const NewChatModal: React.FC<NewChatModalProps> = ({
                     userId: pUser.id,
                     name: `${pUser.firstName || ''} ${pUser.lastName || ''}`.trim() || pUser.email || pUser.role,
                     role: pUser.role === 'CLIENT' ? 'CLIENT' : 'ADMIN',
-                    avatar: pUser.avatar,
+                    avatar: pickProfilePictureUrl(pUser),
                   });
                 }
               });
@@ -203,13 +205,11 @@ const NewChatModal: React.FC<NewChatModalProps> = ({
       activeOpacity={0.7}
     >
       <View style={styles.avatarContainer}>
-        {item.avatar ? (
-          <Image source={{ uri: item.avatar }} style={styles.avatar} />
-        ) : (
-          <View style={styles.avatarPlaceholder}>
-            <User width={24} height={24} color={COLORS.textSecondary} />
-          </View>
-        )}
+        <ProfileAvatar
+          {...parseDisplayName(item.name)}
+          profilePictureUrl={item.avatar}
+          size={48}
+        />
       </View>
       <View style={styles.userInfo}>
         <Text style={styles.userName}>{item.name}</Text>

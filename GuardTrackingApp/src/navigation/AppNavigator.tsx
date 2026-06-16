@@ -4,6 +4,8 @@ import { NavigationContainer, CommonActions } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
+import WebSocketService from '../services/WebSocketService';
+import pushNotificationService from '../services/notificationService';
 
 // Import navigators
 import AuthNavigator from './AuthNavigator';
@@ -11,6 +13,7 @@ import MainNavigator from './MainNavigator';
 
 // Import screens
 import SplashScreen from '../screens/SplashScreen';
+import NotificationBootstrap from '../components/notifications/NotificationBootstrap';
 
 // Navigation types
 export type RootStackParamList = {
@@ -42,6 +45,29 @@ const AppNavigator: React.FC = () => {
 
     return () => clearTimeout(timeout);
   }, []);
+
+  // Register FCM token, Android channel, and session listeners after login
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    pushNotificationService.setupPushOnLogin().catch((err) => {
+      if (__DEV__) console.warn('⚠️ Push setup failed:', err);
+    });
+  }, [isAuthenticated]);
+
+  // Connect realtime socket for live guard tracking (admin/client viewers + guard uploads)
+  useEffect(() => {
+    if (!isAuthenticated) {
+      WebSocketService.disconnect();
+      return;
+    }
+
+    WebSocketService.connect();
+
+    return () => {
+      WebSocketService.disconnect();
+    };
+  }, [isAuthenticated]);
+  // ──────────────────────────────────────────────────────────────────────────
 
   // Determine initial route based on auth state
   const initialRoute = isAuthenticated ? 'Main' : 'Auth';
@@ -142,6 +168,7 @@ const AppNavigator: React.FC = () => {
         navigationRef.current = ref;
       }}
     >
+      <NotificationBootstrap />
       <Stack.Navigator
         initialRouteName={initialRoute}
         screenOptions={{

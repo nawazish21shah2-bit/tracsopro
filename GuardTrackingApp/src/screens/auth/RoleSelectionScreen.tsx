@@ -12,6 +12,7 @@ import { AppIcon } from '../../components/ui/AppIcons';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import Button from '../../components/common/Button';
+import AuthFooter from '../../components/auth/AuthFooter';
 import { AuthStackParamList } from '../../types';
 import Logo from '../../assets/images/tracSOpro-logo.png';
 import { authStyles, AUTH_HEADING_TO_FORM } from '../../styles/authStyles';
@@ -118,23 +119,21 @@ const RoleSelectionScreen: React.FC = () => {
         </View>
 
         {/* Continue Button */}
-        <Button
-          title="Continue"
-          onPress={handleContinue}
-          fullWidth
-          size="large"
-          style={styles.continueButton}
-        />
-
-        {/* Footer */}
-        <View style={authStyles.footer}>
-          <View style={styles.footerRow}>
-            <Text style={authStyles.footerText}>Already have an account? </Text>
-            <TouchableOpacity onPress={handleAlreadyHaveAccount} activeOpacity={0.7}>
-              <Text style={authStyles.linkText}>Login</Text>
-            </TouchableOpacity>
-          </View>
+        <View style={authStyles.authActions}>
+          <Button
+            title="Continue"
+            onPress={handleContinue}
+            fullWidth
+            size="large"
+            style={authStyles.submitButton}
+          />
         </View>
+
+        <AuthFooter
+          text="Already have an account?"
+          linkText="Login"
+          onLinkPress={handleAlreadyHaveAccount}
+        />
       </ScrollView>
     </View>
   );
@@ -147,8 +146,7 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 40,
+    paddingBottom: SPACING.lg,
   },
   // Logo, title styles moved to authStyles.ts
   titleContainer: {
@@ -160,9 +158,8 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm, // Reduced space between title and subtitle (8px)
   },
   optionsContainer: {
-    marginBottom: 40,
-    flex: 1,
-    justifyContent: 'center',
+    marginBottom: SPACING.xxxxl,
+    paddingHorizontal: SPACING.lg,
   },
   firstRow: {
     flexDirection: 'row',
@@ -176,14 +173,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   optionCard: {
-    height: 160,
+    minHeight: 170,
     backgroundColor: COLORS.backgroundSecondary,
     borderWidth: 2,
     borderColor: COLORS.borderLight,
     borderRadius: BORDER_RADIUS.md,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: SPACING.xl,
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: 10,
     width: '48%',
     minWidth: 140,
   },
@@ -211,17 +209,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: COLORS.textSecondary,
   },
-  continueButton: {
-    marginTop: 'auto',
-    marginBottom: 20,
-  },
-  footerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexWrap: 'nowrap',
-  },
-  // Footer styles moved to authStyles.ts
 });
 
 export default RoleSelectionScreen;

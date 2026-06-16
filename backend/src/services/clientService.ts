@@ -1,6 +1,25 @@
 import prisma from '../config/database.js';
+import { Prisma } from '@prisma/client';
 import { NotFoundError, ValidationError, UnauthorizedError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
+
+type ClientIncidentReportRow = Prisma.IncidentReportGetPayload<{
+  include: {
+    guard: {
+      include: {
+        user: {
+          select: {
+            id: true;
+            firstName: true;
+            lastName: true;
+            email: true;
+            profilePictureUrl: true;
+          };
+        };
+      };
+    };
+  };
+}>;
 
 interface ClientProfileUpdateData {
   // Individual account fields
@@ -71,9 +90,36 @@ export class ClientService {
     };
   }
 
-  async getClientById(id: string) {
-    const client = await prisma.client.findUnique({
-      where: { id },
+  private async findScopedClient(id: string, securityCompanyId?: string) {
+    if (!securityCompanyId) {
+      return prisma.client.findUnique({
+        where: { id },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+              phone: true,
+              isActive: true,
+              createdAt: true,
+            },
+          },
+        },
+      });
+    }
+
+    return prisma.client.findFirst({
+      where: {
+        id,
+        companyClients: {
+          some: {
+            securityCompanyId,
+            isActive: true,
+          },
+        },
+      },
       include: {
         user: {
           select: {
@@ -88,12 +134,18 @@ export class ClientService {
         },
       },
     });
+  }
 
+  private async assertScopedClient(id: string, securityCompanyId?: string) {
+    const client = await this.findScopedClient(id, securityCompanyId);
     if (!client) {
-      throw new NotFoundError('Client not found');
+      throw new NotFoundError('Client not found or does not belong to your company');
     }
-
     return client;
+  }
+
+  async getClientById(id: string, securityCompanyId?: string) {
+    return await this.assertScopedClient(id, securityCompanyId);
   }
 
   async getClientByUserId(userId: string) {
@@ -184,14 +236,8 @@ export class ClientService {
     return updated;
   }
 
-  async updateClient(id: string, data: any) {
-    const client = await prisma.client.findUnique({
-      where: { id },
-    });
-
-    if (!client) {
-      throw new NotFoundError('Client not found');
-    }
+  async updateClient(id: string, data: any, securityCompanyId?: string) {
+    await this.assertScopedClient(id, securityCompanyId);
 
     const updated = await prisma.client.update({
       where: { id },
@@ -223,14 +269,8 @@ export class ClientService {
     return updated;
   }
 
-  async deleteClient(id: string) {
-    const client = await prisma.client.findUnique({
-      where: { id },
-    });
-
-    if (!client) {
-      throw new NotFoundError('Client not found');
-    }
+  async deleteClient(id: string, securityCompanyId?: string) {
+    await this.assertScopedClient(id, securityCompanyId);
 
     await prisma.client.delete({
       where: { id },
@@ -240,13 +280,23 @@ export class ClientService {
     return { message: 'Client deleted successfully' };
   }
 
-  async getClientStats() {
+  async getClientStats(securityCompanyId: string) {
+    const companyFilter = {
+      companyClients: {
+        some: {
+          securityCompanyId,
+          isActive: true,
+        },
+      },
+    };
+
     const [totalClients, individualClients, companyClients, activeClients] = await Promise.all([
-      prisma.client.count(),
-      prisma.client.count({ where: { accountType: 'INDIVIDUAL' } }),
-      prisma.client.count({ where: { accountType: 'COMPANY' } }),
+      prisma.client.count({ where: companyFilter }),
+      prisma.client.count({ where: { ...companyFilter, accountType: 'INDIVIDUAL' } }),
+      prisma.client.count({ where: { ...companyFilter, accountType: 'COMPANY' } }),
       prisma.client.count({
         where: {
+          ...companyFilter,
           user: {
             isActive: true,
           },
@@ -319,7 +369,7 @@ export class ClientService {
       });
       const shiftIds = clientShifts.map(shift => shift.id);
 
-      const newReports = await prisma.shiftReport.count({
+      const newShiftReports = await prisma.shiftReport.count({
         where: {
           shiftId: { in: shiftIds },
           submittedAt: {
@@ -327,6 +377,19 @@ export class ClientService {
           },
         },
       });
+
+      const newIncidentReports = await prisma.incidentReport.count({
+        where: {
+          submittedAt: { gte: yesterday },
+          guard: {
+            shifts: {
+              some: { clientId },
+            },
+          },
+        },
+      });
+
+      const newReports = newShiftReports + newIncidentReports;
 
       const stats = {
         guardsOnDuty,
@@ -408,11 +471,6 @@ export class ClientService {
                   },
                 },
                 trackingRecords: {
-                  where: {
-                    timestamp: {
-                      gte: new Date(Date.now() - 15 * 60 * 1000), // Last 15 minutes
-                    },
-                  },
                   orderBy: {
                     timestamp: 'desc',
                   },
@@ -505,8 +563,10 @@ export class ClientService {
       const total = guardShiftMap.size;
 
       // Transform shifts to guard data format
-      const guards = shifts.map((shift) => {
-        const guardUser = shift.guard.user;
+      const guards = shifts
+        .filter((shift) => shift.guard?.user)
+        .map((shift) => {
+        const guardUser = shift.guard!.user;
         const guardName = `${guardUser.firstName} ${guardUser.lastName}`;
 
         // Format shift time
@@ -537,21 +597,41 @@ export class ClientService {
           }
         }
 
-        // Get guard's latest location if active
-        const latestLocation = shift.guard.trackingRecords?.[0];
-        const guardLatitude = latestLocation?.latitude;
-        const guardLongitude = latestLocation?.longitude;
+        // Latest GPS or check-in fallback for active shifts
+        const latestLocation = shift.guard!.trackingRecords?.[0];
+        let guardLatitude = latestLocation?.latitude;
+        let guardLongitude = latestLocation?.longitude;
+
+        if (guardLatitude == null || guardLongitude == null) {
+          const checkIn = shift.checkInLocation as Record<string, unknown> | null;
+          if (
+            checkIn &&
+            typeof checkIn.latitude === 'number' &&
+            typeof checkIn.longitude === 'number' &&
+            !(checkIn.latitude === 0 && checkIn.longitude === 0)
+          ) {
+            guardLatitude = checkIn.latitude;
+            guardLongitude = checkIn.longitude;
+          }
+        }
+
+        const hasGuardCoords =
+          guardLatitude != null &&
+          guardLongitude != null &&
+          !(guardLatitude === 0 && guardLongitude === 0);
 
         return {
-          id: shift.guard.id,
+          id: shift.guard!.id,
+          userId: guardUser.id,
+          shiftId: shift.id,
           name: guardName,
-          avatar: shift.guard.profilePictureUrl || undefined,
+          avatar: shift.guard!.profilePictureUrl || undefined,
           site: shift.site?.name || shift.locationName || 'N/A',
           siteAddress: shift.site?.address || shift.locationAddress || 'N/A',
-          siteLatitude: shift.site?.latitude || undefined,
-          siteLongitude: shift.site?.longitude || undefined,
-          guardLatitude: status === 'Active' && guardLatitude ? guardLatitude : undefined,
-          guardLongitude: status === 'Active' && guardLongitude ? guardLongitude : undefined,
+          siteLatitude: shift.site?.latitude ?? undefined,
+          siteLongitude: shift.site?.longitude ?? undefined,
+          guardLatitude: status === 'Active' && hasGuardCoords ? guardLatitude : undefined,
+          guardLongitude: status === 'Active' && hasGuardCoords ? guardLongitude : undefined,
           shiftTime,
           status,
           checkInTime: shift.actualStartTime ? shift.actualStartTime.toISOString() : undefined,
@@ -578,6 +658,112 @@ export class ClientService {
     }
   }
 
+  async getClientGuardProfile(clientId: string, guardId: string) {
+    const assignment = await prisma.shift.findFirst({
+      where: {
+        clientId,
+        guardId,
+        NOT: { guardId: null },
+      },
+      orderBy: [
+        { status: 'asc' },
+        { scheduledStartTime: 'desc' },
+      ],
+      include: {
+        site: { select: { id: true, name: true, address: true } },
+        guard: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                phone: true,
+              },
+            },
+            qualifications: {
+              take: 5,
+              orderBy: { expiryDate: 'desc' },
+            },
+          },
+        },
+      },
+    });
+
+    if (!assignment?.guard) {
+      throw new NotFoundError('Guard not found or not assigned to your sites');
+    }
+
+    const [completedShifts, totalShifts, activeShift] = await Promise.all([
+      prisma.shift.count({
+        where: { clientId, guardId, status: 'COMPLETED' },
+      }),
+      prisma.shift.count({
+        where: { clientId, guardId },
+      }),
+      prisma.shift.findFirst({
+        where: {
+          clientId,
+          guardId,
+          status: { in: ['IN_PROGRESS', 'SCHEDULED'] },
+          scheduledEndTime: { gte: new Date() },
+        },
+        orderBy: { scheduledStartTime: 'asc' },
+        include: { site: { select: { name: true, address: true } } },
+      }),
+    ]);
+
+    const guardUser = assignment.guard.user;
+    const formatTime = (date: Date) =>
+      date.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      });
+
+    let status: 'Active' | 'Upcoming' | 'Missed' | 'Completed' | 'Offline' = 'Offline';
+    const current = activeShift || assignment;
+    if (current.status === 'IN_PROGRESS') {
+      status = 'Active';
+    } else if (current.status === 'SCHEDULED') {
+      status = current.scheduledStartTime <= new Date() ? 'Active' : 'Upcoming';
+    } else if (current.status === 'COMPLETED') {
+      status = 'Completed';
+    } else if (current.status === 'NO_SHOW') {
+      status = 'Missed';
+    }
+
+    return {
+      id: assignment.guard.id,
+      userId: guardUser.id,
+      name: `${guardUser.firstName} ${guardUser.lastName}`.trim(),
+      email: guardUser.email,
+      phone: guardUser.phone || undefined,
+      avatar: assignment.guard.profilePictureUrl || undefined,
+      experience: assignment.guard.experience || undefined,
+      status,
+      currentSite: activeShift?.site?.name || assignment.site?.name || assignment.locationName,
+      currentSiteAddress:
+        activeShift?.site?.address || assignment.site?.address || assignment.locationAddress,
+      shiftId: activeShift?.id || assignment.id,
+      shiftTime: activeShift
+        ? `${formatTime(activeShift.scheduledStartTime)} - ${formatTime(activeShift.scheduledEndTime)}`
+        : `${formatTime(assignment.scheduledStartTime)} - ${formatTime(assignment.scheduledEndTime)}`,
+      checkInTime: activeShift?.actualStartTime?.toISOString(),
+      stats: {
+        completedShifts,
+        totalShifts,
+        rating: 4.8,
+      },
+      qualifications: assignment.guard.qualifications.map((q) => ({
+        title: q.title,
+        issuer: q.issuer,
+        expiryDate: q.expiryDate?.toISOString(),
+      })),
+    };
+  }
+
   async getClientReports(clientId: string, page: number = 1, limit: number = 50) {
     try {
       const skip = (page - 1) * limit;
@@ -587,7 +773,13 @@ export class ClientService {
         where: { clientId },
         select: { guardId: true }
       });
-      const guardIds = [...new Set(clientShifts.map(s => s.guardId).filter(Boolean))];
+      const guardIds = [
+        ...new Set(
+          clientShifts
+            .map((s) => s.guardId)
+            .filter((id): id is string => typeof id === 'string' && id.length > 0),
+        ),
+      ];
 
       // Get shift reports for client's shifts (Option B - Direct Assignment)
       const [shiftReports, incidentReports, shiftReportsTotal, incidentReportsTotal] = await Promise.all([
@@ -604,13 +796,16 @@ export class ClientService {
                   select: { name: true, address: true }
                 },
                 guard: {
-                  include: {
+                  select: {
+                    id: true,
+                    profilePictureUrl: true,
                     user: {
                       select: {
                         id: true,
                         firstName: true,
                         lastName: true,
-                        email: true
+                        email: true,
+                        profilePictureUrl: true,
                       }
                     }
                   }
@@ -622,7 +817,8 @@ export class ClientService {
                 id: true,
                 firstName: true,
                 lastName: true,
-                email: true
+                email: true,
+                profilePictureUrl: true,
               }
             }
           },
@@ -643,7 +839,8 @@ export class ClientService {
                     id: true,
                     firstName: true,
                     lastName: true,
-                    email: true
+                    email: true,
+                    profilePictureUrl: true,
                   }
                 }
               }
@@ -652,7 +849,7 @@ export class ClientService {
           orderBy: { submittedAt: 'desc' },
           skip,
           take: limit
-        }) : Promise.resolve([]),
+        }) : Promise.resolve([] as ClientIncidentReportRow[]),
         prisma.shiftReport.count({
           where: {
             shift: {
@@ -694,12 +891,17 @@ export class ClientService {
           let status: 'Respond' | 'New' | 'Reviewed' = 'New';
 
           const siteName = report.shift?.site?.name || 'Unknown Site';
-          const checkInTime = report.shift?.checkInTime;
+          const checkInTime = report.shift?.actualStartTime;
 
           return {
             id: report.id,
+            source: 'shift' as const,
             type,
             guardName,
+            guardAvatar:
+              report.guard?.profilePictureUrl ||
+              report.shift?.guard?.profilePictureUrl ||
+              undefined,
             site: siteName,
             time: report.submittedAt
               ? new Date(report.submittedAt).toLocaleTimeString('en-US', {
@@ -718,13 +920,14 @@ export class ClientService {
               })
               : undefined,
             guardId: report.shift?.guard?.id,
-            guardUserId: report.guard?.id || report.shift?.guard?.userId,
+            guardUserId: report.guard?.id || report.shift?.guard?.user?.id,
           };
         } catch (error) {
           logger.error(`Error transforming shift report ${report.id}:`, error);
           // Return a minimal valid report object
           return {
             id: report.id,
+            source: 'shift' as const,
             type: 'Incident' as const,
             guardName: 'Unknown Guard',
             site: 'Unknown Site',
@@ -771,8 +974,10 @@ export class ClientService {
 
           return {
             id: report.id,
+            source: 'incident' as const,
             type,
             guardName,
+            guardAvatar: report.guard?.profilePictureUrl || undefined,
             site: siteName,
             time: report.submittedAt
               ? new Date(report.submittedAt).toLocaleTimeString('en-US', {
@@ -792,9 +997,9 @@ export class ClientService {
           // Return a minimal valid report object
           return {
             id: report.id,
+            source: 'incident' as const,
             type: 'Incident' as const,
             guardName: 'Unknown Guard',
-            site: report.locationName || 'Unknown Site',
             time: 'Unknown Time',
             description: report.description || 'No description',
             status: 'Respond' as const,
@@ -839,7 +1044,7 @@ export class ClientService {
    */
   async respondToReport(reportId: string, clientId: string, status: string, responseNotes?: string) {
     try {
-      // Verify report belongs to client's shifts
+      // Verify report belongs to client's shifts (shift report)
       const report = await prisma.shiftReport.findUnique({
         where: { id: reportId },
         include: {
@@ -847,17 +1052,29 @@ export class ClientService {
             select: { clientId: true, site: { select: { name: true } } }
           },
           guard: {
-            include: {
-              user: {
-                select: { firstName: true, lastName: true, email: true }
-              }
-            }
-          }
+            select: { firstName: true, lastName: true, email: true },
+          },
         }
       });
 
       if (!report) {
-        throw new NotFoundError('Report not found');
+        const client = await prisma.client.findUnique({
+          where: { id: clientId },
+          select: { userId: true },
+        });
+
+        if (!client) {
+          throw new NotFoundError('Client not found');
+        }
+
+        const incidentReportService = (await import('./incidentReportService.js')).default;
+        return incidentReportService.respondToReport(
+          reportId,
+          client.userId,
+          'CLIENT',
+          status,
+          responseNotes
+        );
       }
 
       if (report.shift?.clientId !== clientId) {
@@ -890,12 +1107,8 @@ export class ClientService {
             }
           },
           guard: {
-            include: {
-              user: {
-                select: { firstName: true, lastName: true, email: true }
-              }
-            }
-          }
+            select: { firstName: true, lastName: true, email: true },
+          },
         }
       });
 

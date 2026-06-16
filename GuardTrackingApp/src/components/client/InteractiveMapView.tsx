@@ -3,7 +3,7 @@
  * Real-time guard location display with site boundaries and geofencing
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -20,15 +20,21 @@ import MapView, {
   PROVIDER_GOOGLE, 
   PROVIDER_DEFAULT,
   Region,
-  LatLng,
   MapPressEvent,
 } from 'react-native-maps';
-import { useSelector, useDispatch } from 'react-redux';
+import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
-import { globalStyles, COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
-import WebSocketService from '../../services/WebSocketService';
-import locationTrackingService from '../../services/locationTrackingService';
+import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { ErrorHandler } from '../../utils/errorHandler';
+import { useLiveGuardLocations } from '../../hooks/useLiveGuardLocations';
+import { LiveGuardMarker } from '../../types/liveTracking.types';
+import GuardMapMarker from '../maps/GuardMapMarker';
+import { formatRelativeTime } from '../../utils/formatRelativeTime';
+import {
+  buildLiveGuardSignature,
+  isValidCoordinate,
+} from '../../utils/liveGuardLocationMapper';
+import { computeRegionForPoints } from '../../utils/mapRegionUtils';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -57,6 +63,9 @@ interface InteractiveMapViewProps {
   height?: number;
   showControls?: boolean;
   onGuardSelect?: (guardId: string) => void;
+  /** Pre-fetched live markers from parent (preferred) */
+  liveGuards?: LiveGuardMarker[];
+  /** Optional metadata overlay when parent manages live fetch */
   guardData?: Array<{
     guardId: string;
     guardName: string;
@@ -66,59 +75,157 @@ interface InteractiveMapViewProps {
     status: 'active' | 'on_break' | 'offline' | 'emergency';
     siteName?: string;
   }>;
+  enableLiveTracking?: boolean;
+  /** once = fit on first markers only; always = refit when markers move (dashboard). */
+  autoFit?: 'once' | 'always' | 'never';
 }
+
+const toGuardLocation = (guard: LiveGuardMarker): GuardLocation => ({
+  guardId: guard.guardId,
+  guardName: guard.guardName,
+  latitude: guard.latitude,
+  longitude: guard.longitude,
+  accuracy: guard.accuracy,
+  timestamp: guard.timestamp,
+  status: guard.status,
+  siteName: guard.siteName,
+  lastUpdate: formatRelativeTime(new Date(guard.timestamp)) || 'Live',
+});
 
 const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
   height = 300,
   showControls = true,
   onGuardSelect,
+  liveGuards: liveGuardsProp,
   guardData,
+  enableLiveTracking = true,
+  autoFit = 'always',
 }) => {
-  const dispatch = useDispatch();
-  const { user } = useSelector((state: RootState) => state.auth);
   const { sites } = useSelector((state: RootState) => state.client);
+  const supplementalGuards = guardData?.map((guard) => ({
+    guardId: guard.guardId,
+    guardName: guard.guardName,
+    latitude: guard.latitude,
+    longitude: guard.longitude,
+    accuracy: guard.accuracy,
+    status: guard.status,
+    siteName: guard.siteName,
+    timestamp: Date.now(),
+  }));
+
+  const { guards: fetchedLiveGuards, isConnected: hookConnected } = useLiveGuardLocations({
+    enabled: enableLiveTracking && !liveGuardsProp,
+    supplementalGuards,
+  });
+
+  const liveGuards = useMemo(
+    () => (liveGuardsProp ?? fetchedLiveGuards).filter((g) => isValidCoordinate(g.latitude, g.longitude)),
+    [liveGuardsProp, fetchedLiveGuards]
+  );
+
+  const isConnected =
+    liveGuardsProp != null
+      ? liveGuards.some((g) => Date.now() - (g.timestamp || 0) < 45000)
+      : hookConnected;
   
   const [guardLocations, setGuardLocations] = useState<GuardLocation[]>([]);
   const [siteBoundaries, setSiteBoundaries] = useState<SiteBoundary[]>([]);
   const [selectedGuard, setSelectedGuard] = useState<string | null>(null);
   const [showGeofences, setShowGeofences] = useState(true);
   const [isLiveMode, setIsLiveMode] = useState(true);
-  const [mapRegion, setMapRegion] = useState<Region>({
-    latitude: 40.7128,
-    longitude: -74.0060,
-    latitudeDelta: 0.0922,
-    longitudeDelta: 0.0421,
-  });
 
   const mapRef = useRef<MapView>(null);
-  const mapUpdateInterval = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasAutoFitRef = useRef(false);
+
+  const markerSignature = useMemo(
+    () => buildLiveGuardSignature(liveGuards),
+    [liveGuards],
+  );
+
+  const initialRegion = useMemo(() => {
+    if (liveGuards.length === 0) {
+      return {
+        latitude: 37.7749,
+        longitude: -122.4194,
+        latitudeDelta: 0.08,
+        longitudeDelta: 0.08,
+      };
+    }
+    return computeRegionForPoints(
+      liveGuards.map((g) => ({ latitude: g.latitude, longitude: g.longitude })),
+    );
+  }, [liveGuards]);
+
+  const [mapRegion, setMapRegion] = useState<Region>(initialRegion);
 
   useEffect(() => {
-    initializeMap();
-    startLiveUpdates();
+    if (autoFit === 'once' && hasAutoFitRef.current) return;
+    setMapRegion(initialRegion);
+  }, [initialRegion, autoFit]);
 
-    return () => {
-      stopLiveUpdates();
-    };
+  useEffect(() => {
+    loadSiteBoundaries();
   }, []);
 
-  // Update guard locations when guardData prop changes
   useEffect(() => {
-    if (guardData && guardData.length > 0) {
-      const guardLocations: GuardLocation[] = guardData.map(guard => ({
-        guardId: guard.guardId,
-        guardName: guard.guardName,
-        latitude: guard.latitude,
-        longitude: guard.longitude,
-        accuracy: guard.accuracy,
-        timestamp: Date.now(),
-        status: guard.status,
-        siteName: guard.siteName,
-        lastUpdate: 'Just now',
-      }));
-      setGuardLocations(guardLocations);
-    }
-  }, [guardData]);
+    const markers = liveGuards.map(toGuardLocation);
+    setGuardLocations((prev) => {
+      const prevSig = buildLiveGuardSignature(
+        prev.map((g) => ({
+          guardId: g.guardId,
+          guardName: g.guardName,
+          latitude: g.latitude,
+          longitude: g.longitude,
+          accuracy: g.accuracy,
+          status: g.status,
+          siteName: g.siteName,
+          timestamp: g.timestamp,
+        })),
+      );
+      if (prevSig === markerSignature) return prev;
+      return markers;
+    });
+  }, [markerSignature, liveGuards]);
+
+  useEffect(() => {
+    if (!isLiveMode || autoFit === 'never') return;
+    if (autoFit === 'once' && hasAutoFitRef.current) return;
+    if (liveGuards.length === 0) return;
+
+    const coordinates = liveGuards.map((guard) => ({
+      latitude: guard.latitude,
+      longitude: guard.longitude,
+    }));
+
+    siteBoundaries.forEach((site) => {
+      coordinates.push(site.center);
+    });
+
+    const timer = setTimeout(() => {
+      if (!mapRef.current) return;
+
+      if (coordinates.length === 1) {
+        const only = coordinates[0];
+        mapRef.current.animateToRegion(
+          {
+            latitude: only.latitude,
+            longitude: only.longitude,
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01,
+          },
+          600,
+        );
+      } else {
+        mapRef.current.fitToCoordinates(coordinates, {
+          edgePadding: { top: 48, right: 48, bottom: 48, left: 48 },
+          animated: true,
+        });
+      }
+      hasAutoFitRef.current = true;
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [markerSignature, isLiveMode, siteBoundaries, autoFit, liveGuards.length]);
 
   // Update site boundaries when sites change
   useEffect(() => {
@@ -126,101 +233,6 @@ const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
       loadSiteBoundaries();
     }
   }, [sites]);
-
-  const initializeMap = async () => {
-    try {
-      // Load initial guard locations
-      await loadGuardLocations();
-      
-      // Load site boundaries
-      await loadSiteBoundaries();
-      
-      // Center map on first guard or site
-      if (guardLocations.length > 0) {
-        const firstGuard = guardLocations[0];
-        setMapRegion({
-          latitude: firstGuard.latitude,
-          longitude: firstGuard.longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        });
-      } else if (siteBoundaries.length > 0) {
-        const firstSite = siteBoundaries[0];
-        setMapRegion({
-          latitude: firstSite.center.latitude,
-          longitude: firstSite.center.longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        });
-      }
-
-      console.log('📍 Interactive map initialized');
-    } catch (error) {
-      ErrorHandler.handleError(error, 'initialize_map');
-    }
-  };
-
-  const loadGuardLocations = async () => {
-    try {
-      // If guard data is provided as prop, use it
-      if (guardData && guardData.length > 0) {
-        const guardLocations: GuardLocation[] = guardData.map(guard => ({
-          guardId: guard.guardId,
-          guardName: guard.guardName,
-          latitude: guard.latitude,
-          longitude: guard.longitude,
-          accuracy: guard.accuracy,
-          timestamp: Date.now(),
-          status: guard.status,
-          siteName: guard.siteName,
-          lastUpdate: 'Just now',
-        }));
-        setGuardLocations(guardLocations);
-        return;
-      }
-
-      // Otherwise, load from API or use mock data
-      const mockGuardLocations: GuardLocation[] = [
-        {
-          guardId: 'guard_1',
-          guardName: 'John Smith',
-          latitude: 40.7589,
-          longitude: -73.9851,
-          accuracy: 5,
-          timestamp: Date.now(),
-          status: 'active',
-          siteName: 'Central Office',
-          lastUpdate: '2 min ago',
-        },
-        {
-          guardId: 'guard_2',
-          guardName: 'Sarah Johnson',
-          latitude: 40.7505,
-          longitude: -73.9934,
-          accuracy: 8,
-          timestamp: Date.now() - 300000, // 5 minutes ago
-          status: 'on_break',
-          siteName: 'Warehouse A',
-          lastUpdate: '5 min ago',
-        },
-        {
-          guardId: 'guard_3',
-          guardName: 'Mike Wilson',
-          latitude: 40.7614,
-          longitude: -73.9776,
-          accuracy: 12,
-          timestamp: Date.now() - 120000, // 2 minutes ago
-          status: 'active',
-          siteName: 'Retail Store',
-          lastUpdate: '2 min ago',
-        },
-      ];
-
-      setGuardLocations(mockGuardLocations);
-    } catch (error) {
-      ErrorHandler.handleError(error, 'load_guard_locations', false);
-    }
-  };
 
   const loadSiteBoundaries = async () => {
     try {
@@ -268,41 +280,6 @@ const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
     }
   };
 
-  const startLiveUpdates = () => {
-    if (mapUpdateInterval.current) {
-      clearInterval(mapUpdateInterval.current);
-    }
-
-    mapUpdateInterval.current = setInterval(() => {
-      if (isLiveMode) {
-        updateGuardLocations();
-      }
-    }, 30000); // Update every 30 seconds
-  };
-
-  const stopLiveUpdates = () => {
-    if (mapUpdateInterval.current) {
-      clearInterval(mapUpdateInterval.current);
-      mapUpdateInterval.current = null;
-    }
-  };
-
-  const updateGuardLocations = async () => {
-    try {
-      // Simulate real-time location updates
-      setGuardLocations(prev => prev.map(guard => ({
-        ...guard,
-        // Simulate small location changes
-        latitude: guard.latitude + (Math.random() - 0.5) * 0.001,
-        longitude: guard.longitude + (Math.random() - 0.5) * 0.001,
-        timestamp: Date.now(),
-        lastUpdate: 'Just now',
-      })));
-    } catch (error) {
-      ErrorHandler.handleError(error, 'update_guard_locations', false);
-    }
-  };
-
   const handleGuardPress = (guardId: string) => {
     setSelectedGuard(guardId);
     if (onGuardSelect) {
@@ -345,12 +322,7 @@ const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
   };
 
   const toggleLiveMode = () => {
-    setIsLiveMode(prev => !prev);
-    if (!isLiveMode) {
-      startLiveUpdates();
-    } else {
-      stopLiveUpdates();
-    }
+    setIsLiveMode((prev) => !prev);
   };
 
   const getGuardStatusColor = (status: GuardLocation['status']) => {
@@ -381,24 +353,18 @@ const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
       >
         {/* Guard Markers */}
         {guardLocations.map((guard) => (
-          <Marker
+          <GuardMapMarker
             key={guard.guardId}
-            coordinate={{
-              latitude: guard.latitude,
-              longitude: guard.longitude,
-            }}
-            title={guard.guardName}
-            description={`Status: ${guard.status} | Site: ${guard.siteName}`}
-            onPress={() => handleGuardPress(guard.guardId)}
-          >
-            <View style={[
-              styles.customMarker,
-              { backgroundColor: getGuardStatusColor(guard.status) },
-              selectedGuard === guard.guardId && styles.selectedMarker,
-            ]}>
-              <Text style={styles.markerText}>👤</Text>
-            </View>
-          </Marker>
+            guardId={guard.guardId}
+            guardName={guard.guardName}
+            latitude={guard.latitude}
+            longitude={guard.longitude}
+            status={guard.status}
+            siteName={guard.siteName}
+            accuracy={guard.accuracy}
+            selected={selectedGuard === guard.guardId}
+            onPress={handleGuardPress}
+          />
         ))}
 
         {/* Site Boundaries - Geofences */}
@@ -427,9 +393,23 @@ const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
 
       {/* Live Status Indicator */}
       <View style={styles.liveIndicator}>
-        <View style={[styles.liveDot, { backgroundColor: isLiveMode ? COLORS.success : COLORS.error }]} />
-        <Text style={styles.liveText}>{isLiveMode ? 'LIVE' : 'PAUSED'}</Text>
+        <View style={[styles.liveDot, { backgroundColor: isConnected && isLiveMode ? COLORS.success : COLORS.warning }]} />
+        <Text style={styles.liveText}>
+          {isLiveMode ? (isConnected ? 'LIVE' : 'POLLING') : 'PAUSED'}
+        </Text>
+        {guardLocations.length > 0 && (
+          <Text style={styles.guardCountText}> · {guardLocations.length}</Text>
+        )}
       </View>
+
+      {guardLocations.length === 0 && (
+        <View style={styles.emptyOverlay} pointerEvents="none">
+          <Text style={styles.emptyTitle}>No live guard locations</Text>
+          <Text style={styles.emptySubtitle}>
+            Guards appear here after check-in with GPS enabled
+          </Text>
+        </View>
+      )}
 
       {/* Map Controls */}
       {showControls && (
@@ -471,13 +451,16 @@ const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
             <Text style={styles.closeButton}>✕</Text>
           </TouchableOpacity>
         </View>
-        <Text style={styles.guardSite}>{guard.siteName}</Text>
+        <Text style={styles.guardSite}>{guard.siteName || 'Site unknown'}</Text>
         <View style={styles.guardStatus}>
           <View style={[styles.statusDot, { backgroundColor: getGuardStatusColor(guard.status) }]} />
           <Text style={styles.statusText}>{guard.status.replace('_', ' ').toUpperCase()}</Text>
         </View>
         <Text style={styles.lastUpdate}>Last update: {guard.lastUpdate}</Text>
-        <Text style={styles.accuracy}>Accuracy: ±{guard.accuracy}m</Text>
+        <Text style={styles.accuracy}>Accuracy: ±{Math.round(guard.accuracy)}m</Text>
+        <Text style={styles.coordinates}>
+          {guard.latitude.toFixed(5)}, {guard.longitude.toFixed(5)}
+        </Text>
       </View>
     );
   };
@@ -597,6 +580,30 @@ const styles = StyleSheet.create({
     fontWeight: TYPOGRAPHY.fontWeight.bold,
     color: COLORS.textPrimary,
   },
+  guardCountText: {
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    color: COLORS.textSecondary,
+  },
+  emptyOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    paddingHorizontal: SPACING.lg,
+  },
+  emptyTitle: {
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.xs,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+  },
   mapControls: {
     position: 'absolute',
     right: SPACING.md,
@@ -682,6 +689,11 @@ const styles = StyleSheet.create({
   accuracy: {
     fontSize: TYPOGRAPHY.fontSize.xs,
     color: COLORS.textSecondary,
+  },
+  coordinates: {
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.xs,
   },
 });
 

@@ -51,6 +51,26 @@ export interface EmergencyAlert {
   severity: 'critical' | 'high' | 'medium' | 'low';
 }
 
+export interface OperationsActivityItem {
+  id: string;
+  type:
+    | 'check_in'
+    | 'check_out'
+    | 'incident'
+    | 'shift_start'
+    | 'shift_end'
+    | 'break_start'
+    | 'break_end'
+    | 'emergency';
+  guardId: string;
+  guardName: string;
+  siteName: string;
+  message: string;
+  timestamp: number;
+  severity?: 'low' | 'medium' | 'high' | 'critical';
+  status?: 'active' | 'resolved' | 'pending';
+}
+
 class OperationsService {
   /**
    * Get operations metrics
@@ -126,17 +146,54 @@ class OperationsService {
   /**
    * Acknowledge emergency alert
    */
-  async acknowledgeEmergencyAlert(alertId: string): Promise<boolean> {
+  async acknowledgeEmergencyAlert(
+    alertId: string
+  ): Promise<{ success: boolean; message?: string }> {
     try {
       const response = await apiService.postRaw<{
         success: boolean;
         message: string;
       }>(`/emergency/alert/${alertId}/acknowledge`, {});
-      
-      return response.data.success;
+
+      return {
+        success: response.data.success,
+        message: response.data.message,
+      };
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const message =
+        error?.response?.data?.message || 'Failed to acknowledge emergency alert';
+
+      if (
+        status === 409 ||
+        message.toLowerCase().includes('already acknowledged') ||
+        message.toLowerCase().includes('already resolved')
+      ) {
+        return { success: true, message };
+      }
+
+      console.error('Error acknowledging emergency alert:', message, error);
+      return { success: false, message };
+    }
+  }
+
+  /**
+   * Get live activity feed for operations center
+   */
+  async getOperationsActivity(limit = 50): Promise<OperationsActivityItem[]> {
+    try {
+      const response = await apiService.getRaw<{
+        success: boolean;
+        data: OperationsActivityItem[];
+      }>(`/admin/operations/activity?limit=${limit}`);
+
+      if (response.data.success && Array.isArray(response.data.data)) {
+        return response.data.data;
+      }
+      return [];
     } catch (error) {
-      console.error('Error acknowledging emergency alert:', error);
-      return false;
+      console.error('Error fetching operations activity:', error);
+      return [];
     }
   }
 

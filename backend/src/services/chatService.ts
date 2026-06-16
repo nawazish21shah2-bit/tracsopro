@@ -1,6 +1,43 @@
 import prisma from '../config/database.js';
 import WebSocketService from './websocketService.js';
 import { logger } from '../utils/logger.js';
+import {
+  backfillConversationsFromMessages,
+  ensureConversation,
+  getConversationParticipantIds,
+  inferConversationType,
+  isConversationParticipant,
+  mapChatTypeToConversationType,
+  mapMessageTypeFromEnum,
+  mapMessageTypeToEnum,
+  parseDirectChatParticipantIds,
+  buildSupportChatId,
+  buildCompanySupportChatId,
+  isSupportChatId,
+  isPlatformSupportChatId,
+  isCompanySupportChatId,
+  parseSupportChatAdminUserId,
+  parseCompanySupportUserId,
+  resolveSubmitterCompanyId,
+  getCompanySupportStaffUserIds,
+  getCompanySupportStaffMembership,
+  touchConversationLastMessage,
+  updateParticipantLastRead,
+} from './conversationService.js';
+
+function getDirectChatOtherParticipantId(
+  participantIds: string[],
+  createdBy: string,
+): string | null {
+  const others = participantIds.filter(id => id !== createdBy);
+  if (others.length === 1) {
+    return others[0];
+  }
+  if (participantIds.length === 1 && participantIds[0] !== createdBy) {
+    return participantIds[0];
+  }
+  return null;
+}
 
 export interface ChatMessage {
   id: string;
@@ -62,6 +99,422 @@ export class ChatService {
     return ChatService.instance;
   }
 
+  async initializeConversations(): Promise<void> {
+    await backfillConversationsFromMessages();
+  }
+
+  private mapParticipantRole(role: string): 'member' | 'admin' {
+    return role === 'ADMIN' ? 'admin' : 'member';
+  }
+
+  private async getSuperAdminUserIds(): Promise<string[]> {
+    const users = await prisma.user.findMany({
+      where: { role: 'SUPER_ADMIN', isActive: true },
+      select: { id: true },
+    });
+    return users.map(user => user.id);
+  }
+
+  private async getSupportChatDisplayName(adminUserId: string): Promise<string> {
+    const [adminUser, companyUser] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: adminUserId },
+        select: { firstName: true, lastName: true, email: true },
+      }),
+      prisma.companyUser.findFirst({
+        where: { userId: adminUserId, isActive: true },
+        include: { securityCompany: { select: { name: true } } },
+      }),
+    ]);
+
+    const adminName =
+      `${adminUser?.firstName || ''} ${adminUser?.lastName || ''}`.trim() ||
+      adminUser?.email ||
+      'Admin';
+    const companyName = companyUser?.securityCompany?.name;
+    return companyName ? `${adminName} · ${companyName}` : adminName;
+  }
+
+  private async canAccessSupportChat(conversationId: string, userId: string): Promise<boolean> {
+    if (isPlatformSupportChatId(conversationId)) {
+      const adminUserId = parseSupportChatAdminUserId(conversationId);
+      if (!adminUserId) return false;
+      if (userId === adminUserId) return true;
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { role: true },
+      });
+      return user?.role === 'SUPER_ADMIN';
+    }
+
+    if (isCompanySupportChatId(conversationId)) {
+      const submitterId = parseCompanySupportUserId(conversationId);
+      if (!submitterId) return false;
+      if (userId === submitterId) return true;
+
+      const [staff, submitterCompanyId] = await Promise.all([
+        getCompanySupportStaffMembership(userId),
+        resolveSubmitterCompanyId(submitterId),
+      ]);
+
+      return Boolean(
+        staff.isStaff &&
+          staff.securityCompanyId &&
+          submitterCompanyId &&
+          submitterCompanyId === staff.securityCompanyId,
+      );
+    }
+
+    return false;
+  }
+
+  private async buildVirtualSupportChat(
+    conversationId: string,
+    userId: string,
+  ): Promise<(Chat & { metadata?: Record<string, unknown> }) | null> {
+    if (!(await this.canAccessSupportChat(conversationId, userId))) {
+      return null;
+    }
+
+    const adminUserId = parseSupportChatAdminUserId(conversationId);
+    const companyUserId = parseCompanySupportUserId(conversationId);
+    const subjectUserId = adminUserId ?? companyUserId;
+    if (!subjectUserId) return null;
+
+    const viewer = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, firstName: true, lastName: true },
+    });
+
+    const [subjectUser, superAdminIds, lastMessage, unreadCount] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: subjectUserId },
+        select: { id: true, firstName: true, lastName: true, role: true, profilePictureUrl: true },
+      }),
+      this.getSuperAdminUserIds(),
+      prisma.message.findFirst({
+        where: { conversationId },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          sender: {
+            select: { id: true, firstName: true, lastName: true, role: true },
+          },
+        },
+      }),
+      prisma.message.count({
+        where: {
+          conversationId,
+          senderId: { not: userId },
+          isRead: false,
+        },
+      }),
+    ]);
+
+    if (!subjectUser) return null;
+
+    let chatName = 'Support';
+    if (isPlatformSupportChatId(conversationId)) {
+      chatName =
+        viewer?.role === 'SUPER_ADMIN'
+          ? await this.getSupportChatDisplayName(subjectUserId)
+          : 'Platform Support';
+    } else if (isCompanySupportChatId(conversationId)) {
+      const submitterName =
+        `${subjectUser.firstName || ''} ${subjectUser.lastName || ''}`.trim() ||
+        subjectUser.role;
+      chatName =
+        viewer?.role === 'ADMIN'
+          ? `${submitterName} · ${subjectUser.role}`
+          : 'Company Support';
+    }
+
+    const companyAdminIds = isCompanySupportChatId(conversationId) && viewer?.role === 'ADMIN'
+      ? [userId]
+      : [];
+
+    const superAdminUsers = isPlatformSupportChatId(conversationId) && superAdminIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: superAdminIds } },
+          select: { id: true, firstName: true, lastName: true, role: true, profilePictureUrl: true },
+        })
+      : [];
+
+    const participants: ChatParticipant[] = [
+      {
+        id: `part_${subjectUser.id}_${conversationId}`,
+        chatId: conversationId,
+        userId: subjectUser.id,
+        role: 'member',
+        joinedAt: new Date(),
+        user: {
+          id: subjectUser.id,
+          firstName: subjectUser.firstName,
+          lastName: subjectUser.lastName,
+          avatar: subjectUser.profilePictureUrl || undefined,
+          role: subjectUser.role,
+        },
+      },
+      ...superAdminUsers.map(sa => ({
+        id: `part_${sa.id}_${conversationId}`,
+        chatId: conversationId,
+        userId: sa.id,
+        role: 'admin' as const,
+        joinedAt: new Date(),
+        user: {
+          id: sa.id,
+          firstName: sa.firstName,
+          lastName: sa.lastName,
+          avatar: sa.profilePictureUrl || undefined,
+          role: sa.role,
+        },
+      })),
+    ];
+
+    return {
+      id: conversationId,
+      name: chatName,
+      type: 'direct',
+      participants,
+      lastMessage: lastMessage
+        ? {
+            id: lastMessage.id,
+            chatId: conversationId,
+            senderId: lastMessage.senderId,
+            content: lastMessage.content,
+            messageType: mapMessageTypeFromEnum(lastMessage.messageType),
+            timestamp: lastMessage.createdAt,
+            isRead: lastMessage.isRead,
+            sender: {
+              id: lastMessage.sender.id,
+              firstName: lastMessage.sender.firstName,
+              lastName: lastMessage.sender.lastName,
+              role: lastMessage.sender.role,
+            },
+          }
+        : undefined,
+      lastMessageAt: lastMessage?.createdAt,
+      unreadCount,
+      createdAt: lastMessage?.createdAt || new Date(),
+      updatedAt: lastMessage?.updatedAt || new Date(),
+      metadata: {
+        isSupportChat: true,
+        isPlatformSupport: isPlatformSupportChatId(conversationId),
+        isCompanySupport: isCompanySupportChatId(conversationId),
+        adminUserId: adminUserId ?? undefined,
+        submitterUserId: companyUserId ?? undefined,
+      },
+    };
+  }
+
+  private async buildChatFromConversation(
+    conversationId: string,
+    userId: string,
+    securityCompanyId?: string
+  ): Promise<Chat | null> {
+    const conversation = await prisma.conversation.findUnique({
+      where: { id: conversationId },
+      include: {
+        participants: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                role: true,
+                profilePictureUrl: true,
+                guard: {
+                  select: { profilePictureUrl: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!conversation) {
+      if (isSupportChatId(conversationId)) {
+        return this.buildVirtualSupportChat(conversationId, userId);
+      }
+
+      const senders = await prisma.message.findMany({
+        where: { conversationId },
+        select: { senderId: true },
+        distinct: ['senderId'],
+      });
+      const parsed = parseDirectChatParticipantIds(conversationId);
+      const participantIds =
+        parsed && parsed.length >= 2
+          ? parsed
+          : senders.map(s => s.senderId).filter(Boolean);
+
+      if (!participantIds.includes(userId)) {
+        return null;
+      }
+
+      if (participantIds.length > 0) {
+        await ensureConversation({
+          id: conversationId,
+          type: inferConversationType(conversationId),
+          createdBy: userId,
+          participantIds,
+          securityCompanyId,
+        });
+        return this.buildChatFromConversation(conversationId, userId, securityCompanyId);
+      }
+
+      return null;
+    }
+
+    if (securityCompanyId && conversation.securityCompanyId && conversation.securityCompanyId !== securityCompanyId) {
+      if (!isSupportChatId(conversationId)) {
+        return null;
+      }
+    }
+
+    const participantIds = conversation.participants.map(p => p.userId);
+    if (securityCompanyId && !isSupportChatId(conversationId)) {
+      const [participantAdmins, participantGuards, participantClients] = await Promise.all([
+        prisma.companyUser.findMany({
+          where: {
+            userId: { in: participantIds },
+            securityCompanyId,
+            isActive: true,
+          },
+          select: { userId: true },
+        }),
+        prisma.guard.findMany({
+          where: { userId: { in: participantIds } },
+          include: {
+            companyGuards: {
+              where: { securityCompanyId, isActive: true },
+              take: 1,
+            },
+          },
+        }),
+        prisma.client.findMany({
+          where: { userId: { in: participantIds } },
+          include: {
+            companyClients: {
+              where: { securityCompanyId, isActive: true },
+              take: 1,
+            },
+          },
+        }),
+      ]);
+
+      const validParticipantIds = new Set([
+        ...participantAdmins.map(cu => cu.userId),
+        ...participantGuards.filter(g => g.companyGuards.length > 0).map(g => g.userId),
+        ...participantClients.filter(c => c.companyClients.length > 0).map(c => c.userId),
+      ]);
+
+      if (participantIds.some(id => !validParticipantIds.has(id))) {
+        const parsed = parseDirectChatParticipantIds(conversationId);
+        if (!parsed?.includes(userId)) {
+          return null;
+        }
+      }
+    }
+
+    const [lastMessage, unreadCount] = await Promise.all([
+      prisma.message.findFirst({
+        where: { conversationId },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          sender: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              role: true,
+            },
+          },
+        },
+      }),
+      prisma.message.count({
+        where: {
+          conversationId,
+          senderId: { not: userId },
+          isRead: false,
+        },
+      }),
+    ]);
+
+    const participants: ChatParticipant[] = conversation.participants.map(p => ({
+      id: p.id,
+      chatId: conversationId,
+      userId: p.userId,
+      role: this.mapParticipantRole(p.role),
+      joinedAt: p.joinedAt,
+      lastReadAt: p.lastReadAt || undefined,
+      user: {
+        id: p.user.id,
+        firstName: p.user.firstName,
+        lastName: p.user.lastName,
+        avatar: p.user.profilePictureUrl || p.user.guard?.profilePictureUrl || undefined,
+        role: p.user.role,
+      },
+    }));
+
+    let chatName = conversation.name || undefined;
+    if (isSupportChatId(conversationId)) {
+      const viewer = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { role: true },
+      });
+      chatName =
+        viewer?.role === 'SUPER_ADMIN'
+          ? await this.getSupportChatDisplayName(parseSupportChatAdminUserId(conversationId)!)
+          : 'Platform Support';
+    } else if (!chatName && conversation.type === 'DIRECT') {
+      const otherParticipant = conversation.participants.find(p => p.userId !== userId);
+      if (otherParticipant) {
+        chatName = `${otherParticipant.user.firstName} ${otherParticipant.user.lastName}`.trim();
+      }
+    }
+
+    const chatType =
+      conversation.type === 'TEAM' ? 'team' : conversation.type === 'GROUP' ? 'group' : 'direct';
+
+    return {
+      id: conversationId,
+      name: chatName,
+      type: chatType,
+      participants,
+      lastMessage: lastMessage
+        ? {
+            id: lastMessage.id,
+            chatId: conversationId,
+            senderId: lastMessage.senderId,
+            content: lastMessage.content,
+            messageType: mapMessageTypeFromEnum(lastMessage.messageType),
+            timestamp: lastMessage.createdAt,
+            isRead: lastMessage.isRead,
+            sender: {
+              id: lastMessage.sender.id,
+              firstName: lastMessage.sender.firstName,
+              lastName: lastMessage.sender.lastName,
+              role: lastMessage.sender.role,
+            },
+          }
+        : undefined,
+      lastMessageAt: lastMessage?.createdAt || conversation.lastMessageAt || undefined,
+      unreadCount,
+      createdAt: conversation.createdAt,
+      updatedAt: conversation.updatedAt,
+      ...(isSupportChatId(conversationId)
+        ? {
+            metadata: {
+              isSupportChat: true,
+              adminUserId: parseSupportChatAdminUserId(conversationId),
+            },
+          }
+        : {}),
+    };
+  }
+
   /**
    * Get all chats for a user
    * Uses Message model with conversationId to group conversations
@@ -91,206 +544,58 @@ export class ChatService {
         }
       }
 
-      // Get all unique conversations where user has sent messages
-      // Multi-tenant: Filter by company if not SUPER_ADMIN
-      const whereClause: any = {
-        senderId: userId,
-      };
+      const participantRows = await prisma.conversationParticipant.findMany({
+        where: { userId },
+        select: { conversationId: true },
+        orderBy: { joinedAt: 'desc' },
+      });
 
-      // If user has a company (not SUPER_ADMIN), filter messages to only those from users in same company
-      if (userCompanyId) {
-        // Get all user IDs in the same company
-        const [companyAdmins, companyGuards, companyClients] = await Promise.all([
-          prisma.companyUser.findMany({
-            where: { securityCompanyId: userCompanyId, isActive: true },
-            select: { userId: true },
+      let validChats: Chat[] = (
+        await Promise.all(
+          participantRows.map(row =>
+            this.buildChatFromConversation(row.conversationId, userId, userCompanyId)
+          )
+        )
+      ).filter((chat): chat is Chat => chat !== null);
+
+      validChats.sort((a, b) => {
+        const aTime = a.lastMessageAt?.getTime() || 0;
+        const bTime = b.lastMessageAt?.getTime() || 0;
+        return bTime - aTime;
+      });
+
+      // Legacy fallback before backfill completes
+      if (validChats.length === 0) {
+        const [sentRows, receivedRows] = await Promise.all([
+          prisma.message.findMany({
+            where: { senderId: userId },
+            select: { conversationId: true },
+            distinct: ['conversationId'],
+            orderBy: { createdAt: 'desc' },
           }),
-          prisma.companyGuard.findMany({
-            where: { securityCompanyId: userCompanyId, isActive: true },
-            select: { guard: { select: { userId: true } } },
-          }),
-          prisma.companyClient.findMany({
-            where: { securityCompanyId: userCompanyId, isActive: true },
-            select: { client: { select: { userId: true } } },
+          prisma.message.findMany({
+            where: {
+              conversationId: { contains: userId },
+              senderId: { not: userId },
+            },
+            select: { conversationId: true },
+            distinct: ['conversationId'],
+            orderBy: { createdAt: 'desc' },
           }),
         ]);
 
-        const companyUserIds = [
-          ...companyAdmins.map(cu => cu.userId).filter(Boolean),
-          ...companyGuards.map(cg => cg.guard?.userId).filter(Boolean),
-          ...companyClients.map(cc => cc.client?.userId).filter(Boolean),
+        const conversationIds = [
+          ...new Set([...sentRows, ...receivedRows].map(r => r.conversationId)),
         ];
 
-        // Ensure we have at least the current user
-        const allUserIds = [...new Set([userId, ...companyUserIds])].filter(Boolean);
-        if (allUserIds.length === 0) {
-          // No valid user IDs, return empty array
-          return [];
-        }
-        whereClause.senderId = { in: allUserIds };
+        validChats = (
+          await Promise.all(
+            conversationIds.map(id =>
+              this.buildChatFromConversation(id, userId, userCompanyId)
+            )
+          )
+        ).filter((chat): chat is Chat => chat !== null);
       }
-
-      const userMessages = await prisma.message.findMany({
-        where: whereClause,
-        select: {
-          conversationId: true,
-          senderId: true,
-          createdAt: true,
-        },
-        distinct: ['conversationId'],
-        orderBy: { createdAt: 'desc' },
-      });
-
-      // Get unique conversation IDs
-      const conversationIds = [...new Set(userMessages.map(m => m.conversationId))];
-
-      // For each conversation, get the latest message and participants
-      // Multi-tenant: Filter to only include conversations where all participants are in same company
-      const chats = await Promise.all(
-        conversationIds.map(async (conversationId) => {
-          // Get all unique participants (senders) in this conversation
-          const participantsData = await prisma.message.findMany({
-            where: { conversationId },
-            select: {
-              senderId: true,
-              sender: {
-                select: {
-                  id: true,
-                  firstName: true,
-                  lastName: true,
-                  role: true,
-                },
-              },
-            },
-            distinct: ['senderId'],
-          });
-
-          // Multi-tenant: Validate all participants belong to same company (if not SUPER_ADMIN)
-          if (userCompanyId) {
-            const participantIds = participantsData.map(p => p.senderId);
-            const [participantAdmins, participantGuards, participantClients] = await Promise.all([
-              prisma.companyUser.findMany({
-                where: {
-                  userId: { in: participantIds },
-                  securityCompanyId: userCompanyId,
-                  isActive: true,
-                },
-                select: { userId: true },
-              }),
-              prisma.guard.findMany({
-                where: { userId: { in: participantIds } },
-                include: {
-                  companyGuards: {
-                    where: { securityCompanyId: userCompanyId, isActive: true },
-                    take: 1,
-                  },
-                },
-              }),
-              prisma.client.findMany({
-                where: { userId: { in: participantIds } },
-                include: {
-                  companyClients: {
-                    where: { securityCompanyId: userCompanyId, isActive: true },
-                    take: 1,
-                  },
-                },
-              }),
-            ]);
-
-            const validParticipantIds = new Set([
-              ...participantAdmins.map(cu => cu.userId),
-              ...participantGuards.filter(g => g.companyGuards.length > 0).map(g => g.userId),
-              ...participantClients.filter(c => c.companyClients.length > 0).map(c => c.userId),
-            ]);
-
-            // Skip this conversation if not all participants are in the same company
-            if (participantIds.some(id => !validParticipantIds.has(id))) {
-              return null;
-            }
-          }
-
-          // Get latest message in this conversation
-          const lastMessage = await prisma.message.findFirst({
-            where: { conversationId },
-            orderBy: { createdAt: 'desc' },
-            include: {
-              sender: {
-                select: {
-                  id: true,
-                  firstName: true,
-                  lastName: true,
-                  role: true,
-                },
-              },
-            },
-          });
-
-          // Count unread messages for this user
-          const unreadCount = await prisma.message.count({
-            where: {
-              conversationId,
-              senderId: { not: userId },
-              isRead: false,
-            },
-          });
-
-          // Determine chat name (for direct chats, use other participant's name)
-          let chatName: string | undefined;
-          const otherParticipant = participantsData.find(p => p.senderId !== userId);
-          if (otherParticipant?.sender) {
-            chatName = `${otherParticipant.sender.firstName} ${otherParticipant.sender.lastName}`.trim();
-          } else {
-            chatName = 'Chat';
-          }
-
-          // Build participants list
-          const participants: ChatParticipant[] = participantsData.map((p) => ({
-            id: `part_${p.senderId}_${conversationId}`,
-            chatId: conversationId,
-            userId: p.senderId,
-            role: p.senderId === userId ? 'admin' : 'member',
-            joinedAt: new Date(), // Would need a join date in a full implementation
-            lastReadAt: undefined,
-            user: {
-              id: p.sender.id,
-              firstName: p.sender.firstName,
-              lastName: p.sender.lastName,
-              role: p.sender.role,
-            },
-          }));
-
-          const chat: Chat = {
-            id: conversationId,
-            name: chatName,
-            type: participants.length === 2 ? 'direct' : 'group',
-            participants,
-            lastMessage: lastMessage ? {
-              id: lastMessage.id,
-              chatId: conversationId,
-              senderId: lastMessage.senderId,
-              content: lastMessage.content,
-              messageType: 'text', // Default to text, would need to add messageType to schema
-              timestamp: lastMessage.createdAt,
-              isRead: lastMessage.isRead,
-              sender: {
-                id: lastMessage.sender.id,
-                firstName: lastMessage.sender.firstName,
-                lastName: lastMessage.sender.lastName,
-                role: lastMessage.sender.role,
-              },
-            } : undefined,
-            lastMessageAt: lastMessage?.createdAt,
-            unreadCount,
-            createdAt: lastMessage?.createdAt || new Date(),
-            updatedAt: lastMessage?.createdAt || new Date(),
-          };
-
-          return chat;
-        })
-      );
-
-      // Filter out null chats (conversations with participants from different companies)
-      let validChats = chats.filter((chat): chat is Chat => chat !== null) as Chat[];
 
       // For CLIENT users: Also include guards assigned to their sites (even if no chat exists yet)
       // For ADMIN users: Also include guards and clients in their company (even if no chat exists yet)
@@ -299,6 +604,7 @@ export class ChatService {
           where: { id: userId },
           include: {
             client: true,
+            guard: true,
             companyUsers: { where: { isActive: true }, take: 1 },
           },
         });
@@ -442,6 +748,109 @@ export class ChatService {
             // Combine existing chats with guard chats
             validChats = [...validChats, ...guardChats];
           }
+        } else if (user?.role === 'GUARD' && user.guard) {
+          const guardUserId = userId;
+          const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+          const shiftsRaw = await prisma.shift.findMany({
+            where: {
+              guardId: user.guard.id,
+              OR: [
+                { status: { in: ['SCHEDULED', 'IN_PROGRESS'] } },
+                { scheduledStartTime: { gte: thirtyDaysAgo } },
+              ],
+            },
+            include: {
+              client: {
+                include: {
+                  user: {
+                    select: {
+                      id: true,
+                      firstName: true,
+                      lastName: true,
+                      role: true,
+                      profilePictureUrl: true,
+                    },
+                  },
+                },
+              },
+              site: { select: { id: true, name: true } },
+            },
+            orderBy: { scheduledStartTime: 'desc' },
+          });
+
+          const uniqueClientShifts = new Map<string, any>();
+          shiftsRaw.forEach((shift: any) => {
+            const clientUserId = shift.client?.userId;
+            if (clientUserId && !uniqueClientShifts.has(clientUserId)) {
+              uniqueClientShifts.set(clientUserId, shift);
+            }
+          });
+
+          const existingChatClientIds = new Set(
+            validChats
+              .filter(chat => chat.type === 'direct')
+              .map(chat => chat.participants.find(p => p.userId !== userId)?.userId)
+              .filter(Boolean)
+          );
+
+          const clientChats: Chat[] = Array.from(uniqueClientShifts.values())
+            .filter((shift: any) => {
+              const clientUserId = shift.client?.userId;
+              return clientUserId && !existingChatClientIds.has(clientUserId);
+            })
+            .map((shift: any) => {
+              const clientUser = shift.client.user;
+              const conversationId = `client_${clientUser.id}_guard_${guardUserId}`;
+
+              return {
+                id: conversationId,
+                name: `${clientUser.firstName} ${clientUser.lastName}`.trim(),
+                type: 'direct' as const,
+                participants: [
+                  {
+                    id: `part_${clientUser.id}_${conversationId}`,
+                    chatId: conversationId,
+                    userId: clientUser.id,
+                    role: 'member' as const,
+                    joinedAt: new Date(),
+                    user: {
+                      id: clientUser.id,
+                      firstName: clientUser.firstName,
+                      lastName: clientUser.lastName,
+                      avatar: clientUser.profilePictureUrl || undefined,
+                      role: clientUser.role,
+                    },
+                  },
+                  {
+                    id: `part_${guardUserId}_${conversationId}`,
+                    chatId: conversationId,
+                    userId: guardUserId,
+                    role: 'admin' as const,
+                    joinedAt: new Date(),
+                    user: {
+                      id: guardUserId,
+                      firstName: user.firstName || '',
+                      lastName: user.lastName || '',
+                      role: user.role,
+                    },
+                  },
+                ],
+                lastMessage: undefined,
+                lastMessageAt: undefined,
+                unreadCount: 0,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                metadata: {
+                  clientId: shift.client.id,
+                  siteId: shift.siteId,
+                  siteName: shift.site?.name,
+                  isAssignedClient: true,
+                },
+              } as Chat & { metadata?: any };
+            });
+
+          validChats = [...validChats, ...clientChats];
         } else if (user?.role === 'ADMIN' && user.companyUsers.length > 0) {
           // For ADMIN users: Include guards and clients in their company
           const adminCompanyId = user.companyUsers[0].securityCompanyId;
@@ -648,6 +1057,9 @@ export class ChatService {
         return 0;
       });
 
+      // Team chats only — platform support uses GET /chat/support
+      validChats = validChats.filter(chat => !isSupportChatId(chat.id));
+
       return validChats;
     } catch (error) {
       logger.error('Error getting user chats:', error);
@@ -684,26 +1096,66 @@ export class ChatService {
         }
       }
 
-      // Check if conversation exists (has messages)
-      const conversationExists = await prisma.message.findFirst({
+      // Verify user has access to this conversation
+      if (isSupportChatId(chatId)) {
+        if (!(await this.canAccessSupportChat(chatId, userId))) {
+          throw new Error('Chat not found or access denied');
+        }
+        let participantIds: string[] = [userId];
+        let createdBy = userId;
+        let chatName = 'Support';
+        if (isPlatformSupportChatId(chatId)) {
+          const adminUserId = parseSupportChatAdminUserId(chatId)!;
+          const superAdminIds = await this.getSuperAdminUserIds();
+          participantIds = [...new Set([adminUserId, ...superAdminIds, userId])];
+          createdBy = adminUserId;
+          chatName = 'Platform Support';
+        } else if (isCompanySupportChatId(chatId)) {
+          const submitterId = parseCompanySupportUserId(chatId)!;
+          const companyId = userCompanyId ?? (await resolveSubmitterCompanyId(submitterId));
+          const adminIds = companyId ? await getCompanySupportStaffUserIds(companyId) : [];
+          participantIds = [...new Set([submitterId, ...adminIds, userId])];
+          createdBy = submitterId;
+          chatName = 'Company Support';
+        }
+        await ensureConversation({
+          id: chatId,
+          type: inferConversationType(chatId),
+          name: chatName,
+          createdBy,
+          participantIds,
+          securityCompanyId: userCompanyId,
+        });
+      }
+
+      const hasParticipantAccess = await isConversationParticipant(chatId, userId);
+      let hasSentMessage = hasParticipantAccess;
+      const existingMessages = await prisma.message.findFirst({
         where: { conversationId: chatId },
       });
 
-      // Verify user has access to this conversation
-      if (conversationExists) {
-        // For existing conversations, check if user has sent a message
-        const hasAccess = await prisma.message.findFirst({
-          where: {
-            conversationId: chatId,
-            senderId: userId,
-          },
-        });
+      if (!hasParticipantAccess) {
+        if (existingMessages) {
+          const messageFromUser = await prisma.message.findFirst({
+            where: {
+              conversationId: chatId,
+              senderId: userId,
+            },
+          });
 
-        if (!hasAccess) {
-          throw new Error('Chat not found or access denied');
+          if (messageFromUser) {
+            hasSentMessage = true;
+          } else {
+            const parsedParticipants = parseDirectChatParticipantIds(chatId);
+            if (parsedParticipants?.includes(userId)) {
+              hasSentMessage = true;
+            }
+          }
         }
-      } else {
-        // For new chats (no messages yet), validate access based on chatId format
+      }
+      
+      if (!hasSentMessage && !isSupportChatId(chatId)) {
+        // Validate access based on chatId format (for new chats or users who haven't sent a message)
         // Supported formats:
         // - client_<clientUserId>_guard_<guardUserId> (new format)
         // - admin_<adminUserId>_guard_<guardUserId> (new format)
@@ -819,16 +1271,9 @@ export class ChatService {
             }
           }
         } else if (chatId.startsWith('direct_')) {
-          // Handle direct_<userId1>_<userId2> format
-          const chatIdParts = chatId.split('_');
-          if (chatIdParts.length >= 3) {
-            const userId1 = chatIdParts[1];
-            const userId2 = chatIdParts[2];
-            const isParticipant = userId === userId1 || userId === userId2;
-            
-            if (!isParticipant) {
-              throw new Error('Chat not found or access denied');
-            }
+          const parsedParticipants = parseDirectChatParticipantIds(chatId);
+          if (parsedParticipants?.includes(userId)) {
+            hasSentMessage = true;
           } else {
             throw new Error('Chat not found or access denied');
           }
@@ -839,8 +1284,7 @@ export class ChatService {
       }
 
       // Multi-tenant: Validate all participants in conversation belong to same company
-      // Skip this check for new chats (no messages yet) - validation will happen when first message is sent
-      if (conversationExists && userCompanyId) {
+      if (existingMessages && userCompanyId) {
         const conversationParticipants = await prisma.message.findMany({
           where: { conversationId: chatId },
           select: { senderId: true },
@@ -916,7 +1360,7 @@ export class ChatService {
         chatId: msg.conversationId,
         senderId: msg.senderId,
         content: msg.content,
-        messageType: 'text', // Default - would need messageType in schema
+        messageType: mapMessageTypeFromEnum(msg.messageType),
         timestamp: msg.createdAt,
         isRead: msg.isRead,
         sender: {
@@ -946,17 +1390,61 @@ export class ChatService {
     securityCompanyId?: string;
   }): Promise<ChatMessage> {
     try {
-      // Multi-tenant: Validate sender can send to this chat
       const userCompanyId = data.securityCompanyId;
-      if (userCompanyId) {
-        // Get all participants in this conversation
-        const conversationParticipants = await prisma.message.findMany({
-          where: { conversationId: data.chatId },
-          select: { senderId: true },
-          distinct: ['senderId'],
-        });
+      const supportChat = isSupportChatId(data.chatId);
 
-        const participantIds = [...new Set([...conversationParticipants.map(p => p.senderId), data.senderId])];
+      if (supportChat) {
+        if (!(await this.canAccessSupportChat(data.chatId, data.senderId))) {
+          throw new Error('You do not have access to this conversation');
+        }
+      }
+
+      // Register conversation + participants before first message (so recipients see the chat)
+      const parsedParticipants = parseDirectChatParticipantIds(data.chatId);
+      let participantIds = await getConversationParticipantIds(data.chatId);
+
+      if (supportChat) {
+        if (isPlatformSupportChatId(data.chatId)) {
+          const adminUserId = parseSupportChatAdminUserId(data.chatId)!;
+          const superAdminIds = await this.getSuperAdminUserIds();
+          participantIds = [...new Set([adminUserId, ...superAdminIds, data.senderId])];
+        } else if (isCompanySupportChatId(data.chatId)) {
+          const submitterId = parseCompanySupportUserId(data.chatId)!;
+          const submitterCompany = await resolveSubmitterCompanyId(submitterId);
+          const adminIds = submitterCompany
+            ? await getCompanySupportStaffUserIds(submitterCompany)
+            : [];
+          participantIds = [...new Set([submitterId, ...adminIds, data.senderId])];
+        }
+      } else if (parsedParticipants && parsedParticipants.length >= 2) {
+        participantIds = [...new Set([...parsedParticipants, data.senderId])];
+      } else if (!participantIds.includes(data.senderId)) {
+        participantIds = [...participantIds, data.senderId];
+      }
+
+      if (participantIds.length > 0) {
+        await ensureConversation({
+          id: data.chatId,
+          type: inferConversationType(data.chatId),
+          createdBy: data.senderId,
+          participantIds,
+          securityCompanyId: userCompanyId,
+        });
+      }
+
+      // Multi-tenant: Validate sender can send to this chat
+      if (userCompanyId && !supportChat) {
+        participantIds = await getConversationParticipantIds(data.chatId);
+        if (participantIds.length === 0) {
+          const conversationParticipants = await prisma.message.findMany({
+            where: { conversationId: data.chatId },
+            select: { senderId: true },
+            distinct: ['senderId'],
+          });
+          participantIds = [...new Set([...conversationParticipants.map(p => p.senderId), data.senderId])];
+        } else if (!participantIds.includes(data.senderId)) {
+          participantIds = [...participantIds, data.senderId];
+        }
         
         // Validate all participants belong to same company
         const [participantAdmins, participantGuards, participantClients] = await Promise.all([
@@ -994,9 +1482,58 @@ export class ChatService {
           ...participantClients.filter(c => c.companyClients.length > 0).map(c => c.userId),
         ]);
 
-        // Reject if not all participants are in the same company
-        if (participantIds.some(id => !validParticipantIds.has(id))) {
-          throw new Error('Cannot send message: participants must belong to the same company');
+        const invalidParticipants = participantIds.filter(id => !validParticipantIds.has(id));
+
+        if (invalidParticipants.length > 0) {
+          const users = await prisma.user.findMany({
+            where: { id: { in: participantIds } },
+            select: { id: true, role: true },
+          });
+          const roleByUserId = new Map(users.map(u => [u.id, u.role]));
+          const clientUserId = participantIds.find(id => roleByUserId.get(id) === 'CLIENT');
+          const guardUserId = participantIds.find(id => roleByUserId.get(id) === 'GUARD');
+
+          let allowSiteAssignedChat = false;
+          if (clientUserId && guardUserId) {
+            const client = await prisma.client.findUnique({
+              where: { userId: clientUserId },
+              select: { id: true },
+            });
+            const guard = await prisma.guard.findUnique({
+              where: { userId: guardUserId },
+              select: { id: true },
+            });
+
+            if (client && guard) {
+              const clientSites = await prisma.site.findMany({
+                where: { clientId: client.id },
+                select: { id: true },
+              });
+
+              if (clientSites.length > 0) {
+                const assignedShift = await prisma.shift.findFirst({
+                  where: {
+                    guardId: guard.id,
+                    siteId: { in: clientSites.map(s => s.id) },
+                    OR: [
+                      { status: { in: ['SCHEDULED', 'IN_PROGRESS'] } },
+                      {
+                        scheduledStartTime: {
+                          gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+                        },
+                      },
+                    ],
+                  },
+                  select: { id: true },
+                });
+                allowSiteAssignedChat = Boolean(assignedShift);
+              }
+            }
+          }
+
+          if (!allowSiteAssignedChat) {
+            throw new Error('Cannot send message: participants must belong to the same company');
+          }
         }
       }
 
@@ -1006,6 +1543,7 @@ export class ChatService {
           senderId: data.senderId,
           conversationId: data.chatId,
           content: data.content,
+          messageType: mapMessageTypeToEnum(data.messageType),
           isRead: false,
         },
         include: {
@@ -1019,6 +1557,8 @@ export class ChatService {
           },
         },
       });
+
+      await touchConversationLastMessage(data.chatId, message.createdAt);
 
       // Transform to ChatMessage format
       const chatMessage: ChatMessage = {
@@ -1038,13 +1578,15 @@ export class ChatService {
       };
 
       // Get all participants in this conversation to ensure they're in the room
-      const conversationParticipants = await prisma.message.findMany({
-        where: { conversationId: data.chatId },
-        select: { senderId: true },
-        distinct: ['senderId'],
-      });
-
-      const participantIds = [...new Set([...conversationParticipants.map(p => p.senderId), data.senderId])];
+      participantIds = await getConversationParticipantIds(data.chatId);
+      if (participantIds.length === 0) {
+        const conversationParticipants = await prisma.message.findMany({
+          where: { conversationId: data.chatId },
+          select: { senderId: true },
+          distinct: ['senderId'],
+        });
+        participantIds = [...new Set([...conversationParticipants.map(p => p.senderId), data.senderId])];
+      }
 
       // Ensure all participants are joined to the chat room
       participantIds.forEach(participantId => {
@@ -1056,6 +1598,30 @@ export class ChatService {
         message: chatMessage,
         chatId: data.chatId
       });
+
+      // Notify offline participants via push + in-app notification
+      if (data.messageType === 'text' || data.messageType === 'image' || data.messageType === 'file') {
+        try {
+          const notificationService = (await import('./notificationService.js')).default;
+          const senderName = `${message.sender.firstName} ${message.sender.lastName}`;
+          const preview =
+            data.content.length > 100 ? `${data.content.slice(0, 97)}...` : data.content;
+
+          await notificationService.notifyChatMessage(
+            participantIds,
+            {
+              senderName,
+              senderUserId: data.senderId,
+              chatId: data.chatId,
+              messageId: message.id,
+              preview,
+            },
+            data.securityCompanyId
+          );
+        } catch (notifyErr) {
+          logger.error('Failed to send chat message notification:', notifyErr);
+        }
+      }
 
       logger.info(`Message sent in chat ${data.chatId} by user ${data.senderId}`);
 
@@ -1083,16 +1649,20 @@ export class ChatService {
         },
       });
 
+      await updateParticipantLastRead(chatId, userId);
+
       logger.info(`Marked ${messageIds.length} messages as read in chat ${chatId} for user ${userId}`);
 
       // Get all participants and ensure they're in the room
-      const conversationParticipants = await prisma.message.findMany({
-        where: { conversationId: chatId },
-        select: { senderId: true },
-        distinct: ['senderId'],
-      });
-
-      const participantIds = [...new Set(conversationParticipants.map(p => p.senderId))];
+      let participantIds = await getConversationParticipantIds(chatId);
+      if (participantIds.length === 0) {
+        const conversationParticipants = await prisma.message.findMany({
+          where: { conversationId: chatId },
+          select: { senderId: true },
+          distinct: ['senderId'],
+        });
+        participantIds = [...new Set(conversationParticipants.map(p => p.senderId))];
+      }
       participantIds.forEach(participantId => {
         this.websocketService.joinUserToChatRoom(participantId, chatId);
       });
@@ -1111,6 +1681,157 @@ export class ChatService {
   }
 
   /**
+   * List platform support chats (admin sees own thread; super admin sees all admin requests).
+   */
+  async getSupportChats(userId: string, securityCompanyId?: string): Promise<Chat[]> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+
+    if (!user) {
+      return [];
+    }
+
+    if (user.role === 'ADMIN') {
+      const platformChatId = buildSupportChatId(userId);
+      const [platformChat, companyConversations, companyMessages] = await Promise.all([
+        this.buildChatFromConversation(platformChatId, userId, securityCompanyId).then(
+          c => c ?? this.buildVirtualSupportChat(platformChatId, userId),
+        ),
+        prisma.conversation.findMany({
+          where: { id: { startsWith: 'support_user_' }, securityCompanyId: securityCompanyId ?? undefined },
+          select: { id: true },
+        }),
+        prisma.message.findMany({
+          where: { conversationId: { startsWith: 'support_user_' } },
+          select: { conversationId: true },
+          distinct: ['conversationId'],
+        }),
+      ]);
+
+      const companyIds = [
+        ...new Set([
+          ...companyConversations.map(c => c.id),
+          ...companyMessages.map(m => m.conversationId),
+        ]),
+      ];
+
+      const companyChats = (
+        await Promise.all(
+          companyIds.map(async id => {
+            const existing = await this.buildChatFromConversation(id, userId, securityCompanyId);
+            if (existing) return existing;
+            return this.buildVirtualSupportChat(id, userId);
+          }),
+        )
+      ).filter((c): c is Chat => c !== null);
+
+      const chats = [platformChat, ...companyChats].filter((c): c is Chat => c !== null);
+      chats.sort((a, b) => (b.lastMessageAt?.getTime() || 0) - (a.lastMessageAt?.getTime() || 0));
+      return chats;
+    }
+
+    if (user.role === 'GUARD' || user.role === 'CLIENT') {
+      const chatId = buildCompanySupportChatId(userId);
+      let chat = await this.buildChatFromConversation(chatId, userId, securityCompanyId);
+      if (!chat) chat = await this.buildVirtualSupportChat(chatId, userId);
+      return chat ? [chat] : [];
+    }
+
+    if (user.role === 'SUPER_ADMIN') {
+      const [conversations, messageRows] = await Promise.all([
+        prisma.conversation.findMany({
+          where: { id: { startsWith: 'support_admin_' } },
+          select: { id: true },
+        }),
+        prisma.message.findMany({
+          where: { conversationId: { startsWith: 'support_admin_' } },
+          select: { conversationId: true },
+          distinct: ['conversationId'],
+        }),
+      ]);
+
+      const conversationIds = [
+        ...new Set([
+          ...conversations.map(row => row.id),
+          ...messageRows.map(row => row.conversationId),
+        ]),
+      ];
+
+      const chats = (
+        await Promise.all(
+          conversationIds.map(async id => {
+            const existing = await this.buildChatFromConversation(id, userId);
+            if (existing) return existing;
+            return this.buildVirtualSupportChat(id, userId);
+          }),
+        )
+      ).filter((chat): chat is Chat => chat !== null);
+
+      chats.sort((a, b) => {
+        const aTime = a.lastMessageAt?.getTime() || 0;
+        const bTime = b.lastMessageAt?.getTime() || 0;
+        return bTime - aTime;
+      });
+
+      return chats;
+    }
+
+    throw new Error('Support chat is not available for this role');
+  }
+
+  async openCompanySupportChat(userId: string, securityCompanyId?: string): Promise<Chat> {
+    const { conversationId } = await import('./supportService.js').then(m =>
+      m.openCompanySupportChat(userId, securityCompanyId),
+    );
+    const chat =
+      (await this.buildChatFromConversation(conversationId, userId, securityCompanyId)) ||
+      (await this.buildVirtualSupportChat(conversationId, userId));
+    if (!chat) throw new Error('Failed to open company support chat');
+    return chat;
+  }
+
+  /**
+   * Open (or create) the admin's platform support conversation.
+   */
+  async openSupportChat(adminUserId: string, securityCompanyId?: string): Promise<Chat> {
+    const admin = await prisma.user.findUnique({
+      where: { id: adminUserId },
+      select: { role: true },
+    });
+
+    if (!admin || admin.role !== 'ADMIN') {
+      throw new Error('Only company admins can open platform support chat');
+    }
+
+    const superAdminIds = await this.getSuperAdminUserIds();
+    if (superAdminIds.length === 0) {
+      throw new Error('No platform support agents are available');
+    }
+
+    const chatId = buildSupportChatId(adminUserId);
+    await ensureConversation({
+      id: chatId,
+      type: inferConversationType(chatId),
+      name: 'Platform Support',
+      createdBy: adminUserId,
+      participantIds: [...new Set([adminUserId, ...superAdminIds])],
+      securityCompanyId,
+    });
+
+    const chat =
+      (await this.buildChatFromConversation(chatId, adminUserId, securityCompanyId)) ||
+      (await this.buildVirtualSupportChat(chatId, adminUserId));
+
+    if (!chat) {
+      throw new Error('Failed to open support chat');
+    }
+
+    return chat;
+  }
+
+  /**
    * Create a new chat
    * Creates a conversation by sending an initial message
    */
@@ -1123,14 +1844,19 @@ export class ChatService {
   }): Promise<Chat> {
     try {
       // Validate participant roles for direct chats
-      if (data.type === 'direct' && data.participantIds.length === 1) {
+      if (data.type === 'direct') {
+        const otherParticipantId = getDirectChatOtherParticipantId(data.participantIds, data.createdBy);
+        if (!otherParticipantId) {
+          throw new Error('Direct chat requires exactly one other participant');
+        }
+
         const creator = await prisma.user.findUnique({
           where: { id: data.createdBy },
           select: { role: true },
         });
         
         const participant = await prisma.user.findUnique({
-          where: { id: data.participantIds[0] },
+          where: { id: otherParticipantId },
           select: { role: true },
         });
         
@@ -1335,41 +2061,69 @@ export class ChatService {
 
       // Generate conversation ID based on roles for consistency with virtual chats
       let chatId: string;
+      const otherParticipantId = data.type === 'direct'
+        ? getDirectChatOtherParticipantId(data.participantIds, data.createdBy)
+        : null;
       
       // Get user roles to create consistent chat ID
+      const participantUserIds = data.type === 'direct' && otherParticipantId
+        ? [data.createdBy, otherParticipantId]
+        : [data.createdBy, ...data.participantIds];
       const participants = await prisma.user.findMany({
-        where: { id: { in: [data.createdBy, ...data.participantIds] } },
+        where: { id: { in: [...new Set(participantUserIds)] } },
         select: { id: true, role: true, firstName: true, lastName: true },
       });
 
       const creator = participants.find(p => p.id === data.createdBy);
-      const participant = data.participantIds.length === 1 
-        ? participants.find(p => p.id === data.participantIds[0])
+      const participant = otherParticipantId
+        ? participants.find(p => p.id === otherParticipantId)
         : null;
 
-      if (data.type === 'direct' && participant && creator) {
+      if (data.type === 'direct') {
+        if (!participant || !creator || !otherParticipantId) {
+          throw new Error('Invalid participant IDs for direct chat');
+        }
         // Create consistent ID based on roles (matches getUserChats pattern)
         if (creator.role === 'CLIENT' && participant.role === 'GUARD') {
-          chatId = `client_${data.createdBy}_guard_${data.participantIds[0]}`;
+          chatId = `client_${data.createdBy}_guard_${otherParticipantId}`;
         } else if (creator.role === 'GUARD' && participant.role === 'CLIENT') {
-          chatId = `client_${data.participantIds[0]}_guard_${data.createdBy}`;
+          chatId = `client_${otherParticipantId}_guard_${data.createdBy}`;
         } else if (creator.role === 'ADMIN' && participant.role === 'GUARD') {
-          chatId = `admin_${data.createdBy}_guard_${data.participantIds[0]}`;
+          chatId = `admin_${data.createdBy}_guard_${otherParticipantId}`;
         } else if (creator.role === 'GUARD' && participant.role === 'ADMIN') {
-          chatId = `admin_${data.participantIds[0]}_guard_${data.createdBy}`;
+          chatId = `admin_${otherParticipantId}_guard_${data.createdBy}`;
         } else if (creator.role === 'CLIENT' && participant.role === 'ADMIN') {
-          chatId = `client_${data.createdBy}_admin_${data.participantIds[0]}`;
+          chatId = `client_${data.createdBy}_admin_${otherParticipantId}`;
         } else if (creator.role === 'ADMIN' && participant.role === 'CLIENT') {
-          chatId = `client_${data.participantIds[0]}_admin_${data.createdBy}`;
+          chatId = `client_${otherParticipantId}_admin_${data.createdBy}`;
         } else {
-          // Fallback to sorted IDs for other combinations
-          const sortedIds = [data.createdBy, data.participantIds[0]].sort();
+          // Fallback to sorted user IDs for other combinations
+          const sortedIds = [data.createdBy, otherParticipantId].sort();
           chatId = `direct_${sortedIds[0]}_${sortedIds[1]}`;
         }
       } else {
         // For group/team chats, generate a unique ID
         chatId = `${data.type}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
       }
+
+      const allParticipantIds = [...new Set([...data.participantIds, data.createdBy])];
+
+      let chatName = data.name;
+      if (!chatName && data.type === 'direct' && participants.length === 2) {
+        const otherParticipant = participants.find(p => p.id !== data.createdBy);
+        if (otherParticipant) {
+          chatName = `${otherParticipant.firstName} ${otherParticipant.lastName}`.trim();
+        }
+      }
+
+      await ensureConversation({
+        id: chatId,
+        type: mapChatTypeToConversationType(data.type),
+        name: chatName,
+        createdBy: data.createdBy,
+        participantIds: allParticipantIds,
+        securityCompanyId: userCompanyId,
+      });
       
       // Check if chat already exists (from virtual chat or previous creation)
       const existingChat = await prisma.message.findFirst({
@@ -1385,9 +2139,11 @@ export class ChatService {
             senderId: data.createdBy,
             conversationId: chatId,
             content: data.name || 'Chat started',
+            messageType: 'SYSTEM',
             isRead: false,
           },
         });
+        await touchConversationLastMessage(chatId, initialMessage.createdAt);
       } else {
         // Chat exists, get the latest message for lastMessage
         initialMessage = await prisma.message.findFirst({
@@ -1427,15 +2183,6 @@ export class ChatService {
         },
       }));
 
-      // Determine chat name
-      let chatName = data.name;
-      if (!chatName && data.type === 'direct' && allParticipants.length === 2) {
-        const otherParticipant = allParticipants.find(p => p.id !== data.createdBy);
-        if (otherParticipant) {
-          chatName = `${otherParticipant.firstName} ${otherParticipant.lastName}`.trim();
-        }
-      }
-
       const chat: Chat = {
         id: chatId,
         name: chatName,
@@ -1446,7 +2193,7 @@ export class ChatService {
           chatId,
           senderId: initialMessage.senderId,
           content: initialMessage.content,
-          messageType: 'text',
+          messageType: 'system',
           timestamp: initialMessage.createdAt,
           isRead: false,
           sender: {
@@ -1463,10 +2210,9 @@ export class ChatService {
       };
 
       // Ensure all participants are joined to the chat room
-      const allParticipantIds = [...data.participantIds, data.createdBy];
-      allParticipantIds.forEach(userId => {
-        this.websocketService.joinUserToChatRoom(userId, chatId);
-        this.websocketService.broadcastToUser(userId, 'new_chat', { chat });
+      allParticipantIds.forEach(participantUserId => {
+        this.websocketService.joinUserToChatRoom(participantUserId, chatId);
+        this.websocketService.broadcastToUser(participantUserId, 'new_chat', { chat });
       });
 
       logger.info(`New chat created: ${chatId} by user ${data.createdBy}`);

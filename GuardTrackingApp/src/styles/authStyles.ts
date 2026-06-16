@@ -5,8 +5,10 @@ import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from './globalStyles';
 // Standardized spacing and positioning for all auth screens
 export const AUTH_LOGO_TOP = SPACING.xxxxl * 2; // 80px - Same top position for all logos
 export const AUTH_LOGO_TO_HEADING = SPACING.xl; // 20px - Space between logo and heading
-export const AUTH_HEADING_TO_FORM = SPACING.xxxxl + SPACING.lg; // 56px - Space between heading and form
+export const AUTH_HEADING_TO_FORM = SPACING.xxxxl; // 40px - Space between heading block and form (apply once)
 export const AUTH_INPUT_GAP = SPACING.lg; // 16px - Space between input fields
+export const AUTH_SUBMIT_MARGIN_TOP = SPACING.xxxxl; // 40px - Space after last field before submit
+export const AUTH_SUBMIT_TO_FOOTER = SPACING.xxxl; // 32px - Space between submit and footer link
 export const AUTH_FOOTER_BOTTOM = 32; // 32px from bottom
 
 export const authStyles = StyleSheet.create({
@@ -27,7 +29,13 @@ export const authStyles = StyleSheet.create({
     height: 140,
   },
   
-  // Heading - Same position and styling across all screens
+  // Heading block — single margin below title/subtitle group (avoids double gap with form)
+  headingBlock: {
+    alignItems: 'center',
+    marginBottom: AUTH_HEADING_TO_FORM,
+  },
+
+  // Heading - no bottom margin; spacing handled by headingBlock / auth header container
   title: {
     fontFamily: TYPOGRAPHY.fontPrimary,
     fontWeight: TYPOGRAPHY.fontWeight.semibold, // Semibold, not bold
@@ -37,7 +45,7 @@ export const authStyles = StyleSheet.create({
     letterSpacing: -0.408,
     color: COLORS.textPrimary,
     textTransform: 'uppercase',
-    marginBottom: AUTH_HEADING_TO_FORM,
+    marginBottom: 0,
   },
   
   // Subtitle (for role selection)
@@ -48,7 +56,7 @@ export const authStyles = StyleSheet.create({
     lineHeight: 20,
     textAlign: 'center',
     color: COLORS.textSecondary,
-    marginTop: 0, // No margin - directly below heading
+    marginTop: SPACING.xs,
     paddingHorizontal: SPACING.xl,
   },
   
@@ -70,6 +78,24 @@ export const authStyles = StyleSheet.create({
     alignItems: 'center',
     marginTop: SPACING.xl, // 20px
   },
+
+  submitButton: {
+    marginTop: AUTH_SUBMIT_MARGIN_TOP,
+  },
+
+  /** Wraps full-width auth buttons so they align with form padding without overflowing */
+  authActions: {
+    paddingHorizontal: SPACING.lg,
+  },
+
+  footerLinkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    marginTop: AUTH_SUBMIT_TO_FOOTER,
+    paddingBottom: SPACING.lg,
+  },
   
   // Checkbox
   checkbox: {
@@ -88,11 +114,10 @@ export const authStyles = StyleSheet.create({
     borderColor: COLORS.primary,
   },
   
-  // Footer
+  // Footer wrapper (legacy); prefer footerLinkRow for submit-to-login spacing
   footer: {
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 'auto',
     marginBottom: AUTH_FOOTER_BOTTOM,
   },
   footerText: {

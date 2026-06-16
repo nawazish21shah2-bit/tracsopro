@@ -4,6 +4,7 @@ import { NotFoundError, BadRequestError, ValidationError } from '../utils/errors
 import { logger } from '../utils/logger.js';
 import shiftConflictService, { ConflictInfo } from './shiftConflictService.js';
 import websocketService from './websocketService.js';
+import trackingService from './trackingService.js';
 
 const prisma = new PrismaClient();
 
@@ -13,12 +14,12 @@ const prisma = new PrismaClient();
  */
 function transformShiftForFrontend(shift: any): any {
   if (!shift) return shift;
-  
+
   // If it's an array, transform each item
   if (Array.isArray(shift)) {
     return shift.map(transformShiftForFrontend);
   }
-  
+
   // Transform single shift object
   const transformed = {
     ...shift,
@@ -27,11 +28,11 @@ function transformShiftForFrontend(shift: any): any {
     checkInTime: shift.actualStartTime || shift.checkInTime,
     checkOutTime: shift.actualEndTime || shift.checkOutTime,
   };
-  
+
   // Remove the scheduled* fields if they exist (keep them for now in case frontend needs them)
   // delete transformed.scheduledStartTime;
   // delete transformed.scheduledEndTime;
-  
+
   return transformed;
 }
 
@@ -124,6 +125,43 @@ export interface ShiftStats {
 
 class ShiftService {
   /**
+   * Block create/update when guard has overlapping shifts or exceeds overtime limits.
+   */
+  private async assertShiftSchedulingAllowed(
+    data: {
+      guardId?: string | null;
+      siteId?: string | null;
+      scheduledStartTime: Date;
+      scheduledEndTime: Date;
+    },
+    excludeShiftId?: string
+  ): Promise<void> {
+    if (!data.guardId) {
+      return;
+    }
+
+    const conflicts = await shiftConflictService.detectConflicts({
+      guardId: data.guardId,
+      siteId: data.siteId || undefined,
+      scheduledStartTime: data.scheduledStartTime,
+      scheduledEndTime: data.scheduledEndTime,
+      excludeShiftId,
+    });
+
+    const blockingConflicts = conflicts.filter((c: ConflictInfo) => c.severity === 'error');
+    if (blockingConflicts.length > 0) {
+      throw new ValidationError(
+        `Cannot schedule shift: ${blockingConflicts.map((c: ConflictInfo) => c.message).join('; ')}`
+      );
+    }
+
+    const warnings = conflicts.filter((c: ConflictInfo) => c.severity === 'warning');
+    if (warnings.length > 0) {
+      logger.warn(`Shift scheduling warnings: ${warnings.map((c: ConflictInfo) => c.message).join('; ')}`);
+    }
+  }
+
+  /**
    * Create a new shift
    * Guard can be assigned later via assignGuardToShift method
    */
@@ -158,7 +196,7 @@ class ShiftService {
     // If siteId is provided, validate and get clientId from site
     let siteId: string | null = null;
     let clientId: string | null = data.clientId || null;
-    
+
     if (data.siteId) {
       const site = await prisma.site.findUnique({
         where: { id: data.siteId },
@@ -193,7 +231,7 @@ class ShiftService {
 
       siteId = site.id;
       clientId = site.clientId;
-      
+
       // Use site's name and address if not provided
       if (!data.locationName) {
         data.locationName = site.name;
@@ -203,26 +241,17 @@ class ShiftService {
       }
     }
 
-    // Check for conflicts if guard is provided
-    if (data.guardId) {
-      const conflicts = await shiftConflictService.detectConflicts({
-        guardId: data.guardId,
-        siteId: siteId || undefined,
-        scheduledStartTime: data.scheduledStartTime,
-        scheduledEndTime: data.scheduledEndTime,
+    // Multi-tenant: Verify client belongs to company when clientId is provided directly
+    if (!data.siteId && clientId && securityCompanyId) {
+      const companyClient = await prisma.companyClient.findFirst({
+        where: {
+          clientId,
+          securityCompanyId,
+          isActive: true,
+        },
       });
-
-      // Block creation if there are error-level conflicts
-      const blockingConflicts = conflicts.filter((c: ConflictInfo) => c.severity === 'error');
-      if (blockingConflicts.length > 0) {
-        const errorMessages = blockingConflicts.map((c: ConflictInfo) => c.message).join('; ');
-        throw new ValidationError(`Cannot create shift: ${errorMessages}`);
-      }
-
-      // Log warnings but allow creation
-      const warnings = conflicts.filter((c: ConflictInfo) => c.severity === 'warning');
-      if (warnings.length > 0) {
-        logger.warn(`Shift creation warnings: ${warnings.map((c: ConflictInfo) => c.message).join('; ')}`);
+      if (!companyClient) {
+        throw new ValidationError('Client does not belong to your company');
       }
     }
 
@@ -238,10 +267,18 @@ class ShiftService {
       notes: data.notes,
     };
 
-    // Only include guardId if provided (nullable field)
     if (data.guardId) {
       shiftData.guardId = data.guardId;
     }
+
+    await this.assertShiftSchedulingAllowed(
+      {
+        guardId: data.guardId,
+        siteId,
+        scheduledStartTime: data.scheduledStartTime,
+        scheduledEndTime: data.scheduledEndTime,
+      }
+    );
 
     const shift = await prisma.shift.create({
       data: shiftData,
@@ -292,6 +329,38 @@ class ShiftService {
   }
 
   /**
+   * Create recurring shifts for a week (7 days) or month (30 days)
+   */
+  async createBulkShifts(
+    data: CreateShiftData & { repeatPattern: 'week' | 'month' },
+    securityCompanyId?: string
+  ): Promise<{ count: number; shifts: any[] }> {
+    const durationMs =
+      data.scheduledEndTime.getTime() - data.scheduledStartTime.getTime();
+    const dayCount = data.repeatPattern === 'week' ? 7 : 30;
+    const shifts: any[] = [];
+
+    for (let i = 0; i < dayCount; i++) {
+      const dayStart = new Date(data.scheduledStartTime);
+      dayStart.setDate(dayStart.getDate() + i);
+      const dayEnd = new Date(dayStart.getTime() + durationMs);
+
+      const shift = await this.createShift(
+        {
+          ...data,
+          scheduledStartTime: dayStart,
+          scheduledEndTime: dayEnd,
+        },
+        securityCompanyId
+      );
+      shifts.push(shift);
+    }
+
+    logger.info(`Bulk created ${shifts.length} shifts (${data.repeatPattern})`);
+    return { count: shifts.length, shifts };
+  }
+
+  /**
    * Assign a guard to an existing shift
    */
   async assignGuardToShift(shiftId: string, guardId: string, securityCompanyId?: string): Promise<any> {
@@ -299,13 +368,37 @@ class ShiftService {
     const shift = await prisma.shift.findUnique({
       where: { id: shiftId },
       include: {
-        site: true,
-        client: true,
+        site: {
+          include: {
+            companySites: {
+              where: { isActive: true },
+              select: { securityCompanyId: true },
+            },
+          },
+        },
+        client: {
+          include: {
+            companyClients: {
+              where: { isActive: true },
+              select: { securityCompanyId: true },
+            },
+          },
+        },
       },
     });
 
     if (!shift) {
       throw new NotFoundError('Shift not found');
+    }
+
+    if (securityCompanyId) {
+      const shiftBelongsToCompany =
+        (shift.site && shift.site.companySites.some(cs => cs.securityCompanyId === securityCompanyId)) ||
+        (shift.client && shift.client.companyClients.some(cc => cc.securityCompanyId === securityCompanyId));
+
+      if (!shiftBelongsToCompany) {
+        throw new ValidationError('Shift does not belong to your company');
+      }
     }
 
     if (shift.guardId) {
@@ -418,6 +511,167 @@ class ShiftService {
   }
 
   /**
+   * Update an existing shift (admin or client owner)
+   */
+  async updateShift(
+    shiftId: string,
+    data: {
+      guardId?: string | null;
+      siteId?: string;
+      scheduledStartTime?: Date;
+      scheduledEndTime?: Date;
+      description?: string;
+      notes?: string;
+    },
+    options?: { securityCompanyId?: string; clientId?: string }
+  ): Promise<any> {
+    // Validate shift exists
+    const shift = await prisma.shift.findUnique({
+      where: { id: shiftId },
+      include: {
+        site: {
+          include: {
+            companySites: { where: { isActive: true }, select: { securityCompanyId: true } },
+          },
+        },
+        client: {
+          include: {
+            companyClients: { where: { isActive: true }, select: { securityCompanyId: true } },
+          },
+        },
+      },
+    });
+
+    if (!shift) throw new NotFoundError('Shift not found');
+
+    // Ownership check for admin (company)
+    if (options?.securityCompanyId) {
+      const belongs =
+        (shift.site && shift.site.companySites.some(cs => cs.securityCompanyId === options.securityCompanyId)) ||
+        (shift.client && shift.client.companyClients.some(cc => cc.securityCompanyId === options.securityCompanyId));
+      if (!belongs) throw new ValidationError('Shift does not belong to your company');
+    }
+
+    // Ownership check for client
+    if (options?.clientId && shift.clientId !== options.clientId) {
+      throw new ValidationError('Shift does not belong to this client');
+    }
+
+    // Can only edit SCHEDULED shifts
+    if (shift.status !== 'SCHEDULED') {
+      throw new ValidationError('Only scheduled shifts can be edited');
+    }
+
+    const updateData: any = {};
+    if (data.scheduledStartTime !== undefined) updateData.scheduledStartTime = data.scheduledStartTime;
+    if (data.scheduledEndTime !== undefined) updateData.scheduledEndTime = data.scheduledEndTime;
+    if (data.description !== undefined) updateData.description = data.description;
+    if (data.notes !== undefined) updateData.notes = data.notes;
+    if ('guardId' in data) updateData.guardId = data.guardId ?? null;
+    if (data.siteId !== undefined) updateData.siteId = data.siteId;
+
+    const effectiveGuardId =
+      'guardId' in data ? (data.guardId ?? null) : shift.guardId;
+    const effectiveSiteId = data.siteId ?? shift.siteId;
+    const effectiveStart = data.scheduledStartTime ?? shift.scheduledStartTime;
+    const effectiveEnd = data.scheduledEndTime ?? shift.scheduledEndTime;
+
+    await this.assertShiftSchedulingAllowed(
+      {
+        guardId: effectiveGuardId,
+        siteId: effectiveSiteId,
+        scheduledStartTime: effectiveStart,
+        scheduledEndTime: effectiveEnd,
+      },
+      shiftId
+    );
+
+    const updated = await prisma.shift.update({
+      where: { id: shiftId },
+      data: updateData,
+      include: {
+        guard: {
+          include: {
+            user: { select: { id: true, firstName: true, lastName: true, email: true } },
+          },
+        },
+        site: {
+          include: {
+            client: {
+              include: { user: { select: { firstName: true, lastName: true, email: true } } },
+            },
+          },
+        },
+        client: {
+          include: { user: { select: { firstName: true, lastName: true, email: true } } },
+        },
+        location: true,
+      },
+    });
+
+    logger.info(`Shift ${shiftId} updated`);
+    return updated;
+  }
+
+  /**
+   * Delete (cancel) a shift. Only SCHEDULED shifts can be deleted.
+   */
+  async deleteShift(
+    shiftId: string,
+    options?: { securityCompanyId?: string; clientId?: string }
+  ): Promise<{ success: boolean }> {
+    const shift = await prisma.shift.findUnique({
+      where: { id: shiftId },
+      include: {
+        site: {
+          include: {
+            companySites: { where: { isActive: true }, select: { securityCompanyId: true } },
+          },
+        },
+        client: {
+          include: {
+            companyClients: { where: { isActive: true }, select: { securityCompanyId: true } },
+          },
+        },
+      },
+    });
+
+    if (!shift) throw new NotFoundError('Shift not found');
+
+    // Ownership check for admin
+    if (options?.securityCompanyId) {
+      const belongs =
+        (shift.site && shift.site.companySites.some(cs => cs.securityCompanyId === options.securityCompanyId)) ||
+        (shift.client && shift.client.companyClients.some(cc => cc.securityCompanyId === options.securityCompanyId));
+      if (!belongs) throw new ValidationError('Shift does not belong to your company');
+    }
+
+    // Ownership check for client
+    if (options?.clientId && shift.clientId !== options.clientId) {
+      throw new ValidationError('Shift does not belong to this client');
+    }
+
+    // Allow cancelling SCHEDULED or IN_PROGRESS shifts; hard-delete if SCHEDULED
+    if (shift.status === 'COMPLETED') {
+      throw new ValidationError('Completed shifts cannot be deleted');
+    }
+
+    if (shift.status === 'SCHEDULED') {
+      // Hard delete scheduled shifts
+      await prisma.shift.delete({ where: { id: shiftId } });
+    } else {
+      // Soft-cancel in-progress shifts
+      await prisma.shift.update({
+        where: { id: shiftId },
+        data: { status: 'CANCELLED' },
+      });
+    }
+
+    logger.info(`Shift ${shiftId} deleted/cancelled`);
+    return { success: true };
+  }
+
+  /**
    * Get shift by ID
    */
   async getShiftById(shiftId: string) {
@@ -485,7 +739,7 @@ class ShiftService {
         scheduledStartTime: 'asc',
       },
     });
-    
+
     return transformShiftForFrontend(shifts);
   }
 
@@ -511,7 +765,7 @@ class ShiftService {
       },
       take: 10,
     });
-    
+
     return transformShiftForFrontend(shifts);
   }
 
@@ -540,7 +794,7 @@ class ShiftService {
       },
       take: limit,
     });
-    
+
     return transformShiftForFrontend(shifts);
   }
 
@@ -567,7 +821,7 @@ class ShiftService {
         scheduledStartTime: 'asc',
       },
     });
-    
+
     return transformShiftForFrontend(shifts);
   }
 
@@ -644,7 +898,7 @@ class ShiftService {
     ]);
 
     // Calculate total hours and average duration
-    const completedShiftsWithTimes = shifts.filter(s => 
+    const completedShiftsWithTimes = shifts.filter(s =>
       s.status === 'COMPLETED' && s.actualStartTime && s.actualEndTime
     );
 
@@ -656,8 +910,8 @@ class ShiftService {
     }, 0);
 
     const totalHours = Math.round((totalMinutes / 60) * 100) / 100;
-    const averageShiftDuration = completedShiftsWithTimes.length > 0 
-      ? Math.round((totalMinutes / completedShiftsWithTimes.length) / 60 * 100) / 100 
+    const averageShiftDuration = completedShiftsWithTimes.length > 0
+      ? Math.round((totalMinutes / completedShiftsWithTimes.length) / 60 * 100) / 100
       : 0;
 
     return {
@@ -838,7 +1092,7 @@ class ShiftService {
         scheduledStartTime: 'asc',
       },
     });
-    
+
     return transformShiftForFrontend(shift);
   }
 
@@ -933,6 +1187,18 @@ class ShiftService {
 
     logger.info(`Guard ${data.guardId} checked in to shift ${data.shiftId}`);
 
+    await prisma.guard.update({
+      where: { id: data.guardId },
+      data: { status: 'ON_DUTY' },
+    });
+
+    await trackingService.recordLocation(data.guardId, {
+      latitude: data.location.latitude,
+      longitude: data.location.longitude,
+      accuracy: data.location.accuracy,
+      timestamp: data.timestamp,
+    });
+
     // Broadcast shift status update
     websocketService.broadcastShiftStatusUpdate({
       shiftId: data.shiftId,
@@ -1010,6 +1276,11 @@ class ShiftService {
     });
 
     logger.info(`Guard ${data.guardId} checked out from shift ${data.shiftId}`);
+
+    await prisma.guard.update({
+      where: { id: data.guardId },
+      data: { status: 'ACTIVE' },
+    });
 
     // Broadcast shift status update
     websocketService.broadcastShiftStatusUpdate({
@@ -1217,7 +1488,7 @@ class ShiftService {
     const incidentReports = shifts.reduce((total, s) => total + s.incidentCount, 0);
 
     // Calculate total hours and average duration
-    const completedShiftsWithTimes = shifts.filter(s => 
+    const completedShiftsWithTimes = shifts.filter(s =>
       s.status === 'COMPLETED' && s.actualStartTime && s.actualEndTime
     );
 
@@ -1229,8 +1500,8 @@ class ShiftService {
     }, 0);
 
     const totalHours = Math.round((totalMinutes / 60) * 100) / 100;
-    const averageShiftDuration = completedShiftsWithTimes.length > 0 
-      ? Math.round((totalMinutes / completedShiftsWithTimes.length) / 60 * 100) / 100 
+    const averageShiftDuration = completedShiftsWithTimes.length > 0
+      ? Math.round((totalMinutes / completedShiftsWithTimes.length) / 60 * 100) / 100
       : 0;
 
     return {
@@ -1269,7 +1540,7 @@ class ShiftService {
         },
       },
     });
-    
+
     return transformShiftForFrontend(shift);
   }
 

@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
+import { v4 as uuid } from 'uuid';
 import prisma from '../config/database.js';
-import { signAccessToken, signRefreshToken, verifyToken, getTokenExpiresIn } from '../utils/jwt.js';
+import { signAccessToken, signRefreshToken, verifyToken, getTokenExpiresIn, getRefreshTokenExpiresIn } from '../utils/jwt.js';
 import { UnauthorizedError, ConflictError, ValidationError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 import otpService from './otpService.js';
@@ -8,6 +9,23 @@ import clientService from './clientService.js';
 
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '10');
 const OTP_ENABLED = process.env.OTP_ENABLED !== 'false';
+
+/** Dev-only OTP skip when email fails. Set SMTP_DEV_BYPASS=false to require working SMTP. */
+function shouldBypassSmtpOnEmailFailure(emailError: any): boolean {
+  if (process.env.NODE_ENV === 'production') return false;
+  if (process.env.SMTP_DEV_BYPASS === 'false') return false;
+
+  const message = emailError?.message || '';
+  return (
+    message.includes('SMTP') ||
+    message.includes('email authentication') ||
+    message.includes('Failed to send') ||
+    message.includes('ECONNECTION') ||
+    message.includes('SMTP credentials not configured') ||
+    emailError?.code === 'EAUTH' ||
+    emailError?.code === 'ECONNECTION'
+  );
+}
 
 interface RegisterData {
   email: string;
@@ -77,13 +95,7 @@ export class AuthService {
           await otpService.sendOTPEmail(existingUser.email, otp, firstName);
           logger.info(`OTP resent to unverified user: ${existingUser.email}`);
         } catch (emailError: any) {
-          // In dev mode, if SMTP is not configured, log OTP and continue
-          const isDevMode = process.env.NODE_ENV !== 'production';
-          const isSmtpError = emailError.message?.includes('SMTP') ||
-            emailError.message?.includes('email authentication') ||
-            emailError.message?.includes('Failed to send');
-
-          if (isDevMode && isSmtpError) {
+          if (shouldBypassSmtpOnEmailFailure(emailError)) {
             logger.warn(`SMTP not configured - OTP not sent via email. DEV OTP: ${otp}`);
           } else {
             logger.error(`Failed to resend OTP email:`, emailError);
@@ -156,18 +168,21 @@ export class AuthService {
           },
         });
       } else if (user.role === 'ADMIN') {
-        // Admin registration: Create SecurityCompany with free tier
+        const trialEnd = new Date();
+        trialEnd.setDate(trialEnd.getDate() + 14);
+
         securityCompany = await tx.securityCompany.create({
           data: {
             name: companyName!,
             email: companyEmail!,
             phone: companyPhone || phone || null,
-            subscriptionPlan: 'BASIC', // Free tier
-            subscriptionStatus: 'ACTIVE',
+            subscriptionPlan: 'BASIC',
+            subscriptionStatus: 'TRIAL',
             subscriptionStartDate: new Date(),
-            maxGuards: 2, // Free tier: 2 guards
-            maxClients: 1, // Free tier: 1 client
-            maxSites: 1, // Free tier: 1 site
+            subscriptionEndDate: trialEnd,
+            maxGuards: 2,
+            maxClients: 1,
+            maxSites: 1,
           },
         });
 
@@ -181,7 +196,7 @@ export class AuthService {
           },
         });
 
-        logger.info(`Admin ${user.email} created SecurityCompany ${securityCompany.id} with free tier`);
+        logger.info(`Admin ${user.email} created SecurityCompany ${securityCompany.id} on trial`);
       }
 
       // Handle invitation code if provided
@@ -258,16 +273,7 @@ export class AuthService {
         await otpService.sendOTPEmail(user.email, otp, user.firstName);
         logger.info(`User registered: ${user.email}, ID: ${user.id}, OTP sent`);
       } catch (emailError: any) {
-        // In development mode, if email fails due to missing SMTP, bypass OTP
-        const isDevMode = process.env.NODE_ENV !== 'production';
-        const isSmtpError = emailError.message?.includes('SMTP') ||
-          emailError.message?.includes('email authentication') ||
-          emailError.message?.includes('Failed to send') ||
-          emailError.message?.includes('ECONNECTION') ||
-          emailError.code === 'EAUTH' ||
-          emailError.code === 'ECONNECTION';
-
-        if (isDevMode && isSmtpError) {
+        if (shouldBypassSmtpOnEmailFailure(emailError)) {
           logger.warn(`SMTP not configured - bypassing OTP verification for dev mode. OTP: ${otp}`);
 
           // Mark email as verified automatically in dev mode when SMTP is missing
@@ -276,8 +282,16 @@ export class AuthService {
             data: { isEmailVerified: true },
           });
 
+          const refreshTokenId = uuid();
           const token = signAccessToken(user.id);
-          const refreshToken = signRefreshToken(user.id);
+          const refreshToken = signRefreshToken(user.id, refreshTokenId);
+          await prisma.refreshToken.create({
+            data: {
+              userId: user.id,
+              jti: refreshTokenId,
+              expiresAt: new Date(Date.now() + getRefreshTokenExpiresIn() * 1000),
+            },
+          });
 
           return {
             token,
@@ -317,8 +331,16 @@ export class AuthService {
         data: { isEmailVerified: true },
       });
 
+      const refreshTokenId = uuid();
       const token = signAccessToken(user.id);
-      const refreshToken = signRefreshToken(user.id);
+      const refreshToken = signRefreshToken(user.id, refreshTokenId);
+      await prisma.refreshToken.create({
+        data: {
+          userId: user.id,
+          jti: refreshTokenId,
+          expiresAt: new Date(Date.now() + getRefreshTokenExpiresIn() * 1000),
+        },
+      });
       logger.info(`User registered (OTP bypass): ${user.email}, ID: ${user.id}`);
 
       return {
@@ -341,8 +363,7 @@ export class AuthService {
 
   async login(data: LoginData) {
     const { email, password } = data;
-    console.log('🔐 LOGIN ATTEMPT:', email);
-
+    logger.info('Login attempt', { email });
 
     // Find user with profile data
     const user = await prisma.user.findUnique({
@@ -354,34 +375,33 @@ export class AuthService {
     });
 
     if (!user) {
-      console.log('❌ User not found:', email.toLowerCase());
-      import('fs').then(fs => fs.appendFileSync('login-debug.log', `[${new Date().toISOString()}] User not found: ${email}\n`));
+      logger.warn('Login failed, user not found', { email: email.toLowerCase() });
       throw new UnauthorizedError('Invalid credentials');
     }
 
-    console.log('✅ User found:', user.email, 'Active:', user.isActive);
-
     if (!user.isActive) {
-      console.log('❌ User inactive');
-      import('fs').then(fs => fs.appendFileSync('login-debug.log', `[${new Date().toISOString()}] User inactive: ${email}\n`));
+      logger.warn('Login failed, inactive account', { email: user.email });
       throw new UnauthorizedError('Account is inactive');
     }
 
     // Verify password
-    console.log('🔐 Password hash:', user.password.slice(0, 30) + '...');
-    console.log('🔐 Input password:', password);
     const isValidPassword = await bcrypt.compare(password, user.password);
-    console.log('🔐 bcrypt.compare result:', isValidPassword);
-
-    import('fs').then(fs => fs.appendFileSync('login-debug.log', `[${new Date().toISOString()}] Login attempt for ${email}. Hash: ${user.password.substring(0, 10)}... Input: ${password} Match: ${isValidPassword}\n`));
 
     if (!isValidPassword) {
-      console.log('❌ Password mismatch');
+      logger.warn('Login failed, invalid credentials', { email: user.email });
       throw new UnauthorizedError('Invalid credentials');
     }
 
+    const refreshTokenId = uuid();
     const token = signAccessToken(user.id);
-    const refreshToken = signRefreshToken(user.id);
+    const refreshToken = signRefreshToken(user.id, refreshTokenId);
+    await prisma.refreshToken.create({
+      data: {
+        userId: user.id,
+        jti: refreshTokenId,
+        expiresAt: new Date(Date.now() + getRefreshTokenExpiresIn() * 1000),
+      },
+    });
 
     logger.info(`User logged in: ${user.email}`);
 
@@ -417,8 +437,16 @@ export class AuthService {
     try {
       const payload = verifyToken(refreshToken);
 
-      if (payload.type !== 'refresh') {
+      if (payload.type !== 'refresh' || !payload.jti) {
         throw new UnauthorizedError('Invalid token type');
+      }
+
+      const tokenRecord = await prisma.refreshToken.findUnique({
+        where: { jti: payload.jti },
+      });
+
+      if (!tokenRecord || tokenRecord.revokedAt || tokenRecord.expiresAt < new Date()) {
+        throw new UnauthorizedError('Invalid refresh token');
       }
 
       const user = await prisma.user.findUnique({
@@ -578,8 +606,16 @@ export class AuthService {
       throw new UnauthorizedError('Account is inactive');
     }
 
+    const refreshTokenId = uuid();
     const token = signAccessToken(user.id);
-    const refreshToken = signRefreshToken(user.id);
+    const refreshToken = signRefreshToken(user.id, refreshTokenId);
+    await prisma.refreshToken.create({
+      data: {
+        userId: user.id,
+        jti: refreshTokenId,
+        expiresAt: new Date(Date.now() + getRefreshTokenExpiresIn() * 1000),
+      },
+    });
 
     logger.info(`User logged in by ID: ${user.email}`);
 
@@ -615,6 +651,23 @@ export class AuthService {
     await otpService.sendOTPEmail(user.email, otp, user.firstName);
 
     logger.info(`OTP resent to: ${user.email}`);
+  }
+
+  async logout(refreshToken: string) {
+    try {
+      const payload = verifyToken(refreshToken);
+
+      if (payload.type !== 'refresh' || !payload.jti) {
+        return;
+      }
+
+      await prisma.refreshToken.updateMany({
+        where: { jti: payload.jti, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    } catch {
+      // Silently ignore invalid logout tokens
+    }
   }
 
   async resetPassword(email: string, newPassword: string) {

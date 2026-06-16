@@ -7,7 +7,6 @@ import {
   StatusBar,
   TextInput,
   Alert,
-  Image,
   ScrollView,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -19,10 +18,11 @@ import { registerUser } from '../../store/slices/authSlice';
 import Icon from 'react-native-vector-icons/Ionicons';
 import Button from '../../components/common/Button';
 import PhoneInput from '../../components/auth/PhoneInput';
+import AuthHeader from '../../components/auth/AuthHeader';
+import AuthFooter from '../../components/auth/AuthFooter';
 import { AuthStackParamList, UserRole } from '../../types';
-import Logo from '../../assets/images/tracSOpro-logo.png';
 import { Country, defaultCountry } from '../../utils/countries';
-import { authStyles, AUTH_HEADING_TO_FORM } from '../../styles/authStyles';
+import { authStyles } from '../../styles/authStyles';
 import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { showRegistrationError } from '../../utils/registrationErrorHandler';
 
@@ -206,19 +206,10 @@ const AdminSignupScreen: React.FC = () => {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Logo */}
-        <View style={styles.logoContainer}>
-          <Image source={Logo} style={styles.logoImage} resizeMode="contain" />
-        </View>
-
-        {/* Title */}
-        <View style={styles.titleContainer}>
-          <Text style={authStyles.title}>SIGN UP</Text>
-          <Text style={authStyles.subtitle}>Company Administrator</Text>
-        </View>
+        <AuthHeader title="SIGN UP" />
 
         {/* Form */}
-        <View style={styles.form}>
+        <View style={[authStyles.form, styles.form]}>
           {/* Full Name */}
           <View style={styles.inputContainer}>
             <View style={[styles.inputWrapper, errors.fullName && styles.inputError]}>
@@ -392,25 +383,23 @@ const AdminSignupScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Continue Button */}
-        <Button
-          title="Continue"
-          onPress={handleSignup}
-          fullWidth
-          size="large"
-          loading={isLoading}
-          style={styles.continueButton}
-        />
-
-        {/* Footer */}
-        <View style={styles.footer}>
-          <View style={styles.footerRow}>
-            <Text style={styles.footerText}>Already have an account? </Text>
-            <TouchableOpacity onPress={navigateToLogin} activeOpacity={0.7}>
-              <Text style={styles.loginText}>Login</Text>
-            </TouchableOpacity>
-          </View>
+        <View style={authStyles.authActions}>
+          <Button
+            title="Continue"
+            onPress={handleSignup}
+            fullWidth
+            size="large"
+            loading={isLoading}
+            style={authStyles.submitButton}
+          />
         </View>
+
+        <AuthFooter
+          text="Already have an account?"
+          linkText="Login"
+          onLinkPress={navigateToLogin}
+          disabled={isLoading}
+        />
       </ScrollView>
     </View>
   );
@@ -423,24 +412,10 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 40,
-  },
-  logoContainer: {
-    alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 40,
-  },
-  logoImage: {
-    width: 160,
-    height: 140,
-  },
-  titleContainer: {
-    alignItems: 'center',
-    marginBottom: AUTH_HEADING_TO_FORM,
+    paddingBottom: SPACING.lg,
   },
   form: {
-    marginBottom: 40,
+    flex: 0,
   },
   inputContainer: {
     marginBottom: 20,
@@ -479,31 +454,6 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     marginTop: 4,
     marginLeft: 4,
-  },
-  continueButton: {
-    marginBottom: 30,
-  },
-  footer: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  footerText: {
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  loginText: {
-    fontFamily: 'Inter',
-    fontWeight: '600',
-    fontSize: 14,
-    color: '#1C6CA9',
-  },
-  footerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexWrap: 'nowrap',
   },
   sectionDivider: {
     marginTop: 20,

@@ -1,17 +1,18 @@
 import { Request, Response, NextFunction } from 'express';
 import adminClientService from '../services/adminClientService.js';
 import { AuthRequest } from '../middleware/auth.js';
+import { resolveSecurityCompanyId } from '../utils/companyAuth.js';
 
 export class AdminClientController {
   async getClients(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      // SUPER_ADMIN can access all clients (no company filter)
-      // Regular ADMIN must have securityCompanyId
-      if (req.user?.role !== 'SUPER_ADMIN' && !req.securityCompanyId) {
-        return res.status(403).json({
+      const companyResult = resolveSecurityCompanyId(req);
+      if (companyResult.error) {
+        res.status(companyResult.status || 400).json({
           success: false,
-          error: 'Security company ID not found. Admin must be linked to a company.',
+          error: companyResult.error,
         });
+        return;
       }
 
       const page = parseInt(req.query.page as string) || 1;
@@ -22,7 +23,7 @@ export class AdminClientController {
         page, 
         limit, 
         search,
-        securityCompanyId: req.securityCompanyId, // undefined for SUPER_ADMIN = all clients
+        securityCompanyId: companyResult.securityCompanyId, // undefined for SUPER_ADMIN = all clients
       });
       res.json({ success: true, data: result });
     } catch (error) {

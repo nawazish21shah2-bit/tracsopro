@@ -244,25 +244,6 @@ router.get('/portal', authorize('ADMIN', 'SUPER_ADMIN'), adminPaymentController.
  */
 router.get('/invoices', authorize('CLIENT', 'ADMIN'), paymentController.getInvoices);
 
-/**
- * @swagger
- * /payments/webhook:
- *   post:
- *     summary: Stripe webhook
- *     description: Handle Stripe webhook events
- *     tags: [Payments]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *     responses:
- *       200:
- *         description: Webhook processed successfully
- *       400:
- *         description: Invalid webhook
- */
-router.post('/webhook', paymentController.handleWebhook);
+// Webhook is registered in app.ts with express.raw() — not here (JSON parser breaks signatures)
 
 export default router;

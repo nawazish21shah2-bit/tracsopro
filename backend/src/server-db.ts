@@ -3,6 +3,9 @@ import { createServer } from 'http';
 import { connectDatabase, disconnectDatabase } from './config/database.js';
 import { logger } from './utils/logger.js';
 import websocketService from './services/websocketService.js';
+import notificationService from './services/notificationService.js';
+import { isFirebaseAdminInitialized, initializeFirebaseAdmin } from './config/firebase.js';
+import ChatService from './services/chatService.js';
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 
@@ -10,6 +13,20 @@ const startServer = async () => {
   try {
     // Connect to database
     await connectDatabase();
+
+    // Initialize Firebase Admin for push notifications
+    initializeFirebaseAdmin();
+    if (isFirebaseAdminInitialized()) {
+      logger.info('Firebase Admin ready — push notifications enabled');
+    } else {
+      logger.warn(
+        'Firebase Admin NOT configured — push notifications disabled. ' +
+          'Add backend/keys/firebase-service-account.json and set FIREBASE_SERVICE_ACCOUNT_PATH in .env'
+      );
+    }
+
+    // Backfill conversation records from legacy message threads
+    await ChatService.getInstance().initializeConversations();
 
     // Create HTTP server
     const server = createServer(app);
@@ -19,6 +36,12 @@ const startServer = async () => {
 
     // Start live location broadcast
     websocketService.startLiveLocationBroadcast();
+
+    // Retry failed emergency push notifications
+    notificationService.startPushRetryProcessor();
+
+    // Purge dead FCM tokens and cap active tokens per user
+    notificationService.startDeviceTokenCleanupProcessor();
 
     // Start server - listen on all interfaces (0.0.0.0) for network access
     server.listen(PORT, '0.0.0.0', () => {

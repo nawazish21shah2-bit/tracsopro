@@ -1,38 +1,116 @@
 // Enhanced Push Notification Service - Phase 3
-import { Platform, Alert, Linking, AppState } from 'react-native';
+import { Platform, Alert, Linking, AppState, PermissionsAndroid } from 'react-native';
 import messaging from '@react-native-firebase/messaging';
 import PushNotification from 'react-native-push-notification';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { store } from '../store';
-import { addNotification } from '../store/slices/notificationSlice';
+import { addNotification, updateNotification } from '../store/slices/notificationSlice';
 import { ErrorHandler } from '../utils/errorHandler';
 
 class NotificationService {
   private isInitialized = false;
+  private sessionListenersAttached = false;
   private shiftReminders: Map<string, number> = new Map();
+
+  /**
+   * Lightweight push setup on every login — channel, permissions, token registration,
+   * and open-app handlers. Safe to call multiple times.
+   */
+  async setupPushOnLogin(): Promise<void> {
+    try {
+      this.ensureAndroidChannel();
+      const enabled = await this.requestPermissions();
+      if (!enabled && Platform.OS === 'ios') {
+        console.warn('[Push] iOS notification permission not granted');
+        return;
+      }
+
+      const fcmToken = await messaging().getToken();
+      if (fcmToken) {
+        await AsyncStorage.setItem('fcmToken', fcmToken);
+        await this.sendTokenToServer(fcmToken);
+        console.log('[Push] Device token registered with backend');
+      } else {
+        console.warn('[Push] FCM returned no token — check google-services.json and Firebase project');
+      }
+
+      this.attachSessionListeners();
+    } catch (error) {
+      ErrorHandler.handleError(error, 'push_setup_on_login');
+    }
+  }
 
   async initialize() {
     if (this.isInitialized) return;
 
     try {
-      // Request permission
-      const authStatus = await messaging().requestPermission();
-      const enabled = authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-                     authStatus === messaging.AuthorizationStatus.PROVISIONAL;
-
-      if (enabled) {
-        console.log('Notification permission granted');
-        await this.setupPushNotifications();
-        await this.setupBackgroundHandlers();
-        await this.setupShiftReminders();
-        this.isInitialized = true;
-      } else {
-        console.log('Notification permission denied');
-        this.showPermissionAlert();
-      }
+      await this.setupPushOnLogin();
+      await this.setupPushNotifications();
+      await this.setupShiftReminders();
+      this.isInitialized = true;
     } catch (error) {
       ErrorHandler.handleError(error, 'notification_initialization');
     }
+  }
+
+  private ensureAndroidChannel(): void {
+    if (Platform.OS !== 'android') return;
+
+    PushNotification.createChannel(
+      {
+        channelId: 'default',
+        channelName: 'Notifications',
+        channelDescription: 'Shift updates, alerts, and messages',
+        importance: 4,
+        vibrate: true,
+      },
+      (created) => {
+        if (__DEV__) console.log(`Android notification channel ${created ? 'created' : 'exists'}`);
+      }
+    );
+  }
+
+  private async requestPermissions(): Promise<boolean> {
+    if (Platform.OS === 'android' && Platform.Version >= 33) {
+      const result = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+      );
+      if (result !== PermissionsAndroid.RESULTS.GRANTED) {
+        console.warn(
+          'POST_NOTIFICATIONS not granted — enable notifications in system settings to see alerts in the tray'
+        );
+        // Still continue: register FCM token so pushes work once permission is granted
+      }
+    }
+
+    const authStatus = await messaging().requestPermission();
+    return (
+      authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+      authStatus === messaging.AuthorizationStatus.PROVISIONAL
+    );
+  }
+
+  private attachSessionListeners(): void {
+    if (this.sessionListenersAttached) return;
+    this.sessionListenersAttached = true;
+
+    messaging().onTokenRefresh(async (newToken: string) => {
+      await AsyncStorage.setItem('fcmToken', newToken);
+      await this.sendTokenToServer(newToken);
+    });
+
+    messaging().onNotificationOpenedApp((remoteMessage) => {
+      this.handleNotificationOpened(remoteMessage);
+    });
+
+    messaging()
+      .getInitialNotification()
+      .then((initialNotification) => {
+        if (initialNotification) {
+          this.handleNotificationOpened(initialNotification);
+        }
+      })
+      .catch(() => {});
   }
 
   /**
@@ -53,22 +131,7 @@ class NotificationService {
   }
 
   private async setupPushNotifications() {
-    // Get FCM token
-    const fcmToken = await messaging().getToken();
-    if (fcmToken) {
-      console.log('FCM Token:', fcmToken);
-      await AsyncStorage.setItem('fcmToken', fcmToken);
-      await this.sendTokenToServer(fcmToken);
-    }
-
-    // Listen for token refresh
-    messaging().onTokenRefresh(async (newToken: string) => {
-      console.log('FCM Token refreshed:', newToken);
-      await AsyncStorage.setItem('fcmToken', newToken);
-      await this.sendTokenToServer(newToken);
-    });
-
-    // Configure local notifications
+    // Token registration handled by setupPushOnLogin; configure local notification UI
     PushNotification.configure({
       onRegister: (token) => {
         console.log('Local notification token:', token);
@@ -94,35 +157,13 @@ class NotificationService {
     });
   }
 
-  private async setupBackgroundHandlers() {
-    // Handle background messages
-    messaging().setBackgroundMessageHandler(async (remoteMessage) => {
-      console.log('Background message received:', remoteMessage);
-      this.handleBackgroundMessage(remoteMessage);
-    });
-
-    // Handle notification opened app
-    messaging().onNotificationOpenedApp((remoteMessage) => {
-      console.log('Notification opened app:', remoteMessage);
-      this.handleNotificationOpened(remoteMessage);
-    });
-
-    // Handle initial notification
-    const initialNotification = await messaging().getInitialNotification();
-    if (initialNotification) {
-      console.log('Initial notification:', initialNotification);
-      this.handleNotificationOpened(initialNotification);
-    }
-  }
-
   private async sendTokenToServer(token: string) {
     try {
-      // Send FCM token to backend using API service
       const apiService = (await import('./api')).default;
       const deviceId = await this.getDeviceId();
-      
+
       const response = await apiService.registerDeviceToken(token, Platform.OS, deviceId);
-      
+
       if (response.success) {
         console.log('Device token registered successfully');
       } else {
@@ -221,26 +262,73 @@ class NotificationService {
   }
 
   private handleNotificationOpened(remoteMessage: any) {
-    const { data } = remoteMessage;
-    
-    if (data?.screen) {
-      // Navigate to specific screen
-      this.navigateToScreen(data.screen, data.params);
-    }
-    
-    // Record opened event to backend analytics
+    const { data, notification: notificationPayload } = remoteMessage || {};
+    const parsedData = this.parsePushData(data);
+
+    this.navigateFromNotificationData(parsedData, notificationPayload?.title);
+
     (async () => {
       try {
         const apiService = (await import('./api')).default;
+
+        if (parsedData.notificationId) {
+          const notificationId = String(parsedData.notificationId);
+          await apiService.markNotificationAsRead(notificationId);
+          store.dispatch(
+            updateNotification({ id: notificationId, notification: { isRead: true } })
+          );
+        }
+
         await apiService.recordNotificationEvent({
-          notificationId: data?.notificationId,
+          notificationId: parsedData.notificationId as string | undefined,
           eventType: 'OPENED',
-          notificationType: data?.type,
+          notificationType: parsedData.type as string | undefined,
         });
       } catch (err) {
-        console.error('Failed to record opened notification event:', err);
+        console.error('Failed to handle opened notification:', err);
       }
     })();
+  }
+
+  private parsePushData(data: Record<string, unknown> | undefined): Record<string, unknown> {
+    if (!data) return {};
+
+    const parsed: Record<string, unknown> = { ...data };
+    if (typeof parsed.params === 'string') {
+      try {
+        parsed.params = JSON.parse(parsed.params);
+      } catch {
+        // keep raw string
+      }
+    }
+    return parsed;
+  }
+
+  private navigateFromNotificationData(
+    data: Record<string, unknown>,
+    fallbackTitle?: string
+  ): void {
+    if (data.screen) {
+      this.navigateToScreen(String(data.screen), data.params);
+      return;
+    }
+
+    if (data.shiftId) {
+      this.navigateToScreen('ShiftDetails', { shiftId: data.shiftId });
+    } else if (data.incidentId || data.reportId) {
+      this.navigateToScreen('IncidentDetail', {
+        incidentId: data.incidentId || data.reportId,
+      });
+    } else if (data.alertId) {
+      this.navigateToScreen('EmergencyAlert', { alertId: data.alertId });
+    } else if (data.ticketId) {
+      this.navigateToScreen('SupportTicketDetailScreen', { ticketId: data.ticketId });
+    } else if (data.conversationId || data.chatId) {
+      this.navigateToScreen('IndividualChatScreen', {
+        chatId: data.conversationId || data.chatId,
+        chatName: fallbackTitle || 'Chat',
+      });
+    }
   }
 
   private handleNotificationAction(notification: any) {
@@ -274,13 +362,15 @@ class NotificationService {
    */
   sendLocalNotification(title: string, message: string, data?: any) {
     PushNotification.localNotification({
+      channelId: 'default',
       title,
       message,
-      userInfo: data, // Use userInfo instead of data for better compatibility
+      userInfo: data,
       playSound: true,
       soundName: 'default',
       importance: 'high',
       priority: 'high',
+      ...(Platform.OS === 'android' ? { smallIcon: 'ic_launcher' } : {}),
     });
 
     // Also add to store for consistency

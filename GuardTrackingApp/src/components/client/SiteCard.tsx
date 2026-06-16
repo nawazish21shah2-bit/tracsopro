@@ -1,6 +1,8 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { PersonIcon, LocationIcon } from '../ui/AppIcons';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import ProfileAvatar from '../common/ProfileAvatar';
+import { LocationIcon } from '../ui/AppIcons';
+import { parseDisplayName } from '../../utils/parseDisplayName';
 import { EyeIcon, EditIcon, TrashIcon } from '../ui/FeatherIcons';
 import StatusBadge from './StatusBadge';
 import SiteCardDropdown from './SiteCardDropdown';
@@ -117,17 +119,11 @@ const SiteCard: React.FC<SiteCardProps> = ({
       <View style={styles.guardSection}>
         <Text style={styles.guardOnDutyLabel}>Guard On Duty</Text>
         <View style={styles.guardInfo}>
-          <View style={styles.avatar}>
-            {site.guardAvatar ? (
-              <Image 
-                source={{ uri: site.guardAvatar }} 
-                style={styles.avatarImage}
-                defaultSource={{ uri: 'https://via.placeholder.com/32x32/E5E7EB/9CA3AF?text=?' }}
-              />
-            ) : (
-              <PersonIcon size={20} color="#666" />
-            )}
-          </View>
+          <ProfileAvatar
+            {...parseDisplayName(site.guardName || 'Guard')}
+            profilePictureUrl={site.guardAvatar}
+            size={36}
+          />
           <View style={styles.guardDetails}>
             <Text style={styles.guardName} numberOfLines={1}>
               {site.guardName || 'No guard assigned'}

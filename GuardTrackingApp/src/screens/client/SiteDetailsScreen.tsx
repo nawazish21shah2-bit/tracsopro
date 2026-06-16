@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,13 +7,17 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { LocationIcon, ClockIcon, ArrowLeftIcon } from '../../components/ui/AppIcons';
 import apiService from '../../services/api';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
+import SharedHeader from '../../components/ui/SharedHeader';
+import SectionHeader from '../../components/ui/SectionHeader';
+import SiteShiftCard, { SiteShiftItem } from '../../components/client/SiteShiftCard';
 import { ClientStackParamList } from '../../navigation/ClientStackNavigator';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
+import { MapPinIcon } from '../../components/ui/FeatherIcons';
+import { InlineLoading, EmptyState } from '../../components/ui/LoadingStates';
 
 interface SiteDetails {
   id: string;
@@ -30,56 +34,31 @@ interface SiteDetails {
   createdAt: string;
 }
 
-interface Shift {
-  id: string;
-  scheduledStartTime: string;
-  scheduledEndTime: string;
-  status: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
-  guard?: {
-    user: {
-      firstName: string;
-      lastName: string;
-    };
-  };
-}
-
 const SiteDetailsScreen: React.FC = () => {
   const navigation = useNavigation<StackNavigationProp<ClientStackParamList>>();
   const route = useRoute();
   const { siteId } = route.params as { siteId: string };
-  
+
   const [loading, setLoading] = useState(true);
   const [site, setSite] = useState<SiteDetails | null>(null);
-  const [shifts, setShifts] = useState<Shift[]>([]);
+  const [shifts, setShifts] = useState<SiteShiftItem[]>([]);
 
-  useEffect(() => {
-    loadSiteDetails();
-  }, [siteId]);
-
-  const loadSiteDetails = async () => {
+  const loadSiteDetails = useCallback(async () => {
     try {
       setLoading(true);
-      
-      // Validate siteId exists
-      if (!siteId || typeof siteId !== 'string' || siteId.trim() === '') {
-        Alert.alert(
-          'Error',
-          'Invalid site ID. Please go back and try selecting the site again.',
-          [
-            {
-              text: 'Go Back',
-              onPress: () => navigation.goBack(),
-              style: 'default'
-            }
-          ]
-        );
-        setLoading(false);
+
+      if (!siteId?.trim()) {
+        Alert.alert('Error', 'Invalid site ID.', [
+          { text: 'Go Back', onPress: () => navigation.goBack() },
+        ]);
         return;
       }
-      
-      // Load site details
-      const siteResult = await apiService.getSiteById(siteId);
-      
+
+      const [siteResult, shiftsResult] = await Promise.all([
+        apiService.getSiteById(siteId),
+        apiService.getClientShifts({ siteId, limit: 50, page: 1 }),
+      ]);
+
       if (siteResult.success && siteResult.data) {
         const siteData = siteResult.data;
         setSite({
@@ -91,115 +70,99 @@ const SiteDetailsScreen: React.FC = () => {
           zipCode: siteData.zipCode || '',
           description: siteData.description || '',
           requirements: siteData.requirements || '',
-          contactPerson: siteData.contactPerson || 
-            (siteData.client?.user 
-              ? `${siteData.client.user.firstName || ''} ${siteData.client.user.lastName || ''}`.trim() 
-              : '') || '',
+          contactPerson:
+            siteData.contactPerson ||
+            (siteData.client?.user
+              ? `${siteData.client.user.firstName || ''} ${siteData.client.user.lastName || ''}`.trim()
+              : '') ||
+            '',
           contactPhone: siteData.contactPhone || '',
           status: siteData.isActive ? 'Active' : 'Inactive',
-          createdAt: siteData.createdAt || new Date().toISOString()
+          createdAt: siteData.createdAt || new Date().toISOString(),
         });
-
-        // Load shifts for this site (Option B - Direct Assignment)
-        try {
-          const sitesResult = await apiService.getClientSites(1, 100);
-          if (sitesResult.success && sitesResult.data?.sites) {
-            const foundSite = sitesResult.data.sites.find((s: any) => s.id === siteId);
-            if (foundSite && foundSite.shifts) {
-              setShifts(foundSite.shifts.map((shift: any) => ({
-                id: shift.id,
-                scheduledStartTime: shift.scheduledStartTime,
-                scheduledEndTime: shift.scheduledEndTime,
-                status: shift.status,
-                guard: shift.guard
-              })));
-            }
-          }
-        } catch (shiftError) {
-          // Non-critical - shifts will just be empty
-          console.warn('Failed to load shifts:', shiftError);
-        }
       } else {
-        const errorMessage = siteResult.message || 'Failed to fetch site details';
-        Alert.alert(
-          'Site Not Found',
-          errorMessage === 'Site not found' 
-            ? 'The requested site could not be found. It may have been deleted or you may not have access to it.'
-            : errorMessage,
-          [
-            {
-              text: 'Go Back',
-              onPress: () => navigation.goBack(),
-              style: 'default'
-            }
-          ]
+        Alert.alert('Site Not Found', siteResult.message || 'Could not load site.', [
+          { text: 'Go Back', onPress: () => navigation.goBack() },
+        ]);
+        return;
+      }
+
+      if (shiftsResult.success && shiftsResult.data?.shifts) {
+        setShifts(
+          shiftsResult.data.shifts.map((shift: any) => ({
+            id: shift.id,
+            scheduledStartTime: shift.scheduledStartTime || shift.startTime,
+            scheduledEndTime: shift.scheduledEndTime || shift.endTime,
+            status: shift.status,
+            description: shift.description,
+            notes: shift.notes,
+            guard: shift.guard,
+          })),
         );
-        console.error('Site fetch error:', siteResult);
+      } else {
+        setShifts([]);
       }
     } catch (error: any) {
-      console.error('Load site details error:', error);
-      const errorMessage = error.response?.data?.message || 
-                          error.message || 
-                          'Failed to load site details. Please check your connection and try again.';
-      Alert.alert(
-        'Error',
-        errorMessage,
-        [
-          {
-            text: 'Go Back',
-            onPress: () => navigation.goBack(),
-            style: 'default'
-          },
-          {
-            text: 'Retry',
-            onPress: () => loadSiteDetails(),
-            style: 'default'
-          }
-        ]
-      );
+      Alert.alert('Error', error.message || 'Failed to load site details.', [
+        { text: 'Go Back', onPress: () => navigation.goBack() },
+        { text: 'Retry', onPress: () => loadSiteDetails() },
+      ]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [siteId, navigation]);
 
-  // Clients can view site and related shifts but not edit site or create shifts directly.
+  useFocusEffect(
+    useCallback(() => {
+      loadSiteDetails();
+    }, [loadSiteDetails]),
+  );
 
   const handleShiftPress = (shiftId: string) => {
-    // TODO: Navigate to shift details screen
-    console.log('View shift:', shiftId);
+    navigation.navigate('ShiftDetails', { shiftId });
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'SCHEDULED': return COLORS.primary; // Blue for scheduled
-      case 'IN_PROGRESS': return COLORS.success;
-      case 'COMPLETED': return COLORS.textSecondary;
-      case 'CANCELLED': return COLORS.error;
-      default: return COLORS.textSecondary;
+  const handleEditShift = (shift: SiteShiftItem) => {
+    if (shift.status !== 'SCHEDULED') {
+      Alert.alert('Cannot edit', 'Only scheduled shifts can be edited.');
+      return;
     }
+    navigation.navigate('EditShift', { shiftId: shift.id, shift });
   };
 
-  const formatDateTime = (dateString: string) => {
-    const date = new Date(dateString);
-    const formattedDate = date.toLocaleDateString('en-US', { 
-      month: '2-digit', 
-      day: '2-digit', 
-      year: 'numeric' 
-    });
-    const formattedTime = date.toLocaleTimeString('en-US', { 
-      hour: 'numeric', 
-      minute: '2-digit',
-      hour12: true 
-    });
-    return `${formattedDate} ${formattedTime}`;
+  const handleDeleteShift = (shift: SiteShiftItem) => {
+    if (shift.status !== 'SCHEDULED') {
+      Alert.alert('Cannot cancel', 'Only scheduled shifts can be cancelled.');
+      return;
+    }
+
+    Alert.alert('Cancel Shift', 'Are you sure you want to cancel this shift?', [
+      { text: 'No', style: 'cancel' },
+      {
+        text: 'Yes, cancel',
+        style: 'destructive',
+        onPress: async () => {
+          const result = await apiService.deleteClientShift(shift.id);
+          if (result.success) {
+            Alert.alert('Cancelled', 'Shift was cancelled.');
+            loadSiteDetails();
+          } else {
+            Alert.alert('Error', result.message || 'Failed to cancel shift');
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleCreateShift = () => {
+    navigation.navigate('CreateShift', { siteId });
   };
 
   if (loading) {
     return (
       <SafeAreaWrapper>
-        <View style={styles.loadingContainer}>
-          <Text>Loading site details...</Text>
-        </View>
+        <SharedHeader variant="client" title="Site Details" showLogo={false} />
+        <InlineLoading size="large" message="Loading site..." style={styles.loadingBox} />
       </SafeAreaWrapper>
     );
   }
@@ -207,281 +170,210 @@ const SiteDetailsScreen: React.FC = () => {
   if (!site) {
     return (
       <SafeAreaWrapper>
+        <SharedHeader variant="client" title="Site Details" showLogo={false} />
         <View style={styles.errorContainer}>
-          <Text>Site not found</Text>
+          <Text style={styles.errorText}>Site not found</Text>
         </View>
       </SafeAreaWrapper>
     );
   }
 
+  const fullAddress = [site.address, site.city, site.state, site.zipCode].filter(Boolean).join(', ');
+
   return (
     <SafeAreaWrapper>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <ArrowLeftIcon size={24} color={COLORS.textPrimary} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Site Details</Text>
-        <View style={styles.editButton} />
-      </View>
+      <SharedHeader variant="client" title="Site Details" showLogo={false} />
 
-      <ScrollView 
-        style={styles.content} 
-        showsVerticalScrollIndicator={true}
+      <ScrollView
+        style={styles.content}
         contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
       >
-        {/* Site Information Card */}
-        <View style={styles.section}>
-          <View style={styles.siteHeader}>
-            <Text style={styles.siteName}>{site.name}</Text>
-            <View style={[styles.statusBadge, { 
-              backgroundColor: site.status === 'Active' ? COLORS.success : COLORS.error 
-            }]}>
-              <Text style={styles.statusText}>{site.status}</Text>
-            </View>
-          </View>
-          
-          <View style={styles.infoRow}>
-            <LocationIcon size={16} color={COLORS.textSecondary} />
-            <Text style={styles.infoText}>
-              {site.address}, {site.city}, {site.state} {site.zipCode}
-            </Text>
-          </View>
-
-          <View style={styles.contactContainer}>
-            <Text style={styles.contactLabel}>Contact Information</Text>
-            <Text style={styles.contactText}>{site.contactPerson || 'N/A'}</Text>
-            {site.contactPhone && (
-              <Text style={styles.contactText}>{site.contactPhone}</Text>
-            )}
-          </View>
-        </View>
-
-        {/* Shifts Card */}
-        <View style={styles.section}>
-          <Text style={styles.shiftsSectionTitle}>Shifts</Text>
-
-          {shifts.length > 0 ? (
-            shifts.map((shift) => (
-              <View key={shift.id} style={styles.shiftCard}>
-                <View style={styles.shiftHeader}>
-                  <Text style={styles.shiftTitle}>
-                    {shift.guard 
-                      ? `${shift.guard.user.firstName} ${shift.guard.user.lastName}` 
-                      : 'Unassigned'}
-                  </Text>
-                  <View style={[styles.shiftStatusBadge, { 
-                    backgroundColor: getStatusColor(shift.status) 
-                  }]}>
-                    <Text style={styles.shiftStatusText}>{shift.status}</Text>
-                  </View>
-                </View>
-                
-                <View style={styles.shiftDetailRow}>
-                  <ClockIcon size={14} color={COLORS.textSecondary} />
-                  <Text style={styles.shiftDetailText}>
-                    {formatDateTime(shift.scheduledStartTime)} - {formatDateTime(shift.scheduledEndTime)}
-                  </Text>
-                </View>
+        <View style={styles.siteCard}>
+          <View style={styles.siteAccent} />
+          <View style={styles.siteBody}>
+            <View style={styles.siteHeader}>
+              <Text style={styles.siteName}>{site.name}</Text>
+              <View
+                style={[
+                  styles.statusPill,
+                  {
+                    backgroundColor:
+                      site.status === 'Active' ? COLORS.success + '18' : COLORS.error + '18',
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.statusPillText,
+                    { color: site.status === 'Active' ? COLORS.success : COLORS.error },
+                  ]}
+                >
+                  {site.status}
+                </Text>
               </View>
-            ))
-          ) : (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No shifts scheduled yet</Text>
-              <Text style={styles.emptyStateSubtext}>
-                Contact your security provider to schedule shifts for this site.
-              </Text>
             </View>
-          )}
+
+            <View style={styles.infoRow}>
+              <MapPinIcon size={16} color={COLORS.primary} />
+              <Text style={styles.infoText}>{fullAddress || 'No address on file'}</Text>
+            </View>
+
+            {(site.contactPerson || site.contactPhone) && (
+              <View style={styles.contactBlock}>
+                <Text style={styles.contactLabel}>Contact</Text>
+                {site.contactPerson ? (
+                  <Text style={styles.contactText}>{site.contactPerson}</Text>
+                ) : null}
+                {site.contactPhone ? (
+                  <Text style={styles.contactText}>{site.contactPhone}</Text>
+                ) : null}
+              </View>
+            )}
+
+            {site.description ? (
+              <Text style={styles.siteDescription}>{site.description}</Text>
+            ) : null}
+          </View>
         </View>
+
+        <SectionHeader
+          title="Site Shifts"
+          subtitle={
+            shifts.length > 0
+              ? `${shifts.length} shift${shifts.length !== 1 ? 's' : ''} at this site`
+              : 'Manage scheduled shifts'
+          }
+          actionLabel="+ New Shift"
+          onActionPress={handleCreateShift}
+        />
+
+        {shifts.length > 0 ? (
+          shifts.map((shift) => (
+            <SiteShiftCard
+              key={shift.id}
+              shift={shift}
+              onDetails={() => handleShiftPress(shift.id)}
+              onEdit={() => handleEditShift(shift)}
+              onCancel={() => handleDeleteShift(shift)}
+            />
+          ))
+        ) : (
+          <EmptyState
+            title="No shifts yet"
+            message="Schedule a shift for this site or contact your security provider."
+          />
+        )}
       </ScrollView>
     </SafeAreaWrapper>
   );
 };
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.lg,
-    backgroundColor: COLORS.backgroundPrimary,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: TYPOGRAPHY.fontSize.lg,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
-    color: COLORS.textPrimary,
-  },
-  editButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   content: {
     flex: 1,
     backgroundColor: COLORS.backgroundSecondary,
   },
   scrollContent: {
-    paddingBottom: SPACING.xxl,
+    padding: SPACING.lg,
+    paddingBottom: SPACING.xxxxl,
   },
-  loadingContainer: {
+  loadingBox: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  section: {
-    backgroundColor: COLORS.backgroundPrimary,
-    marginHorizontal: SPACING.lg,
-    marginTop: SPACING.lg,
-    borderRadius: BORDER_RADIUS.md,
     padding: SPACING.lg,
+  },
+  errorText: {
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textSecondary,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+  },
+  siteCard: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    overflow: 'hidden',
+    marginBottom: SPACING.lg,
     ...SHADOWS.small,
+  },
+  siteAccent: {
+    width: 4,
+    backgroundColor: COLORS.primary,
+  },
+  siteBody: {
+    flex: 1,
+    padding: SPACING.lg,
   },
   siteHeader: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    gap: SPACING.sm,
     marginBottom: SPACING.md,
   },
   siteName: {
-    fontSize: TYPOGRAPHY.fontSize.lg,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
-    color: COLORS.textPrimary,
     flex: 1,
-  },
-  statusBadge: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    borderRadius: BORDER_RADIUS.sm,
-  },
-  shiftsSectionTitle: {
     fontSize: TYPOGRAPHY.fontSize.lg,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
     color: COLORS.textPrimary,
-    marginBottom: SPACING.md,
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
-  statusText: {
-    color: COLORS.textInverse,
+  statusPill: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 3,
+    borderRadius: BORDER_RADIUS.round,
+  },
+  statusPillText: {
     fontSize: TYPOGRAPHY.fontSize.xs,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: SPACING.lg,
     gap: SPACING.sm,
+    marginBottom: SPACING.md,
   },
   infoText: {
     flex: 1,
     fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.textSecondary,
     lineHeight: 20,
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
-  contactContainer: {
-    marginTop: SPACING.md,
+  contactBlock: {
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderCard,
+    marginBottom: SPACING.sm,
   },
   contactLabel: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontSize: TYPOGRAPHY.fontSize.xs,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
-    color: COLORS.textPrimary,
+    color: COLORS.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
     marginBottom: SPACING.xs,
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
   contactText: {
     fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.xs,
-  },
-  createShiftButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: BORDER_RADIUS.sm,
-    ...SHADOWS.small,
-  },
-  createShiftText: {
-    color: COLORS.textInverse,
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
-    marginLeft: SPACING.xs,
-  },
-  shiftCard: {
-    backgroundColor: COLORS.backgroundPrimary,
-    borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.lg,
-    marginBottom: SPACING.md,
-    ...SHADOWS.small,
-  },
-  shiftHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.sm,
-  },
-  shiftTitle: {
-    fontSize: TYPOGRAPHY.fontSize.md,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
     color: COLORS.textPrimary,
-    flex: 1,
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
-  shiftStatusBadge: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    borderRadius: BORDER_RADIUS.sm,
-  },
-  shiftStatusText: {
-    color: COLORS.textInverse,
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
-    textTransform: 'uppercase',
-  },
-  shiftDetailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-  },
-  shiftDetailText: {
+  siteDescription: {
+    marginTop: SPACING.sm,
     fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.textSecondary,
-  },
-  hourlyRate: {
-    fontSize: TYPOGRAPHY.fontSize.md,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
-    color: COLORS.success,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: SPACING.xxl,
-  },
-  emptyStateText: {
-    fontSize: TYPOGRAPHY.fontSize.md,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.xs,
-  },
-  emptyStateSubtext: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.textTertiary,
-    textAlign: 'center',
+    lineHeight: 20,
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
 });
 

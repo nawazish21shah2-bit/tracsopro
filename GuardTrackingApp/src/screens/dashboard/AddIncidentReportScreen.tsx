@@ -8,46 +8,37 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
-  Image,
   Platform,
   Modal,
 } from 'react-native';
 import { useSelector } from 'react-redux';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { launchImageLibrary, launchCamera, ImagePickerResponse, MediaType } from 'react-native-image-picker';
 import { RootState } from '../../store';
 import Geolocation from 'react-native-geolocation-service';
 import { PermissionsAndroid } from 'react-native';
 import { COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
-import { LocationIcon, CameraIcon } from '../../components/ui/AppIcons';
-import { CalendarIcon, FileTextIcon } from '../../components/ui/FeatherIcons';
+import SectionHeader from '../../components/ui/SectionHeader';
+import ReportMediaPicker from '../../components/reports/ReportMediaPicker';
+import { ReportMediaItem, uploadReportMediaItems } from '../../utils/reportMediaUtils';
+import { LocationIcon } from '../../components/ui/AppIcons';
+import { CalendarIcon } from '../../components/ui/FeatherIcons';
 import apiService from '../../services/api';
 
 type AddIncidentReportScreenNavigationProp = StackNavigationProp<any, 'AddIncidentReport'>;
 
-interface MediaItem {
-  id: string;
-  uri: string;
-  type: 'image' | 'video';
-  name?: string;
-}
-
 const AddIncidentReportScreen: React.FC = () => {
   const navigation = useNavigation<AddIncidentReportScreenNavigationProp>();
-  const { user, token } = useSelector((state: RootState) => state.auth);
+  const { activeShift } = useSelector((state: RootState) => state.shifts);
 
-  // Form state
   const [reportType, setReportType] = useState('End of the Day Report');
   const [description, setDescription] = useState('');
-  const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
+  const [mediaItems, setMediaItems] = useState<ReportMediaItem[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showReportTypeModal, setShowReportTypeModal] = useState(false);
 
-  // Get active shift location
-  const { activeShift } = useSelector((state: RootState) => state.shifts);
   const [currentLocation, setCurrentLocation] = useState<{
     name: string;
     address: string;
@@ -169,50 +160,6 @@ const AddIncidentReportScreen: React.FC = () => {
     setReportType(type);
   };
 
-  const handleTakePicture = () => {
-    const options = {
-      mediaType: 'mixed' as MediaType,
-      includeBase64: false,
-      maxHeight: 2000,
-      maxWidth: 2000,
-    };
-
-    launchCamera(options, (response: ImagePickerResponse) => {
-      if (response.assets && response.assets[0]) {
-        const asset = response.assets[0];
-        const newMedia: MediaItem = {
-          id: Date.now().toString(),
-          uri: asset.uri || '',
-          type: asset.type?.startsWith('video') ? 'video' : 'image',
-          name: asset.fileName,
-        };
-        setMediaItems(prev => [...prev, newMedia]);
-      }
-    });
-  };
-
-  const handleUploadMedia = () => {
-    const options = {
-      mediaType: 'mixed' as MediaType,
-      includeBase64: false,
-      maxHeight: 2000,
-      maxWidth: 2000,
-    };
-
-    launchImageLibrary(options, (response: ImagePickerResponse) => {
-      if (response.assets && response.assets[0]) {
-        const asset = response.assets[0];
-        const newMedia: MediaItem = {
-          id: Date.now().toString(),
-          uri: asset.uri || '',
-          type: asset.type?.startsWith('video') ? 'video' : 'image',
-          name: asset.fileName,
-        };
-        setMediaItems(prev => [...prev, newMedia]);
-      }
-    });
-  };
-
   const handleSubmitReport = async () => {
     if (!description.trim()) {
       Alert.alert('Error', 'Please add a description for your report');
@@ -222,7 +169,10 @@ const AddIncidentReportScreen: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      // Prepare report data with location
+      const uploadedMedia = mediaItems.length > 0
+        ? await uploadReportMediaItems(mediaItems)
+        : [];
+
       const reportData = {
         reportType,
         description,
@@ -232,26 +182,19 @@ const AddIncidentReportScreen: React.FC = () => {
           latitude: currentLocation.latitude,
           longitude: currentLocation.longitude,
         },
-        mediaFiles: mediaItems.map(item => ({
-          url: item.uri,
-          type: item.type,
-          name: item.name,
-        }))
+        mediaFiles: uploadedMedia,
       };
 
-      // Submit to backend using API service
-      const response = await apiService.post('/incident-reports', reportData);
+      const response = await apiService.post<any>('/incident-reports', reportData);
 
-      if (response.data.success) {
+      if (response.data?.success !== false) {
         Alert.alert(
           'Success',
           'Your incident report has been submitted successfully',
-          [
-            { text: 'OK', onPress: () => navigation.goBack() }
-          ]
+          [{ text: 'OK', onPress: () => navigation.goBack() }],
         );
       } else {
-        Alert.alert('Error', response.data.message || 'Failed to submit report');
+        Alert.alert('Error', response.data?.message || 'Failed to submit report');
       }
     } catch (error: any) {
       console.error('Submit error:', error);
@@ -260,10 +203,6 @@ const AddIncidentReportScreen: React.FC = () => {
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const removeMedia = (id: string) => {
-    setMediaItems(prev => prev.filter(item => item.id !== id));
   };
 
   return (
@@ -281,6 +220,8 @@ const AddIncidentReportScreen: React.FC = () => {
       >
         {/* Location Card */}
         <View style={styles.locationCard}>
+          <View style={styles.cardAccent} />
+          <View style={styles.cardBody}>
           <View style={styles.locationHeader}>
             <View style={styles.locationIconContainer}>
               <LocationIcon size={20} color={COLORS.primary} />
@@ -301,11 +242,12 @@ const AddIncidentReportScreen: React.FC = () => {
             <Text style={styles.dateLabel}>Date:</Text>
             <Text style={styles.dateValue}>{currentDate}</Text>
           </View>
+          </View>
         </View>
 
         {/* Report Type Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Report type</Text>
+          <SectionHeader title="Report type" subtitle="Select the type of incident" />
           <TouchableOpacity 
             style={styles.dropdown}
             onPress={() => setShowReportTypeModal(true)}
@@ -317,7 +259,7 @@ const AddIncidentReportScreen: React.FC = () => {
 
         {/* Description Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Add Description</Text>
+          <SectionHeader title="Description" subtitle="What happened on site?" />
           <TextInput
             style={styles.descriptionInput}
             placeholder="Write report description"
@@ -330,53 +272,16 @@ const AddIncidentReportScreen: React.FC = () => {
           />
         </View>
 
-        {/* Add Media Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Add Media</Text>
-          
-          {/* Take Picture Button */}
-          <TouchableOpacity 
-            style={styles.mediaButton}
-            onPress={handleTakePicture}
-            activeOpacity={0.7}
-          >
-            <View style={styles.mediaButtonContent}>
-              <CameraIcon size={24} color={COLORS.textSecondary} />
-              <Text style={styles.mediaButtonText}>Take a Picture/video</Text>
-            </View>
-          </TouchableOpacity>
-
-          {/* Upload Button */}
-          <TouchableOpacity 
-            style={styles.mediaButton}
-            onPress={handleUploadMedia}
-            activeOpacity={0.7}
-          >
-            <View style={styles.mediaButtonContent}>
-              <FileTextIcon size={24} color={COLORS.textSecondary} />
-              <Text style={styles.mediaButtonText}>Upload a picture/video</Text>
-            </View>
-          </TouchableOpacity>
-
-          {/* Media Preview */}
-          {mediaItems.length > 0 && (
-            <View style={styles.mediaPreview}>
-              <Text style={styles.mediaPreviewTitle}>Attached Media ({mediaItems.length})</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {mediaItems.map((item) => (
-                  <View key={item.id} style={styles.mediaItem}>
-                    <Image source={{ uri: item.uri }} style={styles.mediaImage} />
-                    <TouchableOpacity 
-                      style={styles.removeMediaButton}
-                      onPress={() => removeMedia(item.id)}
-                    >
-                      <Text style={styles.removeMediaText}>×</Text>
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </ScrollView>
-            </View>
-          )}
+        {/* Photo evidence */}
+        <View style={styles.sectionFlush}>
+          <ReportMediaPicker
+            items={mediaItems}
+            onChange={setMediaItems}
+            shiftId={activeShift?.id}
+            maxItems={6}
+            title="Photo evidence"
+            hint="Take or choose photos to attach to this report"
+          />
         </View>
 
         {/* Submit Button */}
@@ -453,11 +358,22 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.xl * 2,
   },
   locationCard: {
+    flexDirection: 'row',
     backgroundColor: COLORS.backgroundPrimary,
     margin: SPACING.lg,
     borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    overflow: 'hidden',
     ...SHADOWS.small,
+  },
+  cardAccent: {
+    width: 4,
+    backgroundColor: COLORS.primary,
+  },
+  cardBody: {
+    flex: 1,
+    padding: SPACING.lg,
   },
   locationHeader: {
     flexDirection: 'row',
@@ -525,7 +441,13 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
     borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
     ...SHADOWS.small,
+  },
+  sectionFlush: {
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.lg,
   },
   sectionTitle: {
     fontSize: TYPOGRAPHY.fontSize.md,
@@ -561,63 +483,10 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.fontSize.md,
     color: COLORS.textPrimary,
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    borderColor: COLORS.borderCard,
     minHeight: 120,
     textAlignVertical: 'top',
-  },
-  mediaButton: {
-    backgroundColor: COLORS.backgroundSecondary,
-    borderRadius: BORDER_RADIUS.md,
-    borderWidth: 2,
-    borderColor: COLORS.borderLight,
-    borderStyle: 'dashed',
-    marginBottom: SPACING.md,
-    paddingVertical: SPACING.xl,
-  },
-  mediaButtonContent: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mediaButtonText: {
-    fontSize: TYPOGRAPHY.fontSize.md,
-    color: COLORS.textSecondary,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
-    marginTop: SPACING.sm,
-  },
-  mediaPreview: {
-    marginTop: SPACING.lg,
-  },
-  mediaPreviewTitle: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.md,
-  },
-  mediaItem: {
-    position: 'relative',
-    marginRight: SPACING.md,
-  },
-  mediaImage: {
-    width: 80,
-    height: 80,
-    borderRadius: BORDER_RADIUS.md,
-  },
-  removeMediaButton: {
-    position: 'absolute',
-    top: -SPACING.sm,
-    right: -SPACING.sm,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: COLORS.error,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...SHADOWS.small,
-  },
-  removeMediaText: {
-    color: COLORS.textInverse,
-    fontSize: TYPOGRAPHY.fontSize.lg,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
   submitSection: {
     paddingHorizontal: SPACING.lg,

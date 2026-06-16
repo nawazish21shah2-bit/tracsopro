@@ -142,12 +142,16 @@ jest.mock('react-native-svg', () => {
 });
 
 // Mock react-native-background-job
-jest.mock('react-native-background-job', () => ({
-  register: jest.fn(),
-  on: jest.fn(),
-  start: jest.fn(),
-  stop: jest.fn(),
-}));
+jest.mock(
+  'react-native-background-job',
+  () => ({
+    register: jest.fn(),
+    on: jest.fn(),
+    start: jest.fn(),
+    stop: jest.fn(),
+  }),
+  { virtual: true }
+);
 
 // Mock crypto-js
 jest.mock('crypto-js', () => ({

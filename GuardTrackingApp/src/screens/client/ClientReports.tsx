@@ -23,14 +23,19 @@ import { ClientStackParamList } from '../../navigation/ClientStackNavigator';
 import SharedHeader from '../../components/ui/SharedHeader';
 import ClientProfileDrawer from '../../components/client/ClientProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import { useNotificationBell } from '../../hooks/useNotificationBell';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { fetchMyReports } from '../../store/slices/clientSlice';
-import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
+import { LoadingOverlay, ErrorState, NetworkError, EmptyState } from '../../components/ui/LoadingStates';
+import { getClientGuardChatParams } from '../../utils/chatHelper';
+import SectionHeader from '../../components/ui/SectionHeader';
+import { FileTextIcon } from '../../components/ui/FeatherIcons';
 import apiService from '../../services/api';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 
 interface ReportData {
   id: string;
+  source?: 'shift' | 'incident';
   type: 'Medical Emergency' | 'Incident' | 'Violation' | 'Maintenance';
   guardName: string;
   guardAvatar?: string;
@@ -47,6 +52,9 @@ const ClientReports: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const navigation = useNavigation<StackNavigationProp<ClientStackParamList>>();
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+  const { onNotificationPress, notificationCount } = useNotificationBell({
+    notificationsRoute: 'ClientNotifications',
+  });
   const [refreshing, setRefreshing] = useState(false);
   const [showResponseModal, setShowResponseModal] = useState(false);
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
@@ -121,7 +129,7 @@ const ClientReports: React.FC = () => {
 
     setIsSubmittingResponse(true);
     try {
-      const response = await apiService.respondToReport(
+      const response = await apiService.respondToClientReport(
         selectedReportId, 
         'REVIEWED', 
         responseNotes.trim() || undefined
@@ -144,27 +152,13 @@ const ClientReports: React.FC = () => {
     }
   };
 
-  const handleChatWithGuard = async (guardId: string, guardName: string) => {
-    try {
-      if (!user) {
-        Alert.alert('Error', 'User not logged in');
-        return;
-      }
-
-      // Use centralized chat helper to find or create chat
-      const { findOrCreateClientGuardChat } = await import('../../utils/chatHelper');
-      const chatParams = await findOrCreateClientGuardChat(
-        user.id,
-        guardId,
-        guardName,
-        'report'
-      );
-
-      navigation.navigate('IndividualChatScreen', chatParams);
-    } catch (error) {
-      console.error('Error navigating to chat:', error);
-      Alert.alert('Error', 'Failed to open chat. Please try again.');
+  const handleChatWithGuard = (guardUserId: string, guardName: string) => {
+    if (!user?.id) {
+      Alert.alert('Error', 'User not logged in');
+      return;
     }
+    const chatParams = getClientGuardChatParams(user.id, guardUserId, guardName, undefined, 'report');
+    navigation.navigate('IndividualChatScreen', chatParams);
   };
 
   return (
@@ -172,7 +166,8 @@ const ClientReports: React.FC = () => {
       <SharedHeader
         variant="client"
         title="Reports"
-        onNotificationPress={() => navigation.navigate('ClientNotifications')}
+        onNotificationPress={onNotificationPress}
+        notificationCount={notificationCount}
         profileDrawer={
           <ClientProfileDrawer
             visible={isDrawerVisible}
@@ -217,6 +212,15 @@ const ClientReports: React.FC = () => {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
+        <SectionHeader
+          title="Guard Reports"
+          subtitle={
+            reports.length > 0
+              ? `${reports.length} report${reports.length !== 1 ? 's' : ''} from your sites`
+              : 'Reports from guards on your sites'
+          }
+        />
+
         {reportsLoading && reports.length > 0 ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="small" color={COLORS.primary} />
@@ -235,10 +239,11 @@ const ClientReports: React.FC = () => {
             />
           ))
         ) : !reportsLoading && !reportsError ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No reports available</Text>
-            <Text style={styles.emptySubtext}>Reports from your guards will appear here</Text>
-          </View>
+          <EmptyState
+            title="No reports yet"
+            message="Shift and incident reports from your guards will appear here."
+            icon={<FileTextIcon size={40} color={COLORS.textTertiary} />}
+          />
           ) : null}
       </ScrollView>
 
@@ -381,6 +386,11 @@ const styles = StyleSheet.create({
     padding: SPACING.xl,
     width: '90%',
     maxWidth: 500,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.primary,
+    ...SHADOWS.medium,
   },
   modalTitle: {
     fontSize: TYPOGRAPHY.fontSize.xl,

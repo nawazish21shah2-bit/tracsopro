@@ -14,12 +14,20 @@ import {
   ActivityIndicator,
   Linking,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
-import { CreditCardIcon, CheckCircleIcon, ClockIcon, ErrorCircleIcon, DollarIcon } from '../../components/ui/AppIcons';
+import { CreditCardIcon, DollarIcon } from '../../components/ui/AppIcons';
+import SharedHeader from '../../components/ui/SharedHeader';
+import { useRoleScreenHeader } from '../../hooks/useRoleScreenHeader';
+import SubscriptionSummaryCard from '../../components/admin/SubscriptionSummaryCard';
 import paymentService from '../../services/paymentService';
 import apiService from '../../services/api';
+import {
+  SubscriptionOverview,
+  PLAN_HIGHLIGHTS,
+  formatPlanPrice,
+  formatPlanDate,
+} from '../../utils/subscriptionUtils';
 
 interface SubscriptionPlan {
   key: string;
@@ -28,17 +36,10 @@ interface SubscriptionPlan {
   yearly: { priceId: string; amount: number };
 }
 
-interface CurrentSubscription {
-  plan: string;
-  status: string;
-  currentPeriodEnd?: string;
-  cancelAtPeriodEnd?: boolean;
-}
-
 const AdminSubscriptionScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const { headerProps } = useRoleScreenHeader('Subscription & Billing', 'admin');
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
-  const [currentSubscription, setCurrentSubscription] = useState<CurrentSubscription | null>(null);
+  const [overview, setOverview] = useState<SubscriptionOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [selectedBillingCycle, setSelectedBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
@@ -54,48 +55,29 @@ const AdminSubscriptionScreen: React.FC = () => {
       
       // Single consolidated API call - gets company, subscription, and plans in one request
       const response = await apiService.get('/admin/subscription');
-      const { company, subscription, availablePlans } = response.data.data;
-      
+      const { company, availablePlans, overview: overviewData } = response.data.data;
+
       if (!company) {
         Alert.alert(
           'Company Not Found',
-          'Your account is not associated with a security company. Please contact support to set up your company account.',
+          'Your account is not associated with a security company. Please contact support.',
           [{ text: 'OK' }]
         );
         return;
       }
-      
+
       setSecurityCompanyId(company.id);
-      
-      // Set plans from consolidated response
-      if (availablePlans && availablePlans.plans) {
+      setOverview(overviewData ?? null);
+
+      if (availablePlans?.plans) {
         setPlans(availablePlans.plans);
       } else {
-        // Fallback: if plans not in response, try to get them separately
         try {
           const plansData = await paymentService.getPlans();
           setPlans(plansData.plans);
         } catch (error) {
           console.warn('Could not load plans:', error);
         }
-      }
-      
-      // Set subscription data
-      if (subscription) {
-        setCurrentSubscription({
-          plan: subscription.plan,
-          status: subscription.status,
-          currentPeriodEnd: subscription.endDate,
-          cancelAtPeriodEnd: subscription.cancelAtPeriodEnd || false,
-        });
-      } else {
-        // Fallback: use company subscription data if subscription object not available
-        setCurrentSubscription({
-          plan: company.subscriptionPlan || 'BASIC',
-          status: company.subscriptionStatus || 'TRIAL',
-          currentPeriodEnd: company.subscriptionEndDate,
-          cancelAtPeriodEnd: false,
-        });
       }
     } catch (error: any) {
       console.error('Error loading subscription data:', error);
@@ -148,9 +130,9 @@ const AdminSubscriptionScreen: React.FC = () => {
 
       // securityCompanyId is now automatically included from the auth middleware
       const checkout = await paymentService.createSubscriptionCheckout({
-        securityCompanyId, // Still pass it for now, backend will use req.securityCompanyId if available
+        securityCompanyId,
         priceId,
-        trialDays: 14,
+        trialDays: 0,
       });
 
       if (__DEV__) {
@@ -236,101 +218,45 @@ const AdminSubscriptionScreen: React.FC = () => {
     }
   };
 
-  const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
-  };
-
-  const formatDate = (dateString: string): string => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  };
-
-  const getStatusColor = (status: string): string => {
-    switch (status) {
-      case 'ACTIVE': return COLORS.success;
-      case 'TRIAL': return COLORS.warning;
-      case 'SUSPENDED': return COLORS.error;
-      case 'CANCELLED': return COLORS.textSecondary;
-      default: return COLORS.textSecondary;
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'ACTIVE': return <CheckCircleIcon size={20} color={COLORS.success} />;
-      case 'TRIAL': return <ClockIcon size={20} color={COLORS.warning} />;
-      default: return <ErrorCircleIcon size={20} color={COLORS.error} />;
-    }
+  const openEmail = (email: string) => {
+    Linking.openURL(`mailto:${email}`).catch(() =>
+      Alert.alert('Contact', email)
+    );
   };
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaWrapper>
+        <SharedHeader {...headerProps} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
           <Text style={styles.loadingText}>Loading subscription...</Text>
         </View>
-      </SafeAreaView>
+      </SafeAreaWrapper>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaWrapper>
+      <SharedHeader {...headerProps} />
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.title}>Subscription & Billing</Text>
-          <Text style={styles.subtitle}>Manage your platform subscription</Text>
-        </View>
+        <SubscriptionSummaryCard overview={overview} />
 
-        {/* Current Subscription */}
-        {currentSubscription && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Current Subscription</Text>
-            <View style={styles.currentSubscriptionCard}>
-              <View style={styles.subscriptionHeader}>
-                <View style={styles.subscriptionInfo}>
-                  <Text style={styles.subscriptionPlan}>{currentSubscription.plan}</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor(currentSubscription.status)}15` }]}>
-                    {getStatusIcon(currentSubscription.status)}
-                    <Text style={[styles.statusText, { color: getStatusColor(currentSubscription.status) }]}>
-                      {currentSubscription.status}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-              
-              {currentSubscription.currentPeriodEnd && (
-                <View style={styles.subscriptionDetails}>
-                  <Text style={styles.detailLabel}>Renews on</Text>
-                  <Text style={styles.detailValue}>
-                    {formatDate(currentSubscription.currentPeriodEnd)}
-                  </Text>
-                </View>
-              )}
-
-              <TouchableOpacity
-                style={styles.manageBillingButton}
-                onPress={handleManageBilling}
-                disabled={processing}
-              >
-                {processing ? (
-                  <ActivityIndicator color={COLORS.primary} />
-                ) : (
-                  <>
-                    <CreditCardIcon size={20} color={COLORS.primary} />
-                    <Text style={styles.manageBillingButtonText}>Manage Billing</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
+        {overview?.hasPaidSubscription && (
+          <TouchableOpacity
+            style={styles.manageBillingButton}
+            onPress={handleManageBilling}
+            disabled={processing}
+          >
+            {processing ? (
+              <ActivityIndicator color={COLORS.primary} />
+            ) : (
+              <>
+                <CreditCardIcon size={20} color={COLORS.primary} />
+                <Text style={styles.manageBillingButtonText}>Manage Billing Portal</Text>
+              </>
+            )}
+          </TouchableOpacity>
         )}
 
         {/* Billing Cycle Selector */}
@@ -376,18 +302,21 @@ const AdminSubscriptionScreen: React.FC = () => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Available Plans</Text>
           {plans.map((plan) => {
-            const price = selectedBillingCycle === 'monthly' 
-              ? plan.monthly.amount 
-              : plan.yearly.amount;
-            const isCurrentPlan = currentSubscription?.plan === plan.key;
-            
+            const priceCents =
+              selectedBillingCycle === 'monthly' ? plan.monthly.amount : plan.yearly.amount;
+            const isCurrentPlan =
+              !overview?.isTrial &&
+              overview?.hasPaidSubscription &&
+              overview?.plan === plan.key;
+            const highlights = PLAN_HIGHLIGHTS[plan.key] ?? [];
+
             return (
               <View key={plan.key} style={styles.planCard}>
                 <View style={styles.planHeader}>
                   <View style={styles.planInfo}>
                     <Text style={styles.planName}>{plan.name}</Text>
                     <Text style={styles.planPrice}>
-                      {formatCurrency(price)}
+                      {formatPlanPrice(priceCents)}
                       <Text style={styles.planPeriod}>
                         /{selectedBillingCycle === 'monthly' ? 'month' : 'year'}
                       </Text>
@@ -401,17 +330,16 @@ const AdminSubscriptionScreen: React.FC = () => {
                 </View>
 
                 <View style={styles.planFeatures}>
-                  <Text style={styles.featureText}>✓ Unlimited guards</Text>
-                  <Text style={styles.featureText}>✓ All features included</Text>
-                  <Text style={styles.featureText}>✓ Priority support</Text>
+                  {highlights.map((line) => (
+                    <Text key={line} style={styles.featureText}>
+                      ✓ {line}
+                    </Text>
+                  ))}
                 </View>
 
                 {!isCurrentPlan && (
                   <TouchableOpacity
-                    style={[
-                      styles.subscribeButton,
-                      processing && styles.subscribeButtonDisabled,
-                    ]}
+                    style={[styles.subscribeButton, processing && styles.subscribeButtonDisabled]}
                     onPress={() => handleSubscribe(plan.key)}
                     disabled={processing}
                   >
@@ -419,7 +347,7 @@ const AdminSubscriptionScreen: React.FC = () => {
                       <ActivityIndicator color={COLORS.textInverse} />
                     ) : (
                       <Text style={styles.subscribeButtonText}>
-                        {currentSubscription ? 'Upgrade' : 'Subscribe'}
+                        {overview?.hasPaidSubscription ? 'Switch to this plan' : 'Subscribe'}
                       </Text>
                     )}
                   </TouchableOpacity>
@@ -432,12 +360,26 @@ const AdminSubscriptionScreen: React.FC = () => {
         {/* Info Section */}
         <View style={styles.infoSection}>
           <DollarIcon size={24} color={COLORS.primary} />
-          <Text style={styles.infoText}>
-            All plans include a 14-day free trial. Cancel anytime.
-          </Text>
+          <View style={styles.infoContent}>
+            <Text style={styles.infoText}>
+              {overview?.isTrial
+                ? 'You are on a free trial. Subscribe to increase guards, clients, and sites.'
+                : 'Manage invoices and payment methods in the Stripe billing portal after subscribing.'}
+            </Text>
+            {overview?.support && (
+              <View style={styles.contactRow}>
+                <TouchableOpacity onPress={() => openEmail(overview.support.billingEmail)}>
+                  <Text style={styles.link}>Billing: {overview.support.billingEmail}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => openEmail(overview.support.email)}>
+                  <Text style={styles.link}>Support: {overview.support.email}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </SafeAreaWrapper>
   );
 };
 
@@ -448,6 +390,27 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+    paddingHorizontal: SPACING.lg,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backText: {
+    fontSize: 22,
+    color: COLORS.textPrimary,
+  },
+  manageBillingButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: `${COLORS.primary}15`,
+    borderRadius: 8,
+    paddingVertical: SPACING.md,
+    gap: SPACING.sm,
+    marginBottom: SPACING.lg,
   },
   loadingContainer: {
     flex: 1,
@@ -640,17 +603,24 @@ const styles = StyleSheet.create({
   },
   infoSection: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     backgroundColor: `${COLORS.primary}15`,
     borderRadius: 12,
     padding: SPACING.lg,
-    margin: SPACING.lg,
+    marginVertical: SPACING.lg,
     gap: SPACING.md,
   },
+  infoContent: { flex: 1 },
   infoText: {
-    flex: 1,
     fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.textPrimary,
+    marginBottom: SPACING.sm,
+  },
+  contactRow: { gap: SPACING.xs },
+  link: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.primary,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
 });
 

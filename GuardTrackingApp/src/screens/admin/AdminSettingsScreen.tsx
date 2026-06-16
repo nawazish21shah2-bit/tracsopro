@@ -2,9 +2,9 @@
  * Admin Settings Screen - System configuration and admin preferences
  */
 
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { ChevronRight, User, Bell, HelpCircle, LogOut, Lock, CreditCard, Settings } from 'react-native-feather';
 import { useDispatch } from 'react-redux';
@@ -14,7 +14,11 @@ import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import { useNotificationBell } from '../../hooks/useNotificationBell';
 import { AdminStackParamList } from '../../navigation/AdminNavigator';
+import SubscriptionSummaryCard from '../../components/admin/SubscriptionSummaryCard';
+import apiService from '../../services/api';
+import { SubscriptionOverview } from '../../utils/subscriptionUtils';
 
 interface SettingItem {
   id: string;
@@ -30,7 +34,30 @@ const ERROR_COLOR = '#F44336';
 const AdminSettingsScreen: React.FC<{ navigation?: any }> = ({ navigation: propNavigation }) => {
   const dispatch = useDispatch<AppDispatch>();
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+  const { onNotificationPress, notificationCount } = useNotificationBell({
+    notificationsRoute: 'AdminNotifications',
+  });
   const navigation = useNavigation<StackNavigationProp<AdminStackParamList>>() || propNavigation;
+  const [subscriptionOverview, setSubscriptionOverview] = useState<SubscriptionOverview | null>(null);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(true);
+
+  const loadSubscription = useCallback(async () => {
+    try {
+      setSubscriptionLoading(true);
+      const response = await apiService.get('/admin/subscription');
+      setSubscriptionOverview(response.data.data?.overview ?? null);
+    } catch {
+      setSubscriptionOverview(null);
+    } finally {
+      setSubscriptionLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadSubscription();
+    }, [loadSubscription])
+  );
 
   const handleProfile = () => {
     navigation.navigate('AdminProfileEdit');
@@ -50,6 +77,14 @@ const AdminSettingsScreen: React.FC<{ navigation?: any }> = ({ navigation: propN
 
   const handleChangePassword = () => {
     navigation.navigate('AdminChangePassword');
+  };
+
+  const handleSupportChat = () => {
+    navigation.navigate('SupportHubScreen', { variant: 'admin', mode: 'platform' });
+  };
+
+  const handleCompanySupportInbox = () => {
+    navigation.navigate('SupportHubScreen', { variant: 'admin', mode: 'inbox' });
   };
 
   const handleSupport = () => {
@@ -87,7 +122,9 @@ const AdminSettingsScreen: React.FC<{ navigation?: any }> = ({ navigation: propN
     { id: '3', title: 'Notifications', icon: <Bell width={20} height={20} color={ICON_COLOR} />, onPress: handleNotifications },
     { id: '4', title: 'System Settings', icon: <Settings width={20} height={20} color={ICON_COLOR} />, onPress: handleSystemSettings },
     { id: '5', title: 'Change Password', icon: <Lock width={20} height={20} color={ICON_COLOR} />, onPress: handleChangePassword },
-    { id: '6', title: 'Contact Support', icon: <HelpCircle width={20} height={20} color={ICON_COLOR} />, onPress: handleSupport },
+    { id: '6', title: 'Company Support Inbox', icon: <HelpCircle width={20} height={20} color={ICON_COLOR} />, onPress: handleCompanySupportInbox },
+    { id: '7', title: 'Platform Support', icon: <HelpCircle width={20} height={20} color={ICON_COLOR} />, onPress: handleSupportChat },
+    { id: '8', title: 'Submit Support Ticket', icon: <HelpCircle width={20} height={20} color={ICON_COLOR} />, onPress: handleSupport },
   ];
 
   return (
@@ -96,9 +133,8 @@ const AdminSettingsScreen: React.FC<{ navigation?: any }> = ({ navigation: propN
         variant="admin"
         title="Admin Settings"
         onMenuPress={openDrawer}
-        onNotificationPress={() => {
-          // Handle notification press
-        }}
+        onNotificationPress={onNotificationPress}
+        notificationCount={notificationCount}
         profileDrawer={
           <AdminProfileDrawer
             visible={isDrawerVisible}
@@ -111,6 +147,14 @@ const AdminSettingsScreen: React.FC<{ navigation?: any }> = ({ navigation: propN
       />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <Text style={styles.sectionHeading}>Your plan</Text>
+        <SubscriptionSummaryCard
+          overview={subscriptionOverview}
+          loading={subscriptionLoading}
+          compact
+          onUpgrade={handleSubscription}
+        />
+
         <View style={styles.card}>
           {items.map((item, idx) => (
             <TouchableOpacity
@@ -142,6 +186,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8F9FA',
     padding: 16,
+  },
+  sectionHeading: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#828282',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   card: {
     backgroundColor: '#FFFFFF',

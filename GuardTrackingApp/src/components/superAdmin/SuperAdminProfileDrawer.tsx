@@ -115,9 +115,14 @@ export const SuperAdminProfileDrawer: React.FC<SuperAdminProfileDrawerProps> = (
     );
   };
 
-  const handleContactSupport = () => {
+  const handleSupportRequests = () => {
     onClose();
-    navigation.navigate('ChatListScreen');
+    navigation.navigate('SupportHubScreen', { variant: 'superAdmin', mode: 'platform' });
+  };
+
+  const handleImpersonate = () => {
+    onClose();
+    navigation.navigate('ImpersonateUser');
   };
 
   const handleProfilePictureSelected = async (imageUri: string) => {
@@ -195,13 +200,18 @@ export const SuperAdminProfileDrawer: React.FC<SuperAdminProfileDrawerProps> = (
       icon: <ReportsIcon size={20} color={COLORS.textPrimary} />,
       onPress: () => {
         onClose();
-        // Navigate to Analytics tab, then to AuditLogs screen
-        navigation.navigate('SuperAdminTabs', { 
+        navigation.navigate('SuperAdminTabs', {
           screen: 'Analytics',
-          params: { screen: 'AuditLogs' }
+          params: { screen: 'AuditLogs' },
         });
         onNavigateToAuditLogs?.();
       },
+    },
+    {
+      id: 'impersonate',
+      label: 'Impersonate User',
+      icon: <UserIcon size={20} color={COLORS.textPrimary} />,
+      onPress: handleImpersonate,
     },
     {
       id: 'notifications',
@@ -209,14 +219,15 @@ export const SuperAdminProfileDrawer: React.FC<SuperAdminProfileDrawerProps> = (
       icon: <NotificationIcon size={20} color={COLORS.textPrimary} />,
       onPress: () => {
         onClose();
+        navigation.navigate('SuperAdminNotificationSettings');
         onNavigateToNotifications?.();
       },
     },
     {
-      id: 'support',
-      label: 'Contact Support',
-      icon: <FeatherIcon name="messageCircle" size={20} color={COLORS.textPrimary} />,
-      onPress: handleContactSupport,
+      id: 'admin-support',
+      label: 'Platform Support Inbox',
+      icon: <FeatherIcon name="headphones" size={20} color={COLORS.textPrimary} />,
+      onPress: handleSupportRequests,
     },
     {
       id: 'logout',

@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, Alert, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { LocationIcon, SettingsIcon } from '../../components/ui/AppIcons';
@@ -15,6 +15,11 @@ import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import { useNotificationBell } from '../../hooks/useNotificationBell';
+import { useSubscriptionLimits } from '../../hooks/useSubscriptionLimits';
+import { showActionErrorAlert } from '../../utils/subscriptionLimitAlert';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../store';
 
 interface Site {
   id: string;
@@ -26,7 +31,12 @@ interface Site {
 }
 
 const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+  const { user } = useSelector((state: RootState) => state.auth);
+  const { ensureCanAdd, refresh: refreshLimits } = useSubscriptionLimits();
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+  const { onNotificationPress, notificationCount } = useNotificationBell({
+    notificationsRoute: 'AdminNotifications',
+  });
   const insets = useSafeAreaInsets();
   
   // Tab bar height is 70px, add safe area bottom inset and spacing
@@ -41,12 +51,26 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
   const [editingSiteId, setEditingSiteId] = useState<string | null>(null);
   const [newSite, setNewSite] = useState({
     name: '',
+    description: '',
+    requirements: '',
     address: '',
+    city: '',
+    state: '',
+    zipCode: '',
+    contactPerson: '',
+    contactPhone: '',
     clientId: '',
   });
   const [editSite, setEditSite] = useState({
     name: '',
+    description: '',
+    requirements: '',
     address: '',
+    city: '',
+    state: '',
+    zipCode: '',
+    contactPerson: '',
+    contactPhone: '',
     clientId: '',
     isActive: true,
   });
@@ -87,21 +111,49 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     }
   };
 
+  const handleOpenCreateModal = async () => {
+    const allowed = await ensureCanAdd('sites', navigation);
+    if (allowed) {
+      setShowCreateModal(true);
+    }
+  };
+
   const handleCreateSite = async () => {
     if (!newSite.name || !newSite.address || !newSite.clientId) {
       Alert.alert('Error', 'Name, address, and client ID are required');
       return;
     }
+    if (!newSite.city) {
+      Alert.alert('Error', 'City is required');
+      return;
+    }
+    if (!newSite.contactPerson) {
+      Alert.alert('Error', 'Contact person is required');
+      return;
+    }
+
+    const allowed = await ensureCanAdd('sites', navigation);
+    if (!allowed) return;
 
     try {
       const response = await apiService.createAdminSite({
         clientId: newSite.clientId,
-        name: newSite.name,
-        address: newSite.address,
+        name: newSite.name.trim(),
+        description: newSite.description.trim(),
+        requirements: newSite.requirements.trim(),
+        address: newSite.address.trim(),
+        city: newSite.city.trim(),
+        state: newSite.state.trim(),
+        zipCode: newSite.zipCode.trim(),
+        contactPerson: newSite.contactPerson.trim(),
+        contactPhone: newSite.contactPhone.trim(),
       });
 
       if (!response.success || !response.data) {
-        Alert.alert('Error', response.message || 'Failed to create site');
+        showActionErrorAlert('Create Site', response.message || 'Failed to create site', {
+          role: user?.role,
+          onUpgrade: () => navigation.navigate('AdminSubscription'),
+        });
         return;
       }
 
@@ -119,27 +171,62 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
 
       setSites(prev => [site, ...prev]);
       setShowCreateModal(false);
-      setNewSite({ name: '', address: '', clientId: '' });
+      setNewSite({
+        name: '', description: '', requirements: '', address: '', city: '', state: '', zipCode: '', contactPerson: '', contactPhone: '', clientId: ''
+      });
+      await refreshLimits();
       Alert.alert('Success', 'Site created successfully');
     } catch (error: any) {
       if (__DEV__) {
         console.error('Create site error:', error);
       }
-      Alert.alert('Error', error.message || 'Failed to create site');
+      showActionErrorAlert('Create Site', error, {
+        role: user?.role,
+        onUpgrade: () => navigation.navigate('AdminSubscription'),
+      });
     }
   };
 
-  const openEditSite = (siteId: string) => {
+  const openEditSite = async (siteId: string) => {
     const s = sites.find(x => x.id === siteId);
     if (!s) return;
 
     setEditingSiteId(s.id);
-    setEditSite({
-      name: s.name,
-      address: s.address,
-      clientId: s.clientId || '', // ✅ Use actual clientId from site
-      isActive: s.status === 'active',
-    });
+    
+    // Fetch full site details to populate description, requirements, etc if they exist
+    try {
+      const response = await apiService.getAdminSites({ search: s.name });
+      const fullSite = response.data?.sites?.find((site: any) => site.id === siteId) || s;
+      
+      setEditSite({
+        name: fullSite.name || '',
+        description: fullSite.description || '',
+        requirements: fullSite.requirements || '',
+        address: fullSite.address || '',
+        city: fullSite.city || '',
+        state: fullSite.state || '',
+        zipCode: fullSite.zipCode || '',
+        contactPerson: fullSite.contactPerson || '',
+        contactPhone: fullSite.contactPhone || '',
+        clientId: fullSite.clientId || s.clientId || '',
+        isActive: fullSite.isActive !== undefined ? fullSite.isActive : (s.status === 'active'),
+      });
+    } catch (e) {
+      setEditSite({
+        name: s.name,
+        description: '',
+        requirements: '',
+        address: s.address,
+        city: '',
+        state: '',
+        zipCode: '',
+        contactPerson: '',
+        contactPhone: '',
+        clientId: s.clientId || '',
+        isActive: s.status === 'active',
+      });
+    }
+    
     setShowEditModal(true);
   };
 
@@ -153,8 +240,15 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
 
     try {
       const payload: any = {
-        name: editSite.name,
-        address: editSite.address,
+        name: editSite.name.trim(),
+        description: editSite.description.trim(),
+        requirements: editSite.requirements.trim(),
+        address: editSite.address.trim(),
+        city: editSite.city.trim(),
+        state: editSite.state.trim(),
+        zipCode: editSite.zipCode.trim(),
+        contactPerson: editSite.contactPerson.trim(),
+        contactPhone: editSite.contactPhone.trim(),
         isActive: editSite.isActive,
       };
       if (editSite.clientId) {
@@ -266,9 +360,8 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
         variant="admin"
         title="Site Management"
         onMenuPress={openDrawer}
-        onNotificationPress={() => {
-          // Handle notification press
-        }}
+        onNotificationPress={onNotificationPress}
+        notificationCount={notificationCount}
         profileDrawer={
           <AdminProfileDrawer
             visible={isDrawerVisible}
@@ -294,7 +387,7 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
       {/* Sticky Action Button */}
       <TouchableOpacity 
         style={[styles.stickyAddButton, { bottom: buttonBottom }]}
-        onPress={() => setShowCreateModal(true)}
+        onPress={handleOpenCreateModal}
       >
         <Text style={styles.stickyAddButtonText}>+ Add Site</Text>
       </TouchableOpacity>
@@ -312,35 +405,127 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
             </TouchableOpacity>
           </View>
 
-          <View style={styles.modalContent}>
+          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
             <View style={styles.formField}>
-              <Text style={styles.fieldLabel}>Name</Text>
+              <ClientSelector
+                value={newSite.clientId || null}
+                onChange={(clientId) => setNewSite(prev => ({ ...prev, clientId: clientId || '' }))}
+                label="Client *"
+                placeholder="Select client"
+                required
+                variant="modal"
+              />
+            </View>
+
+            <Text style={styles.sectionTitle}>Site Information</Text>
+            
+            <View style={styles.formField}>
+              <Text style={styles.fieldLabel}>Site Name *</Text>
               <TextInput
                 style={styles.fieldInput}
                 value={newSite.name}
                 onChangeText={(text) => setNewSite(prev => ({ ...prev, name: text }))}
                 placeholder="Enter site name"
+                placeholderTextColor="#999"
               />
             </View>
 
             <View style={styles.formField}>
+              <Text style={styles.fieldLabel}>Description</Text>
+              <TextInput
+                style={[styles.fieldInput, styles.textArea]}
+                value={newSite.description}
+                onChangeText={(text) => setNewSite(prev => ({ ...prev, description: text }))}
+                placeholder="Brief description of the site"
+                placeholderTextColor="#999"
+                multiline
+                numberOfLines={3}
+              />
+            </View>
+
+            <View style={styles.formField}>
+              <Text style={styles.fieldLabel}>Security Requirements</Text>
+              <TextInput
+                style={[styles.fieldInput, styles.textArea]}
+                value={newSite.requirements}
+                onChangeText={(text) => setNewSite(prev => ({ ...prev, requirements: text }))}
+                placeholder="Specific security requirements"
+                placeholderTextColor="#999"
+                multiline
+                numberOfLines={3}
+              />
+            </View>
+
+            <Text style={styles.sectionTitle}>Location</Text>
+            <View style={styles.formField}>
               <AddressPicker
                 value={newSite.address}
                 onChange={(address) => setNewSite(prev => ({ ...prev, address }))}
-                label="Address"
+                onCityChange={(city) => setNewSite(prev => ({ ...prev, city }))}
+                onStateChange={(state) => setNewSite(prev => ({ ...prev, state }))}
+                onZipChange={(zipCode) => setNewSite(prev => ({ ...prev, zipCode }))}
+                label="Street Address *"
                 placeholder="Enter or select address on map"
                 required
               />
             </View>
 
+            <View style={styles.row}>
+              <View style={[styles.formField, styles.flex1]}>
+                <Text style={styles.fieldLabel}>City *</Text>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={newSite.city}
+                  onChangeText={(text) => setNewSite(prev => ({ ...prev, city: text }))}
+                  placeholder="City"
+                  placeholderTextColor="#999"
+                />
+              </View>
+              <View style={[styles.formField, styles.flex1, styles.marginLeft]}>
+                <Text style={styles.fieldLabel}>State</Text>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={newSite.state}
+                  onChangeText={(text) => setNewSite(prev => ({ ...prev, state: text }))}
+                  placeholder="State"
+                  placeholderTextColor="#999"
+                />
+              </View>
+            </View>
+
             <View style={styles.formField}>
-              <ClientSelector
-                value={newSite.clientId || null}
-                onChange={(clientId) => setNewSite(prev => ({ ...prev, clientId: clientId || '' }))}
-                label="Client"
-                placeholder="Select client"
-                required
-                variant="modal"
+              <Text style={styles.fieldLabel}>ZIP Code</Text>
+              <TextInput
+                style={styles.fieldInput}
+                value={newSite.zipCode}
+                onChangeText={(text) => setNewSite(prev => ({ ...prev, zipCode: text }))}
+                placeholder="ZIP Code"
+                placeholderTextColor="#999"
+                keyboardType="numeric"
+              />
+            </View>
+
+            <Text style={styles.sectionTitle}>Contact Information</Text>
+            <View style={styles.formField}>
+              <Text style={styles.fieldLabel}>Contact Person *</Text>
+              <TextInput
+                style={styles.fieldInput}
+                value={newSite.contactPerson}
+                onChangeText={(text) => setNewSite(prev => ({ ...prev, contactPerson: text }))}
+                placeholder="Site manager or contact person"
+                placeholderTextColor="#999"
+              />
+            </View>
+
+            <View style={styles.formField}>
+              <Text style={styles.fieldLabel}>Contact Phone</Text>
+              <TextInput
+                style={styles.fieldInput}
+                value={newSite.contactPhone}
+                onChangeText={(text) => setNewSite(prev => ({ ...prev, contactPhone: text }))}
+                placeholder="Phone number"
+                placeholderTextColor="#999"
+                keyboardType="phone-pad"
               />
             </View>
 
@@ -350,7 +535,8 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
             >
               <Text style={styles.createButtonText}>Create Site</Text>
             </TouchableOpacity>
-          </View>
+            <View style={{ height: 40 }} />
+          </ScrollView>
         </View>
       </Modal>
 
@@ -372,27 +558,7 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
             </TouchableOpacity>
           </View>
 
-          <View style={styles.modalContent}>
-            <View style={styles.formField}>
-              <Text style={styles.fieldLabel}>Name</Text>
-              <TextInput
-                style={styles.fieldInput}
-                value={editSite.name}
-                onChangeText={(text) => setEditSite(prev => ({ ...prev, name: text }))}
-                placeholder="Enter site name"
-              />
-            </View>
-
-            <View style={styles.formField}>
-              <AddressPicker
-                value={editSite.address}
-                onChange={(address) => setEditSite(prev => ({ ...prev, address }))}
-                label="Address"
-                placeholder="Enter or select address on map"
-                required
-              />
-            </View>
-
+          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
             <View style={styles.formField}>
               <ClientSelector
                 value={editSite.clientId || null}
@@ -400,6 +566,118 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
                 label="Client (optional override)"
                 placeholder="Select client"
                 variant="modal"
+              />
+            </View>
+
+            <Text style={styles.sectionTitle}>Site Information</Text>
+
+            <View style={styles.formField}>
+              <Text style={styles.fieldLabel}>Site Name *</Text>
+              <TextInput
+                style={styles.fieldInput}
+                value={editSite.name}
+                onChangeText={(text) => setEditSite(prev => ({ ...prev, name: text }))}
+                placeholder="Enter site name"
+                placeholderTextColor="#999"
+              />
+            </View>
+
+            <View style={styles.formField}>
+              <Text style={styles.fieldLabel}>Description</Text>
+              <TextInput
+                style={[styles.fieldInput, styles.textArea]}
+                value={editSite.description}
+                onChangeText={(text) => setEditSite(prev => ({ ...prev, description: text }))}
+                placeholder="Brief description of the site"
+                placeholderTextColor="#999"
+                multiline
+                numberOfLines={3}
+              />
+            </View>
+
+            <View style={styles.formField}>
+              <Text style={styles.fieldLabel}>Security Requirements</Text>
+              <TextInput
+                style={[styles.fieldInput, styles.textArea]}
+                value={editSite.requirements}
+                onChangeText={(text) => setEditSite(prev => ({ ...prev, requirements: text }))}
+                placeholder="Specific security requirements"
+                placeholderTextColor="#999"
+                multiline
+                numberOfLines={3}
+              />
+            </View>
+
+            <Text style={styles.sectionTitle}>Location</Text>
+            <View style={styles.formField}>
+              <AddressPicker
+                value={editSite.address}
+                onChange={(address) => setEditSite(prev => ({ ...prev, address }))}
+                onCityChange={(city) => setEditSite(prev => ({ ...prev, city }))}
+                onStateChange={(state) => setEditSite(prev => ({ ...prev, state }))}
+                onZipChange={(zipCode) => setEditSite(prev => ({ ...prev, zipCode }))}
+                label="Street Address *"
+                placeholder="Enter or select address on map"
+                required
+              />
+            </View>
+
+            <View style={styles.row}>
+              <View style={[styles.formField, styles.flex1]}>
+                <Text style={styles.fieldLabel}>City *</Text>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={editSite.city}
+                  onChangeText={(text) => setEditSite(prev => ({ ...prev, city: text }))}
+                  placeholder="City"
+                  placeholderTextColor="#999"
+                />
+              </View>
+              <View style={[styles.formField, styles.flex1, styles.marginLeft]}>
+                <Text style={styles.fieldLabel}>State</Text>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={editSite.state}
+                  onChangeText={(text) => setEditSite(prev => ({ ...prev, state: text }))}
+                  placeholder="State"
+                  placeholderTextColor="#999"
+                />
+              </View>
+            </View>
+
+            <View style={styles.formField}>
+              <Text style={styles.fieldLabel}>ZIP Code</Text>
+              <TextInput
+                style={styles.fieldInput}
+                value={editSite.zipCode}
+                onChangeText={(text) => setEditSite(prev => ({ ...prev, zipCode: text }))}
+                placeholder="ZIP Code"
+                placeholderTextColor="#999"
+                keyboardType="numeric"
+              />
+            </View>
+
+            <Text style={styles.sectionTitle}>Contact Information</Text>
+            <View style={styles.formField}>
+              <Text style={styles.fieldLabel}>Contact Person *</Text>
+              <TextInput
+                style={styles.fieldInput}
+                value={editSite.contactPerson}
+                onChangeText={(text) => setEditSite(prev => ({ ...prev, contactPerson: text }))}
+                placeholder="Site manager or contact person"
+                placeholderTextColor="#999"
+              />
+            </View>
+
+            <View style={styles.formField}>
+              <Text style={styles.fieldLabel}>Contact Phone</Text>
+              <TextInput
+                style={styles.fieldInput}
+                value={editSite.contactPhone}
+                onChangeText={(text) => setEditSite(prev => ({ ...prev, contactPhone: text }))}
+                placeholder="Phone number"
+                placeholderTextColor="#999"
+                keyboardType="phone-pad"
               />
             </View>
 
@@ -441,7 +719,8 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
             >
               <Text style={styles.createButtonText}>Save Changes</Text>
             </TouchableOpacity>
-          </View>
+            <View style={{ height: 40 }} />
+          </ScrollView>
         </View>
       </Modal>
     </SafeAreaWrapper>
@@ -568,9 +847,14 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: TYPOGRAPHY.fontSize.lg, fontWeight: TYPOGRAPHY.fontWeight.bold, color: COLORS.textPrimary },
   closeButton: { fontSize: TYPOGRAPHY.fontSize.xl, color: COLORS.textSecondary },
   modalContent: { flex: 1, padding: SPACING.lg },
+  sectionTitle: { fontSize: TYPOGRAPHY.fontSize.md, fontWeight: TYPOGRAPHY.fontWeight.bold, color: COLORS.textPrimary, marginTop: SPACING.md, marginBottom: SPACING.sm },
   formField: { marginBottom: SPACING.lg },
-  fieldLabel: { fontSize: TYPOGRAPHY.fontSize.md, fontWeight: TYPOGRAPHY.fontWeight.semibold, color: COLORS.textPrimary, marginBottom: SPACING.sm },
+  fieldLabel: { fontSize: TYPOGRAPHY.fontSize.sm, fontWeight: TYPOGRAPHY.fontWeight.semibold, color: COLORS.textPrimary, marginBottom: SPACING.sm },
   fieldInput: { backgroundColor: COLORS.backgroundSecondary, borderRadius: BORDER_RADIUS.md, padding: SPACING.md, fontSize: TYPOGRAPHY.fontSize.md, color: COLORS.textPrimary, borderWidth: 1, borderColor: COLORS.borderCard },
+  textArea: { height: 80, textAlignVertical: 'top' },
+  row: { flexDirection: 'row' },
+  flex1: { flex: 1 },
+  marginLeft: { marginLeft: SPACING.md },
   roleOption: { flex: 1, backgroundColor: COLORS.backgroundSecondary, borderRadius: BORDER_RADIUS.md, padding: SPACING.md, alignItems: 'center', borderWidth: 1, borderColor: COLORS.borderCard },
   roleOptionSelected: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
   roleOptionText: { fontSize: TYPOGRAPHY.fontSize.sm, color: COLORS.textPrimary },
@@ -585,3 +869,4 @@ const styles = StyleSheet.create({
 });
 
 export default SiteManagementScreen;
+

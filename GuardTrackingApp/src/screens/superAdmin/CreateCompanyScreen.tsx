@@ -13,10 +13,20 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
+import SharedHeader from '../../components/ui/SharedHeader';
+import CompanyPlanLimitsFields from '../../components/superAdmin/CompanyPlanLimitsFields';
 import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { superAdminService } from '../../services/superAdminService';
+import {
+  SubscriptionPlanKey,
+  applyPlanSelection,
+  clampCustomLimit,
+  getLimitsForPlan,
+  isCustomPlan,
+  parseLimitFields,
+} from '../../utils/planLimits';
 
 const CreateCompanyScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -30,16 +40,29 @@ const CreateCompanyScreen: React.FC = () => {
     state: '',
     zipCode: '',
     country: 'USA',
-    subscriptionPlan: 'BASIC',
-    maxGuards: '10',
-    maxClients: '5',
-    maxSites: '10',
+    ...applyPlanSelection('BASIC'),
   });
-
-  const subscriptionPlans = ['BASIC', 'PROFESSIONAL', 'ENTERPRISE', 'CUSTOM'];
 
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handlePlanSelect = (plan: SubscriptionPlanKey) => {
+    setFormData((prev) => ({
+      ...prev,
+      ...applyPlanSelection(plan),
+    }));
+  };
+
+  const handleLimitChange = (
+    field: 'maxGuards' | 'maxClients' | 'maxSites',
+    value: string,
+  ) => {
+    if (!isCustomPlan(formData.subscriptionPlan)) return;
+    setFormData((prev) => ({
+      ...prev,
+      [field]: clampCustomLimit(field, value),
+    }));
   };
 
   const validateForm = (): boolean => {
@@ -56,6 +79,18 @@ const CreateCompanyScreen: React.FC = () => {
       Alert.alert('Validation Error', 'Please enter a valid email address');
       return false;
     }
+
+    const limitsResult = parseLimitFields(
+      formData.maxGuards,
+      formData.maxClients,
+      formData.maxSites,
+      formData.subscriptionPlan as SubscriptionPlanKey,
+    );
+    if (!limitsResult.ok) {
+      Alert.alert('Validation Error', limitsResult.message);
+      return false;
+    }
+
     return true;
   };
 
@@ -63,6 +98,17 @@ const CreateCompanyScreen: React.FC = () => {
     if (!validateForm()) {
       return;
     }
+
+    const limits = isCustomPlan(formData.subscriptionPlan)
+      ? parseLimitFields(
+          formData.maxGuards,
+          formData.maxClients,
+          formData.maxSites,
+          'CUSTOM',
+        )
+      : { ok: true as const, limits: getLimitsForPlan(formData.subscriptionPlan as SubscriptionPlanKey) };
+
+    if (!limits.ok) return;
 
     setLoading(true);
     try {
@@ -76,9 +122,9 @@ const CreateCompanyScreen: React.FC = () => {
         zipCode: formData.zipCode.trim() || undefined,
         country: formData.country.trim() || undefined,
         subscriptionPlan: formData.subscriptionPlan,
-        maxGuards: parseInt(formData.maxGuards) || 10,
-        maxClients: parseInt(formData.maxClients) || 5,
-        maxSites: parseInt(formData.maxSites) || 10,
+        maxGuards: limits.limits.maxGuards,
+        maxClients: limits.limits.maxClients,
+        maxSites: limits.limits.maxSites,
       });
 
       Alert.alert('Success', 'Company created successfully', [
@@ -91,7 +137,7 @@ const CreateCompanyScreen: React.FC = () => {
       console.error('Error creating company:', error);
       Alert.alert(
         'Error',
-        error.response?.data?.error || error.message || 'Failed to create company'
+        error.response?.data?.error || error.message || 'Failed to create company',
       );
     } finally {
       setLoading(false);
@@ -99,15 +145,19 @@ const CreateCompanyScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaWrapper backgroundColor="#F5F7FA">
+      <SharedHeader
+        variant="superAdmin"
+        title="Create Company"
+        showLogo={false}
+        showBackButton
+        onBackPress={() => navigation.goBack()}
+        hideProfileDrawer
+      />
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Create New Company</Text>
-          <Text style={styles.subtitle}>Add a new security company to the platform</Text>
-        </View>
+        <Text style={styles.formHint}>Add a new security company to the platform</Text>
 
         <View style={styles.form}>
-          {/* Company Name */}
           <View style={styles.formGroup}>
             <Text style={styles.label}>Company Name *</Text>
             <TextInput
@@ -119,7 +169,6 @@ const CreateCompanyScreen: React.FC = () => {
             />
           </View>
 
-          {/* Email */}
           <View style={styles.formGroup}>
             <Text style={styles.label}>Email *</Text>
             <TextInput
@@ -133,7 +182,6 @@ const CreateCompanyScreen: React.FC = () => {
             />
           </View>
 
-          {/* Phone */}
           <View style={styles.formGroup}>
             <Text style={styles.label}>Phone</Text>
             <TextInput
@@ -146,7 +194,6 @@ const CreateCompanyScreen: React.FC = () => {
             />
           </View>
 
-          {/* Address */}
           <View style={styles.formGroup}>
             <Text style={styles.label}>Address</Text>
             <TextInput
@@ -158,7 +205,6 @@ const CreateCompanyScreen: React.FC = () => {
             />
           </View>
 
-          {/* City, State, Zip */}
           <View style={styles.row}>
             <View style={[styles.formGroup, styles.flex1, styles.marginRight]}>
               <Text style={styles.label}>City</Text>
@@ -206,77 +252,17 @@ const CreateCompanyScreen: React.FC = () => {
             </View>
           </View>
 
-          {/* Subscription Plan */}
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Subscription Plan *</Text>
-            <View style={styles.planContainer}>
-              {subscriptionPlans.map((plan) => (
-                <TouchableOpacity
-                  key={plan}
-                  style={[
-                    styles.planButton,
-                    formData.subscriptionPlan === plan && styles.planButtonActive,
-                  ]}
-                  onPress={() => handleInputChange('subscriptionPlan', plan)}
-                  disabled={loading}
-                >
-                  <Text
-                    style={[
-                      styles.planButtonText,
-                      formData.subscriptionPlan === plan && styles.planButtonTextActive,
-                    ]}
-                  >
-                    {plan}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          {/* Limits */}
-          <View style={styles.sectionTitle}>
-            <Text style={styles.sectionTitleText}>Resource Limits</Text>
-          </View>
-
-          <View style={styles.row}>
-            <View style={[styles.formGroup, styles.flex1, styles.marginRight]}>
-              <Text style={styles.label}>Max Guards</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="10"
-                value={formData.maxGuards}
-                onChangeText={(value) => handleInputChange('maxGuards', value)}
-                keyboardType="numeric"
-                editable={!loading}
-              />
-            </View>
-            <View style={[styles.formGroup, styles.flex1]}>
-              <Text style={styles.label}>Max Clients</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="5"
-                value={formData.maxClients}
-                onChangeText={(value) => handleInputChange('maxClients', value)}
-                keyboardType="numeric"
-                editable={!loading}
-              />
-            </View>
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Max Sites</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="10"
-              value={formData.maxSites}
-              onChangeText={(value) => handleInputChange('maxSites', value)}
-              keyboardType="numeric"
-              editable={!loading}
-            />
-          </View>
+          <CompanyPlanLimitsFields
+            subscriptionPlan={formData.subscriptionPlan}
+            maxGuards={formData.maxGuards}
+            maxClients={formData.maxClients}
+            maxSites={formData.maxSites}
+            onPlanSelect={handlePlanSelect}
+            onLimitChange={handleLimitChange}
+            disabled={loading}
+          />
         </View>
 
-        {/* Submit Button */}
         <View style={styles.buttonContainer}>
           <TouchableOpacity
             style={[styles.submitButton, loading && styles.submitButtonDisabled]}
@@ -299,36 +285,24 @@ const CreateCompanyScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </SafeAreaWrapper>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F7FA',
-  },
   scrollView: {
     flex: 1,
   },
-  header: {
-    backgroundColor: '#FFFFFF',
-    padding: SPACING.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  title: {
-    fontSize: TYPOGRAPHY.fontSize.xl,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.xs,
-  },
-  subtitle: {
-    fontSize: TYPOGRAPHY.fontSize.md,
+  formHint: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.textSecondary,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.xs,
   },
   form: {
     padding: SPACING.lg,
+    paddingTop: SPACING.sm,
   },
   formGroup: {
     marginBottom: SPACING.md,
@@ -340,14 +314,14 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xs,
   },
   input: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.backgroundPrimary,
     borderRadius: 8,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
     fontSize: TYPOGRAPHY.fontSize.md,
     color: COLORS.textPrimary,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.borderLight,
   },
   row: {
     flexDirection: 'row',
@@ -357,42 +331,6 @@ const styles = StyleSheet.create({
   },
   marginRight: {
     marginRight: SPACING.sm,
-  },
-  planContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: SPACING.sm,
-  },
-  planButton: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: 8,
-    backgroundColor: '#F3F4F6',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    minWidth: 100,
-    alignItems: 'center',
-  },
-  planButtonActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  planButtonText: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
-    color: COLORS.textSecondary,
-  },
-  planButtonTextActive: {
-    color: '#FFFFFF',
-  },
-  sectionTitle: {
-    marginTop: SPACING.lg,
-    marginBottom: SPACING.md,
-  },
-  sectionTitleText: {
-    fontSize: TYPOGRAPHY.fontSize.lg,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
-    color: COLORS.textPrimary,
   },
   buttonContainer: {
     padding: SPACING.lg,
@@ -409,17 +347,17 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   submitButtonText: {
-    color: '#FFFFFF',
+    color: COLORS.textInverse,
     fontSize: TYPOGRAPHY.fontSize.md,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
   cancelButton: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.backgroundPrimary,
     borderRadius: 8,
     paddingVertical: SPACING.md,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: COLORS.borderLight,
   },
   cancelButtonText: {
     color: COLORS.textPrimary,

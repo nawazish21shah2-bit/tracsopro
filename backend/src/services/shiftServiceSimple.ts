@@ -2,7 +2,7 @@
 import prisma from '../config/database.js';
 import { NotFoundError, BadRequestError, ValidationError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
-import { ShiftStatus } from '@prisma/client';
+import { ShiftStatus, BreakType } from '@prisma/client';
 
 export interface CreateShiftData {
   guardId?: string; // Optional: Admin assigns directly, client can leave empty for admin to assign later
@@ -340,7 +340,17 @@ class ShiftServiceSimple {
     }
 
     if (shift.status !== 'IN_PROGRESS') {
+      if (shift.status === 'COMPLETED') {
+        throw new BadRequestError('Already checked out from this shift');
+      }
       throw new BadRequestError(`Cannot check out from shift with status: ${shift.status}`);
+    }
+
+    const openBreak = await prisma.shiftBreak.findFirst({
+      where: { shiftId: data.shiftId, endTime: null },
+    });
+    if (openBreak) {
+      throw new BadRequestError('End your active break before checking out');
     }
 
     // Update shift with check-out information
@@ -511,7 +521,7 @@ class ShiftServiceSimple {
       throw new NotFoundError('Shift not found');
     }
 
-    // Verify guard ownership if guardId is provided
+    // Verify guard ownership if guardId is provided (guard-scoped callers)
     if (guardId && shift.guardId !== guardId) {
       throw new NotFoundError('Shift not found');
     }
@@ -856,7 +866,22 @@ class ShiftServiceSimple {
       client: client ? {
         id: client.id,
         name: client.user ? `${client.user.firstName} ${client.user.lastName}` : 'Unknown Client',
+        user: client.user
+          ? { firstName: client.user.firstName, lastName: client.user.lastName }
+          : undefined,
       } : null,
+      guard: shift.guard
+        ? {
+            id: shift.guard.id,
+            user: shift.guard.user
+              ? {
+                  firstName: shift.guard.user.firstName,
+                  lastName: shift.guard.user.lastName,
+                  email: shift.guard.user.email,
+                }
+              : undefined,
+          }
+        : null,
     };
   }
 
@@ -879,42 +904,106 @@ class ShiftServiceSimple {
   }
 
   /**
-   * Start break (simplified implementation)
+   * Map client break type labels to Prisma BreakType enum.
    */
-  async startBreak(data: any) {
-    // Validate shift exists and is in progress
+  private normalizeBreakType(value?: string): BreakType {
+    const key = (value || 'REGULAR').toUpperCase();
+    const map: Record<string, BreakType> = {
+      REGULAR: BreakType.REGULAR,
+      REST: BreakType.REGULAR,
+      SHORT: BreakType.REGULAR,
+      LUNCH: BreakType.LUNCH,
+      EMERGENCY: BreakType.EMERGENCY,
+      UNAUTHORIZED: BreakType.UNAUTHORIZED,
+      BATHROOM: BreakType.REGULAR,
+      OTHER: BreakType.REGULAR,
+    };
+    return map[key] ?? BreakType.REGULAR;
+  }
+
+  /**
+   * Get the guard's active (open) break for a shift, if any.
+   */
+  async getActiveBreak(shiftId: string, guardId: string) {
+    const shift = await prisma.shift.findUnique({ where: { id: shiftId } });
+    if (!shift) {
+      throw new NotFoundError('Shift not found');
+    }
+    if (shift.guardId !== guardId) {
+      throw new BadRequestError('Shift does not belong to this guard');
+    }
+
+    return prisma.shiftBreak.findFirst({
+      where: { shiftId, endTime: null },
+      orderBy: { startTime: 'desc' },
+    });
+  }
+
+  /**
+   * Start break — persisted on ShiftBreak, one active break per shift.
+   */
+  async startBreak(data: {
+    shiftId: string;
+    guardId: string;
+    breakType?: BreakType | string;
+    location?: { latitude: number; longitude: number; accuracy?: number };
+    notes?: string;
+  }) {
     const shift = await prisma.shift.findUnique({
       where: { id: data.shiftId },
     });
 
     if (!shift) {
       throw new NotFoundError('Shift not found');
+    }
+
+    if (shift.guardId !== data.guardId) {
+      throw new BadRequestError('Shift does not belong to this guard');
     }
 
     if (shift.status !== 'IN_PROGRESS') {
       throw new BadRequestError(`Cannot start break for shift with status: ${shift.status}`);
     }
 
-    // For simplified version, we'll just return a mock break object
-    const breakRecord = {
-      id: `break_${Date.now()}`,
-      shiftId: data.shiftId,
-      type: data.breakType || 'REST',
-      startTime: new Date().toISOString(),
-      endTime: null,
-      location: data.location || null,
-      notes: data.notes || null,
-    };
+    const existingBreak = await prisma.shiftBreak.findFirst({
+      where: { shiftId: data.shiftId, endTime: null },
+    });
+    if (existingBreak) {
+      throw new BadRequestError('A break is already in progress for this shift');
+    }
+
+    const breakRecord = await prisma.shiftBreak.create({
+      data: {
+        shiftId: data.shiftId,
+        startTime: new Date(),
+        breakType: this.normalizeBreakType(
+          typeof data.breakType === 'string' ? data.breakType : data.breakType
+        ),
+        location: data.location
+          ? {
+              latitude: data.location.latitude,
+              longitude: data.location.longitude,
+              accuracy: data.location.accuracy,
+            }
+          : undefined,
+        notes: data.notes,
+      },
+    });
 
     logger.info(`Break started for shift ${data.shiftId}: ${breakRecord.id}`);
     return breakRecord;
   }
 
   /**
-   * End break (simplified implementation)
+   * End an active break.
    */
-  async endBreak(data: any) {
-    // Validate shift exists
+  async endBreak(data: {
+    shiftId: string;
+    guardId: string;
+    breakId: string;
+    location?: { latitude: number; longitude: number; accuracy?: number };
+    notes?: string;
+  }) {
     const shift = await prisma.shift.findUnique({
       where: { id: data.shiftId },
     });
@@ -923,20 +1012,44 @@ class ShiftServiceSimple {
       throw new NotFoundError('Shift not found');
     }
 
-    // For simplified version, we'll just return a mock updated break object
-    const breakRecord = {
-      id: data.breakId,
-      shiftId: data.shiftId,
-      type: 'REST',
-      startTime: new Date(Date.now() - 15 * 60 * 1000).toISOString(), // 15 minutes ago
-      endTime: new Date().toISOString(),
-      location: data.location || null,
-      notes: data.notes || null,
-      duration: 15, // 15 minutes
-    };
+    if (shift.guardId !== data.guardId) {
+      throw new BadRequestError('Shift does not belong to this guard');
+    }
 
-    logger.info(`Break ended for shift ${data.shiftId}: ${data.breakId}`);
-    return breakRecord;
+    const breakRecord = await prisma.shiftBreak.findFirst({
+      where: {
+        id: data.breakId,
+        shiftId: data.shiftId,
+        endTime: null,
+      },
+    });
+
+    if (!breakRecord) {
+      throw new NotFoundError('Active break not found');
+    }
+
+    const endTime = new Date();
+    const durationMinutes = Math.round(
+      (endTime.getTime() - breakRecord.startTime.getTime()) / (1000 * 60)
+    );
+
+    const updated = await prisma.shiftBreak.update({
+      where: { id: data.breakId },
+      data: {
+        endTime,
+        location: data.location
+          ? {
+              latitude: data.location.latitude,
+              longitude: data.location.longitude,
+              accuracy: data.location.accuracy,
+            }
+          : breakRecord.location ?? undefined,
+        notes: data.notes ?? breakRecord.notes,
+      },
+    });
+
+    logger.info(`Break ended for shift ${data.shiftId}: ${data.breakId} (${durationMinutes}m)`);
+    return { ...updated, durationMinutes };
   }
 
   /**
@@ -1020,6 +1133,10 @@ class ShiftServiceSimple {
 
     if (!shift) {
       throw new NotFoundError('Shift not found');
+    }
+
+    if (data.guardId && shift.guardId !== data.guardId) {
+      throw new BadRequestError('Shift does not belong to this guard');
     }
 
     // For simplified version, we'll just return a mock incident object

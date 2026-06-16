@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
 import { launchImageLibrary, launchCamera, MediaType, ImagePickerResponse } from 'react-native-image-picker';
 import { CameraIcon } from '../ui/AppIcons';
 import { COLORS, SPACING, TYPOGRAPHY } from '../../styles/globalStyles';
+import { pickProfilePictureUrl } from '../../utils/profilePictureUtils';
 
 interface ProfileAvatarProps {
   /** User's first name */
@@ -19,6 +20,8 @@ interface ProfileAvatarProps {
   lastName?: string;
   /** Profile picture URL */
   profilePictureUrl?: string | null;
+  /** Alias used by chat/list APIs */
+  avatar?: string | null;
   /** Avatar size in pixels */
   size?: number;
   /** Whether the avatar is editable (shows camera icon and allows image selection) */
@@ -42,6 +45,7 @@ export const ProfileAvatar: React.FC<ProfileAvatarProps> = ({
   firstName = '',
   lastName = '',
   profilePictureUrl,
+  avatar,
   size = 80,
   editable = false,
   onImageSelected,
@@ -52,6 +56,15 @@ export const ProfileAvatar: React.FC<ProfileAvatarProps> = ({
   const [imageError, setImageError] = useState(false);
   const [localImageUri, setLocalImageUri] = useState<string | null>(null);
 
+  const remoteImageUrl = useMemo(
+    () => pickProfilePictureUrl({ profilePictureUrl, avatar }),
+    [profilePictureUrl, avatar],
+  );
+
+  useEffect(() => {
+    setImageError(false);
+  }, [remoteImageUrl]);
+
   // Generate initials from name
   const getInitials = (): string => {
     const firstInitial = firstName?.charAt(0)?.toUpperCase() || '';
@@ -59,9 +72,8 @@ export const ProfileAvatar: React.FC<ProfileAvatarProps> = ({
     return firstInitial + lastInitial || 'U';
   };
 
-  // Determine which image to show
-  const imageSource = localImageUri || profilePictureUrl;
-  const shouldShowImage = imageSource && !imageError;
+  const imageSource = localImageUri || remoteImageUrl;
+  const shouldShowImage = Boolean(imageSource && !imageError);
 
   // Handle image picker options
   const handleImagePicker = () => {
@@ -148,7 +160,7 @@ export const ProfileAvatar: React.FC<ProfileAvatarProps> = ({
         </View>
       ) : shouldShowImage ? (
         <Image
-          source={{ uri: imageSource }}
+          source={{ uri: imageSource! }}
           style={[styles.avatarImage, { width: size, height: size, borderRadius: size / 2 }]}
           onError={() => setImageError(true)}
         />
@@ -212,4 +224,3 @@ const styles = StyleSheet.create({
 });
 
 export default ProfileAvatar;
-

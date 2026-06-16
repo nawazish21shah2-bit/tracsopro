@@ -11,7 +11,7 @@ import {
   View,
 } from 'react-native';
 import { useTheme } from '../../utils/theme';
-import { ArrowUpOutlineIcon } from '../ui/AppIcons';
+import { ArrowRightIcon } from '../ui/AppIcons';
 
 export interface ButtonProps {
   title: string;
@@ -113,7 +113,7 @@ const Button: React.FC<ButtonProps> = ({
           {icon && <Text style={styles.icon}>{icon}</Text>}
           <Text style={[getTextStyle(), textStyle]}>{title}</Text>
           {showArrow && (
-            <ArrowUpOutlineIcon
+            <ArrowRightIcon
               size={20}
               color={variant === 'secondary' ? '#1C6CA9' : '#FFFFFF'}
               style={styles.arrowIcon}

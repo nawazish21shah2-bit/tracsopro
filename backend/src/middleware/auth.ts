@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { verifyToken, TokenPayload } from '../utils/jwt.js';
 import { UnauthorizedError, ForbiddenError } from '../utils/errors.js';
 import prisma from '../config/database.js';
+import SuperAdminService from '../services/superAdminService.js';
 
 export interface AuthRequest extends Request {
   userId?: string;
@@ -62,6 +63,16 @@ export const authenticate = async (
 
     if (!user.isActive) {
       throw new UnauthorizedError('User account is inactive');
+    }
+
+    const maintenanceEnabled = await SuperAdminService.isMaintenanceModeEnabled();
+    if (maintenanceEnabled && user.role !== 'SUPER_ADMIN') {
+      res.status(503).json({
+        success: false,
+        code: 'MAINTENANCE',
+        message: 'Platform is under maintenance. Please try again later.',
+      });
+      return;
     }
 
     req.userId = user.id;
@@ -133,45 +144,6 @@ export const authorize = (...roles: string[]) => {
       next(error);
     }
   };
-};
-
-export const optionalAuth = async (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const authHeader = req.headers.authorization;
-    
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.substring(7);
-      const payload: TokenPayload = verifyToken(token);
-
-      if (payload.type === 'access') {
-        const user = await prisma.user.findUnique({
-          where: { id: payload.sub },
-          select: {
-            id: true,
-            email: true,
-            firstName: true,
-            lastName: true,
-            role: true,
-            isActive: true,
-          },
-        });
-
-        if (user && user.isActive) {
-          req.userId = user.id;
-          req.user = user;
-        }
-      }
-    }
-
-    next();
-  } catch (error) {
-    // Ignore auth errors for optional auth
-    next();
-  }
 };
 
 // Alias for backward compatibility

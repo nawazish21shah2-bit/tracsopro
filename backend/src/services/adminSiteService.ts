@@ -148,16 +148,41 @@ export class AdminSiteService {
     return site;
   }
 
-  async updateSite(siteId: string, data: AdminSiteUpdateData) {
-    const site = await prisma.site.findUnique({ where: { id: siteId } });
+  async updateSite(siteId: string, data: AdminSiteUpdateData, securityCompanyId?: string) {
+    const site = await prisma.site.findUnique({
+      where: { id: siteId },
+      include: { companySites: true },
+    });
     if (!site) {
       throw new NotFoundError('Site not found');
+    }
+
+    if (securityCompanyId) {
+      const belongsToCompany = site.companySites.some(
+        (companySite) => companySite.securityCompanyId === securityCompanyId,
+      );
+      if (!belongsToCompany) {
+        throw new ValidationError('Site does not belong to your company');
+      }
     }
 
     if (data.clientId) {
       const client = await prisma.client.findUnique({ where: { id: data.clientId } });
       if (!client) {
         throw new NotFoundError('Client not found');
+      }
+
+      if (securityCompanyId) {
+        const companyClient = await prisma.companyClient.findFirst({
+          where: {
+            clientId: data.clientId,
+            securityCompanyId,
+            isActive: true,
+          },
+        });
+        if (!companyClient) {
+          throw new ValidationError('Client does not belong to your company');
+        }
       }
     }
 
@@ -188,7 +213,24 @@ export class AdminSiteService {
     return updated;
   }
 
-  async deleteSite(siteId: string) {
+  async deleteSite(siteId: string, securityCompanyId?: string) {
+    const site = await prisma.site.findUnique({
+      where: { id: siteId },
+      include: { companySites: true },
+    });
+    if (!site) {
+      throw new NotFoundError('Site not found');
+    }
+
+    if (securityCompanyId) {
+      const belongsToCompany = site.companySites.some(
+        (companySite) => companySite.securityCompanyId === securityCompanyId,
+      );
+      if (!belongsToCompany) {
+        throw new ValidationError('Site does not belong to your company');
+      }
+    }
+
     const activeShifts = await prisma.shift.count({
       where: {
         siteId,
@@ -198,11 +240,6 @@ export class AdminSiteService {
 
     if (activeShifts > 0) {
       throw new ValidationError('Cannot delete site with active assignments');
-    }
-
-    const site = await prisma.site.findUnique({ where: { id: siteId } });
-    if (!site) {
-      throw new NotFoundError('Site not found');
     }
 
     await prisma.site.delete({ where: { id: siteId } });

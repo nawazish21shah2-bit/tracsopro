@@ -7,7 +7,6 @@ import {
   StatusBar,
   TextInput,
   Alert,
-  Image,
   ScrollView,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -19,11 +18,12 @@ import { registerUser } from '../../store/slices/authSlice';
 import Icon from 'react-native-vector-icons/Ionicons';
 import Button from '../../components/common/Button';
 import PhoneInput from '../../components/auth/PhoneInput';
+import AuthHeader from '../../components/auth/AuthHeader';
+import AuthFooter from '../../components/auth/AuthFooter';
 import { AuthStackParamList, UserRole } from '../../types';
-import Logo from '../../assets/images/tracSOpro-logo.png';
 import { Country, defaultCountry } from '../../utils/countries';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
-import { authStyles, AUTH_HEADING_TO_FORM } from '../../styles/authStyles';
+import { authStyles } from '../../styles/authStyles';
 import { showRegistrationError } from '../../utils/registrationErrorHandler';
 
 type ClientSignupScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'ClientSignup'>;
@@ -189,18 +189,9 @@ const ClientSignupScreen: React.FC = () => {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Logo */}
-        <View style={styles.logoContainer}>
-          <Image source={Logo} style={styles.logoImage} resizeMode="contain" />
-        </View>
+        <AuthHeader title="SIGN UP" />
 
-        {/* Title */}
-        <View style={styles.titleContainer}>
-          <Text style={authStyles.title}>SIGN UP</Text>
-        </View>
-
-        {/* Form */}
-        <View style={styles.form}>
+        <View style={[authStyles.form, styles.form]}>
           {/* Full Name */}
           <View style={styles.inputContainer}>
             <View style={[styles.inputWrapper, errors.fullName && styles.inputError]}>
@@ -332,29 +323,23 @@ const ClientSignupScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Continue Button */}
-        <Button
-          title="Continue"
-          onPress={handleSignup}
-          fullWidth
-          size="large"
-          loading={isLoading}
-          style={styles.continueButton}
-        />
-
-        {/* Footer */}
-        <View style={styles.footer}>
-          <View style={styles.footerRow}>
-            <Text style={styles.footerText}>Already have an account? </Text>
-            <TouchableOpacity 
-              onPress={navigateToLogin}
-              disabled={isLoading}
-              activeOpacity={isLoading ? 1 : 0.7}
-            >
-              <Text style={[styles.loginText, isLoading && styles.disabledLink]}>Login</Text>
-            </TouchableOpacity>
-          </View>
+        <View style={authStyles.authActions}>
+          <Button
+            title="Continue"
+            onPress={handleSignup}
+            fullWidth
+            size="large"
+            loading={isLoading}
+            style={authStyles.submitButton}
+          />
         </View>
+
+        <AuthFooter
+          text="Already have an account?"
+          linkText="Login"
+          onLinkPress={navigateToLogin}
+          disabled={isLoading}
+        />
       </ScrollView>
     </View>
   );
@@ -367,24 +352,10 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     flexGrow: 1,
-    paddingHorizontal: SPACING.xxl,
-    paddingVertical: SPACING.xxxxl,
-  },
-  logoContainer: {
-    alignItems: 'center',
-    marginTop: SPACING.lg,
-    marginBottom: SPACING.xxxxl,
-  },
-  logoImage: {
-    width: 160,
-    height: 140,
-  },
-  titleContainer: {
-    alignItems: 'center',
-    marginBottom: AUTH_HEADING_TO_FORM,
+    paddingBottom: SPACING.lg,
   },
   form: {
-    marginBottom: SPACING.xxxxl,
+    flex: 0,
   },
   inputContainer: {
     marginBottom: SPACING.lg,
@@ -423,34 +394,6 @@ const styles = StyleSheet.create({
     color: COLORS.error,
     marginTop: SPACING.xs,
     marginLeft: SPACING.xs,
-  },
-  continueButton: {
-    marginBottom: SPACING.xxl,
-  },
-  footer: {
-    alignItems: 'center',
-    marginBottom: SPACING.lg,
-  },
-  footerText: {
-    fontFamily: TYPOGRAPHY.fontPrimary,
-    fontWeight: TYPOGRAPHY.fontWeight.regular,
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.textSecondary,
-  },
-  loginText: {
-    fontFamily: TYPOGRAPHY.fontPrimary,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.primary,
-  },
-  disabledLink: {
-    opacity: 0.5,
-  },
-  footerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexWrap: 'nowrap',
   },
 });
 

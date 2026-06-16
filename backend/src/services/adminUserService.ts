@@ -1,5 +1,7 @@
 import prisma from '../config/database.js';
 import bcrypt from 'bcryptjs';
+import subscriptionService from './subscriptionService.js';
+import { ForbiddenError, NotFoundError } from '../utils/errors.js';
 
 export class AdminUserService {
   async getUsers(params: {
@@ -107,8 +109,62 @@ export class AdminUserService {
     };
   }
 
-  async updateUserStatus(userId: string, isActive: boolean) {
-    const user = await prisma.user.update({
+  private async findScopedUser(userId: string, securityCompanyId?: string) {
+    if (!securityCompanyId) {
+      return prisma.user.findUnique({
+        where: { id: userId },
+      });
+    }
+
+    return prisma.user.findFirst({
+      where: {
+        id: userId,
+        OR: [
+          {
+            guard: {
+              companyGuards: {
+                some: {
+                  securityCompanyId,
+                  isActive: true,
+                },
+              },
+            },
+          },
+          {
+            client: {
+              companyClients: {
+                some: {
+                  securityCompanyId,
+                  isActive: true,
+                },
+              },
+            },
+          },
+          {
+            companyUsers: {
+              some: {
+                securityCompanyId,
+                isActive: true,
+              },
+            },
+          },
+        ],
+      },
+    });
+  }
+
+  private async assertScopedUser(userId: string, securityCompanyId?: string) {
+    const user = await this.findScopedUser(userId, securityCompanyId);
+    if (!user) {
+      throw new NotFoundError('User not found or does not belong to your company');
+    }
+    return user;
+  }
+
+  async updateUserStatus(userId: string, isActive: boolean, securityCompanyId?: string) {
+    const user = await this.assertScopedUser(userId, securityCompanyId);
+
+    const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: { isActive },
       select: {
@@ -124,14 +180,14 @@ export class AdminUserService {
     });
 
     // If guard, optionally sync guard status
-    if (user.role === 'GUARD') {
+    if (updatedUser.role === 'GUARD') {
       await prisma.guard.updateMany({
-        where: { userId: user.id },
+        where: { userId: updatedUser.id },
         data: { status: isActive ? 'ACTIVE' : 'SUSPENDED' },
       });
     }
 
-    return user;
+    return updatedUser;
   }
 
   async updateUser(userId: string, data: {
@@ -139,7 +195,13 @@ export class AdminUserService {
     lastName?: string;
     email?: string;
     role?: 'GUARD' | 'ADMIN' | 'CLIENT' | 'SUPER_ADMIN';
-  }) {
+  }, securityCompanyId?: string) {
+    const existingUser = await this.assertScopedUser(userId, securityCompanyId);
+
+    if (securityCompanyId && data.role === 'SUPER_ADMIN') {
+      throw new ForbiddenError('Cannot assign SUPER_ADMIN role');
+    }
+
     const user = await prisma.user.update({
       where: { id: userId },
       data,
@@ -158,7 +220,8 @@ export class AdminUserService {
     return user;
   }
 
-  async deleteUser(userId: string) {
+  async deleteUser(userId: string, securityCompanyId?: string) {
+    await this.assertScopedUser(userId, securityCompanyId);
     await prisma.user.delete({ where: { id: userId } });
     return { id: userId };
   }
@@ -188,6 +251,14 @@ export class AdminUserService {
       throw new Error('User with this email already exists');
     }
 
+    if (securityCompanyId) {
+      if (role === 'GUARD') {
+        await subscriptionService.validateGuardLimit(securityCompanyId);
+      } else if (role === 'CLIENT') {
+        await subscriptionService.validateClientLimit(securityCompanyId);
+      }
+    }
+
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -199,7 +270,7 @@ export class AdminUserService {
           email: email.toLowerCase(),
           password: hashedPassword,
           firstName,
-          lastName,
+          lastName: lastName?.trim() ?? '',
           phone: phone || null,
           role,
           isActive: true,

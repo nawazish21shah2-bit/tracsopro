@@ -3,7 +3,7 @@
  * Matches exact design specifications with shadows, borders, typography
  */
 
-import React from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,10 +12,19 @@ import {
   Image,
   Dimensions,
 } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE, PROVIDER_DEFAULT, Region } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_GOOGLE, PROVIDER_DEFAULT } from 'react-native-maps';
 import { Platform } from 'react-native';
 import { MapPinIcon } from '../ui/FeatherIcons';
+import ProfileAvatar from '../common/ProfileAvatar';
+import { parseDisplayName } from '../../utils/parseDisplayName';
 import StatusBadge from './StatusBadge';
+import GuardMapMarker from '../maps/GuardMapMarker';
+import {
+  collectMapPoints,
+  computeRegionForPoints,
+  isValidLatLng,
+  parseCoordinate,
+} from '../../utils/mapRegionUtils';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -58,6 +67,45 @@ const ShiftCard: React.FC<ShiftCardProps> = ({
   showMap = true,
   mapHeight = 200,
 }) => {
+  const mapRef = useRef<MapView>(null);
+
+  const siteLat = parseCoordinate(shift.siteLatitude);
+  const siteLng = parseCoordinate(shift.siteLongitude);
+  const guardLat = parseCoordinate(shift.guardLatitude);
+  const guardLng = parseCoordinate(shift.guardLongitude);
+  const hasGuardPin = isValidLatLng(guardLat, guardLng);
+  const hasSitePin = isValidLatLng(siteLat, siteLng);
+
+  const mapPoints = useMemo(
+    () =>
+      collectMapPoints({
+        siteLatitude: siteLat,
+        siteLongitude: siteLng,
+        guardLatitude: guardLat,
+        guardLongitude: guardLng,
+      }),
+    [siteLat, siteLng, guardLat, guardLng],
+  );
+
+  const mapRegion = useMemo(() => computeRegionForPoints(mapPoints), [mapPoints]);
+
+  useEffect(() => {
+    if (!showMap || mapPoints.length === 0 || !mapRef.current) return;
+
+    const timer = setTimeout(() => {
+      if (mapPoints.length === 1) {
+        mapRef.current?.animateToRegion(mapRegion, 350);
+      } else {
+        mapRef.current?.fitToCoordinates(mapPoints, {
+          edgePadding: { top: 40, right: 40, bottom: 40, left: 40 },
+          animated: true,
+        });
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [showMap, mapPoints, mapRegion]);
+
   const formatTime = (time?: string) => {
     if (!time) return '--:--';
     try {
@@ -70,14 +118,6 @@ const ShiftCard: React.FC<ShiftCardProps> = ({
     } catch {
       return time;
     }
-  };
-
-  // Default map region (San Francisco Mission District)
-  const defaultRegion: Region = {
-    latitude: shift.siteLatitude || 37.7599,
-    longitude: shift.siteLongitude || -122.4148,
-    latitudeDelta: 0.01,
-    longitudeDelta: 0.01,
   };
 
   return (
@@ -94,9 +134,10 @@ const ShiftCard: React.FC<ShiftCardProps> = ({
           activeOpacity={0.9}
         >
           <MapView
+            ref={mapRef}
             style={styles.map}
             provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
-            region={defaultRegion}
+            initialRegion={mapRegion}
             scrollEnabled={true}
             zoomEnabled={true}
             pitchEnabled={false}
@@ -107,34 +148,26 @@ const ShiftCard: React.FC<ShiftCardProps> = ({
             showsScale={false}
             onPress={onMapPress || onViewLocation}
           >
-            {/* Site Marker */}
-            {shift.siteLatitude && shift.siteLongitude && (
+            {hasSitePin && (
               <Marker
                 coordinate={{
-                  latitude: shift.siteLatitude,
-                  longitude: shift.siteLongitude,
+                  latitude: siteLat!,
+                  longitude: siteLng!,
                 }}
                 title={shift.siteName}
                 description={shift.siteAddress}
                 pinColor="#1C6CA9"
               />
             )}
-            {/* Guard Location Marker (if active shift) */}
-            {shift.status === 'Active' && shift.guardLatitude && shift.guardLongitude && (
-              <Marker
-                coordinate={{
-                  latitude: shift.guardLatitude,
-                  longitude: shift.guardLongitude,
-                }}
-                title={shift.guardName}
-                description="Guard Location"
-              >
-                <View style={styles.guardMarker}>
-                  <View style={styles.guardMarkerInner}>
-                    <Text style={styles.guardMarkerText}>👤</Text>
-                  </View>
-                </View>
-              </Marker>
+            {hasGuardPin && (
+              <GuardMapMarker
+                guardId={shift.guardId || shift.id}
+                guardName={shift.guardName || 'Guard'}
+                latitude={guardLat!}
+                longitude={guardLng!}
+                status={shift.status === 'Active' ? 'active' : 'offline'}
+                siteName={shift.siteName}
+              />
             )}
           </MapView>
         </TouchableOpacity>
@@ -209,18 +242,11 @@ const ShiftCard: React.FC<ShiftCardProps> = ({
               activeOpacity={0.7}
             >
               <View style={styles.guardAvatar}>
-                {shift.guardAvatar ? (
-                  <Image
-                    source={{ uri: shift.guardAvatar }}
-                    style={styles.avatarImage}
-                  />
-                ) : (
-                  <View style={styles.avatarPlaceholder}>
-                    <Text style={styles.avatarText}>
-                      {shift.guardName.charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                )}
+                <ProfileAvatar
+                  {...parseDisplayName(shift.guardName)}
+                  profilePictureUrl={shift.guardAvatar}
+                  size={40}
+                />
               </View>
               <View style={styles.guardDetails}>
                 <Text style={styles.guardName}>{shift.guardName}</Text>

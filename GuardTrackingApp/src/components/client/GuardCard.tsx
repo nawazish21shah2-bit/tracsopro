@@ -1,13 +1,21 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { PersonIcon } from '../ui/AppIcons';
-import { MessageCircle, User, Phone } from 'react-native-feather';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+} from 'react-native';
+import { MessageCircle, User } from 'react-native-feather';
+import ProfileAvatar from '../common/ProfileAvatar';
+import { parseDisplayName } from '../../utils/parseDisplayName';
 import StatusBadge from './StatusBadge';
-import { globalStyles, COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../styles/globalStyles';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 
 interface GuardCardProps {
   guard: {
     id: string;
+    userId?: string;
     name: string;
     avatar?: string;
     site?: string;
@@ -21,29 +29,28 @@ interface GuardCardProps {
     phone?: string;
   };
   onPress?: () => void;
-  onChat?: (guardId: string, guardName: string) => void;
+  onChat?: (guardUserId: string, guardName: string, avatar?: string, guardEntityId?: string) => void;
   onViewProfile?: (guardId: string) => void;
   onCall?: (phone: string) => void;
   showActionButtons?: boolean;
+  chatLoading?: boolean;
 }
 
-const GuardCard: React.FC<GuardCardProps> = ({ 
-  guard, 
-  onPress, 
-  onChat, 
+const GuardCard: React.FC<GuardCardProps> = ({
+  guard,
+  onPress,
+  onChat,
   onViewProfile,
   onCall,
-  showActionButtons = false 
+  showActionButtons = false,
+  chatLoading = false,
 }) => {
-  const handleChat = (e: any) => {
-    e?.stopPropagation?.(); // Prevent card press when clicking chat button
-    if (onChat) {
-      onChat(guard.id, guard.name);
-    }
+  const handleChat = () => {
+    if (!onChat || !guard.userId || chatLoading) return;
+    onChat(guard.userId, guard.name, guard.avatar, guard.id);
   };
 
-  const handleViewProfile = (e?: any) => {
-    e?.stopPropagation?.(); // Prevent card press when clicking profile button
+  const handleViewProfile = () => {
     if (onViewProfile) {
       onViewProfile(guard.id);
     } else if (onPress) {
@@ -51,107 +58,98 @@ const GuardCard: React.FC<GuardCardProps> = ({
     }
   };
 
-  const handleCall = (e: any) => {
-    e?.stopPropagation?.(); // Prevent card press when clicking call button
+  const handleCall = () => {
     if (onCall && guard.phone) {
       onCall(guard.phone);
     }
   };
 
   return (
-    <TouchableOpacity 
-      style={styles.card} 
-      onPress={handleViewProfile} 
-      activeOpacity={0.7}
+    <TouchableOpacity
+      style={styles.card}
+      onPress={handleViewProfile}
+      activeOpacity={0.75}
     >
-      <View style={styles.header}>
-        <View style={styles.guardInfo}>
-          <View style={styles.avatar}>
-            {guard.avatar ? (
-              <Image source={{ uri: guard.avatar }} style={styles.avatarImage} />
-            ) : (
-              <PersonIcon size={24} color="#666" />
-            )}
+      <View style={styles.accent} />
+
+      <View style={styles.body}>
+        <View style={styles.header}>
+          <View style={styles.guardInfo}>
+            <ProfileAvatar
+              {...parseDisplayName(guard.name)}
+              profilePictureUrl={guard.avatar}
+              size={48}
+            />
+            <View style={styles.details}>
+              <Text style={styles.name}>{guard.name}</Text>
+              {guard.site ? <Text style={styles.site}>{guard.site}</Text> : null}
+              {guard.shiftTime && !showActionButtons ? (
+                <Text style={styles.shiftTime}>{guard.shiftTime}</Text>
+              ) : null}
+            </View>
           </View>
-          <View style={styles.details}>
-            <Text style={styles.name}>{guard.name}</Text>
-            {guard.site && <Text style={styles.site}>{guard.site}</Text>}
-            {showActionButtons && guard.pastJobs && (
-              <Text style={styles.pastJobs}>Past Jobs: {guard.pastJobs}</Text>
-            )}
-            {showActionButtons && guard.rating && (
-              <Text style={styles.rating}>Rating: {guard.rating}/5</Text>
-            )}
-            {showActionButtons && guard.availability && (
-              <Text style={styles.availability}>Availability: {guard.availability}</Text>
-            )}
-          </View>
+
+          {showActionButtons ? (
+            <View style={styles.actionButtons}>
+              {onChat ? (
+                <TouchableOpacity
+                  style={[styles.iconButton, styles.chatButton, (!guard.userId || chatLoading) && styles.iconDisabled]}
+                  onPress={(e) => {
+                    e?.stopPropagation?.();
+                    handleChat();
+                  }}
+                  disabled={!guard.userId || chatLoading}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  {chatLoading ? (
+                    <ActivityIndicator size="small" color={COLORS.primary} />
+                  ) : (
+                    <MessageCircle width={18} height={18} color={COLORS.primary} strokeWidth={2} />
+                  )}
+                </TouchableOpacity>
+              ) : null}
+              <TouchableOpacity
+                style={[styles.iconButton, styles.profileButton]}
+                onPress={(e) => {
+                  e?.stopPropagation?.();
+                  handleViewProfile();
+                }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <User width={18} height={18} color={COLORS.primary} strokeWidth={2} />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <StatusBadge status={guard.status} />
+          )}
         </View>
-        {showActionButtons ? (
-          <View style={styles.actionButtons}>
-            {onChat && (
-              <TouchableOpacity 
-                style={[styles.iconButton, styles.chatButton]} 
-                onPress={(e) => {
-                  e?.stopPropagation?.();
-                  handleChat(e);
-                }}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <MessageCircle width={18} height={18} color={COLORS.primary} strokeWidth={2} />
-              </TouchableOpacity>
-            )}
-            {onCall && guard.phone && (
-              <TouchableOpacity 
-                style={[styles.iconButton, styles.callButton]} 
-                onPress={(e) => {
-                  e?.stopPropagation?.();
-                  handleCall(e);
-                }}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Phone width={18} height={18} color={COLORS.success} strokeWidth={2} />
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity 
-              style={[styles.iconButton, styles.profileButton]} 
-              onPress={(e) => {
-                e?.stopPropagation?.();
-                handleViewProfile(e);
-              }}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <User width={18} height={18} color={COLORS.textSecondary} strokeWidth={2} />
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <StatusBadge status={guard.status} />
-        )}
+
+        {!showActionButtons && guard.status === 'Active' && guard.checkInTime ? (
+          <Text style={styles.checkInTime}>Checked in at {guard.checkInTime}</Text>
+        ) : null}
       </View>
-      
-      {!showActionButtons && (
-        <View style={styles.shiftDetails}>
-          <View style={styles.shiftInfo}>
-            <Text style={styles.shiftTime}>{guard.shiftTime}</Text>
-            {guard.status === 'Active' && guard.checkInTime && (
-              <Text style={styles.checkInTime}>Checked in at {guard.checkInTime}</Text>
-            )}
-          </View>
-        </View>
-      )}
     </TouchableOpacity>
   );
 };
 
 const styles = StyleSheet.create({
   card: {
+    flexDirection: 'row',
     backgroundColor: COLORS.backgroundPrimary,
-    borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.lg,
+    borderRadius: BORDER_RADIUS.lg,
     marginBottom: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.borderCard,
-    // Border only, no shadow for minimal style
+    overflow: 'hidden',
+    ...SHADOWS.small,
+  },
+  accent: {
+    width: 4,
+    backgroundColor: COLORS.primary,
+  },
+  body: {
+    flex: 1,
+    padding: SPACING.lg,
   },
   header: {
     flexDirection: 'row',
@@ -162,97 +160,66 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-  },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: COLORS.backgroundSecondary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: SPACING.md,
-  },
-  avatarImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    marginRight: SPACING.sm,
+    gap: SPACING.md,
   },
   details: {
     flex: 1,
   },
   name: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
     color: COLORS.textPrimary,
-    marginBottom: SPACING.xs,
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
   site: {
-    fontSize: 14,
+    fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.textSecondary,
-    marginBottom: SPACING.xs / 2,
+    marginTop: 2,
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
-  pastJobs: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.xs / 2,
+  shiftTime: {
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.primary,
+    marginTop: 4,
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
-  rating: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.xs / 2,
-  },
-  availability: {
-    fontSize: 12,
+  checkInTime: {
+    marginTop: SPACING.sm,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderCard,
+    fontSize: TYPOGRAPHY.fontSize.xs,
     color: COLORS.success,
-    fontWeight: '500',
+    fontFamily: TYPOGRAPHY.fontPrimary,
   },
   actionButtons: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: SPACING.xs,
   },
   iconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: COLORS.backgroundSecondary,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E0E0E0',
-    marginLeft: 6,
+  },
+  iconDisabled: {
+    opacity: 0.5,
   },
   chatButton: {
-    backgroundColor: COLORS.primaryLight,
-    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primaryLight + '55',
+    borderColor: COLORS.primary + '44',
   },
   callButton: {
-    backgroundColor: COLORS.success + '20',
-    borderColor: COLORS.success,
+    backgroundColor: COLORS.success + '15',
+    borderColor: COLORS.success + '44',
   },
   profileButton: {
-    backgroundColor: COLORS.backgroundSecondary,
-    borderColor: COLORS.borderLight,
-  },
-  shiftDetails: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
-  },
-  shiftInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  shiftTime: {
-    fontSize: 14,
-    color: COLORS.textPrimary,
-    fontWeight: '500',
-  },
-  checkInTime: {
-    fontSize: 12,
-    color: COLORS.success,
-    fontWeight: '500',
+    backgroundColor: COLORS.secondary,
+    borderColor: COLORS.borderCard,
   },
 });
 

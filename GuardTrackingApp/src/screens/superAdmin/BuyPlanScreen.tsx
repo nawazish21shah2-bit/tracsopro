@@ -1,9 +1,8 @@
 /**
- * Buy Plan Screen - Subscription plan selection and purchase
- * Matches the exact UI design from the app
+ * Buy Plan Screen - Stripe subscription for a company (Super Admin)
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,247 +10,169 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
+  Linking,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
+import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
+import { SuperAdminStackParamList } from '../../navigation/SuperAdminNavigator';
+import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SharedHeader from '../../components/ui/SharedHeader';
+import { superAdminService } from '../../services/superAdminService';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../styles/globalStyles';
 
-interface PlanFeature {
-  label: string;
-  value: string | boolean;
-}
+type BuyPlanRoute = RouteProp<SuperAdminStackParamList, 'BuyPlan'>;
 
-interface Plan {
-  id: string;
+interface PlanOption {
+  key: string;
   name: string;
-  description: string;
-  monthlyPrice: number;
-  yearlyPrice: number;
-  features: PlanFeature[];
-  isPopular?: boolean;
+  monthly: { priceId: string; amount: number };
+  yearly: { priceId: string; amount: number };
 }
 
-const BuyPlanScreen: React.FC<{ navigation?: any }> = ({ navigation }) => {
+const BuyPlanScreen: React.FC = () => {
+  const route = useRoute<BuyPlanRoute>();
+  const navigation = useNavigation();
+  const { companyId } = route.params;
+
   const [billingCycle, setBillingCycle] = useState<'MONTHLY' | 'YEARLY'>('MONTHLY');
+  const [plans, setPlans] = useState<PlanOption[]>([]);
+  const [companyName, setCompanyName] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState<string | null>(null);
 
-  const plans: Plan[] = [
-    {
-      id: 'BASIC',
-      name: 'BASIC',
-      description: 'Best for small businesses',
-      monthlyPrice: 30,
-      yearlyPrice: 300,
-      features: [
-        { label: 'Sites', value: '1' },
-        { label: 'Guards', value: '3' },
-        { label: 'Basic Reporting', value: true },
-      ],
-    },
-    {
-      id: 'PROFESSIONAL',
-      name: 'PROFESSIONAL',
-      description: 'Best for Large Firms',
-      monthlyPrice: 100,
-      yearlyPrice: 1000,
-      isPopular: true,
-      features: [
-        { label: 'Sites', value: '5' },
-        { label: 'Guards', value: '20' },
-        { label: 'Basic Reporting', value: true },
-        { label: 'Real-Time Map Tracking', value: true },
-        { label: 'Emergency Reporting', value: true },
-        { label: 'Push Notifications', value: true },
-      ],
-    },
-    {
-      id: 'ENTERPRISE',
-      name: 'ENTERPRISE',
-      description: 'Large company, multi sites',
-      monthlyPrice: 300,
-      yearlyPrice: 3000,
-      features: [
-        { label: 'Sites', value: 'Unlimited' },
-        { label: 'Guards', value: 'Unlimited' },
-        { label: 'Basic Reporting', value: true },
-        { label: 'Real-Time Map Tracking', value: true },
-        { label: 'Emergency Reporting', value: true },
-        { label: 'Push Notifications', value: true },
-      ],
-    },
-  ];
+  useEffect(() => {
+    loadData();
+  }, [companyId]);
 
-  const handleGetStarted = (plan: Plan) => {
-    const price = billingCycle === 'MONTHLY' ? plan.monthlyPrice : plan.yearlyPrice;
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const data = await superAdminService.getCompanySubscription(companyId);
+      setCompanyName(data.company?.name || 'Company');
+      setPlans(data.availablePlans?.plans || []);
+    } catch (error) {
+      console.error('Error loading subscription data:', error);
+      Alert.alert('Error', 'Failed to load subscription plans', [
+        { text: 'OK', onPress: () => navigation.goBack() },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatPrice = (cents: number) => `$${(cents / 100).toFixed(0)}`;
+
+  const handleSubscribe = async (plan: PlanOption) => {
+    const priceInfo = billingCycle === 'MONTHLY' ? plan.monthly : plan.yearly;
+    if (!priceInfo.priceId) {
+      Alert.alert(
+        'Configuration Error',
+        'Stripe price ID not configured for this plan. Set STRIPE_PRICE_* env vars on the server.'
+      );
+      return;
+    }
+
     Alert.alert(
-      'Subscribe to Plan',
-      `You are about to subscribe to the ${plan.name} plan for $${price} ${billingCycle === 'MONTHLY' ? 'per month' : 'per year'}.`,
+      'Subscribe',
+      `Start ${plan.key} (${billingCycle.toLowerCase()}) for ${companyName} at ${formatPrice(priceInfo.amount)}?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Continue',
-          onPress: () => {
-            // Navigate to payment screen or handle subscription
-            // navigation?.navigate('Payment', { plan, billingCycle, price });
-            Alert.alert('Success', 'Subscription process initiated');
+          onPress: async () => {
+            try {
+              setProcessing(plan.key);
+              const checkout = await superAdminService.createCompanySubscriptionCheckout(companyId, {
+                priceId: priceInfo.priceId,
+                trialDays: 14,
+              });
+              if (!checkout?.url) {
+                Alert.alert('Error', 'Checkout session created but no URL returned');
+                return;
+              }
+              await Linking.openURL(checkout.url);
+            } catch (error: any) {
+              Alert.alert('Error', error.response?.data?.error || 'Failed to start checkout');
+            } finally {
+              setProcessing(null);
+            }
           },
         },
       ]
     );
   };
 
-  const renderFeature = (feature: PlanFeature, index: number) => (
-    <View key={index} style={styles.featureRow}>
-      <Text style={styles.featureLabel}>{feature.label}:</Text>
-      <Text style={styles.featureValue}>
-        {typeof feature.value === 'boolean' ? (feature.value ? 'Yes' : 'No') : feature.value}
-      </Text>
-    </View>
-  );
-
-  const renderPlanCard = (plan: Plan) => {
-    const price = billingCycle === 'MONTHLY' ? plan.monthlyPrice : plan.yearlyPrice;
-    const isPopular = plan.isPopular;
-
+  if (loading) {
     return (
-      <View
-        key={plan.id}
-        style={[
-          styles.planCard,
-          isPopular && styles.planCardPopular,
-        ]}
-      >
-        <View style={styles.planHeader}>
-          <Text style={styles.planName}>{plan.name}</Text>
-          <Text style={styles.planDescription}>{plan.description}</Text>
+      <SafeAreaWrapper>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
-
-        <View style={styles.pricingContainer}>
-          <Text style={styles.pricingLabel}>
-            {billingCycle === 'MONTHLY' ? 'Monthly' : 'Yearly'}:
-          </Text>
-          <Text style={styles.pricingAmount}>
-            <Text style={styles.pricingValue}>{price}</Text> USD
-          </Text>
-        </View>
-
-        {billingCycle === 'MONTHLY' && (
-          <Text style={styles.yearlyPriceHint}>
-            Yearly: <Text style={styles.yearlyPriceValue}>{plan.yearlyPrice} USD</Text>
-          </Text>
-        )}
-        {billingCycle === 'YEARLY' && (
-          <Text style={styles.monthlyPriceHint}>
-            Monthly: <Text style={styles.monthlyPriceValue}>{plan.monthlyPrice} USD</Text>
-          </Text>
-        )}
-
-        <View style={styles.featuresContainer}>
-          {plan.features.map((feature, index) => renderFeature(feature, index))}
-        </View>
-
-        <TouchableOpacity
-          style={[
-            styles.getStartedButton,
-            isPopular && styles.getStartedButtonPopular,
-          ]}
-          onPress={() => handleGetStarted(plan)}
-          activeOpacity={0.7}
-        >
-          <Text
-            style={[
-              styles.getStartedButtonText,
-              isPopular && styles.getStartedButtonTextPopular,
-            ]}
-          >
-            Get Started →
-          </Text>
-        </TouchableOpacity>
-      </View>
+      </SafeAreaWrapper>
     );
-  };
+  }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <SharedHeader
-        variant="admin"
-        title="Buy Plan"
-        showLogo={false}
-      />
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.header}>
-          <Text style={styles.subtitle}>Become a member</Text>
-        </View>
+    <SafeAreaWrapper>
+      <SharedHeader variant="superAdmin" title="Manage Subscription" />
+      <TouchableOpacity style={styles.backRow} onPress={() => navigation.goBack()}>
+        <Text style={styles.backText}>← Back</Text>
+      </TouchableOpacity>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <Text style={styles.companyLabel}>{companyName}</Text>
 
         <View style={styles.toggleContainer}>
-          <TouchableOpacity
-            style={[
-              styles.toggleOption,
-              billingCycle === 'MONTHLY' && styles.toggleOptionActive,
-            ]}
-            onPress={() => setBillingCycle('MONTHLY')}
-            activeOpacity={0.7}
-          >
-            <Text
-              style={[
-                styles.toggleText,
-                billingCycle === 'MONTHLY' && styles.toggleTextActive,
-              ]}
+          {(['MONTHLY', 'YEARLY'] as const).map((cycle) => (
+            <TouchableOpacity
+              key={cycle}
+              style={[styles.toggleOption, billingCycle === cycle && styles.toggleActive]}
+              onPress={() => setBillingCycle(cycle)}
             >
-              Monthly
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.toggleOption,
-              billingCycle === 'YEARLY' && styles.toggleOptionActive,
-            ]}
-            onPress={() => setBillingCycle('YEARLY')}
-            activeOpacity={0.7}
-          >
-            <Text
-              style={[
-                styles.toggleText,
-                billingCycle === 'YEARLY' && styles.toggleTextActive,
-              ]}
-            >
-              Yearly
-            </Text>
-          </TouchableOpacity>
+              <Text style={[styles.toggleText, billingCycle === cycle && styles.toggleTextActive]}>
+                {cycle === 'MONTHLY' ? 'Monthly' : 'Yearly'}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
-        <View style={styles.plansContainer}>
-          {plans.map((plan) => renderPlanCard(plan))}
-        </View>
+        {plans.map((plan) => {
+          const price = billingCycle === 'MONTHLY' ? plan.monthly : plan.yearly;
+          return (
+            <View key={plan.key} style={styles.planCard}>
+              <Text style={styles.planName}>{plan.name || plan.key}</Text>
+              <Text style={styles.planPrice}>
+                {formatPrice(price.amount)} / {billingCycle === 'MONTHLY' ? 'month' : 'year'}
+              </Text>
+              <TouchableOpacity
+                style={styles.subscribeButton}
+                onPress={() => handleSubscribe(plan)}
+                disabled={processing === plan.key}
+              >
+                {processing === plan.key ? (
+                  <ActivityIndicator color={COLORS.textInverse} />
+                ) : (
+                  <Text style={styles.subscribeText}>Get Started →</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          );
+        })}
       </ScrollView>
-    </SafeAreaView>
+    </SafeAreaWrapper>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.backgroundPrimary,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: SPACING.xxxxxl,
-  },
-  header: {
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.lg,
-    paddingBottom: SPACING.md,
-    alignItems: 'center',
-  },
-  subtitle: {
-    fontSize: TYPOGRAPHY.fontSize.md,
-    color: COLORS.textSecondary,
-    fontWeight: TYPOGRAPHY.fontWeight.regular,
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  backRow: { paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm },
+  backText: { color: COLORS.primary, fontSize: TYPOGRAPHY.fontSize.md },
+  scrollContent: { padding: SPACING.lg, paddingBottom: SPACING.xxxxxl },
+  companyLabel: {
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.md,
+    textAlign: 'center',
   },
   toggleContainer: {
     flexDirection: 'row',
@@ -259,137 +180,45 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.backgroundSecondary,
     borderRadius: BORDER_RADIUS.round,
     padding: SPACING.xs,
-    marginHorizontal: SPACING.lg,
-    marginBottom: SPACING.xl,
+    marginBottom: SPACING.lg,
   },
   toggleOption: {
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.sm,
     borderRadius: BORDER_RADIUS.round,
-    minWidth: 64,
-    alignItems: 'center',
   },
-  toggleOptionActive: {
-    backgroundColor: COLORS.primary,
-  },
-  toggleText: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
-    color: COLORS.textSecondary,
-  },
-  toggleTextActive: {
-    color: COLORS.textInverse,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
-  },
-  plansContainer: {
-    paddingHorizontal: SPACING.lg,
-    gap: SPACING.lg,
-  },
+  toggleActive: { backgroundColor: COLORS.primary },
+  toggleText: { color: COLORS.textSecondary, fontSize: TYPOGRAPHY.fontSize.sm },
+  toggleTextActive: { color: COLORS.textInverse, fontWeight: TYPOGRAPHY.fontWeight.semibold },
   planCard: {
     backgroundColor: COLORS.backgroundPrimary,
     borderRadius: BORDER_RADIUS.lg,
     borderWidth: 1,
-    borderColor: COLORS.primary,
-    padding: SPACING.xl,
-    ...SHADOWS.small,
-  },
-  planCardPopular: {
-    borderWidth: 2,
-    borderColor: COLORS.primary,
-  },
-  planHeader: {
-    marginBottom: SPACING.lg,
+    borderColor: COLORS.borderCard,
+    padding: SPACING.lg,
+    marginBottom: SPACING.md,
   },
   planName: {
-    fontSize: TYPOGRAPHY.fontSize.xl,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.xs,
-  },
-  planDescription: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.textSecondary,
-    fontWeight: TYPOGRAPHY.fontWeight.regular,
-  },
-  pricingContainer: {
-    marginBottom: SPACING.sm,
-  },
-  pricingLabel: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.textSecondary,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
-    marginBottom: SPACING.xs,
-  },
-  pricingAmount: {
-    fontSize: TYPOGRAPHY.fontSize.md,
-    color: COLORS.textPrimary,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
-  },
-  pricingValue: {
     fontSize: TYPOGRAPHY.fontSize.lg,
     fontWeight: TYPOGRAPHY.fontWeight.bold,
     color: COLORS.textPrimary,
   },
-  yearlyPriceHint: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
+  planPrice: {
+    fontSize: TYPOGRAPHY.fontSize.md,
     color: COLORS.textSecondary,
-    marginBottom: SPACING.md,
+    marginVertical: SPACING.sm,
   },
-  yearlyPriceValue: {
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
-    color: COLORS.textSecondary,
-  },
-  monthlyPriceHint: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.md,
-  },
-  monthlyPriceValue: {
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
-    color: COLORS.textSecondary,
-  },
-  featuresContainer: {
-    marginBottom: SPACING.lg,
-    gap: SPACING.sm,
-  },
-  featureRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  featureLabel: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.textPrimary,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
-  },
-  featureValue: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.textSecondary,
-    fontWeight: TYPOGRAPHY.fontWeight.regular,
-  },
-  getStartedButton: {
-    backgroundColor: COLORS.backgroundPrimary,
-    borderWidth: 1,
-    borderColor: COLORS.primary,
+  subscribeButton: {
+    backgroundColor: COLORS.primary,
     borderRadius: BORDER_RADIUS.md,
     paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg,
     alignItems: 'center',
-    justifyContent: 'center',
+    marginTop: SPACING.sm,
   },
-  getStartedButtonPopular: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  getStartedButtonText: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
-    color: COLORS.primary,
-  },
-  getStartedButtonTextPopular: {
+  subscribeText: {
     color: COLORS.textInverse,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
 });
 
 export default BuyPlanScreen;
-

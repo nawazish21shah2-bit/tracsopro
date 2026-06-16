@@ -2,16 +2,14 @@ import { Request, Response } from 'express';
 import { EmergencyService } from '../services/emergencyService.js';
 import { logger } from '../utils/logger.js';
 import { AuthRequest } from '../middleware/auth.js';
+import { resolveSecurityCompanyId } from '../utils/companyAuth.js';
+import { AppError, ConflictError } from '../utils/errors.js';
 import prisma from '../config/database.js';
 
 const emergencyService = EmergencyService.getInstance();
 
 interface AuthenticatedRequest extends AuthRequest {
-  user?: {
-    id: string;
-    role: string;
-    guardId?: string;
-  };
+  user?: any;
 }
 
 /**
@@ -20,7 +18,7 @@ interface AuthenticatedRequest extends AuthRequest {
 export const triggerEmergencyAlert = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { type, severity, location, message, shiftId } = req.body;
-    const guardId = req.user?.guardId;
+    const guardId = req.guardId;
 
     if (!guardId) {
       return res.status(400).json({
@@ -37,11 +35,16 @@ export const triggerEmergencyAlert = async (req: AuthenticatedRequest, res: Resp
       });
     }
 
-    // Validate location coordinates
-    if (!location.latitude || !location.longitude) {
+    // Validate location coordinates (0 is valid — GPS may be unavailable)
+    if (
+      typeof location.latitude !== 'number' ||
+      typeof location.longitude !== 'number' ||
+      Number.isNaN(location.latitude) ||
+      Number.isNaN(location.longitude)
+    ) {
       return res.status(400).json({
         success: false,
-        message: 'Location must include latitude and longitude',
+        message: 'Location must include valid latitude and longitude',
       });
     }
 
@@ -63,9 +66,54 @@ export const triggerEmergencyAlert = async (req: AuthenticatedRequest, res: Resp
     });
   } catch (error) {
     logger.error('Error triggering emergency alert:', error);
+    if (error instanceof AppError) {
+      const conflictCode =
+        error.statusCode === 409
+          ? (error.message.includes('already have an active emergency alert')
+              ? 'ACTIVE_ALERT_EXISTS'
+              : 'EMERGENCY_COOLDOWN')
+          : undefined;
+
+      return res.status(error.statusCode).json({
+        success: false,
+        message: error.message,
+        code: conflictCode,
+        data: error instanceof ConflictError ? error.data : undefined,
+      });
+    }
     res.status(500).json({
       success: false,
       message: 'Failed to trigger emergency alert',
+      error: process.env.NODE_ENV === 'development' ? error : undefined,
+    });
+  }
+};
+
+/**
+ * Get the authenticated guard's active emergency alert, if any.
+ */
+export const getMyActiveEmergencyAlert = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const guardId = req.guardId;
+
+    if (!guardId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Guard ID not found in request',
+      });
+    }
+
+    const alert = await emergencyService.findGuardActiveEmergencyAlert(guardId);
+
+    res.json({
+      success: true,
+      data: alert,
+    });
+  } catch (error) {
+    logger.error('Error getting guard active emergency alert:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get active emergency alert',
       error: process.env.NODE_ENV === 'development' ? error : undefined,
     });
   }
@@ -77,8 +125,7 @@ export const triggerEmergencyAlert = async (req: AuthenticatedRequest, res: Resp
 export const acknowledgeEmergencyAlert = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { alertId } = req.params;
-    const acknowledgedBy = req.user?.id;
-    const securityCompanyId = req.securityCompanyId; // Multi-tenant filter
+    const acknowledgedBy = req.userId || req.user?.id;
 
     if (!acknowledgedBy) {
       return res.status(401).json({
@@ -87,31 +134,39 @@ export const acknowledgeEmergencyAlert = async (req: AuthenticatedRequest, res: 
       });
     }
 
-    // Multi-tenant: Validate alert belongs to admin's company (if not SUPER_ADMIN)
-    if (req.user?.role !== 'SUPER_ADMIN' && securityCompanyId) {
-      // Get the alert to check guard's company
-      const alert = await prisma.incident.findUnique({
-        where: { id: alertId },
-        include: {
-          reporter: {
-            include: {
-              guard: {
-                include: {
-                  companyGuards: {
-                    where: { securityCompanyId, isActive: true },
-                    take: 1,
-                  },
-                },
-              },
-            },
-          },
-        },
+    if (req.user?.role !== 'SUPER_ADMIN') {
+      const companyResult = resolveSecurityCompanyId(req);
+      if (companyResult.error) {
+        res.status(companyResult.status || 400).json({
+          success: false,
+          message: companyResult.error,
+        });
+        return;
+      }
+
+      const hasAccess = await emergencyService.canAccessEmergencyAlert(alertId, {
+        securityCompanyId: companyResult.securityCompanyId,
+        role: req.user?.role || '',
+        userId: req.userId,
+        clientId: req.clientId,
       });
 
-      if (!alert || !alert.reporter.guard || alert.reporter.guard.companyGuards.length === 0) {
+      if (!hasAccess) {
         return res.status(403).json({
           success: false,
           message: 'Emergency alert not found or does not belong to your company',
+        });
+      }
+    } else {
+      const exists = await prisma.incident.findUnique({
+        where: { id: alertId },
+        select: { id: true },
+      });
+
+      if (!exists) {
+        return res.status(404).json({
+          success: false,
+          message: 'Emergency alert not found',
         });
       }
     }
@@ -126,6 +181,12 @@ export const acknowledgeEmergencyAlert = async (req: AuthenticatedRequest, res: 
     });
   } catch (error) {
     logger.error('Error acknowledging emergency alert:', error);
+    if (error instanceof AppError) {
+      return res.status(error.statusCode).json({
+        success: false,
+        message: error.message,
+      });
+    }
     res.status(500).json({
       success: false,
       message: 'Failed to acknowledge emergency alert',
@@ -159,7 +220,7 @@ export const resolveEmergencyAlert = async (req: AuthenticatedRequest, res: Resp
     }
 
     // Multi-tenant: Validate alert belongs to admin's company (if not SUPER_ADMIN)
-    if (req.user?.role !== 'SUPER_ADMIN' && securityCompanyId) {
+    if (req.user?.role !== 'SUPER_ADMIN') {
       // Get the alert to check guard's company
       const alert = await prisma.incident.findUnique({
         where: { id: alertId },
@@ -197,6 +258,12 @@ export const resolveEmergencyAlert = async (req: AuthenticatedRequest, res: Resp
     });
   } catch (error) {
     logger.error('Error resolving emergency alert:', error);
+    if (error instanceof AppError) {
+      return res.status(error.statusCode).json({
+        success: false,
+        message: error.message,
+      });
+    }
     res.status(500).json({
       success: false,
       message: 'Failed to resolve emergency alert',
@@ -211,7 +278,17 @@ export const resolveEmergencyAlert = async (req: AuthenticatedRequest, res: Resp
 export const getActiveEmergencyAlerts = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const securityCompanyId = req.securityCompanyId;
-    const alerts = await emergencyService.getActiveEmergencyAlerts(securityCompanyId);
+    let clientId: string | undefined;
+
+    if (req.user?.role === 'CLIENT' && req.userId) {
+      const client = await prisma.client.findUnique({
+        where: { userId: req.userId },
+        select: { id: true },
+      });
+      clientId = client?.id;
+    }
+
+    const alerts = await emergencyService.getActiveEmergencyAlerts(securityCompanyId, clientId);
 
     res.json({
       success: true,
@@ -245,7 +322,16 @@ export const getGuardEmergencyHistory = async (req: AuthenticatedRequest, res: R
   try {
     const { guardId } = req.params;
     const { limit = '50' } = req.query;
-    const securityCompanyId = req.securityCompanyId; // Multi-tenant filter
+
+    const companyResult = resolveSecurityCompanyId(req);
+    if (companyResult.error) {
+      res.status(companyResult.status || 400).json({
+        success: false,
+        message: companyResult.error,
+      });
+      return;
+    }
+    const securityCompanyId = companyResult.securityCompanyId;
 
     // Guards can only see their own history
     if (req.user?.role === 'GUARD' && req.user?.guardId !== guardId) {
@@ -256,7 +342,7 @@ export const getGuardEmergencyHistory = async (req: AuthenticatedRequest, res: R
     }
 
     // Multi-tenant: Admin accessing guard history - validate guard belongs to company
-    if (req.user?.role !== 'SUPER_ADMIN' && req.user?.role !== 'GUARD' && securityCompanyId) {
+    if (req.user?.role !== 'SUPER_ADMIN' && req.user?.role !== 'GUARD') {
       const companyGuard = await prisma.companyGuard.findFirst({
         where: {
           guardId,
@@ -300,19 +386,18 @@ export const getGuardEmergencyHistory = async (req: AuthenticatedRequest, res: R
 export const getEmergencyStatistics = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { startDate, endDate } = req.query;
-    const securityCompanyId = req.securityCompanyId; // Multi-tenant filter
-
-    // SUPER_ADMIN can see all, others must have company
-    if (req.user?.role !== 'SUPER_ADMIN' && !securityCompanyId) {
-      return res.status(403).json({
+    const companyResult = resolveSecurityCompanyId(req);
+    if (companyResult.error) {
+      res.status(companyResult.status || 400).json({
         success: false,
-        error: 'Security company ID not found. Admin must be linked to a company.',
+        error: companyResult.error,
       });
+      return;
     }
 
     // This would be implemented with proper date filtering
     // For now, return basic stats
-    const activeAlerts = await emergencyService.getActiveEmergencyAlerts(securityCompanyId);
+    const activeAlerts = await emergencyService.getActiveEmergencyAlerts(companyResult.securityCompanyId);
     
     const stats = {
       activeAlerts: activeAlerts.length,
@@ -345,6 +430,7 @@ export const getEmergencyStatistics = async (req: AuthenticatedRequest, res: Res
 
 export default {
   triggerEmergencyAlert,
+  getMyActiveEmergencyAlert,
   acknowledgeEmergencyAlert,
   resolveEmergencyAlert,
   getActiveEmergencyAlerts,

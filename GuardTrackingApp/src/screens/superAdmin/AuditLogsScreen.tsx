@@ -2,82 +2,90 @@
  * Audit Logs Screen - System audit logs and activity tracking
  */
 
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, FlatList, TextInput } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  FlatList,
+  TextInput,
+  ActivityIndicator,
+} from 'react-native';
 import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
-import { superAdminService } from '../../services/superAdminService';
-
-interface AuditLog {
-  id: string;
-  action: string;
-  resource: string;
-  userId: string;
-  userName: string;
-  timestamp: string;
-  details: any;
-  ipAddress: string;
-  userAgent: string;
-}
+import { superAdminService, AuditLog } from '../../services/superAdminService';
+import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
+import SharedHeader from '../../components/ui/SharedHeader';
+import { useNotificationBell } from '../../hooks/useNotificationBell';
 
 const AuditLogsScreen: React.FC = () => {
+  const { onNotificationPress, notificationCount } = useNotificationBell({
+    notificationsRoute: 'SuperAdminNotifications',
+  });
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('ALL');
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
 
   useEffect(() => {
-    loadAuditLogs();
-  }, []);
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
-  const loadAuditLogs = async () => {
-    try {
-      setLoading(true);
-      const data = await superAdminService.getAuditLogs({
-        page: 1,
-        limit: 50,
-        action: selectedFilter !== 'ALL' ? selectedFilter : undefined,
-      });
-      
-      // Transform backend data to frontend format
-      const logs: AuditLog[] = (data.logs || []).map((log: any) => ({
-        id: log.id,
-        action: log.action,
-        resource: log.resource,
-        userId: log.userId || 'system',
-        userName: log.userId ? 'User' : 'System', // Could fetch user name if needed
-        timestamp: log.timestamp,
-        details: log.newValues || log.oldValues || {},
-        ipAddress: log.ipAddress || 'N/A',
-        userAgent: log.userAgent || 'N/A',
-      }));
-      
-      setAuditLogs(logs);
-    } catch (error) {
-      console.error('Error loading audit logs:', error);
-      setAuditLogs([]);
-    } finally {
-      setLoading(false);
+  const loadAuditLogs = useCallback(
+    async (reset = false, pageOverride?: number) => {
+      try {
+        const currentPage = reset ? 1 : pageOverride ?? page;
+        if (reset) setLoading(true);
+        else setLoadingMore(true);
+
+        const data = await superAdminService.getAuditLogs({
+          page: currentPage,
+          limit: 30,
+          action: selectedFilter !== 'ALL' ? selectedFilter : undefined,
+          search: debouncedSearch || undefined,
+        });
+
+        if (reset) {
+          setAuditLogs(data.logs);
+          setPage(1);
+        } else {
+          setAuditLogs((prev) => [...prev, ...data.logs]);
+        }
+        setHasMore(data.pagination.page < data.pagination.pages);
+      } catch (error) {
+        console.error('Error loading audit logs:', error);
+        if (reset) setAuditLogs([]);
+      } finally {
+        setLoading(false);
+        setLoadingMore(false);
+      }
+    },
+    [selectedFilter, debouncedSearch, page]
+  );
+
+  useEffect(() => {
+    loadAuditLogs(true);
+  }, [selectedFilter, debouncedSearch]);
+
+  const handleLoadMore = () => {
+    if (!loadingMore && hasMore && !loading) {
+      const nextPage = page + 1;
+      setPage(nextPage);
+      loadAuditLogs(false, nextPage);
     }
   };
 
   const getActionColor = (action: string) => {
-    switch (action) {
-      case 'LOGIN':
-      case 'LOGOUT':
-        return COLORS.primary;
-      case 'COMPANY_CREATED':
-      case 'USER_CREATED':
-        return COLORS.success;
-      case 'USER_SUSPENDED':
-      case 'COMPANY_SUSPENDED':
-        return COLORS.warning;
-      case 'PAYMENT_FAILED':
-      case 'ERROR':
-        return COLORS.error;
-      default:
-        return COLORS.textSecondary;
-    }
+    if (action.includes('LOGIN') || action.includes('LOGOUT')) return COLORS.primary;
+    if (action.includes('CREATE') || action.includes('ACTIVATE')) return COLORS.success;
+    if (action.includes('SUSPEND') || action.includes('DELETE')) return COLORS.warning;
+    if (action.includes('FAILED') || action.includes('ERROR')) return COLORS.error;
+    return COLORS.textSecondary;
   };
 
   const renderAuditLog = ({ item }: { item: AuditLog }) => (
@@ -86,37 +94,30 @@ const AuditLogsScreen: React.FC = () => {
         <View style={[styles.actionBadge, { backgroundColor: getActionColor(item.action) }]}>
           <Text style={styles.actionText}>{item.action}</Text>
         </View>
-        <Text style={styles.timestampText}>
-          {new Date(item.timestamp).toLocaleString()}
-        </Text>
+        <Text style={styles.timestampText}>{new Date(item.timestamp).toLocaleString()}</Text>
       </View>
-      
       <View style={styles.logContent}>
         <Text style={styles.resourceText}>{item.resource}</Text>
-        <Text style={styles.userText}>by {item.userName}</Text>
+        <Text style={styles.userText}>by {item.userName || 'System'}</Text>
       </View>
-      
-      {item.details && (
+      {item.newValues && (
         <View style={styles.detailsContainer}>
-          <Text style={styles.detailsText}>
-            {JSON.stringify(item.details, null, 2)}
+          <Text style={styles.detailsText} numberOfLines={4}>
+            {typeof item.newValues === 'string'
+              ? item.newValues
+              : JSON.stringify(item.newValues, null, 2)}
           </Text>
         </View>
       )}
-      
       <View style={styles.logFooter}>
-        <Text style={styles.ipText}>IP: {item.ipAddress}</Text>
-        <Text style={styles.idText}>ID: {item.id}</Text>
+        <Text style={styles.ipText}>IP: {item.ipAddress || 'N/A'}</Text>
       </View>
     </View>
   );
 
   const renderFilterButton = (filter: string, label: string) => (
     <TouchableOpacity
-      style={[
-        styles.filterButton,
-        selectedFilter === filter && styles.filterButtonActive,
-      ]}
+      style={[styles.filterButton, selectedFilter === filter && styles.filterButtonActive]}
       onPress={() => setSelectedFilter(filter)}
     >
       <Text
@@ -130,35 +131,15 @@ const AuditLogsScreen: React.FC = () => {
     </TouchableOpacity>
   );
 
-  const filteredLogs = auditLogs.filter(log => {
-    const matchesSearch = searchQuery === '' || 
-      log.action.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.resource.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.userName.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesFilter = selectedFilter === 'ALL' || 
-      log.action.includes(selectedFilter) ||
-      log.resource === selectedFilter;
-    
-    return matchesSearch && matchesFilter;
-  });
-
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading Audit Logs...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Audit Logs</Text>
-        <Text style={styles.subtitle}>System activity and security logs</Text>
-      </View>
+    <SafeAreaWrapper>
+      <SharedHeader
+        variant="superAdmin"
+        title="Audit Logs"
+        hideLeftAction
+        onNotificationPress={onNotificationPress}
+        notificationCount={notificationCount}
+      />
 
       <View style={styles.searchContainer}>
         <TextInput
@@ -178,53 +159,37 @@ const AuditLogsScreen: React.FC = () => {
         {renderFilterButton('PAYMENT', 'Payment')}
       </View>
 
-      <FlatList
-        data={filteredLogs}
-        renderItem={renderAuditLog}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContainer}
-        showsVerticalScrollIndicator={false}
-      />
-    </SafeAreaView>
+      {loading && auditLogs.length === 0 ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+        </View>
+      ) : (
+        <FlatList
+          data={auditLogs}
+          renderItem={renderAuditLog}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContainer}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={
+            loadingMore ? <ActivityIndicator style={styles.footerLoader} color={COLORS.primary} /> : null
+          }
+          ListEmptyComponent={
+            <Text style={styles.emptyText}>No audit logs found</Text>
+          }
+        />
+      )}
+    </SafeAreaWrapper>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F7FA',
-  },
-  header: {
-    padding: SPACING.lg,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  title: {
-    fontSize: TYPOGRAPHY.fontSize.xl,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.sm,
-  },
-  subtitle: {
-    fontSize: TYPOGRAPHY.fontSize.md,
-    color: COLORS.textSecondary,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: TYPOGRAPHY.fontSize.md,
-    color: COLORS.textSecondary,
-  },
   searchContainer: {
     padding: SPACING.md,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.backgroundPrimary,
   },
   searchInput: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.backgroundSecondary,
     borderRadius: 8,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
@@ -234,42 +199,31 @@ const styles = StyleSheet.create({
   filterContainer: {
     flexDirection: 'row',
     padding: SPACING.md,
-    backgroundColor: '#FFFFFF',
-    marginBottom: SPACING.sm,
+    backgroundColor: COLORS.backgroundPrimary,
+    gap: SPACING.xs,
   },
   filterButton: {
     flex: 1,
     paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.md,
-    marginHorizontal: SPACING.xs,
     borderRadius: 8,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.backgroundSecondary,
     alignItems: 'center',
   },
-  filterButtonActive: {
-    backgroundColor: COLORS.primary,
-  },
+  filterButtonActive: { backgroundColor: COLORS.primary },
   filterButtonText: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontSize: TYPOGRAPHY.fontSize.xs,
     color: COLORS.textSecondary,
     fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
-  filterButtonTextActive: {
-    color: '#FFFFFF',
-  },
-  listContainer: {
-    padding: SPACING.md,
-  },
+  filterButtonTextActive: { color: COLORS.textInverse },
+  listContainer: { padding: SPACING.md, paddingBottom: SPACING.xxxxxl },
   logCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.backgroundPrimary,
     padding: SPACING.lg,
     marginBottom: SPACING.md,
     borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
   },
   logHeader: {
     flexDirection: 'row',
@@ -291,21 +245,18 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.textSecondary,
   },
-  logContent: {
-    marginBottom: SPACING.sm,
-  },
+  logContent: { marginBottom: SPACING.sm },
   resourceText: {
     fontSize: TYPOGRAPHY.fontSize.md,
     fontWeight: TYPOGRAPHY.fontWeight.bold,
     color: COLORS.textPrimary,
-    marginBottom: SPACING.xs,
   },
   userText: {
     fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.textSecondary,
   },
   detailsContainer: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.backgroundSecondary,
     padding: SPACING.sm,
     borderRadius: 6,
     marginBottom: SPACING.sm,
@@ -315,19 +266,11 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontFamily: 'monospace',
   },
-  logFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  ipText: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    color: COLORS.textSecondary,
-  },
-  idText: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    color: COLORS.textSecondary,
-  },
+  logFooter: { flexDirection: 'row', justifyContent: 'space-between' },
+  ipText: { fontSize: TYPOGRAPHY.fontSize.xs, color: COLORS.textSecondary },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  emptyText: { textAlign: 'center', color: COLORS.textSecondary, padding: SPACING.xl },
+  footerLoader: { padding: SPACING.md },
 });
 
 export default AuditLogsScreen;

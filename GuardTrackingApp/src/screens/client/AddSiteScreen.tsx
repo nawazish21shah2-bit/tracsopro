@@ -14,6 +14,10 @@ import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import AddressPicker from '../../components/common/AddressPicker';
 import { siteService, CreateSiteData } from '../../services/siteService';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
+import { useSubscriptionLimits } from '../../hooks/useSubscriptionLimits';
+import { showActionErrorAlert } from '../../utils/subscriptionLimitAlert';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../store';
 
 interface SiteFormData {
   name: string;
@@ -29,6 +33,8 @@ interface SiteFormData {
 
 const AddSiteScreen: React.FC = () => {
   const navigation = useNavigation();
+  const { user } = useSelector((state: RootState) => state.auth);
+  const { ensureCanAdd, refresh: refreshLimits } = useSubscriptionLimits();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<SiteFormData>({
     name: '',
@@ -71,6 +77,9 @@ const AddSiteScreen: React.FC = () => {
   const handleSaveSite = async () => {
     if (!validateForm()) return;
 
+    const allowed = await ensureCanAdd('sites');
+    if (!allowed) return;
+
     setLoading(true);
     try {
       const siteData: CreateSiteData = {
@@ -86,6 +95,7 @@ const AddSiteScreen: React.FC = () => {
       };
 
       await siteService.createSite(siteData);
+      await refreshLimits();
       
       Alert.alert(
         'Success',
@@ -101,17 +111,14 @@ const AddSiteScreen: React.FC = () => {
       if (__DEV__) {
         console.error('Error creating site:', error);
       }
-      Alert.alert(
-        'Error', 
-        error instanceof Error ? error.message : 'Failed to create site. Please try again.'
-      );
+      showActionErrorAlert('Create Site', error, { role: user?.role });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <SafeAreaWrapper>
+    <SafeAreaWrapper includeTop>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity 
@@ -176,7 +183,7 @@ const AddSiteScreen: React.FC = () => {
         {/* Location */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <MapPin width={20} height={20} color="#1C6CA9" />
+            {/* <MapPin width={20} height={20} color="#1C6CA9" /> */}
             <Text style={styles.sectionTitle}>Location</Text>
           </View>
           

@@ -101,7 +101,7 @@ const CheckInScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaWrapper>
+    <SafeAreaWrapper includeTop>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Check In / Check Out</Text>

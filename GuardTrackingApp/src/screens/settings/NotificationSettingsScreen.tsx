@@ -7,21 +7,21 @@ import {
   Switch,
   Alert,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { useSelector } from 'react-redux';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { RootState } from '../../store';
+import { SettingsStackParamList } from '../../navigation/DashboardNavigator';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SharedHeader from '../../components/ui/SharedHeader';
 import { settingsService, NotificationSettings } from '../../services/settingsService';
+import pushNotificationService from '../../services/notificationService';
+import { useRoleScreenHeader, RoleHeaderVariant } from '../../hooks/useRoleScreenHeader';
 import { Bell, Mail, MessageCircle, Clock, AlertTriangle } from 'react-native-feather';
-import { useProfileDrawer } from '../../hooks/useProfileDrawer';
-import GuardProfileDrawer from '../../components/guard/GuardProfileDrawer';
-import { SettingsStackParamList } from '../../navigation/DashboardNavigator';
 
 interface NotificationSettingsScreenProps {
-  variant?: 'client' | 'guard' | 'admin';
+  variant?: 'client' | 'guard' | 'admin' | 'superAdmin';
   profileDrawer?: React.ReactNode;
 }
 
@@ -29,9 +29,16 @@ const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = ({
   variant = 'client',
   profileDrawer,
 }) => {
-  const { user } = useSelector((state: RootState) => state.auth);
   const navigation = useNavigation<StackNavigationProp<SettingsStackParamList>>();
-  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+  const roleVariant: RoleHeaderVariant =
+    variant === 'superAdmin'
+      ? 'superAdmin'
+      : variant === 'admin'
+        ? 'admin'
+        : variant === 'guard'
+          ? 'guard'
+          : 'client';
+  const { headerProps: roleHeaderProps } = useRoleScreenHeader('Notification Settings', roleVariant);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState<NotificationSettings>({
@@ -42,33 +49,9 @@ const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = ({
     incidentAlerts: true,
   });
 
-  // Create drawer for guard variant if not provided
-  const renderProfileDrawer = () => {
-    if (profileDrawer) return profileDrawer;
-
-    if (variant === 'guard') {
-      return (
-        <GuardProfileDrawer
-          visible={isDrawerVisible}
-          onClose={closeDrawer}
-          onNavigateToProfile={() => {
-            closeDrawer();
-            navigation.navigate('GuardProfileEdit');
-          }}
-          onNavigateToNotifications={() => {
-            closeDrawer();
-            // Already on notification settings
-          }}
-          onNavigateToSupport={() => {
-            closeDrawer();
-            navigation.navigate('GuardSupportContact');
-          }}
-        />
-      );
-    }
-
-    return null;
-  };
+  const headerProps = profileDrawer
+    ? { ...roleHeaderProps, profileDrawer, onMenuPress: roleHeaderProps.onMenuPress }
+    : roleHeaderProps;
 
   useEffect(() => {
     loadSettings();
@@ -83,7 +66,6 @@ const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = ({
       console.error('Error loading notification settings:', error);
       const errorMessage = error?.message || 'Failed to load notification settings';
 
-      // If it's a session expired error, show a more user-friendly message
       if (errorMessage.includes('session has expired') || errorMessage.includes('expired')) {
         Alert.alert(
           'Session Expired',
@@ -105,6 +87,26 @@ const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = ({
 
     try {
       setSaving(true);
+
+      if (key === 'pushNotifications') {
+        if (value) {
+          const granted = await pushNotificationService.requestPermission();
+          if (!granted) {
+            setSettings(previousSettings);
+            Alert.alert(
+              'Permission Required',
+              'Enable notifications in your device settings to receive push alerts.',
+              [
+                { text: 'Not Now', style: 'cancel' },
+                { text: 'Open Settings', onPress: () => Linking.openSettings() },
+              ]
+            );
+            return;
+          }
+          await pushNotificationService.initialize();
+        }
+      }
+
       await settingsService.updateNotificationSettings({ [key]: value });
     } catch (error: any) {
       console.error('Error updating notification settings:', error);
@@ -126,7 +128,7 @@ const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = ({
   if (loading) {
     return (
       <SafeAreaWrapper>
-        <SharedHeader variant={variant} title="Notification Settings" onNotificationPress={() => navigation.navigate('Notifications')} profileDrawer={renderProfileDrawer()} />
+        <SharedHeader {...headerProps} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#1C6CA9" />
         </View>
@@ -136,7 +138,7 @@ const NotificationSettingsScreen: React.FC<NotificationSettingsScreenProps> = ({
 
   return (
     <SafeAreaWrapper>
-      <SharedHeader variant={variant} title="Notification Settings" onNotificationPress={() => navigation.navigate('Notifications')} profileDrawer={renderProfileDrawer()} />
+      <SharedHeader {...headerProps} />
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {[
           {

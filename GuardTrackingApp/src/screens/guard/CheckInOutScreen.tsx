@@ -16,6 +16,8 @@ import apiService from '../../services/api';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { getCurrentLocationWithRetry } from '../../utils/safeLocationHelper';
+import locationTrackingService from '../../services/locationTrackingService';
+import WebSocketService from '../../services/WebSocketService';
 
 const { width } = Dimensions.get('window');
 
@@ -113,6 +115,10 @@ const CheckInOutScreen: React.FC = () => {
           notes: notes
         } : null);
 
+        WebSocketService.connect();
+        await locationTrackingService.initialize();
+        await locationTrackingService.startTracking(assignmentId);
+
         Alert.alert('Success', result.message || 'You have successfully checked in to your shift!');
         setNotes('');
       } else {
@@ -202,7 +208,7 @@ const CheckInOutScreen: React.FC = () => {
 
   if (loading) {
     return (
-      <SafeAreaWrapper>
+      <SafeAreaWrapper includeTop>
         <View style={styles.loadingContainer}>
           <Text>Loading assignment...</Text>
         </View>
@@ -212,7 +218,7 @@ const CheckInOutScreen: React.FC = () => {
 
   if (!assignment) {
     return (
-      <SafeAreaWrapper>
+      <SafeAreaWrapper includeTop>
         <View style={styles.errorContainer}>
           <Text>Assignment not found</Text>
         </View>
@@ -225,7 +231,7 @@ const CheckInOutScreen: React.FC = () => {
   const isCompleted = assignment.status === 'COMPLETED';
 
   return (
-    <SafeAreaWrapper>
+    <SafeAreaWrapper includeTop>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity

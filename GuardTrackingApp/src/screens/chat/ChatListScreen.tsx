@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,18 +6,23 @@ import {
   FlatList,
   TouchableOpacity,
   TextInput,
-  Image,
   RefreshControl,
   Alert,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../store';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
-import { Search, Bell, Menu, MoreVertical, MessageCircle, Users, Settings } from 'react-native-feather';
+import ProfileAvatar from '../../components/common/ProfileAvatar';
+import { pickProfilePictureUrl } from '../../utils/profilePictureUtils';
+import { Search, ArrowLeft, MoreVertical, MessageCircle, Users, Settings } from 'react-native-feather';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
+import SharedHeader from '../../components/ui/SharedHeader';
 import NewChatModal from '../../components/chat/NewChatModal';
 import DropdownMenu, { DropdownMenuItem } from '../../components/ui/DropdownMenu';
+import { EmptyState, ErrorState, InlineLoading, NetworkError } from '../../components/ui/LoadingStates';
+import { formatRelativeTime } from '../../utils/formatRelativeTime';
+import { parseDisplayName } from '../../utils/parseDisplayName';
 
 interface ChatItem {
   id: string;
@@ -37,6 +42,8 @@ const ChatListScreen: React.FC = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [chats, setChats] = useState<ChatItem[]>([]);
   const [rawChats, setRawChats] = useState<any[]>([]); // Store raw chat data for creating new chats
   const [newChatModalVisible, setNewChatModalVisible] = useState(false);
@@ -54,6 +61,31 @@ const ChatListScreen: React.FC = () => {
         onPress: () => setNewChatModalVisible(true),
       },
     ];
+
+    // Admin / Super Admin: separate platform support from team chats
+    if (user?.role === 'ADMIN' || (user?.role as string) === 'SUPER_ADMIN') {
+      baseItems.unshift({
+        id: 'support-requests',
+        label: user?.role === 'SUPER_ADMIN' ? 'Platform Support Inbox' : 'Support Center',
+        icon: <MessageCircle width={20} height={20} color={COLORS.primary} />,
+        onPress: () =>
+          (navigation as any).navigate('SupportHubScreen', {
+            variant: user?.role === 'SUPER_ADMIN' ? 'superAdmin' : 'admin',
+            mode: user?.role === 'SUPER_ADMIN' ? 'platform' : 'inbox',
+          }),
+      });
+    } else if (user?.role === 'GUARD' || user?.role === 'CLIENT') {
+      baseItems.unshift({
+        id: 'support-center',
+        label: 'Support Center',
+        icon: <MessageCircle width={20} height={20} color={COLORS.primary} />,
+        onPress: () =>
+          (navigation as any).navigate('SupportHubScreen', {
+            variant: user?.role === 'GUARD' ? 'guard' : 'client',
+            mode: 'mine',
+          }),
+      });
+    }
 
     // Admin can create group chats
     if (user?.role === 'ADMIN' || (user?.role as string) === 'SUPER_ADMIN') {
@@ -93,14 +125,41 @@ const ChatListScreen: React.FC = () => {
     loadChats();
   }, []);
 
+  useFocusEffect(
+    useCallback(() => {
+      loadChats();
+    }, []),
+  );
+
+  const buildChatNavParams = (chat: ChatItem) => {
+    const rawChat = rawChats.find((c: any) => c.id === chat.id);
+    const metadata = rawChat?.metadata;
+    const otherParticipant = rawChat?.participants?.find(
+      (p: any) => p.userId !== user?.id,
+    );
+
+    return {
+      chatId: chat.id,
+      chatName: chat.name.split(' (')[0],
+      avatar: chat.avatar,
+      guardId: metadata?.guardId as string | undefined,
+      guardUserId:
+        otherParticipant?.user?.role === 'GUARD' ? otherParticipant.userId : undefined,
+      clientUserId:
+        otherParticipant?.user?.role === 'CLIENT' ? otherParticipant.userId : undefined,
+    };
+  };
+
   const loadChats = async () => {
     try {
+      setError(null);
       const apiService = (await import('../../services/api')).default;
       const response = await apiService.getChatRooms();
 
       if (!response.success) {
-        console.error('Failed to load chats:', response.message || 'Unknown error');
-        // Don't set empty array on error - keep previous chats if available
+        const message = response.message || 'Failed to load chats';
+        console.error('Failed to load chats:', message);
+        setError(message);
         if (chats.length === 0) {
           setChats([]);
         }
@@ -128,7 +187,7 @@ const ChatListScreen: React.FC = () => {
           );
           if (otherParticipant?.user) {
             chatName = `${otherParticipant.user.firstName} ${otherParticipant.user.lastName}`.trim();
-            avatar = otherParticipant.user.avatar;
+            avatar = pickProfilePictureUrl(otherParticipant.user) || chat.avatar;
             isOnline = otherParticipant.user.isOnline || false;
           }
         }
@@ -141,7 +200,7 @@ const ChatListScreen: React.FC = () => {
           );
           if (guardParticipant?.user) {
             chatName = `${guardParticipant.user.firstName} ${guardParticipant.user.lastName}`.trim();
-            avatar = guardParticipant.user.avatar;
+            avatar = pickProfilePictureUrl(guardParticipant.user) || chat.avatar;
             // Show site name if available
             const siteName = (chat as any).metadata?.siteName;
             if (siteName && !chat.lastMessage) {
@@ -152,29 +211,12 @@ const ChatListScreen: React.FC = () => {
         }
 
         // Format timestamp
-        let timestamp = 'now';
-        if (chat.lastMessageAt || chat.lastMessage?.timestamp) {
-          const lastMsgTime = chat.lastMessageAt
-            ? new Date(chat.lastMessageAt)
-            : new Date(chat.lastMessage.timestamp);
-          const now = new Date();
-          const diffMs = now.getTime() - lastMsgTime.getTime();
-          const diffMins = Math.floor(diffMs / 60000);
-          const diffHours = Math.floor(diffMs / 3600000);
-          const diffDays = Math.floor(diffMs / 86400000);
-
-          if (diffMins < 1) {
-            timestamp = 'now';
-          } else if (diffMins < 60) {
-            timestamp = `${diffMins}m`;
-          } else if (diffHours < 24) {
-            timestamp = `${diffHours}h`;
-          } else if (diffDays === 1) {
-            timestamp = 'Yest';
-          } else {
-            timestamp = lastMsgTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-          }
-        }
+        const lastMsgTime = chat.lastMessageAt
+          ? new Date(chat.lastMessageAt)
+          : chat.lastMessage?.timestamp
+            ? new Date(chat.lastMessage.timestamp)
+            : null;
+        const timestamp = lastMsgTime ? formatRelativeTime(lastMsgTime) : '';
         const lastMessage = chat.lastMessage?.content || chat.lastMessage?.message || '';
 
         // For assigned guards without messages, show a helpful placeholder
@@ -214,15 +256,17 @@ const ChatListScreen: React.FC = () => {
       });
 
       setChats(uniqueChats);
-      setRawChats(chatData); // Store raw chat data
+      setRawChats(chatData);
     } catch (error: any) {
       console.error('Error loading chats:', error);
-      // Only clear chats if we don't have any cached ones
-      // This prevents flickering when network temporarily fails
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        'Failed to load chats';
+      setError(message);
       if (chats.length === 0) {
         setChats([]);
       }
-      // Log detailed error for debugging
       if (__DEV__) {
         console.error('Chat loading error details:', {
           message: error?.message,
@@ -230,6 +274,8 @@ const ChatListScreen: React.FC = () => {
           status: error?.response?.status,
         });
       }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -258,11 +304,7 @@ const ChatListScreen: React.FC = () => {
             // Reload chats to get the updated list
             await loadChats();
             // Navigate to the newly created chat
-            (navigation as any).navigate('IndividualChatScreen', {
-              chatId: createResponse.data.id || chat.id,
-              chatName: chat.name,
-              avatar: chat.avatar
-            });
+            (navigation as any).navigate('IndividualChatScreen', buildChatNavParams(chat));
             return;
           }
         }
@@ -273,11 +315,7 @@ const ChatListScreen: React.FC = () => {
     }
 
     // Navigate to existing chat
-    (navigation as any).navigate('IndividualChatScreen', {
-      chatId: chat.id,
-      chatName: chat.name,
-      avatar: chat.avatar
-    });
+    (navigation as any).navigate('IndividualChatScreen', buildChatNavParams(chat));
   };
 
   const filteredChats = chats.filter(chat => {
@@ -293,6 +331,8 @@ const ChatListScreen: React.FC = () => {
       return null;
     }
 
+    const { firstName, lastName } = parseDisplayName(item.name);
+
     return (
       <TouchableOpacity
         style={[
@@ -303,10 +343,11 @@ const ChatListScreen: React.FC = () => {
         activeOpacity={0.7}
       >
         <View style={styles.avatarContainer}>
-          <Image
-            source={item.avatar ? { uri: item.avatar } : { uri: 'https://via.placeholder.com/150x150/E5E7EB/9CA3AF?text=?' }}
-            style={styles.avatar}
-            defaultSource={{ uri: 'https://via.placeholder.com/150x150/E5E7EB/9CA3AF?text=?' }}
+          <ProfileAvatar
+            firstName={firstName}
+            lastName={lastName}
+            profilePictureUrl={item.avatar}
+            size={52}
           />
           {item.isOnline && <View style={styles.onlineIndicator} />}
           {item.isAssignedGuard && (
@@ -350,27 +391,46 @@ const ChatListScreen: React.FC = () => {
     );
   };
 
+  const isSuperAdmin = (user?.role as string) === 'SUPER_ADMIN';
+  const canGoBack = navigation.canGoBack();
+
+  const chatActionsButton = (
+    <TouchableOpacity
+      ref={menuButtonRef}
+      style={styles.headerSideButton}
+      onPress={handleMenuPress}
+    >
+      <MoreVertical width={24} height={24} color={COLORS.textPrimary} />
+    </TouchableOpacity>
+  );
+
   return (
     <SafeAreaWrapper>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.menuButton}
-          onPress={() => (navigation as any).goBack()}
-        >
-          <Menu width={24} height={24} color={COLORS.textPrimary} />
-        </TouchableOpacity>
-
-        <Text style={styles.headerTitle}>Chats</Text>
-
-        <TouchableOpacity
-          ref={menuButtonRef}
-          style={styles.headerActionButton}
-          onPress={handleMenuPress}
-        >
-          <MoreVertical width={24} height={24} color={COLORS.textPrimary} />
-        </TouchableOpacity>
-      </View>
+      {isSuperAdmin ? (
+        <SharedHeader
+          variant="superAdmin"
+          title="Chats"
+          showBackButton={canGoBack}
+          onBackPress={() => navigation.goBack()}
+          hideLeftAction={!canGoBack}
+          rightIcon={chatActionsButton}
+        />
+      ) : (
+        <View style={styles.header}>
+          {canGoBack ? (
+            <TouchableOpacity
+              style={styles.headerSideButton}
+              onPress={() => navigation.goBack()}
+            >
+              <ArrowLeft width={24} height={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.headerSideButton} />
+          )}
+          <Text style={styles.headerTitle}>Chats</Text>
+          {chatActionsButton}
+        </View>
+      )}
 
       {/* Dropdown Menu */}
       <DropdownMenu
@@ -387,7 +447,7 @@ const ChatListScreen: React.FC = () => {
           <Search width={20} height={20} color={COLORS.textTertiary} style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder="search"
+            placeholder="Search chats..."
             value={searchQuery}
             onChangeText={setSearchQuery}
             placeholderTextColor={COLORS.textTertiary}
@@ -396,6 +456,18 @@ const ChatListScreen: React.FC = () => {
       </View>
 
       {/* Chat List */}
+      {loading && chats.length === 0 && !refreshing ? (
+        <InlineLoading size="large" message="Loading chats..." style={styles.centeredState} />
+      ) : error && chats.length === 0 ? (
+        <View style={styles.centeredState}>
+          {error.toLowerCase().includes('network') ||
+          error.toLowerCase().includes('connection') ? (
+            <NetworkError onRetry={loadChats} />
+          ) : (
+            <ErrorState error={error} onRetry={loadChats} />
+          )}
+        </View>
+      ) : (
       <FlatList
         data={filteredChats}
         renderItem={renderChatItem}
@@ -410,19 +482,22 @@ const ChatListScreen: React.FC = () => {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
-        ItemSeparatorComponent={filteredChats.length > 0 ? () => <View style={styles.separator} /> : null}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListEmptyComponent={
-          refreshing ? (
-            <View style={styles.loadingContainer}>
-              <Text style={styles.loadingText}>Loading chats...</Text>
-            </View>
+          searchQuery ? (
+            <EmptyState
+              title="No matches"
+              message="Try a different name or message keyword."
+              icon={<Search width={40} height={40} color={COLORS.textTertiary} />}
+            />
           ) : (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No chats yet</Text>
-              <Text style={styles.emptySubtext}>
-                {searchQuery ? 'No chats match your search' : 'Start a conversation to see chats here'}
-              </Text>
-            </View>
+            <EmptyState
+              title="No chats yet"
+              message="Start a conversation with a guard, client, or team member."
+              actionText="New chat"
+              onAction={() => setNewChatModalVisible(true)}
+              icon={<MessageCircle width={40} height={40} color={COLORS.textTertiary} />}
+            />
           )
         }
         removeClippedSubviews={false}
@@ -430,6 +505,7 @@ const ChatListScreen: React.FC = () => {
         maxToRenderPerBatch={10}
         windowSize={10}
       />
+      )}
 
       {/* Floating Action Button */}
       <TouchableOpacity
@@ -483,30 +559,22 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.lg,
+    paddingBottom: SPACING.sm,
     backgroundColor: COLORS.backgroundPrimary,
   },
-  menuButton: {
-    width: 24,
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: TYPOGRAPHY.fontSize.xl,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
-    color: COLORS.textPrimary,
-    textAlign: 'center',
-  },
-  headerActionButton: {
+  headerSideButton: {
     width: 40,
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 20,
-    backgroundColor: COLORS.backgroundSecondary,
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    textAlign: 'center',
   },
   searchContainer: {
     paddingHorizontal: SPACING.lg,
@@ -536,6 +604,11 @@ const styles = StyleSheet.create({
   },
   chatListContent: {
     paddingBottom: SPACING.xxxxl * 2.5, // Space for bottom tab bar
+  },
+  centeredState: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.lg,
   },
   chatItem: {
     flexDirection: 'row',

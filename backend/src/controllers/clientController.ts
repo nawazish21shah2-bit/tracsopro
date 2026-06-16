@@ -3,16 +3,31 @@ import clientService from '../services/clientService.js';
 import shiftService from '../services/shiftService.js';
 import { AuthRequest } from '../middleware/auth.js';
 import prisma from '../config/database.js';
+import { resolveSecurityCompanyId } from '../utils/companyAuth.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
 
 export class ClientController {
   async getAllClients(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
+      const companyResult = resolveSecurityCompanyId(req);
+      if (companyResult.error) {
+        res.status(companyResult.status || 403).json({
+          success: false,
+          error: companyResult.error,
+        });
+        return;
+      }
+
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 50;
       const accountType = req.query.accountType as string;
 
-      const result = await clientService.getAllClients(page, limit, accountType, req.securityCompanyId);
+      const result = await clientService.getAllClients(
+        page,
+        limit,
+        accountType,
+        companyResult.securityCompanyId
+      );
       res.json({
         success: true,
         data: result,
@@ -22,9 +37,21 @@ export class ClientController {
     }
   }
 
-  async getClientById(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getClientById(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const client = await clientService.getClientById(req.params.id);
+      const companyResult = resolveSecurityCompanyId(req);
+      if (companyResult.error) {
+        res.status(companyResult.status || 400).json({
+          success: false,
+          error: companyResult.error,
+        });
+        return;
+      }
+
+      const client = await clientService.getClientById(
+        req.params.id,
+        companyResult.securityCompanyId,
+      );
       res.json({
         success: true,
         data: client,
@@ -82,9 +109,22 @@ export class ClientController {
     }
   }
 
-  async updateClient(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async updateClient(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const client = await clientService.updateClient(req.params.id, req.body);
+      const companyResult = resolveSecurityCompanyId(req);
+      if (companyResult.error) {
+        res.status(companyResult.status || 400).json({
+          success: false,
+          error: companyResult.error,
+        });
+        return;
+      }
+
+      const client = await clientService.updateClient(
+        req.params.id,
+        req.body,
+        companyResult.securityCompanyId,
+      );
       res.json({
         success: true,
         data: client,
@@ -94,9 +134,21 @@ export class ClientController {
     }
   }
 
-  async deleteClient(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async deleteClient(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const result = await clientService.deleteClient(req.params.id);
+      const companyResult = resolveSecurityCompanyId(req);
+      if (companyResult.error) {
+        res.status(companyResult.status || 400).json({
+          success: false,
+          error: companyResult.error,
+        });
+        return;
+      }
+
+      const result = await clientService.deleteClient(
+        req.params.id,
+        companyResult.securityCompanyId,
+      );
       res.json({
         success: true,
         data: result,
@@ -106,9 +158,18 @@ export class ClientController {
     }
   }
 
-  async getClientStats(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async getClientStats(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const stats = await clientService.getClientStats();
+      const companyResult = resolveSecurityCompanyId(req);
+      if (companyResult.error) {
+        res.status(companyResult.status || 403).json({
+          success: false,
+          error: companyResult.error,
+        });
+        return;
+      }
+
+      const stats = await clientService.getClientStats(companyResult.securityCompanyId!);
       res.json({
         success: true,
         data: stats,
@@ -142,6 +203,21 @@ export class ClientController {
         data: result,
       });
     } catch (error) {
+      next(error);
+    }
+  }
+
+  async getGuardProfile(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { guardId } = req.params;
+      const client = await clientService.getClientByUserId(req.userId!);
+      const profile = await clientService.getClientGuardProfile(client.id, guardId);
+      res.json({ success: true, data: profile });
+    } catch (error: any) {
+      if (error.name === 'NotFoundError') {
+        res.status(404).json({ success: false, error: error.message });
+        return;
+      }
       next(error);
     }
   }
@@ -385,6 +461,129 @@ export class ClientController {
       });
     } catch (error) {
         next(error);
+    }
+  }
+
+  /**
+   * Create recurring shifts for a week or month
+   */
+  async createBulkShifts(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { siteId, guardId, description, scheduledStartTime, scheduledEndTime, notes, repeatPattern } = req.body;
+
+      if (!siteId || !scheduledStartTime || !scheduledEndTime) {
+        res.status(400).json({
+          success: false,
+          error: 'siteId, scheduledStartTime, and scheduledEndTime are required',
+        });
+        return;
+      }
+
+      if (!repeatPattern || !['week', 'month'].includes(repeatPattern)) {
+        res.status(400).json({
+          success: false,
+          error: 'repeatPattern must be "week" or "month"',
+        });
+        return;
+      }
+
+      const client = await clientService.getClientByUserId(req.userId!);
+      const site = await prisma.site.findFirst({
+        where: { id: siteId, clientId: client.id },
+      });
+
+      if (!site) {
+        res.status(404).json({ success: false, error: 'Site not found' });
+        return;
+      }
+
+      const companyClient = await prisma.companyClient.findFirst({
+        where: { clientId: client.id, isActive: true },
+        select: { securityCompanyId: true },
+      });
+
+      const shiftServiceModule = (await import('../services/shiftService.js')).default;
+      const result = await shiftServiceModule.createBulkShifts(
+        {
+          siteId,
+          guardId: guardId || undefined,
+          scheduledStartTime: new Date(scheduledStartTime),
+          scheduledEndTime: new Date(scheduledEndTime),
+          description,
+          notes,
+          repeatPattern,
+        },
+        companyClient?.securityCompanyId
+      );
+
+      res.status(201).json({
+        success: true,
+        data: result,
+        message: `${result.count} shifts scheduled successfully`,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Update a client's own shift (only SCHEDULED shifts)
+   */
+  async updateShift(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { shiftId } = req.params;
+      const { scheduledStartTime, scheduledEndTime, description, notes } = req.body;
+
+      const client = await clientService.getClientByUserId(req.userId!);
+
+      const shiftServiceModule = (await import('../services/shiftService.js')).default;
+      const updated = await shiftServiceModule.updateShift(
+        shiftId,
+        {
+          scheduledStartTime: scheduledStartTime ? new Date(scheduledStartTime) : undefined,
+          scheduledEndTime: scheduledEndTime ? new Date(scheduledEndTime) : undefined,
+          description,
+          notes,
+        },
+        { clientId: client.id }
+      );
+
+      res.json({ success: true, data: updated, message: 'Shift updated successfully' });
+    } catch (error: any) {
+      if (error.name === 'NotFoundError') {
+        res.status(404).json({ success: false, error: error.message });
+        return;
+      }
+      if (error.name === 'ValidationError') {
+        res.status(400).json({ success: false, error: error.message });
+        return;
+      }
+      next(error);
+    }
+  }
+
+  /**
+   * Delete (cancel) a client's own shift
+   */
+  async deleteShift(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { shiftId } = req.params;
+      const client = await clientService.getClientByUserId(req.userId!);
+
+      const shiftServiceModule = (await import('../services/shiftService.js')).default;
+      await shiftServiceModule.deleteShift(shiftId, { clientId: client.id });
+
+      res.json({ success: true, message: 'Shift deleted successfully' });
+    } catch (error: any) {
+      if (error.name === 'NotFoundError') {
+        res.status(404).json({ success: false, error: error.message });
+        return;
+      }
+      if (error.name === 'ValidationError') {
+        res.status(400).json({ success: false, error: error.message });
+        return;
+      }
+      next(error);
     }
   }
 }

@@ -167,7 +167,7 @@ const PaymentDetailScreen: React.FC = () => {
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <SharedHeader variant="admin" title="Payment Details" showLogo={false} />
+        <SharedHeader variant="superAdmin" title="Payment Details" showLogo={false} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
           <Text style={styles.loadingText}>Loading payment details...</Text>
@@ -179,7 +179,7 @@ const PaymentDetailScreen: React.FC = () => {
   if (!payment) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <SharedHeader variant="admin" title="Payment Details" showLogo={false} />
+        <SharedHeader variant="superAdmin" title="Payment Details" showLogo={false} />
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>Payment not found</Text>
         </View>
@@ -189,7 +189,7 @@ const PaymentDetailScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <SharedHeader variant="admin" title="Payment Details" showLogo={false} />
+      <SharedHeader variant="superAdmin" title="Payment Details" showLogo={false} />
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Status Card */}
         <View style={styles.statusCard}>
