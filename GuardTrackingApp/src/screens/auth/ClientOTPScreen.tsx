@@ -19,7 +19,7 @@ import { AuthStackParamList } from '../../types';
 import { RootState } from '../../store';
 import { verifyOTP, resendOTP } from '../../store/slices/authSlice';
 import Button from '../../components/common/Button';
-import Icon from 'react-native-vector-icons/Ionicons';
+import AuthOtpInput from '../../components/auth/AuthOtpInput';
 import Logo from '../../assets/images/tracSOpro-logo.png';
 import { authStyles, AUTH_HEADING_TO_FORM } from '../../styles/authStyles';
 import { COLORS, SPACING } from '../../styles/globalStyles';
@@ -177,20 +177,12 @@ const ClientOTPScreen: React.FC = () => {
 
         {/* OTP Input */}
         <View style={styles.otpContainer}>
-          <View style={styles.otpInputWrapper}>
-            <Icon name="search-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-            <TextInput
-              ref={inputRef}
-              style={styles.otpInput}
-              placeholder="Enter OTP"
-              value={otp}
-              onChangeText={handleOtpChange}
-              keyboardType="number-pad"
-              maxLength={6}
-              placeholderTextColor="#9CA3AF"
-              autoFocus
-            />
-          </View>
+          <AuthOtpInput
+            ref={inputRef}
+            value={otp}
+            onChangeText={handleOtpChange}
+            autoFocus
+          />
         </View>
 
         {/* Resend Code */}
@@ -255,28 +247,7 @@ const styles = StyleSheet.create({
   },
   otpContainer: {
     marginBottom: 40,
-  },
-  otpInputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    height: 56,
-  },
-  inputIcon: {
-    marginRight: 12,
-  },
-  otpInput: {
-    flex: 1,
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    fontSize: 16,
-    color: '#000000',
-    paddingVertical: 0,
-    letterSpacing: 2,
+    paddingHorizontal: SPACING.lg,
   },
   resendContainer: {
     paddingHorizontal: 16,

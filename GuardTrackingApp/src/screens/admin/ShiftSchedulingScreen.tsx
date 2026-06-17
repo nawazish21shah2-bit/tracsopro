@@ -15,6 +15,7 @@ import {
   TextInput,
   FlatList,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { logoutUser } from '../../store/slices/authSlice';
@@ -27,7 +28,7 @@ import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 import { ShiftsIcon, UserIcon, EmergencyIcon, LocationIcon, ClockIcon, PlusIcon, CheckCircleIcon, InfoIcon } from '../../components/ui/AppIcons';
-import { ArrowLeftIcon, ArrowRightIcon, RefreshCwIcon, AlertTriangleIcon } from '../../components/ui/FeatherIcons';
+import { ArrowLeftIcon, ArrowRightIcon, RefreshCwIcon, AlertTriangleIcon, EditIcon, TrashIcon } from '../../components/ui/FeatherIcons';
 import SectionHeader from '../../components/ui/SectionHeader';
 import ShiftFormFields, { ShiftFormValues } from '../../components/shifts/ShiftFormFields';
 import ShiftOptionPicker from '../../components/shifts/ShiftOptionPicker';
@@ -93,6 +94,7 @@ interface ShiftSchedulingScreenProps {
 }
 
 const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
@@ -592,16 +594,27 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
 
   const handleEditShift = async () => {
     if (!editingShift) return;
+
+    const validation = validateShiftSchedule(
+      editingShift.date,
+      editForm.startTime,
+      editingShift.date,
+      editForm.endTime,
+    );
+    if (!validation.valid) {
+      Alert.alert('Error', validation.message);
+      return;
+    }
+
     try {
       setLoading(true);
-      // Build ISO datetime strings combining shift date with new times
-      const scheduledStartTime = `${editingShift.date}T${editForm.startTime}:00`;
-      const scheduledEndTime = `${editingShift.date}T${editForm.endTime}:00`;
+      const scheduledStartTime = combineDateTime(editingShift.date, editForm.startTime);
+      const scheduledEndTime = combineDateTime(editingShift.date, editForm.endTime);
 
       const response = await apiService.updateAdminShift(editingShift.id, {
         scheduledStartTime,
         scheduledEndTime,
-        notes: editForm.notes,
+        notes: editForm.notes.trim() || undefined,
       });
 
       if (response.success) {
@@ -663,6 +676,42 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
       default: return COLORS.textSecondary;
     }
   };
+
+  const renderAssignGuardButton = (shift: ScheduledShift) => (
+    <TouchableOpacity
+      style={styles.assignGuardButton}
+      onPress={() => openAssignGuardModal(shift)}
+    >
+      <UserIcon size={14} color={COLORS.primary} />
+      <Text style={styles.assignGuardButtonText}>Assign Guard</Text>
+    </TouchableOpacity>
+  );
+
+  const renderShiftCardActions = (shift: ScheduledShift) => (
+    <View style={styles.shiftActionsRow}>
+      <TouchableOpacity
+        style={styles.cardActionBtn}
+        onPress={() => handleViewDetails(shift)}
+      >
+        <InfoIcon size={14} color={COLORS.primary} />
+        <Text style={styles.cardActionBtnText}>Details</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.cardActionBtn}
+        onPress={() => openEditModal(shift)}
+      >
+        <EditIcon size={14} color={COLORS.primary} />
+        <Text style={styles.cardActionBtnText}>Edit</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.cardActionBtn, styles.cardActionBtnDanger]}
+        onPress={() => handleDeleteShift(shift)}
+      >
+        <TrashIcon size={14} color={COLORS.error} />
+        <Text style={[styles.cardActionBtnText, styles.cardActionBtnTextDanger]}>Delete</Text>
+      </TouchableOpacity>
+    </View>
+  );
 
   const renderCalendarView = () => (
     <View style={styles.calendarContainer}>
@@ -735,15 +784,7 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
               </View>
             </View>
             
-            {!item.guardId && (
-              <TouchableOpacity
-                style={styles.assignGuardButton}
-                onPress={() => openAssignGuardModal(item)}
-              >
-                <UserIcon size={16} color={COLORS.primary} style={{ marginRight: SPACING.xs }} />
-                <Text style={styles.assignGuardButtonText}>Assign Guard</Text>
-              </TouchableOpacity>
-            )}
+            {!item.guardId && renderAssignGuardButton(item)}
             
             <View style={styles.shiftInfoRow}>
               <View style={styles.shiftInfoIconContainer}>
@@ -776,27 +817,7 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
               </View>
             )}
             
-            <View style={styles.shiftActionsRow}>
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => handleViewDetails(item)}
-              >
-                <InfoIcon size={14} color={COLORS.primary} />
-                <Text style={styles.actionButtonText}>Details</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => openEditModal(item)}
-              >
-                <Text style={styles.actionButtonText}>Edit</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.actionButton, styles.deleteButton]}
-                onPress={() => handleDeleteShift(item)}
-              >
-                <Text style={styles.deleteButtonText}>Delete</Text>
-              </TouchableOpacity>
-            </View>
+            {renderShiftCardActions(item)}
           </View>
         )}
         keyExtractor={(item) => item.id}
@@ -872,35 +893,8 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
               </Text>
             </View>
             
-            <TouchableOpacity
-              style={styles.assignGuardButton}
-              onPress={() => openAssignGuardModal(item)}
-            >
-              <UserIcon size={16} color={COLORS.primary} style={{ marginRight: SPACING.xs }} />
-              <Text style={styles.assignGuardButtonText}>Assign Guard</Text>
-            </TouchableOpacity>
-
-            <View style={styles.shiftActionsRow}>
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => handleViewDetails(item)}
-              >
-                <InfoIcon size={14} color={COLORS.primary} />
-                <Text style={styles.actionButtonText}>Details</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => openEditModal(item)}
-              >
-                <Text style={styles.actionButtonText}>Edit</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.actionButton, styles.deleteButton]}
-                onPress={() => handleDeleteShift(item)}
-              >
-                <Text style={styles.deleteButtonText}>Delete</Text>
-              </TouchableOpacity>
-            </View>
+            {renderAssignGuardButton(item)}
+            {renderShiftCardActions(item)}
           </View>
         )}
         keyExtractor={(item) => item.id}
@@ -1002,6 +996,123 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
               )}
               <Text style={styles.createButtonText}>
                 {loading ? 'Assigning...' : 'Assign Guard'}
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </Modal>
+    );
+  };
+
+  const renderEditModal = () => {
+    if (!editingShift) return null;
+
+    return (
+      <Modal
+        visible={showEditModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => {
+          setShowEditModal(false);
+          setEditingShift(null);
+        }}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Edit Shift</Text>
+            <TouchableOpacity
+              onPress={() => {
+                setShowEditModal(false);
+                setEditingShift(null);
+              }}
+            >
+              <Text style={styles.closeButton}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            style={styles.modalContent}
+            contentContainerStyle={styles.modalContentInner}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.formSection}>
+              <Text style={styles.sectionTitle}>Shift Details</Text>
+              <View style={styles.shiftInfoCard}>
+                <Text style={styles.shiftInfoLabel}>Site</Text>
+                <Text style={styles.shiftInfoValue}>{editingShift.siteName}</Text>
+                <Text style={styles.shiftInfoLabel}>Guard</Text>
+                <Text style={styles.shiftInfoValue}>
+                  {editingShift.guardName || 'Unassigned'}
+                </Text>
+                <Text style={styles.shiftInfoLabel}>Date</Text>
+                <Text style={styles.shiftInfoValue}>
+                  {new Date(editingShift.date).toLocaleDateString()}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.timeSection}>
+              <View style={styles.timeInput}>
+                <View style={styles.formLabelContainer}>
+                  <ClockIcon size={18} color={COLORS.primary} style={{ marginRight: SPACING.xs }} />
+                  <Text style={styles.formLabel}>Start Time</Text>
+                </View>
+                <View style={styles.timeInputContainer}>
+                  <TextInput
+                    style={styles.timeField}
+                    value={editForm.startTime}
+                    onChangeText={(value) => setEditForm((prev) => ({ ...prev, startTime: value }))}
+                    placeholder="09:00"
+                    placeholderTextColor={COLORS.textSecondary}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.timeInput}>
+                <View style={styles.formLabelContainer}>
+                  <ClockIcon size={18} color={COLORS.primary} style={{ marginRight: SPACING.xs }} />
+                  <Text style={styles.formLabel}>End Time</Text>
+                </View>
+                <View style={styles.timeInputContainer}>
+                  <TextInput
+                    style={styles.timeField}
+                    value={editForm.endTime}
+                    onChangeText={(value) => setEditForm((prev) => ({ ...prev, endTime: value }))}
+                    placeholder="17:00"
+                    placeholderTextColor={COLORS.textSecondary}
+                  />
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Notes</Text>
+              <View style={styles.timeInputContainer}>
+                <TextInput
+                  style={[styles.timeField, styles.notesField]}
+                  value={editForm.notes}
+                  onChangeText={(value) => setEditForm((prev) => ({ ...prev, notes: value }))}
+                  placeholder="Optional shift notes"
+                  placeholderTextColor={COLORS.textSecondary}
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                />
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.createButton, loading && styles.createButtonDisabled]}
+              onPress={handleEditShift}
+              disabled={loading}
+            >
+              {loading ? (
+                <RefreshCwIcon size={20} color={COLORS.textInverse} style={{ marginRight: SPACING.xs }} />
+              ) : (
+                <CheckCircleIcon size={20} color={COLORS.textInverse} style={{ marginRight: SPACING.xs }} />
+              )}
+              <Text style={styles.createButtonText}>
+                {loading ? 'Saving...' : 'Save Changes'}
               </Text>
             </TouchableOpacity>
           </ScrollView>
@@ -1198,14 +1309,18 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
         
         {renderCreateShiftModal()}
         {renderAssignGuardModal()}
+        {renderEditModal()}
       </View>
 
       {/* Sticky Action Button */}
       <TouchableOpacity 
-        style={styles.stickyAddButton}
+        style={[
+          styles.stickyAddButton,
+          { bottom: Math.max(insets.bottom + SPACING.md, SPACING.lg) },
+        ]}
         onPress={openCreateShiftModal}
       >
-        <PlusIcon size={20} color={COLORS.textInverse} style={{ marginRight: SPACING.xs }} />
+        <PlusIcon size={18} color={COLORS.textInverse} style={{ marginRight: SPACING.xs }} />
         <Text style={styles.stickyAddButtonText}>Add Shift</Text>
       </TouchableOpacity>
     </SafeAreaWrapper>
@@ -1226,12 +1341,12 @@ const styles = StyleSheet.create({
   },
   stickyAddButton: {
     position: 'absolute',
-    bottom: SPACING.lg,
     right: SPACING.lg,
     backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.lg,
+    paddingHorizontal: SPACING.xl,
     paddingVertical: SPACING.md,
-    borderRadius: BORDER_RADIUS.lg,
+    borderRadius: BORDER_RADIUS.md,
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1373,34 +1488,37 @@ const styles = StyleSheet.create({
   },
   shiftActionsRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
+    alignItems: 'stretch',
     marginTop: SPACING.sm,
     paddingTop: SPACING.sm,
     borderTopWidth: 1,
     borderTopColor: COLORS.borderLight,
-    gap: SPACING.md,
+    gap: SPACING.sm,
   },
-  actionButton: {
+  cardActionBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: SPACING.xs,
-    paddingHorizontal: SPACING.sm,
+    justifyContent: 'center',
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.xs,
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    backgroundColor: COLORS.backgroundSecondary,
+    gap: SPACING.xs / 2,
   },
-  actionButtonText: {
+  cardActionBtnDanger: {
+    borderColor: COLORS.error,
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+  },
+  cardActionBtnText: {
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
     color: COLORS.primary,
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
-    marginLeft: 4,
   },
-  deleteButton: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    borderRadius: BORDER_RADIUS.sm,
-  },
-  deleteButtonText: {
+  cardActionBtnTextDanger: {
     color: COLORS.error,
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
   emptyState: {
     padding: SPACING.xl,
@@ -1530,6 +1648,9 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.fontSize.md,
     color: COLORS.textPrimary,
   },
+  notesField: {
+    minHeight: 88,
+  },
   conflictPreview: {
     backgroundColor: COLORS.cardBackground,
     borderRadius: BORDER_RADIUS.md,
@@ -1592,12 +1713,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.primary,
     borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.md,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
     marginTop: SPACING.sm,
+    gap: SPACING.xs / 2,
   },
   assignGuardButtonText: {
     color: COLORS.primary,
-    fontSize: TYPOGRAPHY.fontSize.md,
+    fontSize: TYPOGRAPHY.fontSize.sm,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
   shiftInfoCard: {

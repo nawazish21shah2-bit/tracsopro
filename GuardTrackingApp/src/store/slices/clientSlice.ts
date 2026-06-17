@@ -1,4 +1,4 @@
-import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
+import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { clientApi } from '../api/clientApi';
 
 // Types
@@ -49,6 +49,9 @@ export interface SiteData {
   id: string;
   name: string;
   address: string;
+  latitude?: number;
+  longitude?: number;
+  radiusMeters?: number;
   guardName: string;
   guardAvatar?: string;
   status: 'Active' | 'Upcoming' | 'Missed';

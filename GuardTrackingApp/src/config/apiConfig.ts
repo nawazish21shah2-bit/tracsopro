@@ -9,10 +9,10 @@
 import { Platform } from 'react-native';
 
 // --- Local LAN release (physical phone + laptop backend on same WiFi) ---
-/** Set true when building a release APK to test against your laptop backend. */
-const USE_LOCAL_LAN_RELEASE = true;
+/** Keep false for production/client builds. */
+const USE_LOCAL_LAN_RELEASE = false;
 /** LAN IP of your dev machine (run `ipconfig` on Windows). */
-const DEV_LOCAL_IP = '192.168.1.4';
+const DEV_LOCAL_IP = '192.168.1.8';
 
 // --- Production (store release) — must use HTTPS ---
 const PRODUCTION_API_URL =
@@ -20,7 +20,7 @@ const PRODUCTION_API_URL =
 const PRODUCTION_WS_URL = 'https://api.tracsopro.com';
 
 /** Set true when running on Android emulator (uses 10.0.2.2). */
-const USE_ANDROID_EMULATOR = true;
+const USE_ANDROID_EMULATOR = false;
 
 const DEV_API_URL = `http://${DEV_LOCAL_IP}:3000/api`;
 const DEV_WS_URL = `http://${DEV_LOCAL_IP}:3000`;

@@ -34,6 +34,15 @@ interface GeofenceZone {
   isActive: boolean;
 }
 
+interface ShiftRadiusGeofence {
+  shiftId: string;
+  siteId?: string;
+  siteName: string;
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+}
+
 interface LocationTrackingConfig {
   enableHighAccuracy: boolean;
   timeout: number;
@@ -55,8 +64,12 @@ class LocationTrackingService {
   private lastBackendSyncAt = 0;
   private lastWsSyncAt = 0;
   private lastLocationLogAt = 0;
+  private activeShiftGeofence: ShiftRadiusGeofence | null = null;
+  private isOutsideActiveShiftRadius = false;
+  private lastOutOfRadiusAlertAt = 0;
   private readonly backendSyncIntervalMs = 20000;
   private readonly wsSyncIntervalMs = 5000;
+  private readonly outOfRadiusAlertCooldownMs = 120000;
 
   constructor() {
     this.config = {
@@ -163,6 +176,14 @@ class LocationTrackingService {
 
       this.isTracking = true;
       this.trackingStartTime = Date.now();
+      this.isOutsideActiveShiftRadius = false;
+      this.lastOutOfRadiusAlertAt = 0;
+
+      if (shiftId) {
+        await this.loadShiftRadiusGeofence(shiftId);
+      } else {
+        this.activeShiftGeofence = null;
+      }
 
       WebSocketService.connect();
       
@@ -219,8 +240,38 @@ class LocationTrackingService {
       );
 
       this.trackingStartTime = null;
+      this.activeShiftGeofence = null;
+      this.isOutsideActiveShiftRadius = false;
     } catch (error) {
       ErrorHandler.handleError(error, 'stop_location_tracking');
+    }
+  }
+
+  private async loadShiftRadiusGeofence(shiftId: string): Promise<void> {
+    try {
+      const result = await apiService.getShiftById(shiftId);
+      const site = result.data?.site;
+      if (
+        result.success &&
+        site &&
+        Number.isFinite(site.latitude) &&
+        Number.isFinite(site.longitude)
+      ) {
+        this.activeShiftGeofence = {
+          shiftId,
+          siteId: site.id,
+          siteName: site.name || result.data?.locationName || 'Site',
+          latitude: site.latitude,
+          longitude: site.longitude,
+          radiusMeters: Math.max(20, Math.round(site.radiusMeters || 100)),
+        };
+        return;
+      }
+
+      this.activeShiftGeofence = null;
+    } catch (error) {
+      this.activeShiftGeofence = null;
+      ErrorHandler.handleError(error, 'load_shift_radius_geofence', false);
     }
   }
 
@@ -249,6 +300,7 @@ class LocationTrackingService {
 
       // Check geofences
       await this.checkGeofences(locationData);
+      await this.checkActiveShiftRadius(locationData);
 
       // Cache location for offline access
       await cacheService.set('last_known_location', locationData, 60);
@@ -266,6 +318,67 @@ class LocationTrackingService {
     } catch (error) {
       ErrorHandler.handleError(error, 'handle_location_update', false);
     }
+  }
+
+  private async checkActiveShiftRadius(location: LocationData): Promise<void> {
+    if (!this.activeShiftGeofence) return;
+
+    const distance = this.calculateDistance(
+      location.latitude,
+      location.longitude,
+      this.activeShiftGeofence.latitude,
+      this.activeShiftGeofence.longitude,
+    );
+    const isOutside = distance > this.activeShiftGeofence.radiusMeters;
+    const stateChanged = this.isOutsideActiveShiftRadius !== isOutside;
+    this.isOutsideActiveShiftRadius = isOutside;
+
+    if (!isOutside) {
+      if (stateChanged) {
+        await cacheService.addToSyncQueue('site_radius_event', {
+          eventType: 'ENTER_RADIUS',
+          shiftId: this.activeShiftGeofence.shiftId,
+          siteId: this.activeShiftGeofence.siteId,
+          siteName: this.activeShiftGeofence.siteName,
+          distanceMeters: Math.round(distance),
+          radiusMeters: this.activeShiftGeofence.radiusMeters,
+          timestamp: Date.now(),
+        });
+      }
+      return;
+    }
+
+    const now = Date.now();
+    if (!stateChanged && now - this.lastOutOfRadiusAlertAt < this.outOfRadiusAlertCooldownMs) {
+      return;
+    }
+
+    this.lastOutOfRadiusAlertAt = now;
+    const roundedDistance = Math.round(distance);
+    await notificationService.sendImmediateNotification(
+      'Outside Site Radius',
+      `You are ${roundedDistance}m from ${this.activeShiftGeofence.siteName}. Allowed radius is ${this.activeShiftGeofence.radiusMeters}m.`,
+      {
+        type: 'outside_site_radius',
+        shiftId: this.activeShiftGeofence.shiftId,
+        siteId: this.activeShiftGeofence.siteId,
+        distanceMeters: roundedDistance,
+        radiusMeters: this.activeShiftGeofence.radiusMeters,
+      },
+    );
+
+    await cacheService.addToSyncQueue('site_radius_event', {
+      eventType: 'EXIT_RADIUS',
+      shiftId: this.activeShiftGeofence.shiftId,
+      siteId: this.activeShiftGeofence.siteId,
+      siteName: this.activeShiftGeofence.siteName,
+      distanceMeters: roundedDistance,
+      radiusMeters: this.activeShiftGeofence.radiusMeters,
+      timestamp: now,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      accuracy: location.accuracy,
+    });
   }
 
   /**

@@ -8,6 +8,15 @@ const RESOURCE_LABELS: Record<SubscriptionResource, string> = {
   sites: 'site',
 };
 
+export function isSubscriptionLimitError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes('limit reached') ||
+    lower.includes('trial limit') ||
+    lower.includes('upgrade your plan')
+  );
+}
+
 export function showSubscriptionLimitAlert(
   resource: SubscriptionResource,
   reason: string,
@@ -38,6 +47,7 @@ export function showActionErrorAlert(
   error: unknown,
   options?: {
     role?: string;
+    resource?: SubscriptionResource;
     onUpgrade?: () => void;
   }
 ) {
@@ -45,13 +55,9 @@ export function showActionErrorAlert(
     typeof error === 'string'
       ? error
       : extractErrorMessage(error);
-  const isLimitError =
-    message.toLowerCase().includes('limit reached') ||
-    message.toLowerCase().includes('trial limit') ||
-    message.toLowerCase().includes('upgrade your plan');
 
-  if (isLimitError) {
-    showSubscriptionLimitAlert('sites', message, options);
+  if (isSubscriptionLimitError(message)) {
+    showSubscriptionLimitAlert(options?.resource ?? 'sites', message, options);
     return;
   }
 

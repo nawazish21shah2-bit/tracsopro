@@ -1,10 +1,8 @@
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/database.js';
 import { logger } from '../utils/logger.js';
 import { ValidationError } from '../utils/errors.js';
-
-const prisma = new PrismaClient();
 
 // Rate limiting storage (in production, use Redis)
 const otpAttempts = new Map<string, { count: number; lastAttempt: number }>();
@@ -141,8 +139,9 @@ export const checkRateLimit = (identifier: string, type: 'otp' | 'email'): boole
  * Send OTP email to user
  */
 export const sendOTPEmail = async (email: string, otp: string, userName?: string): Promise<void> => {
-  // DEV ONLY: Log OTP to console for testing
-  console.log(`🔐 DEV OTP for ${email}: ${otp}`);
+  if (process.env.NODE_ENV !== 'production') {
+    logger.debug('OTP generated for email verification', { email, otpLength: otp.length });
+  }
   
   // Logo URL - Update this to your hosted logo URL or use base64 encoded image
   const logoUrl = process.env.EMAIL_LOGO_URL || 'https://via.placeholder.com/180x60/1C6CA9/FFFFFF?text=tracSOpro';
@@ -572,9 +571,10 @@ export const sendPasswordResetOTP = async (email: string): Promise<void> => {
     const otp = generateOTP();
     await storeOTP(user.id, otp);
     
-    // DEV ONLY: Log OTP to console for testing
-    console.log(`🔐 DEV OTP for ${user.email}: ${otp}`);
-    
+    if (process.env.NODE_ENV !== 'production') {
+      logger.debug('OTP generated for password reset', { email: user.email, otpLength: otp.length });
+    }
+
     const userName = `${user.firstName} ${user.lastName}`.trim();
     await sendPasswordResetOTP_Email(email, otp, userName);
     

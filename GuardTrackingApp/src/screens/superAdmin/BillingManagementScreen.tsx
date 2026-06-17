@@ -357,35 +357,39 @@ const BillingManagementScreen: React.FC<{ navigation?: any }> = ({ navigation: n
       {/* Analytics Summary */}
       {analytics && (
         <View style={styles.analyticsContainer}>
-          <View style={styles.analyticsCard}>
-            <Text style={styles.analyticsLabel}>Total Revenue</Text>
-            <Text style={styles.analyticsValue}>
-              ${analytics.totalRevenue?.amount?.toLocaleString() || '0'}
-            </Text>
+          <View style={styles.analyticsRow}>
+            <View style={styles.analyticsCard}>
+              <Text style={styles.analyticsLabel}>Total Revenue</Text>
+              <Text style={styles.analyticsValue}>
+                ${analytics.totalRevenue?.amount?.toLocaleString() || '0'}
+              </Text>
+            </View>
+            <View style={styles.analyticsCard}>
+              <Text style={styles.analyticsLabel}>Monthly Revenue</Text>
+              <Text style={styles.analyticsValue}>
+                ${analytics.monthlyRevenue?.amount?.toLocaleString() || '0'}
+              </Text>
+            </View>
           </View>
-          <View style={styles.analyticsCard}>
-            <Text style={styles.analyticsLabel}>Monthly Revenue</Text>
-            <Text style={styles.analyticsValue}>
-              ${analytics.monthlyRevenue?.amount?.toLocaleString() || '0'}
-            </Text>
-          </View>
-          <View style={styles.analyticsCard}>
-            <Text style={styles.analyticsLabel}>Pending</Text>
-            <Text style={styles.analyticsValue}>
-              ${analytics.byStatus?.find((s: any) => s.status === 'PENDING')?.amount?.toLocaleString() || '0'}
-            </Text>
-            <Text style={styles.analyticsSubtext}>
-              {analytics.byStatus?.find((s: any) => s.status === 'PENDING')?.count || 0} payments
-            </Text>
-          </View>
-          <View style={styles.analyticsCard}>
-            <Text style={styles.analyticsLabel}>Overdue</Text>
-            <Text style={[styles.analyticsValue, { color: COLORS.error }]}>
-              ${analytics.byStatus?.find((s: any) => s.status === 'OVERDUE')?.amount?.toLocaleString() || '0'}
-            </Text>
-            <Text style={styles.analyticsSubtext}>
-              {analytics.byStatus?.find((s: any) => s.status === 'OVERDUE')?.count || 0} payments
-            </Text>
+          <View style={styles.analyticsRow}>
+            <View style={styles.analyticsCard}>
+              <Text style={styles.analyticsLabel}>Pending</Text>
+              <Text style={styles.analyticsValue}>
+                ${analytics.byStatus?.find((s: any) => s.status === 'PENDING')?.amount?.toLocaleString() || '0'}
+              </Text>
+              <Text style={styles.analyticsSubtext}>
+                {analytics.byStatus?.find((s: any) => s.status === 'PENDING')?.count || 0} payments
+              </Text>
+            </View>
+            <View style={styles.analyticsCard}>
+              <Text style={styles.analyticsLabel}>Overdue</Text>
+              <Text style={[styles.analyticsValue, { color: COLORS.error }]}>
+                ${analytics.byStatus?.find((s: any) => s.status === 'OVERDUE')?.amount?.toLocaleString() || '0'}
+              </Text>
+              <Text style={styles.analyticsSubtext}>
+                {analytics.byStatus?.find((s: any) => s.status === 'OVERDUE')?.count || 0} payments
+              </Text>
+            </View>
           </View>
         </View>
       )}
@@ -694,16 +698,17 @@ const styles = StyleSheet.create({
     color: COLORS.success,
   },
   analyticsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     backgroundColor: COLORS.backgroundPrimary,
     gap: SPACING.md,
   },
+  analyticsRow: {
+    flexDirection: 'row',
+    gap: SPACING.md,
+  },
   analyticsCard: {
     flex: 1,
-    minWidth: '45%',
     backgroundColor: COLORS.backgroundSecondary,
     borderRadius: BORDER_RADIUS.md,
     padding: SPACING.md,

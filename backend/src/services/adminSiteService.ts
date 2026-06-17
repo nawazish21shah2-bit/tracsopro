@@ -17,6 +17,7 @@ interface AdminSiteCreateData {
   address: string;
   latitude?: number;
   longitude?: number;
+  radiusMeters?: number;
   description?: string;
   requirements?: string;
 }
@@ -25,7 +26,16 @@ interface AdminSiteUpdateData extends Partial<AdminSiteCreateData> {
   isActive?: boolean;
 }
 
+const DEFAULT_SITE_RADIUS_METERS = 100;
+const MIN_SITE_RADIUS_METERS = 20;
+const MAX_SITE_RADIUS_METERS = 2000;
+
 export class AdminSiteService {
+  private sanitizeRadius(radiusMeters?: number): number {
+    const radius = Number.isFinite(radiusMeters) ? Math.round(radiusMeters as number) : DEFAULT_SITE_RADIUS_METERS;
+    return Math.min(MAX_SITE_RADIUS_METERS, Math.max(MIN_SITE_RADIUS_METERS, radius));
+  }
+
   async getSites(filters: AdminSiteFilter, securityCompanyId?: string) {
     const { page = 1, limit = 20, clientId, isActive, search } = filters;
     const skip = (page - 1) * limit;
@@ -119,6 +129,7 @@ export class AdminSiteService {
           address: data.address,
           latitude: data.latitude,
           longitude: data.longitude,
+          radiusMeters: this.sanitizeRadius(data.radiusMeters),
           description: data.description,
           requirements: data.requirements,
         },
@@ -194,6 +205,10 @@ export class AdminSiteService {
         address: data.address ?? site.address,
         latitude: data.latitude ?? site.latitude,
         longitude: data.longitude ?? site.longitude,
+        radiusMeters:
+          data.radiusMeters !== undefined
+            ? this.sanitizeRadius(data.radiusMeters)
+            : site.radiusMeters,
         description: data.description ?? site.description,
         requirements: data.requirements ?? site.requirements,
         isActive: typeof data.isActive === 'boolean' ? data.isActive : site.isActive,

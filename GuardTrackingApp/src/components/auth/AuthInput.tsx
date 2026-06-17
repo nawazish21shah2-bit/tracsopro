@@ -1,6 +1,8 @@
 import React, { useState, forwardRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, TextInputProps } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, TextInputProps } from 'react-native';
 import { AppIcon, EyeIcon, EyeSlashIcon } from '../ui/AppIcons';
+import { COLORS } from '../../styles/globalStyles';
+import { authInputStyles } from '../../styles/authStyles';
 
 interface AuthInputProps extends TextInputProps {
   label?: string;
@@ -11,7 +13,7 @@ interface AuthInputProps extends TextInputProps {
   required?: boolean;
 }
 
-const AuthInput = forwardRef<TextInput, AuthInputProps> (({
+const AuthInput = forwardRef<TextInput, AuthInputProps>(({
   label,
   icon,
   error,
@@ -25,105 +27,62 @@ const AuthInput = forwardRef<TextInput, AuthInputProps> (({
   const [focused, setFocused] = useState(false);
 
   return (
-    <View style={styles.container}>
+    <View>
       {label && (
-        <Text style={styles.label}>
+        <Text style={authInputStyles.label}>
           {label}
-          {required && <Text style={styles.required}> *</Text>}
+          {required && <Text style={authInputStyles.required}> *</Text>}
         </Text>
       )}
-      
+
       <View
         style={[
-          styles.inputWrapper,
-          focused && styles.inputFocused,
-          error && styles.inputError,
+          authInputStyles.inputWrapper,
+          focused && authInputStyles.inputFocused,
+          error && authInputStyles.inputError,
           style,
         ]}
       >
         {icon && (
-          <AppIcon type="material" name={icon} size={20} color="#9CA3AF" style={styles.inputIcon} />
+          <AppIcon
+            type="material"
+            name={icon}
+            size={20}
+            color={COLORS.textSecondary}
+            style={authInputStyles.inputIcon}
+          />
         )}
-        
+
         <TextInput
           ref={ref}
-          style={styles.textInput}
-          placeholderTextColor="#828282"
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
+          style={authInputStyles.textInput}
+          placeholderTextColor={COLORS.textSecondary}
+          onFocus={(e) => {
+            setFocused(true);
+            props.onFocus?.(e);
+          }}
+          onBlur={(e) => {
+            setFocused(false);
+            props.onBlur?.(e);
+          }}
           {...props}
           secureTextEntry={isPasswordField ? !showPassword : props.secureTextEntry}
         />
-        
+
         {isPasswordField && onTogglePassword && (
-          <TouchableOpacity onPress={onTogglePassword} style={styles.eyeIcon}>
+          <TouchableOpacity onPress={onTogglePassword} style={authInputStyles.eyeIcon}>
             {showPassword ? (
-              <EyeIcon size={20} color="#9CA3AF" />
+              <EyeIcon size={20} color={COLORS.textSecondary} />
             ) : (
-              <EyeSlashIcon size={20} color="#9CA3AF" />
+              <EyeSlashIcon size={20} color={COLORS.textSecondary} />
             )}
           </TouchableOpacity>
         )}
       </View>
-      
-      {error && <Text style={styles.errorText}>{error}</Text>}
+
+      {error ? <Text style={authInputStyles.errorText}>{error}</Text> : null}
     </View>
   );
-});
-
-const styles = StyleSheet.create({
-  container: {
-    // Margin handled by parent inputContainer
-  },
-  label: {
-    fontFamily: 'Inter',
-    fontWeight: '500',
-    fontSize: 14,
-    color: '#828282',
-    marginBottom: 8,
-  },
-  required: {
-    color: '#EF4444',
-  },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA', // Light gray background as per design
-    borderWidth: 1,
-    borderColor: '#ACD3F1',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    height: 56,
-  },
-  inputFocused: {
-    borderColor: '#1C6CA9',
-    borderWidth: 1, // Keep border width consistent
-  },
-  inputError: {
-    borderColor: '#EF4444',
-  },
-  inputIcon: {
-    marginRight: 12,
-  },
-  textInput: {
-    flex: 1,
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    fontSize: 16,
-    color: '#000000',
-    paddingVertical: 0,
-  },
-  eyeIcon: {
-    padding: 4,
-  },
-  errorText: {
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    fontSize: 12,
-    color: '#EF4444',
-    marginTop: 4,
-    marginLeft: 4,
-  },
 });
 
 export default AuthInput;

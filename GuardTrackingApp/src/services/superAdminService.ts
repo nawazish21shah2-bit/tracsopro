@@ -185,9 +185,31 @@ class SuperAdminService {
     maxGuards?: number;
     maxClients?: number;
     maxSites?: number;
-  }): Promise<SecurityCompany> {
+    adminFirstName?: string;
+    adminLastName?: string;
+    adminEmail?: string;
+    adminPassword?: string;
+    createAdmin?: boolean;
+  }): Promise<{
+    company: SecurityCompany;
+    adminCredentials?: { email: string; temporaryPassword: string };
+  }> {
     const response = await apiService.post('/super-admin/companies', data);
-    return SuperAdminService.transformCompany(response.data);
+    const payload = response.data?.data ?? response.data ?? {};
+    const companyPayload = payload.company ?? payload;
+    const adminCredentials =
+      payload.adminCredentials ??
+      (data.adminPassword && (data.adminEmail || data.email)
+        ? {
+            email: (data.adminEmail || data.email).trim().toLowerCase(),
+            temporaryPassword: data.adminPassword,
+          }
+        : undefined);
+
+    return {
+      company: SuperAdminService.transformCompany(companyPayload),
+      adminCredentials,
+    };
   }
 
   async updateSecurityCompany(companyId: string, data: Partial<SecurityCompany>): Promise<SecurityCompany> {

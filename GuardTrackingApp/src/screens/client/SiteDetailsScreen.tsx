@@ -30,6 +30,7 @@ interface SiteDetails {
   requirements: string;
   contactPerson: string;
   contactPhone: string;
+  radiusMeters?: number;
   status: 'Active' | 'Inactive';
   createdAt: string;
 }
@@ -77,6 +78,7 @@ const SiteDetailsScreen: React.FC = () => {
               : '') ||
             '',
           contactPhone: siteData.contactPhone || '',
+          radiusMeters: siteData.radiusMeters ?? 100,
           status: siteData.isActive ? 'Active' : 'Inactive',
           createdAt: siteData.createdAt || new Date().toISOString(),
         });
@@ -218,6 +220,10 @@ const SiteDetailsScreen: React.FC = () => {
               <MapPinIcon size={16} color={COLORS.primary} />
               <Text style={styles.infoText}>{fullAddress || 'No address on file'}</Text>
             </View>
+
+            <Text style={styles.radiusText}>
+              Check-in radius: {site.radiusMeters ?? 100}m
+            </Text>
 
             {(site.contactPerson || site.contactPhone) && (
               <View style={styles.contactBlock}>
@@ -373,6 +379,12 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.textSecondary,
     lineHeight: 20,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+  },
+  radiusText: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.sm,
     fontFamily: TYPOGRAPHY.fontPrimary,
   },
 });

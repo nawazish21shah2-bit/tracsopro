@@ -9,12 +9,15 @@ import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { superAdminService, MetricGrowth, PlatformAnalyticsResponse } from '../../services/superAdminService';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
+import SuperAdminProfileDrawer from '../../components/superAdmin/SuperAdminProfileDrawer';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 import { useNotificationBell } from '../../hooks/useNotificationBell';
 import { ErrorState } from '../../components/ui/LoadingStates';
 
 const { width } = Dimensions.get('window');
 
 const PlatformAnalyticsScreen: React.FC = () => {
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
   const { onNotificationPress, notificationCount } = useNotificationBell({
     notificationsRoute: 'SuperAdminNotifications',
   });
@@ -130,7 +133,7 @@ const PlatformAnalyticsScreen: React.FC = () => {
   if (error && !analytics) {
     return (
       <SafeAreaWrapper>
-        <SharedHeader variant="superAdmin" title="Platform Analytics" hideLeftAction />
+        <SharedHeader variant="superAdmin" title="Platform Analytics" onMenuPress={openDrawer} />
         <ErrorState error={error} onRetry={loadAnalytics} />
       </SafeAreaWrapper>
     );
@@ -144,9 +147,16 @@ const PlatformAnalyticsScreen: React.FC = () => {
       <SharedHeader
         variant="superAdmin"
         title="Platform Analytics"
-        hideLeftAction
+        onMenuPress={openDrawer}
         onNotificationPress={onNotificationPress}
         notificationCount={notificationCount}
+        profileDrawer={
+          <SuperAdminProfileDrawer
+            visible={isDrawerVisible}
+            onClose={closeDrawer}
+            onNavigateToAnalytics={() => closeDrawer()}
+          />
+        }
       />
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {renderPeriodSelector()}

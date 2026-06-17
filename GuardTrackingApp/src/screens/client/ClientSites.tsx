@@ -15,6 +15,7 @@ import {
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigation, useFocusEffect, DrawerActions } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RootState, AppDispatch } from '../../store';
 import SiteCard from '../../components/client/SiteCard';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
@@ -26,6 +27,7 @@ import { useNotificationBell } from '../../hooks/useNotificationBell';
 import { fetchMySites } from '../../store/slices/clientSlice';
 import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
+import { PlusIcon } from '../../components/ui/AppIcons';
 import apiService from '../../services/api';
 import { getClientGuardChatParams } from '../../utils/chatHelper';
 import { useSubscriptionLimits } from '../../hooks/useSubscriptionLimits';
@@ -34,6 +36,7 @@ interface SiteData {
   id: string;
   name: string;
   address: string;
+  radiusMeters?: number;
   guardName: string;
   guardAvatar?: string;
   status: 'Active' | 'Upcoming' | 'Missed';
@@ -45,6 +48,7 @@ interface SiteData {
 const ClientSites: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const navigation = useNavigation<StackNavigationProp<ClientStackParamList>>();
+  const insets = useSafeAreaInsets();
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
   const { onNotificationPress, notificationCount } = useNotificationBell({
     notificationsRoute: 'ClientNotifications',
@@ -60,6 +64,7 @@ const ClientSites: React.FC = () => {
   
   const { user } = useSelector((state: RootState) => state.auth);
   const { ensureCanAdd } = useSubscriptionLimits();
+  const buttonBottom = Math.max(insets.bottom + SPACING.md, SPACING.lg);
 
   const handleAddSitePress = async () => {
     const allowed = await ensureCanAdd('sites');
@@ -287,6 +292,7 @@ const ClientSites: React.FC = () => {
               id: site.id,
               name: site.name || 'Unnamed Site',
               address: site.address || 'No address',
+              radiusMeters: site.radiusMeters ?? 100,
               guardName: guardName,
               status: status,
               guardId: guard?.id || undefined,
@@ -325,11 +331,12 @@ const ClientSites: React.FC = () => {
       </ScrollView>
 
       <TouchableOpacity 
-        style={styles.footerAddButton}
+        style={[styles.footerAddButton, { bottom: buttonBottom }]}
         onPress={handleAddSitePress}
         activeOpacity={0.85}
       >
-        <Text style={styles.footerAddButtonText}>+ Add New Site</Text>
+        <PlusIcon size={18} color={COLORS.textInverse} style={styles.footerAddButtonIcon} />
+        <Text style={styles.footerAddButtonText}>Add New Site</Text>
       </TouchableOpacity>
     </SafeAreaWrapper>
   );
@@ -371,7 +378,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     padding: SPACING.lg,
-    paddingBottom: SPACING.md,
+    paddingBottom: 120,
   },
   loadingContainer: {
     flex: 1,
@@ -426,16 +433,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   footerAddButton: {
-    marginHorizontal: SPACING.lg,
-    marginTop: SPACING.sm,
-    marginBottom: SPACING.sm,
+    position: 'absolute',
+    right: SPACING.lg,
     backgroundColor: COLORS.primary,
     paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg,
+    paddingHorizontal: SPACING.xl,
     borderRadius: BORDER_RADIUS.md,
+    minHeight: 48,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     ...SHADOWS.medium,
+    zIndex: 1000,
+  },
+  footerAddButtonIcon: {
+    marginRight: SPACING.xs,
   },
   footerAddButtonText: {
     color: COLORS.textInverse,

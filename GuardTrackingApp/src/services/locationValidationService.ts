@@ -277,7 +277,8 @@ class LocationValidationService {
         siteLocation.longitude
       );
 
-      const isWithinRadius = distance <= (siteLocation.radius || allowedRadius);
+      const maxAllowedRadius = siteLocation.radius || allowedRadius;
+      const isWithinRadius = distance <= maxAllowedRadius;
 
       return {
         isValid: isWithinRadius,
@@ -285,7 +286,7 @@ class LocationValidationService {
         accuracy: currentLocation.accuracy,
         message: isWithinRadius
           ? `Within ${Math.round(distance)}m of site location`
-          : `Too far from site (${Math.round(distance)}m away, max ${allowedRadius}m allowed)`,
+          : `Too far from site (${Math.round(distance)}m away, max ${maxAllowedRadius}m allowed)`,
         location: currentLocation,
       };
     } catch (error) {

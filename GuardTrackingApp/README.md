@@ -40,7 +40,9 @@ npm run ios
 
 ## Related docs
 
-- Root `START_HERE.md`
-- Root `QUICK_START_GUIDE.md`
-- Root `TESTING_PLAN.md`
-- Root `RELEASE_READINESS_CHECKLIST.md`
+- `CLIENT_HANDOFF.md` — delivery overview and go-live checklist
+- `docs/MOBILE_APP_ARCHITECTURE.md` — navigation, Redux, services
+- `docs/API_REFERENCE.md` — backend endpoints
+- `docs/DEPLOYMENT_GUIDE.md` — release builds
+- `docs/TROUBLESHOOTING.md` — common issues
+- `docs/USER_GUIDE.md` — role-based workflows

@@ -1,4 +1,6 @@
 import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { AuthService } from './authService.js';
 import PaymentService from './paymentService.js';
 import {
@@ -292,37 +294,107 @@ export class SuperAdminService {
     maxGuards?: number;
     maxClients?: number;
     maxSites?: number;
+    adminFirstName?: string;
+    adminLastName?: string;
+    adminEmail?: string;
+    adminPassword?: string;
+    createAdmin?: boolean;
   }) {
     try {
-      const company = await prisma.securityCompany.create({
-        data: {
-          ...data,
-          subscriptionPlan: data.subscriptionPlan as any,
-          subscriptionStatus: 'TRIAL',
-          subscriptionStartDate: new Date(),
-          subscriptionEndDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days trial
+      const createAdmin = data.createAdmin !== false;
+      const adminEmail = (data.adminEmail || data.email).toLowerCase().trim();
+      const trialEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+      if (createAdmin) {
+        const existingUser = await prisma.user.findUnique({
+          where: { email: adminEmail },
+        });
+        if (existingUser) {
+          throw new Error('An account with this admin email already exists');
         }
+      }
+
+      const result = await prisma.$transaction(async (tx) => {
+        const company = await tx.securityCompany.create({
+          data: {
+            name: data.name,
+            email: data.email,
+            phone: data.phone,
+            address: data.address,
+            city: data.city,
+            state: data.state,
+            zipCode: data.zipCode,
+            country: data.country,
+            subscriptionPlan: data.subscriptionPlan as any,
+            subscriptionStatus: 'TRIAL',
+            subscriptionStartDate: new Date(),
+            subscriptionEndDate: trialEnd,
+            maxGuards: data.maxGuards,
+            maxClients: data.maxClients,
+            maxSites: data.maxSites,
+          },
+        });
+
+        await tx.subscription.create({
+          data: {
+            securityCompanyId: company.id,
+            plan: data.subscriptionPlan as any,
+            status: 'TRIAL',
+            startDate: new Date(),
+            endDate: trialEnd,
+            amount: 0,
+            billingCycle: 'MONTHLY',
+          },
+        });
+
+        let adminCredentials: { email: string; temporaryPassword: string } | null = null;
+
+        if (createAdmin) {
+          const temporaryPassword =
+            data.adminPassword?.trim() ||
+            crypto.randomBytes(6).toString('base64url');
+          const hashedPassword = await bcrypt.hash(
+            temporaryPassword,
+            parseInt(process.env.BCRYPT_ROUNDS || '10', 10),
+          );
+
+          const adminUser = await tx.user.create({
+            data: {
+              email: adminEmail,
+              password: hashedPassword,
+              firstName: data.adminFirstName?.trim() || 'Company',
+              lastName: data.adminLastName?.trim() || 'Admin',
+              phone: data.phone || null,
+              role: 'ADMIN',
+              isEmailVerified: true,
+              isActive: true,
+            },
+          });
+
+          await tx.companyUser.create({
+            data: {
+              securityCompanyId: company.id,
+              userId: adminUser.id,
+              role: 'OWNER',
+              isActive: true,
+            },
+          });
+
+          adminCredentials = {
+            email: adminEmail,
+            temporaryPassword,
+          };
+        }
+
+        return { company, adminCredentials };
       });
 
-      // Create initial subscription record
-      await prisma.subscription.create({
-        data: {
-          securityCompanyId: company.id,
-          plan: data.subscriptionPlan as any,
-          status: 'TRIAL',
-          startDate: new Date(),
-          endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-          amount: 0,
-          billingCycle: 'MONTHLY'
-        }
-      });
-
-      // Log the action (userId should be passed from route handler)
-      // This will be called from route handler with userId
-
-      return company;
+      return result;
     } catch (error) {
       console.error('Error creating security company:', error);
+      if (error instanceof Error) {
+        throw error;
+      }
       throw new Error('Failed to create security company');
     }
   }

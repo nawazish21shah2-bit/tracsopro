@@ -3,9 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   StatusBar,
-  TextInput,
   Alert,
   ScrollView,
 } from 'react-native';
@@ -15,15 +13,15 @@ import { RouteProp } from '@react-navigation/native';
 import { useDispatch } from 'react-redux';
 import { AppDispatch } from '../../store';
 import { registerUser } from '../../store/slices/authSlice';
-import Icon from 'react-native-vector-icons/Ionicons';
 import Button from '../../components/common/Button';
 import PhoneInput from '../../components/auth/PhoneInput';
 import AuthHeader from '../../components/auth/AuthHeader';
+import AuthInput from '../../components/auth/AuthInput';
 import AuthFooter from '../../components/auth/AuthFooter';
 import { AuthStackParamList, UserRole } from '../../types';
 import { Country, defaultCountry } from '../../utils/countries';
 import { authStyles } from '../../styles/authStyles';
-import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
+import { COLORS, SPACING } from '../../styles/globalStyles';
 import { showRegistrationError } from '../../utils/registrationErrorHandler';
 
 type AdminSignupScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'AdminSignup'>;
@@ -57,60 +55,29 @@ const AdminSignupScreen: React.FC = () => {
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
-
-    // Full Name validation
-    if (!formData.fullName.trim()) {
-      newErrors.fullName = 'Full name is required';
-    } else if (formData.fullName.trim().length < 2) {
-      newErrors.fullName = 'Full name must be at least 2 characters';
-    } else if (formData.fullName.trim().length > 100) {
-      newErrors.fullName = 'Full name must be less than 100 characters';
-    }
-
-    // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!formData.email.trim()) {
-      newErrors.email = 'Email is required';
-    } else if (!emailRegex.test(formData.email.trim())) {
-      newErrors.email = 'Please enter a valid email address';
-    }
 
-    // Phone validation
-    if (!formData.phoneNumber.trim()) {
-      newErrors.phoneNumber = 'Phone number is required';
-    } else {
+    if (!formData.fullName.trim()) newErrors.fullName = 'Full name is required';
+    if (!formData.email.trim()) newErrors.email = 'Email is required';
+    else if (!emailRegex.test(formData.email.trim())) newErrors.email = 'Please enter a valid email address';
+
+    if (!formData.phoneNumber.trim()) newErrors.phoneNumber = 'Phone number is required';
+    else {
       const phoneDigits = formData.phoneNumber.replace(/\D/g, '');
-      // Validate phone number length (minimum 7, maximum 15 digits)
       if (phoneDigits.length < 7 || phoneDigits.length > 15) {
         newErrors.phoneNumber = 'Please enter a valid phone number';
       }
     }
 
-    // Password validation
-    if (!formData.password) {
-      newErrors.password = 'Password is required';
-    } else if (formData.password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters';
-    }
+    if (!formData.password) newErrors.password = 'Password is required';
+    else if (formData.password.length < 8) newErrors.password = 'Password must be at least 8 characters';
 
-    // Confirm Password validation
-    if (!formData.confirmPassword) {
-      newErrors.confirmPassword = 'Please confirm your password';
-    } else if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
-    }
+    if (!formData.confirmPassword) newErrors.confirmPassword = 'Please confirm your password';
+    else if (formData.password !== formData.confirmPassword) newErrors.confirmPassword = 'Passwords do not match';
 
-    // Company Name validation (Required for Admin)
-    if (!companyData.companyName.trim()) {
-      newErrors.companyName = 'Company name is required';
-    } else if (companyData.companyName.trim().length < 2) {
-      newErrors.companyName = 'Company name must be at least 2 characters';
-    }
-
-    // Company Email validation (Required for Admin)
-    if (!companyData.companyEmail.trim()) {
-      newErrors.companyEmail = 'Company email is required';
-    } else if (!emailRegex.test(companyData.companyEmail.trim())) {
+    if (!companyData.companyName.trim()) newErrors.companyName = 'Company name is required';
+    if (!companyData.companyEmail.trim()) newErrors.companyEmail = 'Company email is required';
+    else if (!emailRegex.test(companyData.companyEmail.trim())) {
       newErrors.companyEmail = 'Please enter a valid company email address';
     }
 
@@ -118,34 +85,38 @@ const AdminSignupScreen: React.FC = () => {
     return Object.keys(newErrors).length === 0;
   };
 
+  const updateField = (field: keyof typeof formData, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    if (errors[field]) setErrors((prev) => ({ ...prev, [field]: '' }));
+  };
+
+  const updateCompanyField = (field: keyof typeof companyData, value: string) => {
+    setCompanyData((prev) => ({ ...prev, [field]: value }));
+    if (errors[field]) setErrors((prev) => ({ ...prev, [field]: '' }));
+  };
+
   const handleSignup = async () => {
     if (!validateForm()) return;
 
     setIsLoading(true);
     try {
-      // Format phone number with country code
       const phoneDigits = formData.phoneNumber.replace(/\D/g, '');
       const fullPhoneNumber = `${selectedCountry.dialCode}${phoneDigits}`;
-      
-      // Split full name into first and last name
       const nameParts = formData.fullName.trim().split(' ');
       const firstName = nameParts[0];
       const lastName = nameParts.slice(1).join(' ') || '';
-
-      // Format company phone if provided
       const companyPhoneDigits = companyData.companyPhone.replace(/\D/g, '');
-      const fullCompanyPhone = companyPhoneDigits 
+      const fullCompanyPhone = companyPhoneDigits
         ? `${selectedCountry.dialCode}${companyPhoneDigits}`
-        : fullPhoneNumber; // Fallback to admin phone if not provided
+        : fullPhoneNumber;
 
-      // Prepare registration data
       const registrationData = {
         firstName,
         lastName,
         email: formData.email.toLowerCase().trim(),
         phone: fullPhoneNumber,
         password: formData.password,
-        confirmPassword: formData.password, // Backend doesn't need this, but type requires it
+        confirmPassword: formData.password,
         role: UserRole.ADMIN,
         accountType: accountType.toUpperCase(),
         companyName: companyData.companyName.trim(),
@@ -153,233 +124,139 @@ const AdminSignupScreen: React.FC = () => {
         companyPhone: fullCompanyPhone,
       };
 
-      // Call registration API via Redux
       const result = await dispatch(registerUser(registrationData));
-      
+
       if (registerUser.fulfilled.match(result)) {
         const payload = result.payload;
-        
-        // Check if tokens are returned (dev mode OTP bypass)
         if (payload.token && payload.user) {
-          // OTP was bypassed - user is already authenticated, navigate to profile setup
           Alert.alert(
             'Registration Successful',
             payload.message || 'Your account has been created successfully.',
-            [{ text: 'Continue', onPress: () => navigation.navigate('AdminProfileSetup', { accountType }) }]
+            [{ text: 'Continue', onPress: () => navigation.navigate('AdminProfileSetup', { accountType }) }],
           );
         } else {
-          // Normal flow - need OTP verification
-          navigation.navigate('AdminOTP', { 
+          navigation.navigate('AdminOTP', {
             email: formData.email,
             accountType,
-            isPasswordReset: false 
+            isPasswordReset: false,
           });
         }
       } else {
-        // Use streamlined error handler for consistent UX
-        showRegistrationError({
-          error: result.payload,
-          navigation,
-        });
+        showRegistrationError({ error: result.payload, navigation });
       }
     } catch (error) {
-      showRegistrationError({
-        error,
-        navigation,
-      });
+      showRegistrationError({ error, navigation });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const navigateToLogin = () => {
-    navigation.navigate('Login');
-  };
-
-
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      
-      <ScrollView 
+    <View style={authStyles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.backgroundPrimary} />
+
+      <ScrollView
         contentContainerStyle={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
         <AuthHeader title="SIGN UP" />
 
-        {/* Form */}
         <View style={[authStyles.form, styles.form]}>
-          {/* Full Name */}
-          <View style={styles.inputContainer}>
-            <View style={[styles.inputWrapper, errors.fullName && styles.inputError]}>
-              <Icon name="person-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-              <TextInput
-                style={styles.textInput}
-                placeholder="Full Name"
-                value={formData.fullName}
-                onChangeText={(text) => {
-                  setFormData(prev => ({ ...prev, fullName: text }));
-                  if (errors.fullName) setErrors(prev => ({ ...prev, fullName: '' }));
-                }}
-                placeholderTextColor="#9CA3AF"
-                autoCapitalize="words"
-              />
-            </View>
-            {errors.fullName && <Text style={styles.errorText}>{errors.fullName}</Text>}
+          <View style={authStyles.inputContainer}>
+            <AuthInput
+              icon="person-outline"
+              placeholder="Full Name"
+              value={formData.fullName}
+              onChangeText={(text) => updateField('fullName', text)}
+              autoCapitalize="words"
+              error={errors.fullName}
+            />
           </View>
 
-          {/* Email */}
-          <View style={styles.inputContainer}>
-            <View style={[styles.inputWrapper, errors.email && styles.inputError]}>
-              <Icon name="mail-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-              <TextInput
-                style={styles.textInput}
-                placeholder="Email Address"
-                value={formData.email}
-                onChangeText={(text) => {
-                  setFormData(prev => ({ ...prev, email: text }));
-                  if (errors.email) setErrors(prev => ({ ...prev, email: '' }));
-                }}
-                placeholderTextColor="#9CA3AF"
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-            </View>
-            {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+          <View style={authStyles.inputContainer}>
+            <AuthInput
+              icon="mail-outline"
+              placeholder="Email Address"
+              value={formData.email}
+              onChangeText={(text) => updateField('email', text)}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              error={errors.email}
+            />
           </View>
 
-          {/* Phone Number */}
-          <View style={styles.inputContainer}>
+          <View style={authStyles.inputContainer}>
             <PhoneInput
               value={formData.phoneNumber}
-              onChangeText={(text) => {
-                setFormData(prev => ({ ...prev, phoneNumber: text }));
-                if (errors.phoneNumber) setErrors(prev => ({ ...prev, phoneNumber: '' }));
-              }}
+              onChangeText={(text) => updateField('phoneNumber', text)}
               onCountryChange={(country) => setSelectedCountry(country)}
               selectedCountry={selectedCountry}
               error={errors.phoneNumber}
             />
           </View>
 
-          {/* Password */}
-          <View style={styles.inputContainer}>
-            <View style={[styles.inputWrapper, errors.password && styles.inputError]}>
-              <Icon name="lock-closed-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-              <TextInput
-                style={styles.textInput}
-                placeholder="Password"
-                value={formData.password}
-                onChangeText={(text) => {
-                  setFormData(prev => ({ ...prev, password: text }));
-                  if (errors.password) setErrors(prev => ({ ...prev, password: '' }));
-                }}
-                placeholderTextColor="#9CA3AF"
-                secureTextEntry={!showPassword}
-              />
-              <TouchableOpacity
-                onPress={() => setShowPassword(!showPassword)}
-                style={styles.eyeIcon}
-              >
-                <Icon 
-                  name={showPassword ? "eye-outline" : "eye-off-outline"} 
-                  size={20} 
-                  color="#9CA3AF" 
-                />
-              </TouchableOpacity>
-            </View>
-            {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
+          <View style={authStyles.inputContainer}>
+            <AuthInput
+              icon="lock-outline"
+              placeholder="Password"
+              value={formData.password}
+              onChangeText={(text) => updateField('password', text)}
+              secureTextEntry
+              showPassword={showPassword}
+              onTogglePassword={() => setShowPassword(!showPassword)}
+              error={errors.password}
+            />
           </View>
 
-          {/* Confirm Password */}
-          <View style={styles.inputContainer}>
-            <View style={[styles.inputWrapper, errors.confirmPassword && styles.inputError]}>
-              <Icon name="lock-closed-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-              <TextInput
-                style={styles.textInput}
-                placeholder="Confirm Password"
-                value={formData.confirmPassword}
-                onChangeText={(text) => {
-                  setFormData(prev => ({ ...prev, confirmPassword: text }));
-                  if (errors.confirmPassword) setErrors(prev => ({ ...prev, confirmPassword: '' }));
-                }}
-                placeholderTextColor="#9CA3AF"
-                secureTextEntry={!showConfirmPassword}
-              />
-              <TouchableOpacity
-                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                style={styles.eyeIcon}
-              >
-                <Icon 
-                  name={showConfirmPassword ? "eye-outline" : "eye-off-outline"} 
-                  size={20} 
-                  color="#9CA3AF" 
-                />
-              </TouchableOpacity>
-            </View>
-            {errors.confirmPassword && <Text style={styles.errorText}>{errors.confirmPassword}</Text>}
+          <View style={authStyles.inputContainer}>
+            <AuthInput
+              icon="lock-outline"
+              placeholder="Confirm Password"
+              value={formData.confirmPassword}
+              onChangeText={(text) => updateField('confirmPassword', text)}
+              secureTextEntry
+              showPassword={showConfirmPassword}
+              onTogglePassword={() => setShowConfirmPassword(!showConfirmPassword)}
+              error={errors.confirmPassword}
+            />
           </View>
 
-          {/* Company Details Section */}
           <View style={styles.sectionDivider}>
             <Text style={styles.sectionTitle}>Company Information</Text>
           </View>
 
-          {/* Company Name */}
-          <View style={styles.inputContainer}>
-            <View style={[styles.inputWrapper, errors.companyName && styles.inputError]}>
-              <Icon name="business-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-              <TextInput
-                style={styles.textInput}
-                placeholder="Company Name *"
-                value={companyData.companyName}
-                onChangeText={(text) => {
-                  setCompanyData(prev => ({ ...prev, companyName: text }));
-                  if (errors.companyName) setErrors(prev => ({ ...prev, companyName: '' }));
-                }}
-                placeholderTextColor="#9CA3AF"
-                autoCapitalize="words"
-              />
-            </View>
-            {errors.companyName && <Text style={styles.errorText}>{errors.companyName}</Text>}
+          <View style={authStyles.inputContainer}>
+            <AuthInput
+              icon="business"
+              placeholder="Company Name *"
+              value={companyData.companyName}
+              onChangeText={(text) => updateCompanyField('companyName', text)}
+              autoCapitalize="words"
+              error={errors.companyName}
+            />
           </View>
 
-          {/* Company Email */}
-          <View style={styles.inputContainer}>
-            <View style={[styles.inputWrapper, errors.companyEmail && styles.inputError]}>
-              <Icon name="mail-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-              <TextInput
-                style={styles.textInput}
-                placeholder="Company Email *"
-                value={companyData.companyEmail}
-                onChangeText={(text) => {
-                  setCompanyData(prev => ({ ...prev, companyEmail: text }));
-                  if (errors.companyEmail) setErrors(prev => ({ ...prev, companyEmail: '' }));
-                }}
-                placeholderTextColor="#9CA3AF"
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-            </View>
-            {errors.companyEmail && <Text style={styles.errorText}>{errors.companyEmail}</Text>}
+          <View style={authStyles.inputContainer}>
+            <AuthInput
+              icon="mail-outline"
+              placeholder="Company Email *"
+              value={companyData.companyEmail}
+              onChangeText={(text) => updateCompanyField('companyEmail', text)}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              error={errors.companyEmail}
+            />
           </View>
 
-          {/* Company Phone (Optional) */}
-          <View style={styles.inputContainer}>
-            <View style={styles.inputWrapper}>
-              <Icon name="call-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-              <TextInput
-                style={styles.textInput}
-                placeholder="Company Phone (Optional)"
-                value={companyData.companyPhone}
-                onChangeText={(text) => {
-                  setCompanyData(prev => ({ ...prev, companyPhone: text }));
-                }}
-                placeholderTextColor="#9CA3AF"
-                keyboardType="phone-pad"
-              />
-            </View>
+          <View style={authStyles.inputContainer}>
+            <AuthInput
+              icon="phone"
+              placeholder="Company Phone (Optional)"
+              value={companyData.companyPhone}
+              onChangeText={(text) => updateCompanyField('companyPhone', text)}
+              keyboardType="phone-pad"
+            />
           </View>
         </View>
 
@@ -397,7 +274,7 @@ const AdminSignupScreen: React.FC = () => {
         <AuthFooter
           text="Already have an account?"
           linkText="Login"
-          onLinkPress={navigateToLogin}
+          onLinkPress={() => navigation.navigate('Login')}
           disabled={isLoading}
         />
       </ScrollView>
@@ -406,10 +283,6 @@ const AdminSignupScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
   scrollContainer: {
     flexGrow: 1,
     paddingBottom: SPACING.lg,
@@ -417,59 +290,19 @@ const styles = StyleSheet.create({
   form: {
     flex: 0,
   },
-  inputContainer: {
-    marginBottom: 20,
-  },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    height: 56,
-  },
-  inputError: {
-    borderColor: '#EF4444',
-  },
-  inputIcon: {
-    marginRight: 12,
-  },
-  textInput: {
-    flex: 1,
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    fontSize: 16,
-    color: '#000000',
-    paddingVertical: 0,
-  },
-  eyeIcon: {
-    padding: 4,
-  },
-  errorText: {
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    fontSize: 12,
-    color: '#EF4444',
-    marginTop: 4,
-    marginLeft: 4,
-  },
   sectionDivider: {
-    marginTop: 20,
-    marginBottom: 16,
-    paddingTop: 20,
+    marginTop: SPACING.lg,
+    marginBottom: SPACING.md,
+    paddingTop: SPACING.lg,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: COLORS.borderCard,
   },
   sectionTitle: {
-    fontFamily: 'Inter',
-    fontWeight: '600',
     fontSize: 16,
-    color: '#374151',
-    marginBottom: 8,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.sm,
   },
 });
 
 export default AdminSignupScreen;
-

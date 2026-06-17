@@ -22,7 +22,6 @@ import {
   deleteNotification,
   clearAllNotifications,
 } from '../../store/slices/notificationSlice';
-import { useNotificationBell } from '../../hooks/useNotificationBell';
 import { COLORS, SPACING, TYPOGRAPHY } from '../../styles/globalStyles';
 import { NotificationIcon } from '../../components/ui/AppIcons';
 import { TrashIcon } from '../../components/ui/FeatherIcons';
@@ -62,9 +61,8 @@ const NotificationListScreen: React.FC<{ variant?: 'client' | 'guard' | 'admin' 
         : variant === 'guard'
           ? 'guard'
           : 'client';
-  const { headerProps } = useRoleScreenHeader('Notification', roleVariant);
+  const { headerProps } = useRoleScreenHeader('Notifications', roleVariant);
   const { notifications, unreadCount, isLoading, error } = useSelector((state: RootState) => state.notifications);
-  const bell = useNotificationBell({ refreshOnFocus: false });
   
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
@@ -135,7 +133,7 @@ const NotificationListScreen: React.FC<{ variant?: 'client' | 'guard' | 'admin' 
     } else if (data.incidentId) {
       navigationTargets.push({ screen: 'IncidentDetail', params: { incidentId: data.incidentId } });
     } else if (data.alertId) {
-      navigationTargets.push({ screen: 'EmergencyAlert', params: { alertId: data.alertId } });
+      navigationTargets.push({ screen: 'SupportHubScreen', params: { mode: 'mine' } });
     } else if (data.conversationId) {
       navigationTargets.push({ 
         screen: 'IndividualChatScreen', 
@@ -260,12 +258,14 @@ const NotificationListScreen: React.FC<{ variant?: 'client' | 'guard' | 'admin' 
         activeOpacity={0.7}
       >
         <View style={styles.cardContent}>
-          <ProfileAvatar
-            firstName={userName.split(' ')[0]}
-            lastName={userName.split(' ').slice(1).join(' ')}
-            profilePictureUrl={userAvatar}
-            size={48}
-          />
+          <View style={styles.avatarContainer}>
+            <ProfileAvatar
+              firstName={userName.split(' ')[0]}
+              lastName={userName.split(' ').slice(1).join(' ')}
+              profilePictureUrl={userAvatar}
+              size={48}
+            />
+          </View>
           <View style={styles.detailsContainer}>
             <Text style={styles.userName}>{item.title || userName}</Text>
             <Text style={styles.actionText}>{action}</Text>
@@ -308,42 +308,41 @@ const NotificationListScreen: React.FC<{ variant?: 'client' | 'guard' | 'admin' 
     <SafeAreaWrapper>
       <SharedHeader
         {...headerProps}
-        onNotificationPress={bell.onNotificationPress}
-        notificationCount={unreadCount}
-        rightIcon={
-          notifications.length > 0 || unreadCount > 0 ? (
-            <View style={styles.headerActions}>
-              {unreadCount > 0 ? (
-                <TouchableOpacity onPress={handleMarkAllAsRead} style={styles.headerActionButton}>
-                  <Text style={styles.markAllText}>Mark read</Text>
-                </TouchableOpacity>
-              ) : null}
-              {notifications.length > 0 ? (
-                <TouchableOpacity onPress={handleClearAll} style={styles.headerActionButton}>
-                  <Text style={styles.clearAllText}>Clear all</Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
-          ) : null
-        }
+        rightIcon={<View style={styles.headerRightSpacer} />}
       />
-      <View style={styles.filterRow}>
-        <TouchableOpacity
-          style={[styles.filterChip, filter === 'all' && styles.filterChipActive]}
-          onPress={() => setFilter('all')}
-        >
-          <Text style={[styles.filterChipText, filter === 'all' && styles.filterChipTextActive]}>
-            All
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.filterChip, filter === 'unread' && styles.filterChipActive]}
-          onPress={() => setFilter('unread')}
-        >
-          <Text style={[styles.filterChipText, filter === 'unread' && styles.filterChipTextActive]}>
-            Unread{unreadCount > 0 ? ` (${unreadCount})` : ''}
-          </Text>
-        </TouchableOpacity>
+      <View style={styles.toolbar}>
+        <View style={styles.filterRow}>
+          <TouchableOpacity
+            style={[styles.filterChip, filter === 'all' && styles.filterChipActive]}
+            onPress={() => setFilter('all')}
+          >
+            <Text style={[styles.filterChipText, filter === 'all' && styles.filterChipTextActive]}>
+              All
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterChip, filter === 'unread' && styles.filterChipActive]}
+            onPress={() => setFilter('unread')}
+          >
+            <Text style={[styles.filterChipText, filter === 'unread' && styles.filterChipTextActive]}>
+              Unread{unreadCount > 0 ? ` (${unreadCount})` : ''}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        {(unreadCount > 0 || notifications.length > 0) ? (
+          <View style={styles.bulkActions}>
+            {unreadCount > 0 ? (
+              <TouchableOpacity onPress={handleMarkAllAsRead} style={styles.bulkActionButton}>
+                <Text style={styles.markAllText}>Mark all read</Text>
+              </TouchableOpacity>
+            ) : null}
+            {notifications.length > 0 ? (
+              <TouchableOpacity onPress={handleClearAll} style={styles.bulkActionButton}>
+                <Text style={styles.clearAllText}>Clear all</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : null}
       </View>
       {isLoading && notifications.length === 0 ? (
         <View style={styles.loadingContainer}>
@@ -403,9 +402,10 @@ const styles = StyleSheet.create({
   cardContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: SPACING.md,
   },
   avatarContainer: {
-    marginRight: 12,
+    flexShrink: 0,
   },
   avatar: {
     width: 48,
@@ -422,6 +422,7 @@ const styles = StyleSheet.create({
   },
   detailsContainer: {
     flex: 1,
+    minWidth: 0,
   },
   userName: {
     fontSize: TYPOGRAPHY.fontSize.md,
@@ -440,7 +441,9 @@ const styles = StyleSheet.create({
   },
   statusContainer: {
     alignItems: 'flex-end',
-    gap: 8,
+    gap: SPACING.sm,
+    flexShrink: 0,
+    marginLeft: SPACING.xs,
   },
   unreadDot: {
     width: 10,
@@ -453,9 +456,29 @@ const styles = StyleSheet.create({
   },
   filterRow: {
     flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  toolbar: {
     paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.sm,
     paddingBottom: SPACING.sm,
     gap: SPACING.sm,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
+  },
+  bulkActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: SPACING.md,
+  },
+  bulkActionButton: {
+    paddingVertical: SPACING.xs,
+  },
+  headerRightSpacer: {
+    width: 40,
+    height: 40,
   },
   filterChip: {
     paddingHorizontal: SPACING.md,
@@ -473,15 +496,6 @@ const styles = StyleSheet.create({
   },
   filterChipTextActive: {
     color: '#FFFFFF',
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-  },
-  headerActionButton: {
-    paddingHorizontal: SPACING.xs,
-    paddingVertical: SPACING.xs,
   },
   clearAllText: {
     fontSize: TYPOGRAPHY.fontSize.sm,

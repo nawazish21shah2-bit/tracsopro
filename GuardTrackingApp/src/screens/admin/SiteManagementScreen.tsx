@@ -5,7 +5,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, Alert, ScrollView } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { LocationIcon, SettingsIcon } from '../../components/ui/AppIcons';
 import AddressPicker from '../../components/common/AddressPicker';
@@ -18,6 +17,7 @@ import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 import { useNotificationBell } from '../../hooks/useNotificationBell';
 import { useSubscriptionLimits } from '../../hooks/useSubscriptionLimits';
 import { showActionErrorAlert } from '../../utils/subscriptionLimitAlert';
+import { validateSiteForm } from '../../utils/siteFormValidation';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
 
@@ -37,12 +37,6 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
   const { onNotificationPress, notificationCount } = useNotificationBell({
     notificationsRoute: 'AdminNotifications',
   });
-  const insets = useSafeAreaInsets();
-  
-  // Tab bar height is 70px, add safe area bottom inset and spacing
-  const TAB_BAR_HEIGHT = 70;
-  const BUTTON_SPACING = 16;
-  const buttonBottom = TAB_BAR_HEIGHT + insets.bottom + BUTTON_SPACING;
   
   const [sites, setSites] = useState<Site[]>([]);
   const [loading, setLoading] = useState(false);
@@ -101,6 +95,7 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
       }));
 
       setSites(mapped);
+      await refreshLimits();
     } catch (error: any) {
       if (__DEV__) {
         console.error('Failed to load sites:', error);
@@ -119,16 +114,9 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
   };
 
   const handleCreateSite = async () => {
-    if (!newSite.name || !newSite.address || !newSite.clientId) {
-      Alert.alert('Error', 'Name, address, and client ID are required');
-      return;
-    }
-    if (!newSite.city) {
-      Alert.alert('Error', 'City is required');
-      return;
-    }
-    if (!newSite.contactPerson) {
-      Alert.alert('Error', 'Contact person is required');
+    const validation = validateSiteForm(newSite, { requireClient: true });
+    if (!validation.valid) {
+      Alert.alert('Missing Information', validation.message || 'Please complete all required fields.');
       return;
     }
 
@@ -152,6 +140,7 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
       if (!response.success || !response.data) {
         showActionErrorAlert('Create Site', response.message || 'Failed to create site', {
           role: user?.role,
+          resource: 'sites',
           onUpgrade: () => navigation.navigate('AdminSubscription'),
         });
         return;
@@ -182,6 +171,7 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
       }
       showActionErrorAlert('Create Site', error, {
         role: user?.role,
+        resource: 'sites',
         onUpgrade: () => navigation.navigate('AdminSubscription'),
       });
     }
@@ -386,7 +376,7 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
 
       {/* Sticky Action Button */}
       <TouchableOpacity 
-        style={[styles.stickyAddButton, { bottom: buttonBottom }]}
+        style={styles.stickyAddButton}
         onPress={handleOpenCreateModal}
       >
         <Text style={styles.stickyAddButtonText}>+ Add Site</Text>
@@ -410,7 +400,7 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
               <ClientSelector
                 value={newSite.clientId || null}
                 onChange={(clientId) => setNewSite(prev => ({ ...prev, clientId: clientId || '' }))}
-                label="Client *"
+                label="Client"
                 placeholder="Select client"
                 required
                 variant="modal"
@@ -464,7 +454,7 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
                 onCityChange={(city) => setNewSite(prev => ({ ...prev, city }))}
                 onStateChange={(state) => setNewSite(prev => ({ ...prev, state }))}
                 onZipChange={(zipCode) => setNewSite(prev => ({ ...prev, zipCode }))}
-                label="Street Address *"
+                label="Street Address"
                 placeholder="Enter or select address on map"
                 required
               />
@@ -616,7 +606,7 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
                 onCityChange={(city) => setEditSite(prev => ({ ...prev, city }))}
                 onStateChange={(state) => setEditSite(prev => ({ ...prev, state }))}
                 onZipChange={(zipCode) => setEditSite(prev => ({ ...prev, zipCode }))}
-                label="Street Address *"
+                label="Street Address"
                 placeholder="Enter or select address on map"
                 required
               />
@@ -830,12 +820,14 @@ const styles = StyleSheet.create({
   },
   stickyAddButton: {
     position: 'absolute',
+    bottom: SPACING.lg,
     right: SPACING.lg,
     backgroundColor: COLORS.primary,
     borderRadius: BORDER_RADIUS.lg,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     ...SHADOWS.medium,
+    zIndex: 1000,
   },
   stickyAddButtonText: {
     color: COLORS.textInverse,

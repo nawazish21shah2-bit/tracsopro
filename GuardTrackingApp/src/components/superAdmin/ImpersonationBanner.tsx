@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform, StatusBar } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { exitImpersonation } from '../../store/slices/authSlice';
@@ -20,9 +20,10 @@ const ImpersonationBanner: React.FC = () => {
   const targetLabel = user
     ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email
     : 'user';
+  const topInset = Platform.OS === 'android' ? (StatusBar.currentHeight || 0) : 0;
 
   return (
-    <View style={styles.banner}>
+    <View style={[styles.banner, { paddingTop: Math.max(topInset, SPACING.xs) }]}>
       <View style={styles.content}>
         <Text style={styles.text}>
           Viewing as {targetLabel}

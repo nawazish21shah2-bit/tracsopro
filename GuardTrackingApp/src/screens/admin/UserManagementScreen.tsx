@@ -18,7 +18,13 @@ import { useSelector } from 'react-redux';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RootState } from '../../store';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
-import { UserIcon, UsersIcon, SettingsIcon, EmergencyIcon } from '../../components/ui/AppIcons';
+import { UserIcon, UsersIcon, PlusIcon } from '../../components/ui/AppIcons';
+import {
+  EditIcon,
+  TrashIcon,
+  CheckCircleIcon,
+  AlertTriangleIcon,
+} from '../../components/ui/FeatherIcons';
 import { MessageCircle } from 'react-native-feather';
 import apiService from '../../services/api';
 import SharedHeader from '../../components/ui/SharedHeader';
@@ -422,7 +428,91 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
     ? users
     : users.filter(u => u.role === selectedRole);
 
-  const renderUserItem = ({ item }: { item: User }) => (
+  const ACTION_ICON_SIZE = 14;
+  const isItemLoading = (userId: string) => actionLoading === userId;
+
+  const renderUserCardAction = (
+    label: string,
+    onPress: () => void,
+    icon: React.ReactNode,
+    options?: {
+      variant?: 'primary' | 'warning' | 'success' | 'danger';
+      disabled?: boolean;
+    }
+  ) => {
+    const variant = options?.variant ?? 'primary';
+    const disabled = options?.disabled ?? false;
+
+    const variantBtnStyle =
+      variant === 'warning'
+        ? styles.cardActionBtnWarning
+        : variant === 'success'
+          ? styles.cardActionBtnSuccess
+          : variant === 'danger'
+            ? styles.cardActionBtnDanger
+            : undefined;
+
+    const variantTextStyle =
+      variant === 'warning'
+        ? styles.cardActionBtnTextWarning
+        : variant === 'success'
+          ? styles.cardActionBtnTextSuccess
+          : variant === 'danger'
+            ? styles.cardActionBtnTextDanger
+            : styles.cardActionBtnText;
+
+    return (
+      <TouchableOpacity
+        style={[
+          styles.cardActionBtn,
+          variantBtnStyle,
+          disabled && styles.cardActionBtnDisabled,
+        ]}
+        onPress={onPress}
+        activeOpacity={0.7}
+        disabled={disabled}
+      >
+        {icon}
+        <Text
+          style={[variantTextStyle, disabled && styles.cardActionBtnTextDisabled]}
+          numberOfLines={1}
+        >
+          {label}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
+
+  const handleUserChat = async (item: User) => {
+    try {
+      if (!user) {
+        Alert.alert('Error', 'User not logged in');
+        return;
+      }
+
+      let chatParams;
+      if (item.role === 'guard') {
+        chatParams = await findOrCreateAdminGuardChat(user.id, item.id, item.name);
+      } else if (item.role === 'client') {
+        chatParams = await findOrCreateClientAdminChat(item.id, user.id, item.name);
+      }
+
+      if (chatParams) {
+        navigation.navigate('IndividualChatScreen', chatParams);
+      } else {
+        Alert.alert('Error', 'Could not initiate chat');
+      }
+    } catch (error: any) {
+      console.error('Error initiating chat:', error);
+      Alert.alert('Error', 'Failed to start chat. Please try again.');
+    }
+  };
+
+  const renderUserItem = ({ item }: { item: User }) => {
+    const loading = isItemLoading(item.id);
+    const muted = COLORS.textSecondary;
+
+    return (
     <View style={styles.userCard}>
       <View style={styles.userHeader}>
         <View style={styles.userInfo}>
@@ -472,110 +562,44 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
       </View>
 
       <View style={styles.userActions}>
-        {/* Chat Button - Only show for guards and clients */}
-        {(item.role === 'guard' || item.role === 'client') && (
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={async () => {
-              try {
-                if (!user) {
-                  Alert.alert('Error', 'User not logged in');
-                  return;
-                }
+        {(item.role === 'guard' || item.role === 'client') &&
+          renderUserCardAction(
+            'Chat',
+            () => handleUserChat(item),
+            <MessageCircle size={ACTION_ICON_SIZE} color={COLORS.primary} />,
+          )}
 
-                let chatParams;
-                // item.id is already the User's ID (from User model)
-                if (item.role === 'guard') {
-                  // Use item.id directly - it's the guard's userId
-                  chatParams = await findOrCreateAdminGuardChat(
-                    user.id,
-                    item.id,
-                    item.name
-                  );
-                } else if (item.role === 'client') {
-                  // Use item.id directly - it's the client's userId
-                  chatParams = await findOrCreateClientAdminChat(
-                    item.id,
-                    user.id,
-                    item.name
-                  );
-                }
-
-                if (chatParams) {
-                  navigation.navigate('IndividualChatScreen', chatParams);
-                } else {
-                  Alert.alert('Error', 'Could not initiate chat');
-                }
-              } catch (error: any) {
-                console.error('Error initiating chat:', error);
-                Alert.alert('Error', 'Failed to start chat. Please try again.');
-              }
-            }}
-            activeOpacity={0.7}
-          >
-            <MessageCircle size={14} color={COLORS.primary} />
-            <Text style={styles.actionText}>Chat</Text>
-          </TouchableOpacity>
+        {renderUserCardAction(
+          'Edit',
+          () => handleUserAction(item.id, 'edit'),
+          <EditIcon size={ACTION_ICON_SIZE} color={loading ? muted : COLORS.primary} />,
+          { disabled: loading },
         )}
 
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => handleUserAction(item.id, 'edit')}
-          activeOpacity={0.7}
-          disabled={actionLoading === item.id}
-        >
-          <SettingsIcon size={16} color={actionLoading === item.id ? COLORS.textSecondary : COLORS.primary} />
-          <Text style={[styles.actionText, actionLoading === item.id && styles.actionTextDisabled]}>Edit</Text>
-        </TouchableOpacity>
+        {item.status === 'active'
+          ? renderUserCardAction(
+              'Suspend',
+              () => handleUserAction(item.id, 'suspend'),
+              <AlertTriangleIcon size={ACTION_ICON_SIZE} color={loading ? muted : COLORS.warning} />,
+              { variant: 'warning', disabled: loading },
+            )
+          : renderUserCardAction(
+              'Activate',
+              () => handleUserAction(item.id, 'activate'),
+              <CheckCircleIcon size={ACTION_ICON_SIZE} color={loading ? muted : COLORS.success} />,
+              { variant: 'success', disabled: loading },
+            )}
 
-        {item.status === 'active' ? (
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => handleUserAction(item.id, 'suspend')}
-            activeOpacity={0.7}
-            disabled={actionLoading === item.id}
-          >
-            <EmergencyIcon size={16} color={actionLoading === item.id ? COLORS.textSecondary : COLORS.warning} />
-            <Text style={[
-              styles.actionText,
-              { color: actionLoading === item.id ? COLORS.textSecondary : COLORS.warning }
-            ]}>
-              {actionLoading === item.id ? 'Loading...' : 'Suspend'}
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => handleUserAction(item.id, 'activate')}
-            activeOpacity={0.7}
-            disabled={actionLoading === item.id}
-          >
-            <UserIcon size={16} color={actionLoading === item.id ? COLORS.textSecondary : COLORS.success} />
-            <Text style={[
-              styles.actionText,
-              { color: actionLoading === item.id ? COLORS.textSecondary : COLORS.success }
-            ]}>
-              {actionLoading === item.id ? 'Loading...' : 'Activate'}
-            </Text>
-          </TouchableOpacity>
+        {renderUserCardAction(
+          'Delete',
+          () => handleUserAction(item.id, 'delete'),
+          <TrashIcon size={ACTION_ICON_SIZE} color={loading ? muted : COLORS.error} />,
+          { variant: 'danger', disabled: loading },
         )}
-
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => handleUserAction(item.id, 'delete')}
-          activeOpacity={0.7}
-          disabled={actionLoading === item.id}
-        >
-          <Text style={[
-            styles.actionText,
-            { color: actionLoading === item.id ? COLORS.textSecondary : COLORS.error }
-          ]}>
-            {actionLoading === item.id ? 'Loading...' : 'Delete'}
-          </Text>
-        </TouchableOpacity>
       </View>
     </View>
-  );
+    );
+  };
 
   return (
     <SafeAreaWrapper>
@@ -678,7 +702,8 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
         disabled={creatingUser || updatingUser}
         activeOpacity={(creatingUser || updatingUser) ? 1 : 0.7}
       >
-        <Text style={styles.stickyAddButtonText}>+ Add User</Text>
+        <PlusIcon size={18} color={COLORS.textInverse} style={styles.stickyAddButtonIcon} />
+        <Text style={styles.stickyAddButtonText}>Add User</Text>
       </TouchableOpacity>
 
       <Modal
@@ -894,13 +919,20 @@ const styles = StyleSheet.create({
   },
   stickyAddButton: {
     position: 'absolute',
-    left: SPACING.lg,
+    right: SPACING.lg,
     backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.lg,
+    paddingHorizontal: SPACING.xl,
     paddingVertical: SPACING.md,
     borderRadius: BORDER_RADIUS.md,
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     ...SHADOWS.small,
     zIndex: 1000,
+  },
+  stickyAddButtonIcon: {
+    marginRight: SPACING.xs,
   },
   stickyAddButtonText: {
     color: COLORS.textInverse,
@@ -943,7 +975,7 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     padding: SPACING.lg,
-    paddingBottom: 80, // Space for floating button + bottom nav
+    paddingBottom: 110, // Space for floating CTA + bottom nav
   },
   errorContainer: {
     flex: 1,
@@ -1037,24 +1069,66 @@ const styles = StyleSheet.create({
   },
   userActions: {
     flexDirection: 'row',
-    gap: SPACING.md,
+    alignItems: 'stretch',
+    flexWrap: 'wrap',
+    gap: SPACING.sm,
     paddingTop: SPACING.md,
     marginTop: SPACING.sm,
     borderTopWidth: 1,
     borderTopColor: COLORS.borderLight,
   },
-  actionButton: {
+  cardActionBtn: {
+    flexGrow: 1,
+    flexBasis: '22%',
+    minWidth: 72,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.xs,
-    paddingVertical: SPACING.xs,
-    paddingHorizontal: SPACING.sm,
-    borderRadius: BORDER_RADIUS.sm,
+    justifyContent: 'center',
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.xs,
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.borderCard,
+    backgroundColor: COLORS.backgroundSecondary,
+    gap: SPACING.xs / 2,
   },
-  actionText: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
+  cardActionBtnWarning: {
+    borderColor: COLORS.warning,
+    backgroundColor: 'rgba(255, 152, 0, 0.08)',
+  },
+  cardActionBtnSuccess: {
+    borderColor: COLORS.success,
+    backgroundColor: 'rgba(76, 175, 80, 0.08)',
+  },
+  cardActionBtnDanger: {
+    borderColor: COLORS.error,
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+  },
+  cardActionBtnDisabled: {
+    opacity: 0.55,
+  },
+  cardActionBtnText: {
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
     color: COLORS.primary,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
+  },
+  cardActionBtnTextWarning: {
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.warning,
+  },
+  cardActionBtnTextSuccess: {
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.success,
+  },
+  cardActionBtnTextDanger: {
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.error,
+  },
+  cardActionBtnTextDisabled: {
+    color: COLORS.textSecondary,
   },
   modalContainer: {
     flex: 1,
@@ -1154,9 +1228,6 @@ const styles = StyleSheet.create({
   },
   createButtonDisabled: {
     opacity: 0.6,
-  },
-  actionTextDisabled: {
-    opacity: 0.5,
   },
 });
 

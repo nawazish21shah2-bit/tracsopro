@@ -8,6 +8,7 @@ interface CreateSiteData {
   address: string;
   latitude?: number;
   longitude?: number;
+  radiusMeters?: number;
   description?: string;
   requirements?: string;
 }
@@ -16,7 +17,16 @@ interface UpdateSiteData extends Partial<CreateSiteData> {
   isActive?: boolean;
 }
 
+const DEFAULT_SITE_RADIUS_METERS = 100;
+const MIN_SITE_RADIUS_METERS = 20;
+const MAX_SITE_RADIUS_METERS = 2000;
+
 export class SiteService {
+  private sanitizeRadius(radiusMeters?: number): number {
+    const radius = Number.isFinite(radiusMeters) ? Math.round(radiusMeters as number) : DEFAULT_SITE_RADIUS_METERS;
+    return Math.min(MAX_SITE_RADIUS_METERS, Math.max(MIN_SITE_RADIUS_METERS, radius));
+  }
+
   // Create a new site for a client
   async createSite(clientId: string, data: CreateSiteData) {
     try {
@@ -57,6 +67,7 @@ export class SiteService {
             address: data.address,
             latitude: data.latitude,
             longitude: data.longitude,
+            radiusMeters: this.sanitizeRadius(data.radiusMeters),
             description: data.description,
             requirements: data.requirements,
           },
@@ -226,7 +237,12 @@ export class SiteService {
 
       const updatedSite = await prisma.site.update({
         where: { id: siteId },
-        data,
+        data: {
+          ...data,
+          ...(data.radiusMeters !== undefined
+            ? { radiusMeters: this.sanitizeRadius(data.radiusMeters) }
+            : {}),
+        },
         include: {
           client: {
             include: {

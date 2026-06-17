@@ -59,6 +59,25 @@ interface SiteBoundary {
   isActive: boolean;
 }
 
+const calculateDistanceMeters = (
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number => {
+  const R = 6371e3;
+  const phi1 = (lat1 * Math.PI) / 180;
+  const phi2 = (lat2 * Math.PI) / 180;
+  const dPhi = ((lat2 - lat1) * Math.PI) / 180;
+  const dLambda = ((lon2 - lon1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(dPhi / 2) * Math.sin(dPhi / 2) +
+    Math.cos(phi1) * Math.cos(phi2) * Math.sin(dLambda / 2) * Math.sin(dLambda / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
 interface InteractiveMapViewProps {
   height?: number;
   showControls?: boolean;
@@ -244,7 +263,10 @@ const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
 
       // Convert sites to site boundaries format
       const siteBoundaries: SiteBoundary[] = sites
-        .filter((site: any) => site.latitude && site.longitude && site.isActive)
+        .filter(
+          (site: any) =>
+            Number.isFinite(site.latitude) && Number.isFinite(site.longitude) && site.isActive,
+        )
         .map((site: any) => {
           const center = {
             latitude: site.latitude,
@@ -252,7 +274,7 @@ const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
           };
           
           // Create a simple square boundary around the site (can be enhanced with actual geofence data)
-          const radius = 100; // Default radius in meters
+          const radius = Math.max(20, Math.round(site.radiusMeters || 100));
           const latDelta = radius / 111000; // Approximate conversion: 1 degree ≈ 111km
           const lngDelta = radius / (111000 * Math.cos(center.latitude * Math.PI / 180));
           
@@ -442,6 +464,20 @@ const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
 
     const guard = guardLocations.find(g => g.guardId === selectedGuard);
     if (!guard) return null;
+    const nearestBoundary = siteBoundaries
+      .map((boundary) => ({
+        boundary,
+        distanceMeters: calculateDistanceMeters(
+          guard.latitude,
+          guard.longitude,
+          boundary.center.latitude,
+          boundary.center.longitude,
+        ),
+      }))
+      .sort((a, b) => a.distanceMeters - b.distanceMeters)[0];
+    const isInsideSiteRadius = nearestBoundary
+      ? nearestBoundary.distanceMeters <= nearestBoundary.boundary.radius
+      : undefined;
 
     return (
       <View style={styles.guardInfoPanel}>
@@ -458,6 +494,17 @@ const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
         </View>
         <Text style={styles.lastUpdate}>Last update: {guard.lastUpdate}</Text>
         <Text style={styles.accuracy}>Accuracy: ±{Math.round(guard.accuracy)}m</Text>
+        {nearestBoundary ? (
+          <Text
+            style={[
+              styles.radiusStatus,
+              { color: isInsideSiteRadius ? COLORS.success : COLORS.warning },
+            ]}
+          >
+            {isInsideSiteRadius ? 'Inside radius' : 'Outside radius'} ·{' '}
+            {Math.round(nearestBoundary.distanceMeters)}m / {nearestBoundary.boundary.radius}m
+          </Text>
+        ) : null}
         <Text style={styles.coordinates}>
           {guard.latitude.toFixed(5)}, {guard.longitude.toFixed(5)}
         </Text>
@@ -693,6 +740,11 @@ const styles = StyleSheet.create({
   coordinates: {
     fontSize: TYPOGRAPHY.fontSize.xs,
     color: COLORS.textSecondary,
+    marginTop: SPACING.xs,
+  },
+  radiusStatus: {
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
     marginTop: SPACING.xs,
   },
 });

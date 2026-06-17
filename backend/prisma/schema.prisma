@@ -131,6 +131,7 @@ model Site {
   address      String
   latitude     Float?
   longitude    Float?
+  radiusMeters Int      @default(100)
   description  String?
   requirements String?
   isActive     Boolean  @default(true)

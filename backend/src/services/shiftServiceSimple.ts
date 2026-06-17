@@ -51,6 +51,26 @@ export interface ShiftStats {
 }
 
 class ShiftServiceSimple {
+  private calculateDistanceMeters(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number,
+  ): number {
+    const R = 6371e3;
+    const phi1 = (lat1 * Math.PI) / 180;
+    const phi2 = (lat2 * Math.PI) / 180;
+    const dPhi = ((lat2 - lat1) * Math.PI) / 180;
+    const dLambda = ((lon2 - lon1) * Math.PI) / 180;
+
+    const a =
+      Math.sin(dPhi / 2) * Math.sin(dPhi / 2) +
+      Math.cos(phi1) * Math.cos(phi2) * Math.sin(dLambda / 2) * Math.sin(dLambda / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c;
+  }
+
   /**
    * Create a new shift
    */
@@ -210,6 +230,17 @@ class ShiftServiceSimple {
     // Find the shift
     const shift = await prisma.shift.findUnique({
       where: { id: data.shiftId },
+      include: {
+        site: {
+          select: {
+            id: true,
+            name: true,
+            latitude: true,
+            longitude: true,
+            radiusMeters: true,
+          },
+        },
+      },
     });
 
     if (!shift) {
@@ -218,6 +249,32 @@ class ShiftServiceSimple {
 
     if (shift.guardId !== data.guardId) {
       throw new BadRequestError('Shift does not belong to this guard');
+    }
+
+    if (shift.site?.latitude != null && shift.site?.longitude != null) {
+      const allowedRadiusMeters = Math.max(20, shift.site.radiusMeters || 100);
+      const distanceMeters = this.calculateDistanceMeters(
+        data.location.latitude,
+        data.location.longitude,
+        shift.site.latitude,
+        shift.site.longitude,
+      );
+
+      if (distanceMeters > allowedRadiusMeters) {
+        const roundedDistance = Math.round(distanceMeters);
+        const message = `Check-in denied. You are ${roundedDistance}m away from ${shift.site.name}; maximum allowed radius is ${allowedRadiusMeters}m.`;
+        const error = new BadRequestError(message) as BadRequestError & {
+          details?: Record<string, unknown>;
+        };
+        error.details = {
+          reason: 'OUTSIDE_SITE_RADIUS',
+          siteId: shift.site.id,
+          siteName: shift.site.name,
+          distanceMeters: roundedDistance,
+          allowedRadiusMeters,
+        };
+        throw error;
+      }
     }
 
     // Allow check-in if:
@@ -862,6 +919,9 @@ class ShiftServiceSimple {
         id: site.id,
         name: site.name,
         address: site.address,
+        radiusMeters: site.radiusMeters,
+        latitude: site.latitude,
+        longitude: site.longitude,
       } : null,
       client: client ? {
         id: client.id,

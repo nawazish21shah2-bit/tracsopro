@@ -3,14 +3,12 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   Alert,
   KeyboardAvoidingView,
   Platform,
   StatusBar,
-  Image,
   ScrollView,
 } from 'react-native';
 import { EmailIcon } from '../../components/ui/AppIcons';
@@ -21,7 +19,10 @@ import { RootState, AppDispatch } from '../../store';
 import { forgotPassword, clearError } from '../../store/slices/authSlice';
 import { AuthStackParamList } from '../../types';
 import Button from '../../components/common/Button';
-import Logo from '../../assets/images/tracSOpro-logo.png';
+import AuthHeader from '../../components/auth/AuthHeader';
+import AuthInput from '../../components/auth/AuthInput';
+import { authStyles } from '../../styles/authStyles';
+import { COLORS, SPACING } from '../../styles/globalStyles';
 
 type ForgotPasswordScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'ForgotPassword'>;
 
@@ -46,34 +47,30 @@ const ForgotPasswordScreen: React.FC = () => {
 
     try {
       const result = await dispatch(forgotPassword(email));
-      
+
       if (forgotPassword.fulfilled.match(result)) {
-        // OTP sent successfully - show success message and navigate to OTP screen
-        // For password reset, we navigate to GuardOTP with email and isPasswordReset flag
-        // The OTP screen will handle password reset flow differently
-        navigation.navigate('GuardOTP', { 
-          email, 
-          isPasswordReset: true 
+        navigation.navigate('GuardOTP', {
+          email,
+          isPasswordReset: true,
         });
       } else {
         const errorMessage = result.payload as string;
         Alert.alert('Error', errorMessage || 'Failed to send reset code. Please try again.');
       }
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'An unexpected error occurred');
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'An unexpected error occurred');
     }
   };
 
-  const isValidEmail = (email: string): boolean => {
+  const isValidEmail = (value: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
+    return emailRegex.test(value);
   };
 
   const navigateToLogin = () => {
     navigation.navigate('Login');
   };
 
-  // Clear error when component unmounts or when user starts typing
   React.useEffect(() => {
     if (error) {
       dispatch(clearError());
@@ -83,31 +80,19 @@ const ForgotPasswordScreen: React.FC = () => {
   if (emailSent) {
     return (
       <View style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#007AFF" />
-        
-        <View style={styles.content}>
-          <View style={styles.header}>
-            <EmailIcon size={28} color="#FFFFFF" />
-            <Text style={styles.title}>Check Your Email</Text>
-            <Text style={styles.subtitle}>
+        <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
+
+        <View style={styles.successContent}>
+          <View style={styles.successHeader}>
+            <EmailIcon size={28} color={COLORS.textInverse} />
+            <Text style={styles.successTitle}>Check Your Email</Text>
+            <Text style={styles.successSubtitle}>
               We've sent a password reset link to{'\n'}
               <Text style={styles.emailText}>{email}</Text>
             </Text>
           </View>
 
-          <View style={styles.instructions}>
-            <Text style={styles.instructionText}>
-              • Check your email inbox{'\n'}
-              • Look for an email from Guard Tracker{'\n'}
-              • Click the reset link in the email{'\n'}
-              • Follow the instructions to reset your password
-            </Text>
-          </View>
-
-          <TouchableOpacity
-            style={styles.backToLoginButton}
-            onPress={navigateToLogin}
-          >
+          <TouchableOpacity style={styles.backToLoginButton} onPress={navigateToLogin}>
             <Text style={styles.backToLoginButtonText}>Back to Login</Text>
           </TouchableOpacity>
         </View>
@@ -120,43 +105,30 @@ const ForgotPasswordScreen: React.FC = () => {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.backgroundPrimary} />
+
       <ScrollView
         contentContainerStyle={styles.scrollContainer}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Logo */}
-        <View style={styles.logoContainer}>
-          <Image source={Logo} style={styles.logoImage} resizeMode="contain" />
-        </View>
+        <AuthHeader
+          title="FORGOT PASSWORD"
+          subtitle="Enter your email address and we'll send you an OTP to reset your password."
+        />
 
-        {/* Title */}
-        <Text style={styles.title}>FORGOT PASSWORD</Text>
-        <Text style={styles.subtitle}>
-          Enter your email address and we'll send you an OTP to reset your password.
-        </Text>
-
-        {/* Form */}
-        <View style={styles.form}>
-          <View style={styles.inputContainer}>
-            <View style={styles.inputWrapper}>
-              <View style={styles.iconContainer}>
-                <EmailIcon size={20} color="#1C6CA9" />
-              </View>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Email Address"
-                placeholderTextColor="#9CA3AF"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!isLoading}
-              />
-            </View>
+        <View style={authStyles.form}>
+          <View style={authStyles.inputContainer}>
+            <AuthInput
+              icon="mail-outline"
+              placeholder="Email Address"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!isLoading}
+            />
           </View>
 
           <Button
@@ -166,18 +138,15 @@ const ForgotPasswordScreen: React.FC = () => {
             loading={isLoading}
             fullWidth
             size="large"
-            style={{ marginTop: 40 }}
+            style={authStyles.submitButton}
           />
         </View>
 
-        {/* Footer */}
-        <View style={styles.footer}>
-          <View style={styles.footerRow}>
-            <Text style={styles.footerText}>Remember your password? </Text>
-            <TouchableOpacity onPress={navigateToLogin} disabled={isLoading} activeOpacity={isLoading ? 1 : 0.7}>
-              <Text style={styles.loginLink}>Login</Text>
-            </TouchableOpacity>
-          </View>
+        <View style={authStyles.footerLinkRow}>
+          <Text style={authStyles.footerText}>Remember your password? </Text>
+          <TouchableOpacity onPress={navigateToLogin} disabled={isLoading} activeOpacity={isLoading ? 1 : 0.7}>
+            <Text style={authStyles.linkText}>Login</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -187,154 +156,52 @@ const ForgotPasswordScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    backgroundColor: '#007AFF',
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 32,
+    backgroundColor: COLORS.backgroundPrimary,
   },
   scrollContainer: {
     flexGrow: 1,
-    paddingBottom: 40,
+    paddingBottom: SPACING.xxxl,
   },
-  logoContainer: {
+  successContent: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 60,
-    marginBottom: 30,
+    paddingHorizontal: SPACING.lg,
+    backgroundColor: COLORS.primary,
   },
-  logoImage: {
-    width: 160,
-    height: 140,
+  successHeader: {
+    alignItems: 'center',
+    marginBottom: SPACING.xxxl,
   },
-  title: {
-    fontFamily: 'Montserrat',
-    fontWeight: '600',
+  successTitle: {
     fontSize: 24,
-    lineHeight: 29,
-    textAlign: 'center',
-    letterSpacing: -0.408,
-    color: '#000000',
-    textTransform: 'uppercase',
-    marginBottom: 16,
+    fontWeight: '600',
+    color: COLORS.textInverse,
+    marginTop: SPACING.lg,
+    marginBottom: SPACING.md,
   },
-  subtitle: {
-    fontFamily: 'Inter',
-    fontWeight: '400',
+  successSubtitle: {
     fontSize: 14,
-    lineHeight: 20,
+    color: COLORS.textInverse,
     textAlign: 'center',
-    color: '#6B7280',
-    marginBottom: 40,
-    paddingHorizontal: 20,
+    lineHeight: 22,
   },
   emailText: {
     fontWeight: '600',
-    color: '#ffffff',
-  },
-  form: {
-    paddingHorizontal: 20,
-    flex: 1,
-  },
-  inputContainer: {
-    marginBottom: 16,
-  },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 56,
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-  },
-  iconContainer: {
-    width: 20,
-    height: 20,
-    marginRight: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  inputIcon: {
-    fontSize: 16,
-    color: '#6B7280',
-  },
-  textInput: {
-    flex: 1,
-    fontFamily: 'Inter',
-    fontWeight: '500',
-    fontSize: 14,
-    lineHeight: 17,
-    letterSpacing: -0.408,
-    color: '#000000',
-  },
-  instructions: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 24,
-    marginBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  instructionText: {
-    fontSize: 16,
-    color: '#333',
-    lineHeight: 24,
   },
   backToLoginButton: {
     backgroundColor: 'transparent',
     borderWidth: 2,
-    borderColor: '#ffffff',
+    borderColor: COLORS.textInverse,
     borderRadius: 8,
-    paddingVertical: 16,
+    paddingVertical: SPACING.lg,
+    paddingHorizontal: SPACING.xxxl,
     alignItems: 'center',
   },
   backToLoginButtonText: {
-    color: '#ffffff',
+    color: COLORS.textInverse,
     fontSize: 16,
     fontWeight: '600',
-  },
-  footer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 'auto',
-    marginBottom: 40,
-  },
-  footerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexWrap: 'nowrap',
-  },
-  footerText: {
-    fontFamily: 'Inter',
-    fontWeight: '500',
-    fontSize: 14,
-    lineHeight: 17,
-    textAlign: 'center',
-    letterSpacing: -0.408,
-    color: '#828282',
-  },
-  loginLink: {
-    fontFamily: 'Inter',
-    fontWeight: '500',
-    fontSize: 14,
-    lineHeight: 17,
-    letterSpacing: -0.408,
-    color: '#1C6CA9',
   },
 });
 

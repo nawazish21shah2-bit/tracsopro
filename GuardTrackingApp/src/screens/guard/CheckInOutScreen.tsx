@@ -122,7 +122,14 @@ const CheckInOutScreen: React.FC = () => {
         Alert.alert('Success', result.message || 'You have successfully checked in to your shift!');
         setNotes('');
       } else {
-        Alert.alert('Error', result.message || 'Failed to check in. Please try again.');
+        if (result.data?.reason === 'OUTSIDE_SITE_RADIUS') {
+          Alert.alert(
+            'Outside Check-In Radius',
+            `${result.message}\n\nDistance: ${result.data.distanceMeters}m\nAllowed radius: ${result.data.allowedRadiusMeters}m`
+          );
+        } else {
+          Alert.alert('Error', result.message || 'Failed to check in. Please try again.');
+        }
       }
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to check in. Please try again.');

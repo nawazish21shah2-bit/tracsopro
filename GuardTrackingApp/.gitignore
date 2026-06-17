@@ -81,6 +81,7 @@ android/app/.cxx/
 android/app/build/
 android/build/
 android/link-assets-manifest.json
+android/keystore.properties
 
 # iOS (module-specific)
 ios/build/

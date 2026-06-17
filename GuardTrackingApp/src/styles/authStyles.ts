@@ -11,6 +11,58 @@ export const AUTH_SUBMIT_MARGIN_TOP = SPACING.xxxxl; // 40px - Space after last 
 export const AUTH_SUBMIT_TO_FOOTER = SPACING.xxxl; // 32px - Space between submit and footer link
 export const AUTH_FOOTER_BOTTOM = 32; // 32px from bottom
 
+/** Shared bordered input styles used by Login and all auth forms */
+export const authInputStyles = StyleSheet.create({
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.backgroundSecondary,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.lg,
+    height: 56,
+  },
+  inputFocused: {
+    borderColor: COLORS.primary,
+  },
+  inputError: {
+    borderColor: COLORS.error,
+  },
+  inputIcon: {
+    marginRight: SPACING.md,
+  },
+  textInput: {
+    flex: 1,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.regular,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textPrimary,
+    paddingVertical: 0,
+  },
+  eyeIcon: {
+    padding: SPACING.xs,
+  },
+  errorText: {
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.regular,
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.error,
+    marginTop: SPACING.xs,
+    marginLeft: SPACING.xs,
+  },
+  label: {
+    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.sm,
+  },
+  required: {
+    color: COLORS.error,
+  },
+});
+
 export const authStyles = StyleSheet.create({
   // Container
   container: {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,14 +8,15 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { ArrowLeft, MapPin, Save } from 'react-native-feather';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { ArrowLeft, Save } from 'react-native-feather';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import AddressPicker from '../../components/common/AddressPicker';
 import { siteService, CreateSiteData } from '../../services/siteService';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { useSubscriptionLimits } from '../../hooks/useSubscriptionLimits';
 import { showActionErrorAlert } from '../../utils/subscriptionLimitAlert';
+import { validateSiteForm } from '../../utils/siteFormValidation';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
 
@@ -29,12 +30,17 @@ interface SiteFormData {
   requirements: string;
   contactPerson: string;
   contactPhone: string;
+  radiusMeters: string;
 }
+
+const DEFAULT_SITE_RADIUS_METERS = 100;
+const MIN_SITE_RADIUS_METERS = 20;
+const MAX_SITE_RADIUS_METERS = 2000;
 
 const AddSiteScreen: React.FC = () => {
   const navigation = useNavigation();
   const { user } = useSelector((state: RootState) => state.auth);
-  const { ensureCanAdd, refresh: refreshLimits } = useSubscriptionLimits();
+  const { ensureCanAdd, refresh: refreshLimits, canAdd, getBlockReason } = useSubscriptionLimits();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<SiteFormData>({
     name: '',
@@ -46,6 +52,7 @@ const AddSiteScreen: React.FC = () => {
     requirements: '',
     contactPerson: '',
     contactPhone: '',
+    radiusMeters: String(DEFAULT_SITE_RADIUS_METERS),
   });
   const handleInputChange = (field: keyof SiteFormData, value: string) => {
     setFormData(prev => ({
@@ -54,21 +61,27 @@ const AddSiteScreen: React.FC = () => {
     }));
   };
 
+  useFocusEffect(
+    useCallback(() => {
+      refreshLimits();
+    }, [refreshLimits])
+  );
+
+  const siteLimitReached = !canAdd('sites');
+  const siteLimitReason = getBlockReason('sites');
+
   const validateForm = (): boolean => {
-    if (!formData.name.trim()) {
-      Alert.alert('Error', 'Site name is required');
+    const validation = validateSiteForm(formData);
+    if (!validation.valid) {
+      Alert.alert('Missing Information', validation.message || 'Please complete all required fields.');
       return false;
     }
-    if (!formData.address.trim()) {
-      Alert.alert('Error', 'Address is required');
-      return false;
-    }
-    if (!formData.city.trim()) {
-      Alert.alert('Error', 'City is required');
-      return false;
-    }
-    if (!formData.contactPerson.trim()) {
-      Alert.alert('Error', 'Contact person is required');
+    const radius = Number.parseInt(formData.radiusMeters, 10);
+    if (!Number.isFinite(radius) || radius < MIN_SITE_RADIUS_METERS || radius > MAX_SITE_RADIUS_METERS) {
+      Alert.alert(
+        'Invalid Radius',
+        `Radius must be a number between ${MIN_SITE_RADIUS_METERS}m and ${MAX_SITE_RADIUS_METERS}m.`
+      );
       return false;
     }
     return true;
@@ -92,6 +105,7 @@ const AddSiteScreen: React.FC = () => {
         requirements: formData.requirements.trim(),
         contactPerson: formData.contactPerson.trim(),
         contactPhone: formData.contactPhone.trim(),
+        radiusMeters: Number.parseInt(formData.radiusMeters, 10),
       };
 
       await siteService.createSite(siteData);
@@ -111,7 +125,7 @@ const AddSiteScreen: React.FC = () => {
       if (__DEV__) {
         console.error('Error creating site:', error);
       }
-      showActionErrorAlert('Create Site', error, { role: user?.role });
+      showActionErrorAlert('Create Site', error, { role: user?.role, resource: 'sites' });
     } finally {
       setLoading(false);
     }
@@ -131,13 +145,21 @@ const AddSiteScreen: React.FC = () => {
         <TouchableOpacity 
           style={styles.saveButton}
           onPress={handleSaveSite}
-          disabled={loading}
+          disabled={loading || siteLimitReached}
         >
           <Save width={20} height={20} color="#1C6CA9" />
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {siteLimitReached && (
+          <View style={styles.limitBanner}>
+            <Text style={styles.limitBannerText}>
+              {siteLimitReason || 'Your plan site limit has been reached. You cannot add another site until the plan is upgraded.'}
+            </Text>
+          </View>
+        )}
+
         {/* Site Information */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Site Information</Text>
@@ -233,6 +255,21 @@ const AddSiteScreen: React.FC = () => {
               keyboardType="numeric"
             />
           </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Site Radius (meters) *</Text>
+            <TextInput
+              style={[styles.input, styles.zipInput]}
+              value={formData.radiusMeters}
+              onChangeText={(value) => handleInputChange('radiusMeters', value.replace(/[^0-9]/g, ''))}
+              placeholder="100"
+              placeholderTextColor="#999"
+              keyboardType="numeric"
+            />
+            <Text style={styles.helperText}>
+              Guards can only check in within this radius ({MIN_SITE_RADIUS_METERS}m - {MAX_SITE_RADIUS_METERS}m).
+            </Text>
+          </View>
         </View>
 
         {/* Contact Information */}
@@ -265,9 +302,9 @@ const AddSiteScreen: React.FC = () => {
 
         {/* Save Button */}
         <TouchableOpacity 
-          style={[styles.createButton, loading && styles.createButtonDisabled]}
+          style={[styles.createButton, (loading || siteLimitReached) && styles.createButtonDisabled]}
           onPress={handleSaveSite}
-          disabled={loading}
+          disabled={loading || siteLimitReached}
         >
           <Text style={styles.createButtonText}>
             {loading ? 'Creating Site...' : 'Create Site'}
@@ -382,6 +419,25 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  helperText: {
+    marginTop: SPACING.xs,
+    color: COLORS.textSecondary,
+    fontSize: TYPOGRAPHY.fontSize.xs,
+  },
+  limitBanner: {
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.lg,
+    padding: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderWidth: 1,
+    borderColor: COLORS.error,
+  },
+  limitBannerText: {
+    color: COLORS.error,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    lineHeight: 20,
   },
 });
 

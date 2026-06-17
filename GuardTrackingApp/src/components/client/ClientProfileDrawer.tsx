@@ -130,17 +130,21 @@ export const ClientProfileDrawer: React.FC<ClientProfileDrawerProps> = ({
 
   const handleNotificationSettings = () => {
     onClose();
-    // Navigate to Settings tab to keep bottom menu visible
-    navigation.navigate('ClientTabs', { screen: 'Settings' });
-    onNavigateToNotifications?.();
+    navigation.navigate('ClientTabs', {
+      screen: 'Settings',
+      params: { screen: 'NotificationSettings' },
+    });
   };
 
   const handleContactSupport = () => {
     onClose();
-    // Navigate to chat/support - this is a stack screen, but we'll navigate to it
-    // Note: This will hide bottom menu as it's outside the tab navigator
-    navigation.navigate('ChatListScreen');
-    onNavigateToSupport?.();
+    navigation.navigate('ClientTabs', {
+      screen: 'Settings',
+      params: {
+        screen: 'SupportHubScreen',
+        params: { variant: 'client', mode: 'mine' },
+      },
+    });
   };
 
   const handleProfilePictureSelected = async (imageUri: string) => {

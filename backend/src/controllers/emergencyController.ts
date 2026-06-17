@@ -277,8 +277,20 @@ export const resolveEmergencyAlert = async (req: AuthenticatedRequest, res: Resp
  */
 export const getActiveEmergencyAlerts = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const securityCompanyId = req.securityCompanyId;
+    let securityCompanyId: string | undefined;
     let clientId: string | undefined;
+
+    // Enforce tenant isolation for non-super-admin users.
+    if (req.user?.role !== 'SUPER_ADMIN') {
+      const companyResult = resolveSecurityCompanyId(req);
+      if (companyResult.error) {
+        return res.status(companyResult.status || 403).json({
+          success: false,
+          message: companyResult.error,
+        });
+      }
+      securityCompanyId = companyResult.securityCompanyId;
+    }
 
     if (req.user?.role === 'CLIENT' && req.userId) {
       const client = await prisma.client.findUnique({

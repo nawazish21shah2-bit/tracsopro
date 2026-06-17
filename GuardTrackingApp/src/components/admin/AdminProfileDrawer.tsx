@@ -123,12 +123,24 @@ export const AdminProfileDrawer: React.FC<AdminProfileDrawerProps> = ({
 
   const handleContactSupport = () => {
     onClose();
-    navigation.navigate('SupportHubScreen', { variant: 'admin', mode: 'inbox' });
+    navigation.navigate('AdminTabs', {
+      screen: 'Settings',
+      params: {
+        screen: 'SupportHubScreen',
+        params: { variant: 'admin', mode: 'inbox' },
+      },
+    });
   };
 
   const handlePlatformSupport = () => {
     onClose();
-    navigation.navigate('SupportHubScreen', { variant: 'admin', mode: 'platform' });
+    navigation.navigate('AdminTabs', {
+      screen: 'Settings',
+      params: {
+        screen: 'SupportHubScreen',
+        params: { variant: 'admin', mode: 'platform' },
+      },
+    });
   };
 
   const handleProfilePictureSelected = async (imageUri: string) => {
@@ -164,7 +176,6 @@ export const AdminProfileDrawer: React.FC<AdminProfileDrawerProps> = ({
         onClose();
         // Navigate to Operations tab to keep bottom menu visible
         navigation.navigate('AdminTabs', { screen: 'Operations' });
-        onNavigateToOperations?.();
       },
     },
     {
@@ -178,7 +189,6 @@ export const AdminProfileDrawer: React.FC<AdminProfileDrawerProps> = ({
           screen: 'Management',
           params: { screen: 'ShiftScheduling' }
         });
-        onNavigateToScheduling?.();
       },
     },
     {
@@ -192,7 +202,6 @@ export const AdminProfileDrawer: React.FC<AdminProfileDrawerProps> = ({
           screen: 'Management',
           params: { screen: 'UserManagement' }
         });
-        onNavigateToUserManagement?.();
       },
     },
     {
@@ -206,7 +215,6 @@ export const AdminProfileDrawer: React.FC<AdminProfileDrawerProps> = ({
           screen: 'Management',
           params: { screen: 'SiteManagement' }
         });
-        onNavigateToSiteManagement?.();
       },
     },
     {
@@ -220,7 +228,6 @@ export const AdminProfileDrawer: React.FC<AdminProfileDrawerProps> = ({
           screen: 'Reports',
           params: { screen: 'IncidentReview' }
         });
-        onNavigateToIncidentReview?.();
       },
     },
     {
@@ -234,7 +241,6 @@ export const AdminProfileDrawer: React.FC<AdminProfileDrawerProps> = ({
           screen: 'Reports',
           params: { screen: 'AdminAnalytics' }
         });
-        onNavigateToAnalytics?.();
       },
     },
     {
@@ -243,7 +249,10 @@ export const AdminProfileDrawer: React.FC<AdminProfileDrawerProps> = ({
       icon: <NotificationIcon size={20} color={COLORS.textPrimary} />,
       onPress: () => {
         onClose();
-        onNavigateToNotifications?.();
+        navigation.navigate('AdminTabs', {
+          screen: 'Settings',
+          params: { screen: 'AdminNotificationSettings' },
+        });
       },
     },
     {

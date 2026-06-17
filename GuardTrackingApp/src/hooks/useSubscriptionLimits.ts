@@ -6,7 +6,32 @@ import {
   SubscriptionOverview,
   SubscriptionResource,
 } from '../utils/subscriptionUtils';
-import { showSubscriptionLimitAlert } from '../utils/subscriptionLimitAlert';
+import { showSubscriptionLimitAlert, resourceLabel } from '../utils/subscriptionLimitAlert';
+
+function getLimitReason(
+  resource: SubscriptionResource,
+  data: SubscriptionOverview | null
+): string | undefined {
+  const check = data?.canAdd?.[resource];
+  if (check?.reason) {
+    return check.reason;
+  }
+
+  const usage =
+    resource === 'guards'
+      ? data?.usage.guards
+      : resource === 'clients'
+        ? data?.usage.clients
+        : data?.usage.sites;
+
+  if (!usage || usage.max <= 0 || usage.used < usage.max) {
+    return undefined;
+  }
+
+  return data?.isTrial
+    ? `Trial limit reached (${usage.max} ${resourceLabel(resource)}). Upgrade your plan in Settings → Subscription & Billing.`
+    : `${resourceLabel(resource).charAt(0).toUpperCase() + resourceLabel(resource).slice(1)} limit reached (${usage.max}). Upgrade your plan to add more.`;
+}
 
 export const useSubscriptionLimits = (options?: { autoLoad?: boolean }) => {
   const { user } = useSelector((state: RootState) => state.auth);
@@ -41,18 +66,38 @@ export const useSubscriptionLimits = (options?: { autoLoad?: boolean }) => {
     }
   }, [enabled, autoLoad, refresh]);
 
-  const canAdd = useCallback(
-    (resource: SubscriptionResource): boolean => {
-      const check = overview?.canAdd?.[resource];
-      return check?.allowed !== false;
+  const isAtResourceLimit = useCallback(
+    (resource: SubscriptionResource, data: SubscriptionOverview | null): boolean => {
+      const check = data?.canAdd?.[resource];
+      if (check?.allowed === false) {
+        return true;
+      }
+
+      const usage =
+        resource === 'guards'
+          ? data?.usage.guards
+          : resource === 'clients'
+            ? data?.usage.clients
+            : data?.usage.sites;
+
+      return Boolean(usage && usage.max > 0 && usage.used >= usage.max);
     },
-    [overview]
+    []
+  );
+
+  const canAdd = useCallback(
+    (resource: SubscriptionResource): boolean => !isAtResourceLimit(resource, overview),
+    [overview, isAtResourceLimit]
   );
 
   const getBlockReason = useCallback(
-    (resource: SubscriptionResource): string | undefined =>
-      overview?.canAdd?.[resource]?.reason,
-    [overview]
+    (resource: SubscriptionResource): string | undefined => {
+      if (!isAtResourceLimit(resource, overview)) {
+        return undefined;
+      }
+      return getLimitReason(resource, overview) || 'Plan limit reached.';
+    },
+    [overview, isAtResourceLimit]
   );
 
   const ensureCanAdd = useCallback(
@@ -60,17 +105,16 @@ export const useSubscriptionLimits = (options?: { autoLoad?: boolean }) => {
       resource: SubscriptionResource,
       navigation?: { navigate: (screen: string) => void }
     ): Promise<boolean> => {
-      let current = overview;
-      if (!current?.canAdd) {
-        current = (await refresh()) ?? null;
-      }
+      const current = (await refresh()) ?? overview;
 
-      const check = current?.canAdd?.[resource];
-      if (check?.allowed !== false) {
+      const blocked = isAtResourceLimit(resource, current);
+      if (!blocked) {
         return true;
       }
 
-      showSubscriptionLimitAlert(resource, check?.reason || 'Plan limit reached.', {
+      const reason = getLimitReason(resource, current) || 'Plan limit reached.';
+
+      showSubscriptionLimitAlert(resource, reason, {
         role,
         onUpgrade:
           role === 'ADMIN' && navigation
@@ -79,7 +123,7 @@ export const useSubscriptionLimits = (options?: { autoLoad?: boolean }) => {
       });
       return false;
     },
-    [overview, refresh, role]
+    [overview, refresh, role, isAtResourceLimit]
   );
 
   return {

@@ -96,7 +96,7 @@ export class AuthService {
           logger.info(`OTP resent to unverified user: ${existingUser.email}`);
         } catch (emailError: any) {
           if (shouldBypassSmtpOnEmailFailure(emailError)) {
-            logger.warn(`SMTP not configured - OTP not sent via email. DEV OTP: ${otp}`);
+            logger.warn('SMTP not configured - OTP not sent via email (dev bypass active).');
           } else {
             logger.error(`Failed to resend OTP email:`, emailError);
             throw emailError;
@@ -274,7 +274,7 @@ export class AuthService {
         logger.info(`User registered: ${user.email}, ID: ${user.id}, OTP sent`);
       } catch (emailError: any) {
         if (shouldBypassSmtpOnEmailFailure(emailError)) {
-          logger.warn(`SMTP not configured - bypassing OTP verification for dev mode. OTP: ${otp}`);
+          logger.warn('SMTP not configured - bypassing OTP verification for dev mode.');
 
           // Mark email as verified automatically in dev mode when SMTP is missing
           await prisma.user.update({
@@ -307,7 +307,7 @@ export class AuthService {
               createdAt: user.createdAt,
             },
             expiresIn: getTokenExpiresIn(),
-            message: `Registration successful (OTP bypassed - SMTP not configured). DEV OTP: ${otp}`,
+            message: 'Registration successful (OTP bypassed - SMTP not configured).',
           };
         } else {
           // In production or non-SMTP errors, throw the error

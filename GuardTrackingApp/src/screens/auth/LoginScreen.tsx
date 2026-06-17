@@ -19,14 +19,11 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RootState, AppDispatch } from '../../store';
 import { loginUser, clearError } from '../../store/slices/authSlice';
 import { AuthStackParamList } from '../../types';
-import Input from '../../components/common/Input';
 import AuthInput from '../../components/auth/AuthInput';
 import Button from '../../components/common/Button';
 import AuthHeader from '../../components/auth/AuthHeader';
-import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorBoundary from '../../components/common/ErrorBoundary';
 import { createLoginValidator, ValidationResult } from '../../utils/validation';
-import { useTheme } from '../../utils/theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { authStyles, AUTH_INPUT_GAP } from '../../styles/authStyles';
@@ -37,8 +34,6 @@ const LoginScreen: React.FC = () => {
   const navigation = useNavigation<LoginScreenNavigationProp>();
   const dispatch = useDispatch<AppDispatch>();
   const { isLoading, error } = useSelector((state: RootState) => state.auth);
-  const { theme } = useTheme();
-
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -46,7 +41,6 @@ const LoginScreen: React.FC = () => {
 
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [showPassword, setShowPassword] = useState(false);
-  const [accountType, setAccountType] = useState<'individual' | 'company'>('individual');
   const [rememberMe, setRememberMe] = useState(false);
   
   // Refs for input focus management
@@ -112,10 +106,10 @@ const LoginScreen: React.FC = () => {
         }
         Alert.alert('Login Failed', errorMessage);
       }
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'An unexpected error occurred');
     }
-  }, [formData, validateForm, dispatch, rememberMe]);
+  }, [dispatch, formData, isLoading, rememberMe, validateForm]);
 
   const navigateToRegister = useCallback(() => {
     navigation.navigate('RoleSelection');
@@ -137,8 +131,8 @@ const LoginScreen: React.FC = () => {
           });
           setRememberMe(true);
         }
-      } catch (error) {
-        console.error('Error loading saved credentials:', error);
+      } catch (err) {
+        console.error('Error loading saved credentials:', err);
       }
     };
 
@@ -157,7 +151,7 @@ const LoginScreen: React.FC = () => {
   return (
     <ErrorBoundary>
       <KeyboardAvoidingView
-        style={[styles.container, { backgroundColor: '#FFFFFF' }]}
+        style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >

@@ -28,7 +28,6 @@ import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { fetchMyReports } from '../../store/slices/clientSlice';
 import { LoadingOverlay, ErrorState, NetworkError, EmptyState } from '../../components/ui/LoadingStates';
 import { getClientGuardChatParams } from '../../utils/chatHelper';
-import SectionHeader from '../../components/ui/SectionHeader';
 import { FileTextIcon } from '../../components/ui/FeatherIcons';
 import apiService from '../../services/api';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
@@ -212,15 +211,6 @@ const ClientReports: React.FC = () => {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        <SectionHeader
-          title="Guard Reports"
-          subtitle={
-            reports.length > 0
-              ? `${reports.length} report${reports.length !== 1 ? 's' : ''} from your sites`
-              : 'Reports from guards on your sites'
-          }
-        />
-
         {reportsLoading && reports.length > 0 ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="small" color={COLORS.primary} />

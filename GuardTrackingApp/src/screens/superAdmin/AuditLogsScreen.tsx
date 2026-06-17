@@ -16,9 +16,12 @@ import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { superAdminService, AuditLog } from '../../services/superAdminService';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SharedHeader from '../../components/ui/SharedHeader';
+import SuperAdminProfileDrawer from '../../components/superAdmin/SuperAdminProfileDrawer';
+import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 import { useNotificationBell } from '../../hooks/useNotificationBell';
 
 const AuditLogsScreen: React.FC = () => {
+  const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
   const { onNotificationPress, notificationCount } = useNotificationBell({
     notificationsRoute: 'SuperAdminNotifications',
   });
@@ -136,9 +139,16 @@ const AuditLogsScreen: React.FC = () => {
       <SharedHeader
         variant="superAdmin"
         title="Audit Logs"
-        hideLeftAction
+        onMenuPress={openDrawer}
         onNotificationPress={onNotificationPress}
         notificationCount={notificationCount}
+        profileDrawer={
+          <SuperAdminProfileDrawer
+            visible={isDrawerVisible}
+            onClose={closeDrawer}
+            onNavigateToAuditLogs={() => closeDrawer()}
+          />
+        }
       />
 
       <View style={styles.searchContainer}>

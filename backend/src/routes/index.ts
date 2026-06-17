@@ -22,6 +22,8 @@ import operationsRoutes from './operations.js';
 import invitationRoutes from './invitations.js';
 import notificationRoutes from './notifications.js';
 import userRoutes from './users.js';
+import subscriptionRoutes from './subscription.js';
+import supportRoutes from './supportRoutes.js';
 
 const router = Router();
 
@@ -63,6 +65,8 @@ router.use('/admin/invitations', invitationRoutes);
 // Register generic /admin route LAST to avoid catching specific routes
 router.use('/admin', adminRoutes);
 router.use('/notifications', notificationRoutes);
+router.use('/subscription', subscriptionRoutes);
+router.use('/support', supportRoutes);
 // Test route for Super Admin
 router.get('/super-admin-test', (req, res) => {
   res.json({ success: true, message: 'Super Admin routes are working!' });

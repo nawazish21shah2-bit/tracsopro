@@ -97,6 +97,22 @@ const ReportsStack = () => (
   </Stack.Navigator>
 );
 
+const AdminSettingsStack = () => (
+  <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Screen name="AdminSettings" component={AdminSettingsScreen} />
+    <Stack.Screen name="AdminNotificationSettings" component={AdminNotificationSettingsWrapper} />
+    <Stack.Screen name="AdminProfileEdit" component={AdminProfileEditWrapper} />
+    <Stack.Screen name="AdminSupportContact" component={AdminSupportContactWrapper} />
+    <Stack.Screen name="AdminChangePassword" component={AdminChangePasswordWrapper} />
+    <Stack.Screen
+      name="SupportHubScreen"
+      component={SupportHubScreen}
+      initialParams={{ variant: 'admin', mode: 'inbox' }}
+    />
+    <Stack.Screen name="SupportTicketDetailScreen" component={SupportTicketDetailScreen} />
+  </Stack.Navigator>
+);
+
 // Wrapper components for settings screens with admin variant
 const AdminNotificationSettingsWrapper: React.FC = () => (
   <NotificationSettingsScreen variant="admin" />
@@ -182,7 +198,7 @@ const AdminTabNavigator: React.FC = () => {
       />
       <Tab.Screen 
         name="Settings" 
-        component={AdminSettingsScreen}
+        component={AdminSettingsStack}
         options={{
           tabBarLabel: 'Settings',
         }}

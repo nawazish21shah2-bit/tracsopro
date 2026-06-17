@@ -98,6 +98,30 @@ const BillingStack = () => (
   </Stack.Navigator>
 );
 
+const SuperAdminSettingsStack = () => (
+  <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Screen name="SystemSettings" component={SystemSettingsScreen} />
+    <Stack.Screen
+      name="SuperAdminNotificationSettings"
+      component={() => <NotificationSettingsScreen variant="superAdmin" />}
+    />
+    <Stack.Screen
+      name="SuperAdminProfileEdit"
+      component={() => <ProfileEditScreen variant="superAdmin" />}
+    />
+    <Stack.Screen
+      name="SuperAdminChangePassword"
+      component={() => <ChangePasswordScreen variant="superAdmin" />}
+    />
+    <Stack.Screen
+      name="SupportHubScreen"
+      component={SupportHubScreen}
+      initialParams={{ variant: 'superAdmin', mode: 'platform' }}
+    />
+    <Stack.Screen name="SupportTicketDetailScreen" component={SupportTicketDetailScreen} />
+  </Stack.Navigator>
+);
+
 const SuperAdminShell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <View style={shellStyles.root}>
     <ImpersonationBanner />
@@ -145,7 +169,7 @@ const SuperAdminTabNavigator: React.FC = () => (
       <Tab.Screen name="Companies" component={CompanyStack} />
       <Tab.Screen name="Analytics" component={AnalyticsStack} />
       <Tab.Screen name="Billing" component={BillingStack} />
-      <Tab.Screen name="Settings" component={SystemSettingsScreen} />
+      <Tab.Screen name="Settings" component={SuperAdminSettingsStack} />
     </Tab.Navigator>
   </SuperAdminShell>
 );
@@ -170,11 +194,11 @@ const SuperAdminNavigator: React.FC = () => (
     />
     <Stack.Screen
       name="SuperAdminProfileEdit"
-      component={() => <ProfileEditScreen variant="admin" />}
+      component={() => <ProfileEditScreen variant="superAdmin" />}
     />
     <Stack.Screen
       name="SuperAdminNotificationSettings"
-      component={() => <NotificationSettingsScreen variant="admin" />}
+      component={() => <NotificationSettingsScreen variant="superAdmin" />}
     />
     <Stack.Screen
       name="SuperAdminChangePassword"

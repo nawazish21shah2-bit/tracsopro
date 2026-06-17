@@ -1,5 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
 import { securityManager } from '../utils/security';
 import api from './api';
 
@@ -20,6 +18,7 @@ export interface CreateSiteData {
   contactPhone?: string;
   latitude?: number;
   longitude?: number;
+  radiusMeters?: number;
 }
 
 export interface Site {
@@ -28,6 +27,7 @@ export interface Site {
   address: string;
   latitude?: number;
   longitude?: number;
+  radiusMeters?: number;
   description?: string;
   requirements?: string;
   isActive: boolean;

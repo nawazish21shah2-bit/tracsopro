@@ -115,6 +115,12 @@ junit.xml
 # Misc
 .DS_Store
 
+# Local build artifacts (do not commit binaries)
+releases/
+*.apk
+*.aab
+*.ipa
+
 # Large log files
 *.log
 **/logs/

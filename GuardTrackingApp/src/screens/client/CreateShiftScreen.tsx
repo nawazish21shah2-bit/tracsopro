@@ -31,7 +31,7 @@ const CreateShiftScreen: React.FC = () => {
   const siteId = (route.params as { siteId?: string })?.siteId;
 
   const [loading, setLoading] = useState(false);
-  const [siteInfo, setSiteInfo] = useState<{ name: string; address: string } | null>(null);
+  const [siteInfo, setSiteInfo] = useState<{ name: string; address: string; radiusMeters?: number } | null>(null);
   const [availableGuards, setAvailableGuards] = useState<any[]>([]);
   const [guardId, setGuardId] = useState<string | undefined>();
   const [formValues, setFormValues] = useState<ShiftFormValues>(() => {
@@ -73,6 +73,7 @@ const CreateShiftScreen: React.FC = () => {
           setSiteInfo({
             name: site.name || 'Site Location',
             address: site.address || 'Site Address',
+            radiusMeters: site.radiusMeters ?? 100,
           });
         }
       }
@@ -168,6 +169,7 @@ const CreateShiftScreen: React.FC = () => {
                 <Text style={styles.summaryTitle}>{siteInfo.name}</Text>
               </View>
               <Text style={styles.summaryText}>{siteInfo.address}</Text>
+              <Text style={styles.summaryMeta}>Check-in radius: {siteInfo.radiusMeters ?? 100}m</Text>
             </View>
           </View>
         ) : null}
@@ -244,6 +246,12 @@ const styles = StyleSheet.create({
   summaryText: {
     marginTop: SPACING.xs,
     fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+  },
+  summaryMeta: {
+    marginTop: SPACING.xs,
+    fontSize: TYPOGRAPHY.fontSize.xs,
     color: COLORS.textSecondary,
     fontFamily: TYPOGRAPHY.fontPrimary,
   },

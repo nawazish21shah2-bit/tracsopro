@@ -12,6 +12,8 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Modal,
+  Clipboard,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
@@ -28,9 +30,15 @@ import {
   parseLimitFields,
 } from '../../utils/planLimits';
 
+const generateTemporaryPassword = () => `Trac${Math.floor(100000 + Math.random() * 900000)}!`;
+
 const CreateCompanyScreen: React.FC = () => {
   const navigation = useNavigation();
   const [loading, setLoading] = useState(false);
+  const [createdCredentials, setCreatedCredentials] = useState<{
+    email: string;
+    temporaryPassword: string;
+  } | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -40,6 +48,9 @@ const CreateCompanyScreen: React.FC = () => {
     state: '',
     zipCode: '',
     country: 'USA',
+    adminFirstName: '',
+    adminLastName: '',
+    adminEmail: '',
     ...applyPlanSelection('BASIC'),
   });
 
@@ -110,9 +121,12 @@ const CreateCompanyScreen: React.FC = () => {
 
     if (!limits.ok) return;
 
+    const adminLoginEmail = (formData.adminEmail.trim() || formData.email.trim()).toLowerCase();
+    const temporaryPassword = generateTemporaryPassword();
+
     setLoading(true);
     try {
-      await superAdminService.createSecurityCompany({
+      const result = await superAdminService.createSecurityCompany({
         name: formData.name.trim(),
         email: formData.email.trim(),
         phone: formData.phone.trim() || undefined,
@@ -125,14 +139,19 @@ const CreateCompanyScreen: React.FC = () => {
         maxGuards: limits.limits.maxGuards,
         maxClients: limits.limits.maxClients,
         maxSites: limits.limits.maxSites,
+        adminFirstName: formData.adminFirstName.trim() || undefined,
+        adminLastName: formData.adminLastName.trim() || undefined,
+        adminEmail: adminLoginEmail,
+        adminPassword: temporaryPassword,
+        createAdmin: true,
       });
 
-      Alert.alert('Success', 'Company created successfully', [
-        {
-          text: 'OK',
-          onPress: () => navigation.goBack(),
-        },
-      ]);
+      const credentials = result.adminCredentials ?? {
+        email: adminLoginEmail,
+        temporaryPassword,
+      };
+
+      setCreatedCredentials(credentials);
     } catch (error: any) {
       console.error('Error creating company:', error);
       Alert.alert(
@@ -144,8 +163,58 @@ const CreateCompanyScreen: React.FC = () => {
     }
   };
 
+  const handleCopyCredentials = () => {
+    if (!createdCredentials) return;
+    const text = `Email: ${createdCredentials.email}\nPassword: ${createdCredentials.temporaryPassword}`;
+    Clipboard.setString(text);
+    Alert.alert('Copied', 'Admin login details copied to clipboard.');
+  };
+
+  const handleCloseCredentialsModal = () => {
+    setCreatedCredentials(null);
+    navigation.goBack();
+  };
+
   return (
     <SafeAreaWrapper backgroundColor="#F5F7FA">
+      <Modal
+        visible={createdCredentials !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCloseCredentialsModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Company Created</Text>
+            <Text style={styles.modalSubtitle}>
+              Share these admin login details with the company. They should change the password after first login.
+            </Text>
+
+            <View style={styles.credentialBlock}>
+              <Text style={styles.credentialLabel}>Admin Email</Text>
+              <Text style={styles.credentialValue} selectable>
+                {createdCredentials?.email}
+              </Text>
+            </View>
+
+            <View style={styles.credentialBlock}>
+              <Text style={styles.credentialLabel}>Temporary Password</Text>
+              <Text style={styles.credentialValue} selectable>
+                {createdCredentials?.temporaryPassword}
+              </Text>
+            </View>
+
+            <TouchableOpacity style={styles.copyButton} onPress={handleCopyCredentials}>
+              <Text style={styles.copyButtonText}>Copy Login Details</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.doneButton} onPress={handleCloseCredentialsModal}>
+              <Text style={styles.doneButtonText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <SharedHeader
         variant="superAdmin"
         title="Create Company"
@@ -261,6 +330,50 @@ const CreateCompanyScreen: React.FC = () => {
             onLimitChange={handleLimitChange}
             disabled={loading}
           />
+
+          <Text style={styles.sectionTitle}>Company Admin Account</Text>
+          <Text style={styles.sectionHint}>
+            An admin login is created automatically. The admin can sign in with the email below and the temporary password shown after creation.
+          </Text>
+
+          <View style={styles.row}>
+            <View style={[styles.formGroup, styles.flex1, styles.marginRight]}>
+              <Text style={styles.label}>Admin First Name</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="First name"
+                placeholderTextColor={COLORS.textSecondary}
+                value={formData.adminFirstName}
+                onChangeText={(value) => handleInputChange('adminFirstName', value)}
+                editable={!loading}
+              />
+            </View>
+            <View style={[styles.formGroup, styles.flex1]}>
+              <Text style={styles.label}>Admin Last Name</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Last name"
+                placeholderTextColor={COLORS.textSecondary}
+                value={formData.adminLastName}
+                onChangeText={(value) => handleInputChange('adminLastName', value)}
+                editable={!loading}
+              />
+            </View>
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Admin Login Email</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Defaults to company email if left blank"
+              placeholderTextColor={COLORS.textSecondary}
+              value={formData.adminEmail}
+              onChangeText={(value) => handleInputChange('adminEmail', value)}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              editable={!loading}
+            />
+          </View>
         </View>
 
         <View style={styles.buttonContainer}>
@@ -299,6 +412,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.sm,
     paddingBottom: SPACING.xs,
+  },
+  sectionTitle: {
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.xs,
+  },
+  sectionHint: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.md,
+    lineHeight: 20,
   },
   form: {
     padding: SPACING.lg,
@@ -363,6 +489,74 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     fontSize: TYPOGRAPHY.fontSize.md,
     fontWeight: TYPOGRAPHY.fontWeight.medium,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: COLORS.backgroundPrimary,
+    borderRadius: 12,
+    padding: SPACING.lg,
+  },
+  modalTitle: {
+    fontSize: TYPOGRAPHY.fontSize.xl,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.sm,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.lg,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  credentialBlock: {
+    backgroundColor: COLORS.backgroundSecondary,
+    borderRadius: 8,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+  },
+  credentialLabel: {
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+  },
+  credentialValue: {
+    fontSize: TYPOGRAPHY.fontSize.md,
+    color: COLORS.textPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+  },
+  copyButton: {
+    backgroundColor: `${COLORS.primary}15`,
+    borderRadius: 8,
+    paddingVertical: SPACING.md,
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
+  },
+  copyButtonText: {
+    color: COLORS.primary,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+  },
+  doneButton: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 8,
+    paddingVertical: SPACING.md,
+    alignItems: 'center',
+  },
+  doneButtonText: {
+    color: COLORS.textInverse,
+    fontSize: TYPOGRAPHY.fontSize.md,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
 });
 

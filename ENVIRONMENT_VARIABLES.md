@@ -36,14 +36,19 @@ This file lists the minimum variables required for safe deployment.
 - `FIREBASE_SERVICE_ACCOUNT_PATH`
   - or inline service account env set supported by your deployment strategy
 
+### Google Maps (Android)
+- Restrict the Maps API key in Google Cloud Console (Android app restriction + API restriction).
+- Key is referenced in `GuardTrackingApp/android/app/src/main/AndroidManifest.xml`.
+
 ## Mobile app (`GuardTrackingApp`)
 
 ### API endpoint safety
 - Ensure `src/config/apiConfig.ts` does not point release builds to local LAN.
 - Verify production host URLs are correct for both REST and WebSocket.
 
-## Pre-release validation
+## Production validation
 
-- Run backend with production-like env and confirm `/api/health`.
+- Run backend with production env and confirm `/api/health`.
 - Validate auth login, refresh token, and WebSocket authentication.
-- Validate Stripe webhooks in staging before production cutover.
+- Validate Stripe webhooks before production cutover.
+- See [CLIENT_HANDOFF.md](CLIENT_HANDOFF.md) for the full go-live checklist.

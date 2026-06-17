@@ -42,6 +42,15 @@ export function useNotificationBell(options: UseNotificationBellOptions = {}) {
   const onNotificationPress = useCallback(() => {
     if (!notificationsRoute) return;
     try {
+      let navigator: any = navigation;
+      while (navigator) {
+        const routeNames: string[] = navigator.getState?.()?.routeNames ?? [];
+        if (routeNames.includes(notificationsRoute)) {
+          navigator.navigate(notificationsRoute);
+          return;
+        }
+        navigator = navigator.getParent?.();
+      }
       navigation.navigate(notificationsRoute);
     } catch (error) {
       if (__DEV__) console.warn('Failed to navigate to notifications:', error);

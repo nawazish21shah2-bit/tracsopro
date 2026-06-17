@@ -320,7 +320,8 @@ class NotificationService {
         incidentId: data.incidentId || data.reportId,
       });
     } else if (data.alertId) {
-      this.navigateToScreen('EmergencyAlert', { alertId: data.alertId });
+      // Route to a valid cross-role screen to avoid navigation crashes from unknown emergency detail routes.
+      this.navigateToScreen('SupportHubScreen', { mode: 'mine' });
     } else if (data.ticketId) {
       this.navigateToScreen('SupportTicketDetailScreen', { ticketId: data.ticketId });
     } else if (data.conversationId || data.chatId) {

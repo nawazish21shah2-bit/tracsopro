@@ -460,7 +460,8 @@ export const checkInToShift = async (req: Request, res: Response) => {
     logger.error('Error checking in to shift:', error);
     res.status(400).json({ 
       success: false,
-      error: error.message || 'Failed to check in to shift' 
+      error: error.message || 'Failed to check in to shift',
+      details: error.details || undefined,
     });
   }
 };

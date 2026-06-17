@@ -664,10 +664,7 @@ class ApiService {
       return {
         success: false,
         data: null,
-        message:
-          error.response?.data?.message ||
-          error.response?.data?.error ||
-          'Failed to create site',
+        message: extractErrorMessage(error) || 'Failed to create site',
       };
     }
   }
@@ -1993,7 +1990,7 @@ class ApiService {
     } catch (error: any) {
       return {
         success: false,
-        data: null,
+        data: error.response?.data?.details || null,
         message: error.response?.data?.error || error.response?.data?.message || 'Failed to check in'
       };
     }

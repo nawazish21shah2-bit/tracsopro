@@ -54,20 +54,22 @@ router.get('/companies/:id', async (req, res) => {
 
 router.post('/companies', async (req: AuthRequest, res) => {
   try {
-    const company = await SuperAdminService.createSecurityCompany(req.body);
+    const result = await SuperAdminService.createSecurityCompany(req.body);
     await SuperAdminService.logAction({
       userId: req.userId,
       action: 'CREATE_COMPANY',
       resource: 'SecurityCompany',
-      resourceId: company.id,
-      newValues: company,
+      resourceId: result.company.id,
+      newValues: result.company,
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
     });
-    res.status(201).json(company);
-  } catch (error) {
+    res.status(201).json(result);
+  } catch (error: any) {
     console.error('Error creating security company:', error);
-    res.status(500).json({ error: 'Failed to create security company' });
+    const message = error?.message || 'Failed to create security company';
+    const status = message.includes('already exists') ? 409 : 500;
+    res.status(status).json({ error: message });
   }
 });
 

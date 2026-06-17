@@ -13,6 +13,7 @@ interface SiteCardProps {
     id: string;
     name: string;
     address: string;
+    radiusMeters?: number;
     guardName: string;
     guardAvatar?: string;
     status: 'Active' | 'Upcoming' | 'Missed';
@@ -101,6 +102,9 @@ const SiteCard: React.FC<SiteCardProps> = ({
               </Text>
               <Text style={styles.siteAddress} numberOfLines={2}>
                 {site.address || 'No address'}
+              </Text>
+              <Text style={styles.radiusText}>
+                Radius: {site.radiusMeters ?? 100}m
               </Text>
             </View>
           </View>
@@ -209,6 +213,11 @@ const styles = StyleSheet.create({
   siteAddress: {
     fontSize: TYPOGRAPHY.fontSize.xs,
     color: COLORS.textSecondary,
+  },
+  radiusText: {
+    marginTop: 2,
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.textTertiary,
   },
   moreButton: {
     width: 32,

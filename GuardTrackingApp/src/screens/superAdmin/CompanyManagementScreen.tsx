@@ -14,19 +14,24 @@ import {
   Alert,
   TextInput,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
-import { UserIcon, ReportsIcon, ShiftsIcon } from '../../components/ui/AppIcons';
+import { UserIcon, ReportsIcon, ShiftsIcon, PlusIcon } from '../../components/ui/AppIcons';
 import { superAdminService, SecurityCompany } from '../../services/superAdminService';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SuperAdminProfileDrawer from '../../components/superAdmin/SuperAdminProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import { useNotificationBell } from '../../hooks/useNotificationBell';
 
 const CompanyManagementScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
+  const { onNotificationPress, notificationCount } = useNotificationBell({
+    notificationsRoute: 'SuperAdminNotifications',
+  });
   const [companies, setCompanies] = useState<SecurityCompany[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -211,9 +216,8 @@ const CompanyManagementScreen: React.FC = () => {
         variant="superAdmin"
         title="Company Management"
         onMenuPress={openDrawer}
-        onNotificationPress={() => {
-          // Handle notification press
-        }}
+        onNotificationPress={onNotificationPress}
+        notificationCount={notificationCount}
         profileDrawer={
           <SuperAdminProfileDrawer
             visible={isDrawerVisible}
@@ -230,6 +234,7 @@ const CompanyManagementScreen: React.FC = () => {
           <TextInput
             style={styles.searchInput}
             placeholder="Search companies..."
+            placeholderTextColor={COLORS.textSecondary}
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
@@ -285,10 +290,14 @@ const CompanyManagementScreen: React.FC = () => {
 
       {/* Sticky Action Button */}
       <TouchableOpacity 
-        style={styles.stickyAddButton}
+        style={[
+          styles.stickyAddButton,
+          { bottom: Math.max(insets.bottom + SPACING.md, 20) },
+        ]}
         onPress={handleAddCompany}
       >
-        <Text style={styles.stickyAddButtonText}>+ Add Company</Text>
+        <PlusIcon size={18} color={COLORS.textInverse} style={styles.stickyAddButtonIcon} />
+        <Text style={styles.stickyAddButtonText}>Add Company</Text>
       </TouchableOpacity>
     </SafeAreaWrapper>
   );
@@ -325,12 +334,15 @@ const styles = StyleSheet.create({
   },
   stickyAddButton: {
     position: 'absolute',
-    bottom: 20,
-    left: 20,
+    right: 20,
     backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: 25,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderRadius: 12,
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -342,6 +354,9 @@ const styles = StyleSheet.create({
     color: COLORS.textInverse,
     fontSize: TYPOGRAPHY.fontSize.md,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
+  },
+  stickyAddButtonIcon: {
+    marginRight: SPACING.xs,
   },
   searchSection: {
     backgroundColor: '#FFFFFF',
@@ -385,6 +400,7 @@ const styles = StyleSheet.create({
   },
   companiesContainer: {
     padding: SPACING.lg,
+    paddingBottom: 110,
   },
   companyCard: {
     backgroundColor: '#FFFFFF',

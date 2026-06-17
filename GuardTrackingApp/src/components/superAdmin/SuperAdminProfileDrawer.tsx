@@ -117,7 +117,13 @@ export const SuperAdminProfileDrawer: React.FC<SuperAdminProfileDrawerProps> = (
 
   const handleSupportRequests = () => {
     onClose();
-    navigation.navigate('SupportHubScreen', { variant: 'superAdmin', mode: 'platform' });
+    navigation.navigate('SuperAdminTabs', {
+      screen: 'Settings',
+      params: {
+        screen: 'SupportHubScreen',
+        params: { variant: 'superAdmin', mode: 'platform' },
+      },
+    });
   };
 
   const handleImpersonate = () => {
@@ -158,7 +164,6 @@ export const SuperAdminProfileDrawer: React.FC<SuperAdminProfileDrawerProps> = (
         onClose();
         // Navigate to Companies tab to keep bottom menu visible
         navigation.navigate('SuperAdminTabs', { screen: 'Companies' });
-        onNavigateToCompanies?.();
       },
     },
     {
@@ -169,7 +174,6 @@ export const SuperAdminProfileDrawer: React.FC<SuperAdminProfileDrawerProps> = (
         onClose();
         // Navigate to Analytics tab to keep bottom menu visible
         navigation.navigate('SuperAdminTabs', { screen: 'Analytics' });
-        onNavigateToAnalytics?.();
       },
     },
     {
@@ -180,7 +184,6 @@ export const SuperAdminProfileDrawer: React.FC<SuperAdminProfileDrawerProps> = (
         onClose();
         // Navigate to Billing tab to keep bottom menu visible
         navigation.navigate('SuperAdminTabs', { screen: 'Billing' });
-        onNavigateToBilling?.();
       },
     },
     {
@@ -191,7 +194,6 @@ export const SuperAdminProfileDrawer: React.FC<SuperAdminProfileDrawerProps> = (
         onClose();
         // Navigate to Settings tab to keep bottom menu visible
         navigation.navigate('SuperAdminTabs', { screen: 'Settings' });
-        onNavigateToSystemSettings?.();
       },
     },
     {
@@ -204,7 +206,6 @@ export const SuperAdminProfileDrawer: React.FC<SuperAdminProfileDrawerProps> = (
           screen: 'Analytics',
           params: { screen: 'AuditLogs' },
         });
-        onNavigateToAuditLogs?.();
       },
     },
     {
@@ -219,8 +220,10 @@ export const SuperAdminProfileDrawer: React.FC<SuperAdminProfileDrawerProps> = (
       icon: <NotificationIcon size={20} color={COLORS.textPrimary} />,
       onPress: () => {
         onClose();
-        navigation.navigate('SuperAdminNotificationSettings');
-        onNavigateToNotifications?.();
+        navigation.navigate('SuperAdminTabs', {
+          screen: 'Settings',
+          params: { screen: 'SuperAdminNotificationSettings' },
+        });
       },
     },
     {

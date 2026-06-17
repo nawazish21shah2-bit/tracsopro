@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createStackNavigator } from '@react-navigation/stack';
 import { Text, StyleSheet } from 'react-native';
 import TabBarIcon from '../components/navigation/TabBarIcon';
 import { COLORS, TYPOGRAPHY, SPACING } from '../styles/globalStyles';
@@ -11,6 +12,13 @@ import ClientSites from '../screens/client/ClientSites';
 import ClientReports from '../screens/client/ClientReports';
 import ClientGuards from '../screens/client/ClientGuards';
 import ClientSettings from '../screens/client/ClientSettings';
+import NotificationSettingsScreen from '../screens/settings/NotificationSettingsScreen';
+import ProfileEditScreen from '../screens/settings/ProfileEditScreen';
+import SupportContactScreen from '../screens/settings/SupportContactScreen';
+import SupportHubScreen from '../screens/support/SupportHubScreen';
+import SupportTicketDetailScreen from '../screens/support/SupportTicketDetailScreen';
+import CompanyDetailsScreen from '../screens/settings/CompanyDetailsScreen';
+import ChangePasswordScreen from '../screens/settings/ChangePasswordScreen';
 
 export type ClientTabParamList = {
   Dashboard: undefined;
@@ -21,6 +29,27 @@ export type ClientTabParamList = {
 };
 
 const Tab = createBottomTabNavigator<ClientTabParamList>();
+const SettingsStack = createStackNavigator();
+
+const ClientSettingsStackNavigator: React.FC = () => (
+  <SettingsStack.Navigator screenOptions={{ headerShown: false }}>
+    <SettingsStack.Screen name="ClientSettingsHome" component={ClientSettings} />
+    <SettingsStack.Screen name="NotificationSettings" component={NotificationSettingsScreen} />
+    <SettingsStack.Screen name="ProfileEdit" component={ProfileEditScreen} />
+    <SettingsStack.Screen name="SupportContact" component={SupportContactScreen} />
+    <SettingsStack.Screen
+      name="SupportHubScreen"
+      component={SupportHubScreen}
+      initialParams={{ variant: 'client', mode: 'mine' }}
+    />
+    <SettingsStack.Screen name="SupportTicketDetailScreen" component={SupportTicketDetailScreen} />
+    <SettingsStack.Screen name="CompanyDetails" component={CompanyDetailsScreen} />
+    <SettingsStack.Screen
+      name="ClientChangePassword"
+      component={() => <ChangePasswordScreen variant="client" />}
+    />
+  </SettingsStack.Navigator>
+);
 
 const ClientNavigator: React.FC = () => {
   return (
@@ -88,7 +117,7 @@ const ClientNavigator: React.FC = () => {
       />
       <Tab.Screen
         name="Settings"
-        component={ClientSettings}
+        component={ClientSettingsStackNavigator}
         options={{
           tabBarLabel: 'Settings',
         }}

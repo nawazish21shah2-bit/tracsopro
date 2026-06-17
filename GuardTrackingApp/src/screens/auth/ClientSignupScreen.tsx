@@ -3,9 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   StatusBar,
-  TextInput,
   Alert,
   ScrollView,
 } from 'react-native';
@@ -15,14 +13,14 @@ import { RouteProp } from '@react-navigation/native';
 import { useDispatch } from 'react-redux';
 import { AppDispatch } from '../../store';
 import { registerUser } from '../../store/slices/authSlice';
-import Icon from 'react-native-vector-icons/Ionicons';
 import Button from '../../components/common/Button';
 import PhoneInput from '../../components/auth/PhoneInput';
 import AuthHeader from '../../components/auth/AuthHeader';
+import AuthInput from '../../components/auth/AuthInput';
 import AuthFooter from '../../components/auth/AuthFooter';
 import { AuthStackParamList, UserRole } from '../../types';
 import { Country, defaultCountry } from '../../utils/countries';
-import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
+import { COLORS, SPACING } from '../../styles/globalStyles';
 import { authStyles } from '../../styles/authStyles';
 import { showRegistrationError } from '../../utils/registrationErrorHandler';
 
@@ -43,7 +41,6 @@ const ClientSignupScreen: React.FC = () => {
     confirmPassword: '',
   });
   const [invitationCode, setInvitationCode] = useState('');
-
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -52,139 +49,112 @@ const ClientSignupScreen: React.FC = () => {
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-    // Full Name validation
     if (!formData.fullName.trim()) {
       newErrors.fullName = 'Full name is required';
     } else if (formData.fullName.trim().length < 2) {
       newErrors.fullName = 'Full name must be at least 2 characters';
-    } else if (formData.fullName.trim().length > 100) {
-      newErrors.fullName = 'Full name must be less than 100 characters';
     }
 
-    // Email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!formData.email.trim()) {
       newErrors.email = 'Email is required';
     } else if (!emailRegex.test(formData.email.trim())) {
       newErrors.email = 'Please enter a valid email address';
     }
 
-    // Phone validation
     if (!formData.phoneNumber.trim()) {
       newErrors.phoneNumber = 'Phone number is required';
     } else {
       const phoneDigits = formData.phoneNumber.replace(/\D/g, '');
-      // Validate phone number length (minimum 7, maximum 15 digits)
       if (phoneDigits.length < 7 || phoneDigits.length > 15) {
         newErrors.phoneNumber = 'Please enter a valid phone number';
       }
     }
 
-    // Password validation
     if (!formData.password) {
       newErrors.password = 'Password is required';
     } else if (formData.password.length < 8) {
       newErrors.password = 'Password must be at least 8 characters';
     }
 
-    // Confirm Password validation
     if (!formData.confirmPassword) {
       newErrors.confirmPassword = 'Please confirm your password';
     } else if (formData.password !== formData.confirmPassword) {
       newErrors.confirmPassword = 'Passwords do not match';
     }
 
-    // Invitation code validation (Required for Client)
     if (!invitationCode.trim()) {
-      newErrors.invitationCode = 'Invitation code is required. Please contact your security company administrator.';
+      newErrors.invitationCode =
+        'Invitation code is required. Please contact your security company administrator.';
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSignup = async () => {
-    // Prevent multiple submissions
-    if (isLoading) {
-      return;
+  const updateField = (field: keyof typeof formData, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    if (errors[field]) {
+      setErrors((prev) => ({ ...prev, [field]: '' }));
     }
+  };
 
-    if (!validateForm()) return;
+  const handleSignup = async () => {
+    if (isLoading || !validateForm()) return;
 
     setIsLoading(true);
     try {
-      // Format phone number with country code
       const phoneDigits = formData.phoneNumber.replace(/\D/g, '');
       const fullPhoneNumber = `${selectedCountry.dialCode}${phoneDigits}`;
-      
-      // Split full name into first and last name
       const nameParts = formData.fullName.trim().split(' ');
       const firstName = nameParts[0];
       const lastName = nameParts.slice(1).join(' ') || '';
 
-      // Prepare registration data
       const registrationData = {
         firstName,
         lastName,
         email: formData.email.toLowerCase().trim(),
         phone: fullPhoneNumber,
         password: formData.password,
-        confirmPassword: formData.password, // Backend doesn't need this, but type requires it
+        confirmPassword: formData.password,
         role: UserRole.CLIENT,
         accountType: accountType.toUpperCase(),
         invitationCode: invitationCode.trim() || undefined,
       };
 
-      // Call registration API via Redux
       const result = await dispatch(registerUser(registrationData));
-      
+
       if (registerUser.fulfilled.match(result)) {
         const payload = result.payload;
-        
-        // Check if tokens are returned (dev mode OTP bypass)
         if (payload.token && payload.user) {
-          // OTP was bypassed - user is already authenticated, navigate to profile setup
           Alert.alert(
             'Registration Successful',
             payload.message || 'Your account has been created successfully.',
-            [{ text: 'Continue', onPress: () => navigation.navigate('ClientProfileSetup', { accountType }) }]
+            [{ text: 'Continue', onPress: () => navigation.navigate('ClientProfileSetup', { accountType }) }],
           );
         } else {
-          // Normal flow - need OTP verification
-          navigation.navigate('ClientOTP', { 
+          navigation.navigate('ClientOTP', {
             email: formData.email,
             accountType,
-            isPasswordReset: false 
+            isPasswordReset: false,
           });
         }
       } else {
-        // Use streamlined error handler for consistent UX
-        showRegistrationError({
-          error: result.payload,
-          navigation,
-        });
+        showRegistrationError({ error: result.payload, navigation });
       }
     } catch (error) {
-      showRegistrationError({
-        error,
-        navigation,
-      });
+      showRegistrationError({ error, navigation });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const navigateToLogin = () => {
-    navigation.navigate('Login');
-  };
-
-
   return (
-    <View style={styles.container}>
+    <View style={authStyles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.backgroundPrimary} />
-      
-      <ScrollView 
+
+      <ScrollView
         contentContainerStyle={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -192,134 +162,78 @@ const ClientSignupScreen: React.FC = () => {
         <AuthHeader title="SIGN UP" />
 
         <View style={[authStyles.form, styles.form]}>
-          {/* Full Name */}
-          <View style={styles.inputContainer}>
-            <View style={[styles.inputWrapper, errors.fullName && styles.inputError]}>
-              <Icon name="person-outline" size={20} color={COLORS.textTertiary} style={styles.inputIcon} />
-              <TextInput
-                style={styles.textInput}
-                placeholder="Full Name"
-                value={formData.fullName}
-                onChangeText={(text) => {
-                  setFormData(prev => ({ ...prev, fullName: text }));
-                  if (errors.fullName) setErrors(prev => ({ ...prev, fullName: '' }));
-                }}
-                placeholderTextColor={COLORS.textTertiary}
-                autoCapitalize="words"
-              />
-            </View>
-            {errors.fullName && <Text style={styles.errorText}>{errors.fullName}</Text>}
+          <View style={authStyles.inputContainer}>
+            <AuthInput
+              icon="person-outline"
+              placeholder="Full Name"
+              value={formData.fullName}
+              onChangeText={(text) => updateField('fullName', text)}
+              autoCapitalize="words"
+              error={errors.fullName}
+            />
           </View>
 
-          {/* Email */}
-          <View style={styles.inputContainer}>
-            <View style={[styles.inputWrapper, errors.email && styles.inputError]}>
-              <Icon name="person-outline" size={20} color={COLORS.textTertiary} style={styles.inputIcon} />
-              <TextInput
-                style={styles.textInput}
-                placeholder="Email Address"
-                value={formData.email}
-                onChangeText={(text) => {
-                  setFormData(prev => ({ ...prev, email: text }));
-                  if (errors.email) setErrors(prev => ({ ...prev, email: '' }));
-                }}
-                placeholderTextColor={COLORS.textTertiary}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-            </View>
-            {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+          <View style={authStyles.inputContainer}>
+            <AuthInput
+              icon="mail-outline"
+              placeholder="Email Address"
+              value={formData.email}
+              onChangeText={(text) => updateField('email', text)}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              error={errors.email}
+            />
           </View>
 
-          {/* Invitation Code */}
-          <View style={styles.inputContainer}>
-            <View style={[styles.inputWrapper, errors.invitationCode && styles.inputError]}>
-              <Icon name="ticket-outline" size={20} color={COLORS.textTertiary} style={styles.inputIcon} />
-              <TextInput
-                style={styles.textInput}
-                placeholder="Invitation Code *"
-                value={invitationCode}
-                onChangeText={(text) => {
-                  setInvitationCode(text);
-                  if (errors.invitationCode) setErrors(prev => ({ ...prev, invitationCode: '' }));
-                }}
-                placeholderTextColor={COLORS.textTertiary}
-                autoCapitalize="characters"
-              />
-            </View>
-            {errors.invitationCode && <Text style={styles.errorText}>{errors.invitationCode}</Text>}
-          </View>
-
-          {/* Phone Number */}
-          <View style={styles.inputContainer}>
-            <PhoneInput
-              value={formData.phoneNumber}
+          <View style={authStyles.inputContainer}>
+            <AuthInput
+              icon="vpn-key"
+              placeholder="Invitation Code *"
+              value={invitationCode}
               onChangeText={(text) => {
-                setFormData(prev => ({ ...prev, phoneNumber: text }));
-                if (errors.phoneNumber) setErrors(prev => ({ ...prev, phoneNumber: '' }));
+                setInvitationCode(text);
+                if (errors.invitationCode) setErrors((prev) => ({ ...prev, invitationCode: '' }));
               }}
+              autoCapitalize="characters"
+              error={errors.invitationCode}
+            />
+          </View>
+
+          <View style={authStyles.inputContainer}>
+            <PhoneInput
+              placeholder="Phone Number"
+              value={formData.phoneNumber}
+              onChangeText={(text) => updateField('phoneNumber', text)}
               onCountryChange={(country) => setSelectedCountry(country)}
               selectedCountry={selectedCountry}
               error={errors.phoneNumber}
             />
           </View>
 
-          {/* Password */}
-          <View style={styles.inputContainer}>
-            <View style={[styles.inputWrapper, errors.password && styles.inputError]}>
-              <Icon name="lock-closed-outline" size={20} color={COLORS.textTertiary} style={styles.inputIcon} />
-              <TextInput
-                style={styles.textInput}
-                placeholder="Password"
-                value={formData.password}
-                onChangeText={(text) => {
-                  setFormData(prev => ({ ...prev, password: text }));
-                  if (errors.password) setErrors(prev => ({ ...prev, password: '' }));
-                }}
-                placeholderTextColor={COLORS.textTertiary}
-                secureTextEntry={!showPassword}
-              />
-              <TouchableOpacity
-                onPress={() => setShowPassword(!showPassword)}
-                style={styles.eyeIcon}
-              >
-                <Icon 
-                  name={showPassword ? "eye-outline" : "eye-off-outline"} 
-                  size={20} 
-                  color={COLORS.textTertiary} 
-                />
-              </TouchableOpacity>
-            </View>
-            {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
+          <View style={authStyles.inputContainer}>
+            <AuthInput
+              icon="lock-outline"
+              placeholder="Password"
+              value={formData.password}
+              onChangeText={(text) => updateField('password', text)}
+              secureTextEntry
+              showPassword={showPassword}
+              onTogglePassword={() => setShowPassword(!showPassword)}
+              error={errors.password}
+            />
           </View>
 
-          {/* Confirm Password */}
-          <View style={styles.inputContainer}>
-            <View style={[styles.inputWrapper, errors.confirmPassword && styles.inputError]}>
-              <Icon name="lock-closed-outline" size={20} color={COLORS.textTertiary} style={styles.inputIcon} />
-              <TextInput
-                style={styles.textInput}
-                placeholder="Confirm Password"
-                value={formData.confirmPassword}
-                onChangeText={(text) => {
-                  setFormData(prev => ({ ...prev, confirmPassword: text }));
-                  if (errors.confirmPassword) setErrors(prev => ({ ...prev, confirmPassword: '' }));
-                }}
-                placeholderTextColor={COLORS.textTertiary}
-                secureTextEntry={!showConfirmPassword}
-              />
-              <TouchableOpacity
-                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                style={styles.eyeIcon}
-              >
-                <Icon 
-                  name={showConfirmPassword ? "eye-outline" : "eye-off-outline"} 
-                  size={20} 
-                  color={COLORS.textTertiary} 
-                />
-              </TouchableOpacity>
-            </View>
-            {errors.confirmPassword && <Text style={styles.errorText}>{errors.confirmPassword}</Text>}
+          <View style={authStyles.inputContainer}>
+            <AuthInput
+              icon="lock-outline"
+              placeholder="Confirm Password"
+              value={formData.confirmPassword}
+              onChangeText={(text) => updateField('confirmPassword', text)}
+              secureTextEntry
+              showPassword={showConfirmPassword}
+              onTogglePassword={() => setShowConfirmPassword(!showConfirmPassword)}
+              error={errors.confirmPassword}
+            />
           </View>
         </View>
 
@@ -337,7 +251,7 @@ const ClientSignupScreen: React.FC = () => {
         <AuthFooter
           text="Already have an account?"
           linkText="Login"
-          onLinkPress={navigateToLogin}
+          onLinkPress={() => navigation.navigate('Login')}
           disabled={isLoading}
         />
       </ScrollView>
@@ -346,54 +260,12 @@ const ClientSignupScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.backgroundPrimary,
-  },
   scrollContainer: {
     flexGrow: 1,
     paddingBottom: SPACING.lg,
   },
   form: {
     flex: 0,
-  },
-  inputContainer: {
-    marginBottom: SPACING.lg,
-  },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.backgroundPrimary,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    borderRadius: BORDER_RADIUS.md,
-    paddingHorizontal: SPACING.lg,
-    height: 56,
-  },
-  inputError: {
-    borderColor: COLORS.error,
-  },
-  inputIcon: {
-    marginRight: SPACING.md,
-  },
-  textInput: {
-    flex: 1,
-    fontFamily: TYPOGRAPHY.fontPrimary,
-    fontWeight: TYPOGRAPHY.fontWeight.regular,
-    fontSize: TYPOGRAPHY.fontSize.md,
-    color: COLORS.textPrimary,
-    paddingVertical: 0,
-  },
-  eyeIcon: {
-    padding: SPACING.xs,
-  },
-  errorText: {
-    fontFamily: TYPOGRAPHY.fontPrimary,
-    fontWeight: TYPOGRAPHY.fontWeight.regular,
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    color: COLORS.error,
-    marginTop: SPACING.xs,
-    marginLeft: SPACING.xs,
   },
 });
 

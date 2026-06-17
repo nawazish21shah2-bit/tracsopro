@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity } from 'react-native';
 import { Country, defaultCountry } from '../../utils/countries';
 import CountryPicker from './CountryPicker';
-import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../styles/globalStyles';
+import { authInputStyles } from '../../styles/authStyles';
+import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 
 interface PhoneInputProps {
   label?: string;
@@ -81,9 +82,9 @@ const PhoneInput: React.FC<PhoneInputProps> = ({
     <View style={styles.container}>
       {label && <Text style={styles.phoneLabel}>{label}</Text>}
       <View style={[
-        styles.phoneInputWrapper,
-        focused && styles.inputFocused,
-        error && styles.inputError
+        authInputStyles.inputWrapper,
+        focused && authInputStyles.inputFocused,
+        error && authInputStyles.inputError,
       ]}>
         <TouchableOpacity
           style={styles.countryCodeContainer}
@@ -95,7 +96,7 @@ const PhoneInput: React.FC<PhoneInputProps> = ({
           <Text style={styles.dropdownIcon}>▼</Text>
         </TouchableOpacity>
         <TextInput
-          style={styles.phoneInput}
+          style={authInputStyles.textInput}
           placeholder={getPlaceholder()}
           value={value}
           onChangeText={handlePhoneChange}
@@ -106,7 +107,7 @@ const PhoneInput: React.FC<PhoneInputProps> = ({
           onBlur={() => setFocused(false)}
         />
       </View>
-      {error && <Text style={styles.errorText}>{error}</Text>}
+      {error && <Text style={authInputStyles.errorText}>{error}</Text>}
       
       <CountryPicker
         selectedCountry={selectedCountry}
@@ -119,41 +120,22 @@ const PhoneInput: React.FC<PhoneInputProps> = ({
 };
 
 const styles = StyleSheet.create({
-  container: {
-    // No margin - handled by parent inputContainer
-  },
+  container: {},
   phoneLabel: {
-    fontFamily: TYPOGRAPHY.fontPrimary,
-    fontWeight: TYPOGRAPHY.fontWeight.regular,
-    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontFamily: 'Inter',
+    fontWeight: '500',
+    fontSize: 14,
     color: COLORS.textSecondary,
-    marginBottom: SPACING.sm,
-  },
-  phoneInputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.backgroundSecondary, // Light gray like AuthInput
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    borderRadius: BORDER_RADIUS.md,
-    height: 56,
-    paddingHorizontal: SPACING.lg,
-  },
-  inputFocused: {
-    borderColor: COLORS.primary,
-    borderWidth: 1,
-  },
-  inputError: {
-    borderColor: COLORS.error,
+    marginBottom: 8,
   },
   countryCodeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: SPACING.sm,
+    paddingHorizontal: 8,
     borderRightWidth: 1,
     borderRightColor: COLORS.borderLight,
     minWidth: 100,
-    marginRight: SPACING.sm,
+    marginRight: 8,
   },
   flagText: {
     fontSize: 20,
@@ -169,23 +151,7 @@ const styles = StyleSheet.create({
   dropdownIcon: {
     fontSize: 10,
     color: COLORS.textSecondary,
-    marginLeft: SPACING.xs,
-  },
-  phoneInput: {
-    flex: 1,
-    fontFamily: TYPOGRAPHY.fontPrimary,
-    fontWeight: TYPOGRAPHY.fontWeight.regular,
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.textPrimary,
-    paddingVertical: 0,
-  },
-  errorText: {
-    fontFamily: TYPOGRAPHY.fontPrimary,
-    fontWeight: TYPOGRAPHY.fontWeight.regular,
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    color: COLORS.error,
-    marginTop: SPACING.xs,
-    marginLeft: SPACING.xs,
+    marginLeft: 4,
   },
 });
 

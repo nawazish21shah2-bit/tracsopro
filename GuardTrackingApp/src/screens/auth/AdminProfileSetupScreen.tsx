@@ -3,24 +3,23 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   StatusBar,
-  TextInput,
   Alert,
-  Image,
   ScrollView,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
 import { useDispatch } from 'react-redux';
-import Icon from 'react-native-vector-icons/Ionicons';
 import Button from '../../components/common/Button';
+import AuthHeader from '../../components/auth/AuthHeader';
+import AuthInput from '../../components/auth/AuthInput';
 import { AuthStackParamList } from '../../types';
 import { AppDispatch } from '../../store';
 import { getCurrentUser } from '../../store/slices/authSlice';
 import apiService from '../../services/api';
-import Logo from '../../assets/images/tracSOpro-logo.png';
+import { authStyles } from '../../styles/authStyles';
+import { COLORS, SPACING } from '../../styles/globalStyles';
 
 type AdminProfileSetupScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'AdminProfileSetup'>;
 type AdminProfileSetupScreenRouteProp = RouteProp<AuthStackParamList, 'AdminProfileSetup'>;
@@ -161,290 +160,163 @@ const AdminProfileSetupScreen: React.FC = () => {
   };
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      
-      <ScrollView 
+    <View style={authStyles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.backgroundPrimary} />
+
+      <ScrollView
         contentContainerStyle={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Logo */}
-        <View style={styles.logoContainer}>
-          <Image source={Logo} style={styles.logoImage} resizeMode="contain" />
-        </View>
+        <AuthHeader
+          title="COMPANY PROFILE"
+          subtitle="Complete your company information to manage your organization"
+        />
 
-        {/* Title */}
-        <View style={styles.titleContainer}>
-          <Text style={styles.title}>COMPANY PROFILE</Text>
-          <Text style={styles.subtitle}>
-            Complete your company information to manage your organization
-          </Text>
-        </View>
-
-        {/* Form */}
-        <View style={styles.form}>
-          {/* Company Information Section */}
+        <View style={authStyles.form}>
           <View style={styles.sectionContainer}>
             <Text style={styles.sectionTitle}>Company Information</Text>
 
-            {/* Company Name */}
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Company Name *</Text>
-              <View style={[styles.inputWrapper, errors.companyName && styles.inputError]}>
-                <Icon name="business-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Enter company name"
-                  value={profileData.companyName}
-                  onChangeText={(text) => handleInputChange('companyName', text)}
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
-              {errors.companyName && <Text style={styles.errorText}>{errors.companyName}</Text>}
+            <View style={authStyles.inputContainer}>
+              <AuthInput
+                label="Company Name"
+                required
+                icon="business"
+                placeholder="Enter company name"
+                value={profileData.companyName}
+                onChangeText={(text) => handleInputChange('companyName', text)}
+                error={errors.companyName}
+              />
             </View>
 
-            {/* Company Registration Number */}
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Company Registration Number *</Text>
-              <View style={[styles.inputWrapper, errors.companyRegistrationNumber && styles.inputError]}>
-                <Icon name="document-text-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Enter registration number"
-                  value={profileData.companyRegistrationNumber}
-                  onChangeText={(text) => handleInputChange('companyRegistrationNumber', text)}
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
-              {errors.companyRegistrationNumber && <Text style={styles.errorText}>{errors.companyRegistrationNumber}</Text>}
+            <View style={authStyles.inputContainer}>
+              <AuthInput
+                label="Company Registration Number"
+                required
+                icon="description"
+                placeholder="Enter registration number"
+                value={profileData.companyRegistrationNumber}
+                onChangeText={(text) => handleInputChange('companyRegistrationNumber', text)}
+                error={errors.companyRegistrationNumber}
+              />
             </View>
 
-            {/* Tax ID */}
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Tax ID *</Text>
-              <View style={[styles.inputWrapper, errors.taxId && styles.inputError]}>
-                <Icon name="card-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Enter tax ID"
-                  value={profileData.taxId}
-                  onChangeText={(text) => handleInputChange('taxId', text)}
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
-              {errors.taxId && <Text style={styles.errorText}>{errors.taxId}</Text>}
+            <View style={authStyles.inputContainer}>
+              <AuthInput
+                label="Tax ID"
+                required
+                icon="credit-card"
+                placeholder="Enter tax ID"
+                value={profileData.taxId}
+                onChangeText={(text) => handleInputChange('taxId', text)}
+                error={errors.taxId}
+              />
             </View>
 
-            {/* Website */}
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Website</Text>
-              <View style={[styles.inputWrapper, errors.website && styles.inputError]}>
-                <Icon name="globe-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="https://www.company.com"
-                  value={profileData.website}
-                  onChangeText={(text) => handleInputChange('website', text)}
-                  placeholderTextColor="#9CA3AF"
-                  keyboardType="url"
-                  autoCapitalize="none"
-                />
-              </View>
-              {errors.website && <Text style={styles.errorText}>{errors.website}</Text>}
+            <View style={authStyles.inputContainer}>
+              <AuthInput
+                label="Website"
+                icon="language"
+                placeholder="https://www.company.com"
+                value={profileData.website}
+                onChangeText={(text) => handleInputChange('website', text)}
+                keyboardType="url"
+                autoCapitalize="none"
+                error={errors.website}
+              />
             </View>
           </View>
 
-          {/* Address Section */}
           <View style={styles.sectionContainer}>
             <Text style={styles.sectionTitle}>Address Information</Text>
 
-            {/* Address */}
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Street Address *</Text>
-              <View style={[styles.inputWrapper, errors.address && styles.inputError]}>
-                <Icon name="location-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Enter street address"
-                  value={profileData.address}
-                  onChangeText={(text) => handleInputChange('address', text)}
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
-              {errors.address && <Text style={styles.errorText}>{errors.address}</Text>}
+            <View style={authStyles.inputContainer}>
+              <AuthInput
+                label="Street Address"
+                required
+                icon="location-on"
+                placeholder="Enter street address"
+                value={profileData.address}
+                onChangeText={(text) => handleInputChange('address', text)}
+                error={errors.address}
+              />
             </View>
 
-            {/* City and State */}
             <View style={styles.rowContainer}>
-              <View style={[styles.inputContainer, styles.halfWidth]}>
-                <Text style={styles.inputLabel}>City *</Text>
-                <View style={[styles.inputWrapper, errors.city && styles.inputError]}>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="City"
-                    value={profileData.city}
-                    onChangeText={(text) => handleInputChange('city', text)}
-                    placeholderTextColor="#9CA3AF"
-                  />
-                </View>
-                {errors.city && <Text style={styles.errorText}>{errors.city}</Text>}
+              <View style={[authStyles.inputContainer, styles.halfWidth]}>
+                <AuthInput
+                  label="City"
+                  required
+                  placeholder="City"
+                  value={profileData.city}
+                  onChangeText={(text) => handleInputChange('city', text)}
+                  error={errors.city}
+                />
               </View>
 
-              <View style={[styles.inputContainer, styles.halfWidth]}>
-                <Text style={styles.inputLabel}>State *</Text>
-                <View style={[styles.inputWrapper, errors.state && styles.inputError]}>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="State"
-                    value={profileData.state}
-                    onChangeText={(text) => handleInputChange('state', text)}
-                    placeholderTextColor="#9CA3AF"
-                  />
-                </View>
-                {errors.state && <Text style={styles.errorText}>{errors.state}</Text>}
+              <View style={[authStyles.inputContainer, styles.halfWidth]}>
+                <AuthInput
+                  label="State"
+                  required
+                  placeholder="State"
+                  value={profileData.state}
+                  onChangeText={(text) => handleInputChange('state', text)}
+                  error={errors.state}
+                />
               </View>
             </View>
 
-            {/* ZIP Code */}
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>ZIP Code *</Text>
-              <View style={[styles.inputWrapper, errors.zipCode && styles.inputError]}>
-                <Icon name="mail-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="12345 or 12345-6789"
-                  value={profileData.zipCode}
-                  onChangeText={(text) => handleInputChange('zipCode', text)}
-                  placeholderTextColor="#9CA3AF"
-                  keyboardType="numeric"
-                />
-              </View>
-              {errors.zipCode && <Text style={styles.errorText}>{errors.zipCode}</Text>}
+            <View style={authStyles.inputContainer}>
+              <AuthInput
+                label="ZIP Code"
+                required
+                icon="pin"
+                placeholder="12345 or 12345-6789"
+                value={profileData.zipCode}
+                onChangeText={(text) => handleInputChange('zipCode', text)}
+                keyboardType="numeric"
+                error={errors.zipCode}
+              />
             </View>
           </View>
         </View>
 
-        {/* Submit Button */}
-        <Button
-          title="Complete Setup"
-          onPress={handleSubmit}
-          fullWidth
-          size="large"
-          loading={isLoading}
-          style={styles.submitButton}
-        />
+        <View style={authStyles.authActions}>
+          <Button
+            title="Complete Setup"
+            onPress={handleSubmit}
+            fullWidth
+            size="large"
+            loading={isLoading}
+            style={authStyles.submitButton}
+          />
+        </View>
       </ScrollView>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
   scrollContainer: {
     flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 40,
-  },
-  logoContainer: {
-    alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 40,
-  },
-  logoImage: {
-    width: 160,
-    height: 40,
-  },
-  titleContainer: {
-    alignItems: 'center',
-    marginBottom: 40,
-  },
-  title: {
-    fontFamily: 'Montserrat',
-    fontWeight: '700',
-    fontSize: 24,
-    lineHeight: 29,
-    textAlign: 'center',
-    letterSpacing: 1,
-    color: '#000000',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: 'center',
-    color: '#6B7280',
-  },
-  form: {
-    marginBottom: 40,
+    paddingBottom: SPACING.xxxl,
   },
   sectionContainer: {
-    marginTop: 20,
+    marginTop: SPACING.lg,
   },
   sectionTitle: {
-    fontFamily: 'Inter',
-    fontWeight: '600',
     fontSize: 18,
-    color: '#000000',
-    marginBottom: 20,
-  },
-  inputContainer: {
-    marginBottom: 20,
-  },
-  inputLabel: {
-    fontFamily: 'Inter',
-    fontWeight: '500',
-    fontSize: 14,
-    color: '#374151',
-    marginBottom: 8,
-  },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    height: 56,
-  },
-  inputError: {
-    borderColor: '#EF4444',
-  },
-  inputIcon: {
-    marginRight: 12,
-  },
-  textInput: {
-    flex: 1,
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    fontSize: 16,
-    color: '#000000',
-    paddingVertical: 0,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.lg,
   },
   rowContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: SPACING.md,
   },
   halfWidth: {
     flex: 1,
-  },
-  errorText: {
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    fontSize: 12,
-    color: '#EF4444',
-    marginTop: 4,
-    marginLeft: 4,
-  },
-  submitButton: {
-    marginBottom: 20,
   },
 });
 

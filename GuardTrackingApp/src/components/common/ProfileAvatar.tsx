@@ -7,6 +7,8 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  Platform,
+  PermissionsAndroid,
 } from 'react-native';
 import { launchImageLibrary, launchCamera, MediaType, ImagePickerResponse } from 'react-native-image-picker';
 import { CameraIcon } from '../ui/AppIcons';
@@ -56,6 +58,38 @@ export const ProfileAvatar: React.FC<ProfileAvatarProps> = ({
   const [imageError, setImageError] = useState(false);
   const [localImageUri, setLocalImageUri] = useState<string | null>(null);
 
+  const requestCameraPermission = async (): Promise<boolean> => {
+    if (Platform.OS !== 'android') return true;
+    try {
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.CAMERA,
+        {
+          title: 'Camera Permission',
+          message: 'Allow camera access to take a profile photo.',
+          buttonPositive: 'Allow',
+          buttonNegative: 'Cancel',
+        },
+      );
+      return granted === PermissionsAndroid.RESULTS.GRANTED;
+    } catch {
+      return false;
+    }
+  };
+
+  const requestGalleryPermission = async (): Promise<boolean> => {
+    if (Platform.OS !== 'android') return true;
+    try {
+      const permission =
+        Number(Platform.Version) >= 33
+          ? PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES
+          : PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE;
+      const granted = await PermissionsAndroid.request(permission);
+      return granted === PermissionsAndroid.RESULTS.GRANTED;
+    } catch {
+      return false;
+    }
+  };
+
   const remoteImageUrl = useMemo(
     () => pickProfilePictureUrl({ profilePictureUrl, avatar }),
     [profilePictureUrl, avatar],
@@ -99,7 +133,16 @@ export const ProfileAvatar: React.FC<ProfileAvatarProps> = ({
     );
   };
 
-  const handleCamera = () => {
+  const handleCamera = async () => {
+    const hasPermission = await requestCameraPermission();
+    if (!hasPermission) {
+      Alert.alert(
+        'Camera Permission Required',
+        'Please allow camera access in your device settings to take a profile photo.',
+      );
+      return;
+    }
+
     const options = {
       mediaType: 'photo' as MediaType,
       includeBase64: false,
@@ -112,7 +155,16 @@ export const ProfileAvatar: React.FC<ProfileAvatarProps> = ({
     launchCamera(options, handleImageResponse);
   };
 
-  const handleGallery = () => {
+  const handleGallery = async () => {
+    const hasPermission = await requestGalleryPermission();
+    if (!hasPermission) {
+      Alert.alert(
+        'Gallery Permission Required',
+        'Please allow photo library access in your device settings to choose a profile photo.',
+      );
+      return;
+    }
+
     const options = {
       mediaType: 'photo' as MediaType,
       includeBase64: false,
@@ -166,7 +218,12 @@ export const ProfileAvatar: React.FC<ProfileAvatarProps> = ({
         />
       ) : (
         <View style={[styles.avatarPlaceholder, { width: size, height: size, borderRadius: size / 2, backgroundColor }]}>
-          <Text style={[styles.initialsText, { fontSize, color: textColor }]}>
+          <Text
+            style={[
+              styles.initialsText,
+              { fontSize, color: textColor, lineHeight: Math.round(fontSize * 1.1) },
+            ]}
+          >
             {getInitials()}
           </Text>
         </View>
@@ -205,6 +262,8 @@ const styles = StyleSheet.create({
   initialsText: {
     fontWeight: TYPOGRAPHY.fontWeight.bold,
     fontFamily: TYPOGRAPHY.fontPrimary,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   cameraIconContainer: {
     position: 'absolute',
