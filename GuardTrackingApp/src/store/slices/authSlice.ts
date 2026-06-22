@@ -1,18 +1,13 @@
-// Authentication Redux Slice
+// Authentication Redux Slice — tokens stored in Keychain only (securityManager)
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { User, AuthState, LoginForm, RegisterForm, UserRole } from '../../types';
-import apiService from '../../services/api';
+import { User, AuthState, LoginForm, RegisterForm } from '../../types';
+import { authApi } from '../../services/api/authApi';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { securityManager } from '../../utils/security';
 import { superAdminService } from '../../services/superAdminService';
 
-const IMPERSONATION_BACKUP_KEY = 'impersonationBackup';
-
-// Initial state
 const initialState: AuthState = {
   user: null,
-  token: null,
-  refreshToken: null,
   tempUserId: null,
   tempEmail: null,
   isAuthenticated: false,
@@ -21,28 +16,25 @@ const initialState: AuthState = {
   error: null,
   impersonationActive: false,
   impersonatorLabel: null,
+  sessionReady: false,
 };
 
-// Async thunks
 export const loginUser = createAsyncThunk(
   'auth/login',
   async (credentials: LoginForm, { rejectWithValue }) => {
     try {
-      const response = await apiService.login(credentials);
+      const response = await authApi.login(credentials);
       if (response.success && response.data.user) {
-        // Add computed name field for UI display
         const userWithName = {
           ...response.data.user,
-          name: `${response.data.user.firstName} ${response.data.user.lastName}`.trim()
+          name: `${response.data.user.firstName} ${response.data.user.lastName}`.trim(),
         };
-        
         return {
-          ...response.data,
-          user: userWithName
+          user: userWithName,
+          emailVerificationWarning: response.message || undefined,
         };
-      } else {
-        return rejectWithValue(response.message || 'Login failed');
       }
+      return rejectWithValue(response.message || 'Login failed');
     } catch (error: any) {
       return rejectWithValue(error.message || 'Login failed');
     }
@@ -53,13 +45,11 @@ export const registerUser = createAsyncThunk(
   'auth/register',
   async (userData: RegisterForm, { rejectWithValue }) => {
     try {
-      const response = await apiService.register(userData);
+      const response = await authApi.register(userData);
       if (response.success && response.data) {
-        // New API returns userId, email, role, accountType, message
         return response.data;
-      } else {
-        return rejectWithValue(response.message || 'Registration failed');
       }
+      return rejectWithValue(response.message || 'Registration failed');
     } catch (error: any) {
       return rejectWithValue(error.message || 'Registration failed');
     }
@@ -70,20 +60,15 @@ export const verifyOTP = createAsyncThunk(
   'auth/verifyOTP',
   async ({ userId, otp }: { userId: string; otp: string }, { rejectWithValue }) => {
     try {
-      const response = await apiService.verifyOTP(userId, otp);
+      const response = await authApi.verifyOTP(userId, otp);
       if (response.success && response.data.user) {
         const userWithName = {
           ...response.data.user,
-          name: `${response.data.user.firstName} ${response.data.user.lastName}`.trim()
+          name: `${response.data.user.firstName} ${response.data.user.lastName}`.trim(),
         };
-        
-        return {
-          ...response.data,
-          user: userWithName
-        };
-      } else {
-        return rejectWithValue(response.message || 'OTP verification failed');
+        return { user: userWithName };
       }
+      return rejectWithValue(response.message || 'OTP verification failed');
     } catch (error: any) {
       return rejectWithValue(error.message || 'OTP verification failed');
     }
@@ -94,12 +79,11 @@ export const resendOTP = createAsyncThunk(
   'auth/resendOTP',
   async (userId: string, { rejectWithValue }) => {
     try {
-      const response = await apiService.resendOTP(userId);
+      const response = await authApi.resendOTP(userId);
       if (response.success) {
         return response.message;
-      } else {
-        return rejectWithValue(response.message || 'Failed to resend OTP');
       }
+      return rejectWithValue(response.message || 'Failed to resend OTP');
     } catch (error: any) {
       return rejectWithValue(error.message || 'Failed to resend OTP');
     }
@@ -110,16 +94,9 @@ export const logoutUser = createAsyncThunk(
   'auth/logout',
   async (_, { rejectWithValue }) => {
     try {
-      await apiService.logout();
-      
-      // Clear local storage
-      await AsyncStorage.multiRemove([
-        'authToken',
-        'refreshToken',
-        'userData',
-        'userRole',
-      ]);
-      
+      await authApi.logout();
+      await securityManager.clearImpersonationBackup();
+      await AsyncStorage.multiRemove(['authToken', 'refreshToken', 'userData', 'userRole']);
       return null;
     } catch (error: any) {
       return rejectWithValue(error.message || 'Logout failed');
@@ -129,46 +106,38 @@ export const logoutUser = createAsyncThunk(
 
 export const getCurrentUser = createAsyncThunk(
   'auth/getCurrentUser',
-  async (_, { rejectWithValue, getState }) => {
+  async (_, { rejectWithValue }) => {
     try {
-      const response = await apiService.getCurrentUser();
+      const response = await authApi.getCurrentUser();
       if (response.success && response.data) {
-        // Add computed name field for UI display
         const userWithName = {
           ...response.data,
-          name: `${response.data.firstName} ${response.data.lastName}`.trim()
+          name: `${response.data.firstName} ${response.data.lastName}`.trim(),
         };
         return userWithName;
-      } else {
-        // Check if it's an authentication error vs network error
-        const isAuthError = response.message?.includes('Unauthorized') || 
-                           response.message?.includes('401') ||
-                           response.message?.includes('token');
-        
-        // Check if tokens are still valid
-        const tokensValid = await securityManager.areTokensValid();
-        const shouldLogout = isAuthError && !tokensValid;
-        
-        return rejectWithValue({ 
-          message: response.message || 'Failed to get user data',
-          isAuthError,
-          shouldLogout
-        });
       }
-    } catch (error: any) {
-      // Check if it's an authentication error
-      const isAuthError = error.message?.includes('Unauthorized') || 
-                         error.message?.includes('401') ||
-                         error.response?.status === 401;
-      
-      // Check if tokens are still valid - if not, we should logout
+      const isAuthError =
+        response.message?.includes('Unauthorized') ||
+        response.message?.includes('401') ||
+        response.message?.includes('token');
       const tokensValid = await securityManager.areTokensValid();
       const shouldLogout = isAuthError && !tokensValid;
-      
-      return rejectWithValue({ 
+      return rejectWithValue({
+        message: response.message || 'Failed to get user data',
+        isAuthError,
+        shouldLogout,
+      });
+    } catch (error: any) {
+      const isAuthError =
+        error.message?.includes('Unauthorized') ||
+        error.message?.includes('401') ||
+        error.response?.status === 401;
+      const tokensValid = await securityManager.areTokensValid();
+      const shouldLogout = isAuthError && !tokensValid;
+      return rejectWithValue({
         message: error.message || 'Failed to get user data',
         isAuthError,
-        shouldLogout
+        shouldLogout,
       });
     }
   }
@@ -178,21 +147,16 @@ export const updateUserProfile = createAsyncThunk(
   'auth/updateProfile',
   async (userData: Partial<User>, { rejectWithValue }) => {
     try {
-      const response = await apiService.updateProfile(userData);
+      const response = await authApi.updateProfile(userData);
       if (response.success && response.data) {
-        // Add computed name field for UI display
         const userWithName = {
           ...response.data,
-          name: `${response.data.firstName} ${response.data.lastName}`.trim()
+          name: `${response.data.firstName} ${response.data.lastName}`.trim(),
         };
-        
-        // Update the stored user data in AsyncStorage so it persists across app restarts
         await securityManager.storeUserData(userWithName);
-        
         return userWithName;
-      } else {
-        return rejectWithValue(response.message || 'Failed to update profile');
       }
+      return rejectWithValue(response.message || 'Failed to update profile');
     } catch (error: any) {
       return rejectWithValue(error.message || 'Failed to update profile');
     }
@@ -203,12 +167,11 @@ export const forgotPassword = createAsyncThunk(
   'auth/forgotPassword',
   async (email: string, { rejectWithValue }) => {
     try {
-      const response = await apiService.forgotPassword(email);
+      const response = await authApi.forgotPassword(email);
       if (response.success) {
         return response.message;
-      } else {
-        return rejectWithValue(response.message || 'Failed to send reset email');
       }
+      return rejectWithValue(response.message || 'Failed to send reset email');
     } catch (error: any) {
       return rejectWithValue(error.message || 'Failed to send reset email');
     }
@@ -221,13 +184,13 @@ export const startImpersonation = createAsyncThunk(
     try {
       const state = getState() as { auth: AuthState };
       const currentTokens = await securityManager.getTokens();
-      const backup = {
+      if (!currentTokens || !state.auth.user) {
+        return rejectWithValue('No active session to impersonate from');
+      }
+      await securityManager.storeImpersonationBackup({
         user: state.auth.user,
-        token: state.auth.token,
-        refreshToken: state.auth.refreshToken,
         tokens: currentTokens,
-      };
-      await AsyncStorage.setItem(IMPERSONATION_BACKUP_KEY, JSON.stringify(backup));
+      });
 
       const result = await superAdminService.impersonateUser(targetUserId);
       const userWithName = {
@@ -238,23 +201,20 @@ export const startImpersonation = createAsyncThunk(
       await securityManager.storeTokens({
         accessToken: result.token,
         refreshToken: result.refreshToken,
-        expiresAt: Date.now() + (result.expiresIn * 1000),
+        expiresAt: Date.now() + result.expiresIn * 1000,
         tokenType: 'Bearer',
       });
       await securityManager.storeUserData(userWithName);
 
-      const impersonatorLabel = state.auth.user
-        ? `${state.auth.user.firstName} ${state.auth.user.lastName}`.trim() || state.auth.user.email
-        : 'Super Admin';
+      const impersonatorLabel =
+        `${state.auth.user.firstName} ${state.auth.user.lastName}`.trim() ||
+        state.auth.user.email;
 
-      return {
-        user: userWithName,
-        token: result.token,
-        refreshToken: result.refreshToken,
-        impersonatorLabel,
-      };
+      return { user: userWithName, impersonatorLabel };
     } catch (error: any) {
-      return rejectWithValue(error.response?.data?.error || error.message || 'Impersonation failed');
+      return rejectWithValue(
+        error.response?.data?.error || error.message || 'Impersonation failed'
+      );
     }
   }
 );
@@ -263,38 +223,22 @@ export const exitImpersonation = createAsyncThunk(
   'auth/exitImpersonation',
   async (_, { rejectWithValue }) => {
     try {
-      const raw = await AsyncStorage.getItem(IMPERSONATION_BACKUP_KEY);
-      if (!raw) {
+      const backup = await securityManager.getImpersonationBackup();
+      if (!backup) {
         return rejectWithValue('No impersonation session to restore');
       }
-      const backup = JSON.parse(raw);
-      if (backup.tokens) {
-        await securityManager.storeTokens(backup.tokens);
-      } else if (backup.token) {
-        await securityManager.storeTokens({
-          accessToken: backup.token,
-          refreshToken: backup.refreshToken,
-          expiresAt: Date.now() + 3600 * 1000,
-          tokenType: 'Bearer',
-        });
-      }
+      await securityManager.storeTokens(backup.tokens);
       if (backup.user) {
         await securityManager.storeUserData(backup.user);
       }
-      await AsyncStorage.removeItem(IMPERSONATION_BACKUP_KEY);
-
-      return {
-        user: backup.user,
-        token: backup.token,
-        refreshToken: backup.refreshToken,
-      };
+      await securityManager.clearImpersonationBackup();
+      return { user: backup.user };
     } catch (error: any) {
       return rejectWithValue(error.message || 'Failed to exit impersonation');
     }
   }
 );
 
-// Auth slice
 const authSlice = createSlice({
   name: 'auth',
   initialState,
@@ -308,15 +252,14 @@ const authSlice = createSlice({
     setUser: (state, action: PayloadAction<User>) => {
       const userWithName = {
         ...action.payload,
-        name: `${action.payload.firstName} ${action.payload.lastName}`.trim()
+        name: `${action.payload.firstName} ${action.payload.lastName}`.trim(),
       };
       state.user = userWithName;
       state.isAuthenticated = true;
+      state.sessionReady = true;
     },
     clearAuth: (state) => {
       state.user = null;
-      state.token = null;
-      state.refreshToken = null;
       state.tempUserId = null;
       state.tempEmail = null;
       state.isAuthenticated = false;
@@ -324,14 +267,17 @@ const authSlice = createSlice({
       state.error = null;
       state.impersonationActive = false;
       state.impersonatorLabel = null;
+      state.sessionReady = false;
     },
     setTempUserData: (state, action: PayloadAction<{ userId: string; email: string }>) => {
       state.tempUserId = action.payload.userId;
       state.tempEmail = action.payload.email;
     },
+    setSessionReady: (state, action: PayloadAction<boolean>) => {
+      state.sessionReady = action.payload;
+    },
   },
   extraReducers: (builder) => {
-    // Login
     builder
       .addCase(loginUser.pending, (state) => {
         state.isLoading = true;
@@ -340,9 +286,9 @@ const authSlice = createSlice({
       .addCase(loginUser.fulfilled, (state, action) => {
         state.isLoading = false;
         state.user = action.payload.user;
-        state.token = action.payload.token;
-        state.refreshToken = action.payload.refreshToken;
         state.isAuthenticated = true;
+        state.isEmailVerified = Boolean(action.payload.user.isEmailVerified);
+        state.sessionReady = true;
         state.error = null;
       })
       .addCase(loginUser.rejected, (state, action) => {
@@ -351,7 +297,6 @@ const authSlice = createSlice({
         state.isAuthenticated = false;
       });
 
-    // Register (returns userId and email for OTP, or tokens if OTP bypassed)
     builder
       .addCase(registerUser.pending, (state) => {
         state.isLoading = true;
@@ -359,18 +304,14 @@ const authSlice = createSlice({
       })
       .addCase(registerUser.fulfilled, (state, action) => {
         state.isLoading = false;
-        // Check if tokens are returned (dev mode OTP bypass)
-        if (action.payload.token && action.payload.user) {
-          // OTP was bypassed - user is already authenticated
+        if (action.payload.user) {
           state.user = action.payload.user;
-          state.token = action.payload.token;
-          state.refreshToken = action.payload.refreshToken;
           state.isAuthenticated = true;
           state.isEmailVerified = true;
+          state.sessionReady = true;
           state.tempUserId = null;
           state.tempEmail = null;
         } else {
-          // Normal flow - need OTP verification
           state.tempUserId = action.payload.userId;
           state.tempEmail = action.payload.email;
         }
@@ -381,7 +322,6 @@ const authSlice = createSlice({
         state.error = action.payload as string;
       });
 
-    // Verify OTP
     builder
       .addCase(verifyOTP.pending, (state) => {
         state.isLoading = true;
@@ -389,11 +329,13 @@ const authSlice = createSlice({
       })
       .addCase(verifyOTP.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.user = action.payload.user;
-        state.token = action.payload.token;
-        state.refreshToken = action.payload.refreshToken;
+        state.user = {
+          ...action.payload.user,
+          isEmailVerified: true,
+        };
         state.isAuthenticated = true;
         state.isEmailVerified = true;
+        state.sessionReady = true;
         state.tempUserId = null;
         state.tempEmail = null;
         state.error = null;
@@ -403,7 +345,6 @@ const authSlice = createSlice({
         state.error = action.payload as string;
       });
 
-    // Resend OTP
     builder
       .addCase(resendOTP.pending, (state) => {
         state.isLoading = true;
@@ -416,10 +357,8 @@ const authSlice = createSlice({
       .addCase(resendOTP.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload as string;
-        state.isAuthenticated = false;
       });
 
-    // Logout
     builder
       .addCase(logoutUser.pending, (state) => {
         state.isLoading = true;
@@ -427,17 +366,17 @@ const authSlice = createSlice({
       .addCase(logoutUser.fulfilled, (state) => {
         state.isLoading = false;
         state.user = null;
-        state.token = null;
-        state.refreshToken = null;
         state.isAuthenticated = false;
+        state.sessionReady = false;
         state.error = null;
+        state.impersonationActive = false;
+        state.impersonatorLabel = null;
       })
       .addCase(logoutUser.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload as string;
       });
 
-    // Get current user
     builder
       .addCase(getCurrentUser.pending, (state) => {
         state.isLoading = true;
@@ -447,41 +386,27 @@ const authSlice = createSlice({
         state.isLoading = false;
         state.user = action.payload;
         state.isAuthenticated = true;
+        state.isEmailVerified = Boolean(action.payload.isEmailVerified);
+        state.sessionReady = true;
         state.error = null;
       })
       .addCase(getCurrentUser.rejected, (state, action) => {
         state.isLoading = false;
         const payload = action.payload as any;
-        const errorMessage = typeof payload === 'string' ? payload : payload?.message || 'Failed to get user data';
+        const errorMessage =
+          typeof payload === 'string' ? payload : payload?.message || 'Failed to get user data';
         const isAuthError = typeof payload === 'object' && payload?.isAuthError;
         const shouldLogout = typeof payload === 'object' && payload?.shouldLogout;
-        
         state.error = errorMessage;
-        
-        // Only set isAuthenticated to false if:
-        // 1. It's explicitly marked as shouldLogout (tokens are invalid)
-        // 2. It's an auth error AND user was not already authenticated (initial check failed)
-        // Don't log out on network errors or temporary failures
         if (shouldLogout) {
-          // Tokens are invalid, user should be logged out
           state.isAuthenticated = false;
           state.user = null;
-          state.token = null;
-          state.refreshToken = null;
+          state.sessionReady = false;
         } else if (isAuthError && !state.isAuthenticated) {
-          // Only log out if we weren't already authenticated (initial check)
           state.isAuthenticated = false;
-        } else if (isAuthError && state.isAuthenticated) {
-          // If already authenticated but got auth error, the token refresh interceptor should handle it
-          // Don't auto-logout - keep user authenticated and let interceptor retry
-          if (__DEV__) {
-            console.warn('getCurrentUser failed with auth error but user is authenticated. Token refresh should handle this.');
-          }
         }
-        // For network errors or other non-auth errors, keep authentication state
       });
 
-    // Update profile
     builder
       .addCase(updateUserProfile.pending, (state) => {
         state.isLoading = true;
@@ -497,7 +422,6 @@ const authSlice = createSlice({
         state.error = action.payload as string;
       });
 
-    // Forgot password
     builder
       .addCase(forgotPassword.pending, (state) => {
         state.isLoading = true;
@@ -520,9 +444,8 @@ const authSlice = createSlice({
       .addCase(startImpersonation.fulfilled, (state, action) => {
         state.isLoading = false;
         state.user = action.payload.user;
-        state.token = action.payload.token;
-        state.refreshToken = action.payload.refreshToken;
         state.isAuthenticated = true;
+        state.sessionReady = true;
         state.impersonationActive = true;
         state.impersonatorLabel = action.payload.impersonatorLabel;
         state.error = null;
@@ -539,9 +462,8 @@ const authSlice = createSlice({
       .addCase(exitImpersonation.fulfilled, (state, action) => {
         state.isLoading = false;
         state.user = action.payload.user;
-        state.token = action.payload.token;
-        state.refreshToken = action.payload.refreshToken;
         state.isAuthenticated = true;
+        state.sessionReady = true;
         state.impersonationActive = false;
         state.impersonatorLabel = null;
         state.error = null;
@@ -553,5 +475,6 @@ const authSlice = createSlice({
   },
 });
 
-export const { clearError, setLoading, setUser, clearAuth } = authSlice.actions;
+export const { clearError, setLoading, setUser, clearAuth, setTempUserData, setSessionReady } =
+  authSlice.actions;
 export default authSlice.reducer;

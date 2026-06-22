@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TextInput,
   TouchableOpacity,
   Alert,
   ActivityIndicator,
@@ -12,6 +11,7 @@ import {
 import { useNavigation, useRoute } from '@react-navigation/native';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SharedHeader from '../../components/ui/SharedHeader';
+import FormInput from '../../components/common/FormInput';
 import CompanyPlanLimitsFields from '../../components/superAdmin/CompanyPlanLimitsFields';
 import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { superAdminService } from '../../services/superAdminService';
@@ -165,21 +165,85 @@ const EditCompanyScreen: React.FC = () => {
       />
       <ScrollView style={styles.scrollView}>
         <View style={styles.form}>
-          {(['name', 'email', 'phone', 'address', 'city', 'state', 'zipCode', 'country'] as const).map(
-            (field) => (
-              <View key={field} style={styles.formGroup}>
-                <Text style={styles.label}>{field.charAt(0).toUpperCase() + field.slice(1)}</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData[field]}
-                  onChangeText={(v) => handleInputChange(field, v)}
-                  editable={!saving}
-                  autoCapitalize={field === 'email' ? 'none' : 'sentences'}
-                  keyboardType={field === 'email' ? 'email-address' : 'default'}
-                />
-              </View>
-            )
-          )}
+          <FormInput
+            label="Company Name"
+            required
+            placeholder="Enter company name"
+            value={formData.name}
+            onChangeText={(v) => handleInputChange('name', v)}
+            editable={!saving}
+            containerStyle={styles.formGroup}
+          />
+          <FormInput
+            label="Email"
+            required
+            icon="mail-outline"
+            placeholder="company@example.com"
+            value={formData.email}
+            onChangeText={(v) => handleInputChange('email', v)}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            editable={!saving}
+            containerStyle={styles.formGroup}
+          />
+          <FormInput
+            label="Phone"
+            placeholder="+1-555-0123"
+            value={formData.phone}
+            onChangeText={(v) => handleInputChange('phone', v)}
+            keyboardType="phone-pad"
+            editable={!saving}
+            containerStyle={styles.formGroup}
+          />
+          <FormInput
+            label="Address"
+            placeholder="Street address"
+            value={formData.address}
+            onChangeText={(v) => handleInputChange('address', v)}
+            editable={!saving}
+            containerStyle={styles.formGroup}
+          />
+          <View style={styles.row}>
+            <View style={[styles.formGroup, styles.flex1, styles.marginRight]}>
+              <FormInput
+                label="City"
+                placeholder="City"
+                value={formData.city}
+                onChangeText={(v) => handleInputChange('city', v)}
+                editable={!saving}
+              />
+            </View>
+            <View style={[styles.formGroup, styles.flex1]}>
+              <FormInput
+                label="State"
+                placeholder="State"
+                value={formData.state}
+                onChangeText={(v) => handleInputChange('state', v)}
+                editable={!saving}
+              />
+            </View>
+          </View>
+          <View style={styles.row}>
+            <View style={[styles.formGroup, styles.flex1, styles.marginRight]}>
+              <FormInput
+                label="Zip Code"
+                placeholder="12345"
+                value={formData.zipCode}
+                onChangeText={(v) => handleInputChange('zipCode', v)}
+                keyboardType="numeric"
+                editable={!saving}
+              />
+            </View>
+            <View style={[styles.formGroup, styles.flex1]}>
+              <FormInput
+                label="Country"
+                placeholder="Country"
+                value={formData.country}
+                onChangeText={(v) => handleInputChange('country', v)}
+                editable={!saving}
+              />
+            </View>
+          </View>
 
           <CompanyPlanLimitsFields
             subscriptionPlan={formData.subscriptionPlan}
@@ -213,21 +277,9 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   form: { padding: SPACING.lg },
   formGroup: { marginBottom: SPACING.md },
-  label: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
-    marginBottom: SPACING.xs,
-    color: COLORS.textPrimary,
-  },
-  input: {
-    backgroundColor: COLORS.backgroundPrimary,
-    borderRadius: 8,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    fontSize: TYPOGRAPHY.fontSize.md,
-  },
+  row: { flexDirection: 'row' },
+  flex1: { flex: 1 },
+  marginRight: { marginRight: SPACING.sm },
   submitButton: {
     margin: SPACING.lg,
     backgroundColor: COLORS.primary,

@@ -3,7 +3,7 @@
  * Complete admin operations with streamlined navigation
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -41,6 +41,17 @@ import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 import { useNotificationBell } from '../../hooks/useNotificationBell';
 import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
 import { RefreshControl } from 'react-native';
+import EmergencyAlertsPanel from '../../components/emergency/EmergencyAlertsPanel';
+import operationsService, { EmergencyAlert } from '../../services/operationsService';
+import {
+  applyAckCooldown,
+  filterPendingEmergencyAlerts,
+  getCooldownFromMessage,
+  getRemainingCooldownSeconds,
+  navigateToEmergencyAlertResponse,
+} from '../../utils/emergencyAlertUtils';
+import { useEmergencyRealtimeRefresh } from '../../hooks/useEmergencyRealtimeRefresh';
+import { navigateToAdminSettingsTab } from '../../utils/tabNavigationHelpers';
 
 const { width } = Dimensions.get('window');
 
@@ -75,6 +86,30 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
   );
 
   const [refreshing, setRefreshing] = useState(false);
+  const [emergencyAlerts, setEmergencyAlerts] = useState<EmergencyAlert[]>([]);
+  const [emergencyLoading, setEmergencyLoading] = useState(false);
+  const [acknowledgingAlertId, setAcknowledgingAlertId] = useState<string | null>(null);
+  const [ackCooldownUntilById, setAckCooldownUntilById] = useState<Record<string, number>>({});
+
+  const loadEmergencyAlerts = useCallback(async () => {
+    setEmergencyLoading(true);
+    try {
+      const alerts = await operationsService.getActiveEmergencyAlerts();
+      setEmergencyAlerts(alerts);
+    } catch (error) {
+      console.error('Error loading emergency alerts:', error);
+      setEmergencyAlerts([]);
+    } finally {
+      setEmergencyLoading(false);
+    }
+  }, []);
+
+  const pendingEmergencyAlerts = useMemo(
+    () => filterPendingEmergencyAlerts(emergencyAlerts),
+    [emergencyAlerts],
+  );
+
+  useEmergencyRealtimeRefresh(loadEmergencyAlerts);
 
   const [quickActions] = useState([
     {
@@ -135,6 +170,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
 
   useEffect(() => {
     loadDashboardData();
+    loadEmergencyAlerts();
   }, []);
 
   const loadDashboardData = async () => {
@@ -154,6 +190,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
       await Promise.all([
         dispatch(fetchDashboardStats()),
         dispatch(fetchRecentActivity(10)),
+        loadEmergencyAlerts(),
       ]);
     } catch (error) {
       console.error('Error refreshing dashboard:', error);
@@ -166,15 +203,57 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
     navigation.navigate(action.screen);
   };
 
-  const handleEmergencyAlert = () => {
+  const handleEmergencyAlert = (alertId: string) => {
+    if (acknowledgingAlertId) {
+      return;
+    }
+
+    const remaining = getRemainingCooldownSeconds(alertId, ackCooldownUntilById);
+    if (remaining > 0) {
+      Alert.alert('Please Wait', `You can retry this action in ${remaining} seconds.`);
+      return;
+    }
+
     Alert.alert(
-      'Emergency Protocol',
-      'Activate emergency response protocol?',
+      'Emergency Alert',
+      'Acknowledge this emergency alert and dispatch assistance?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Activate', style: 'destructive', onPress: () => console.log('Emergency activated') },
-      ]
+        {
+          text: 'Dispatch',
+          style: 'destructive',
+          onPress: () => acknowledgeEmergency(alertId),
+        },
+      ],
     );
+  };
+
+  const acknowledgeEmergency = async (alertId: string) => {
+    if (acknowledgingAlertId) {
+      return;
+    }
+
+    setAcknowledgingAlertId(alertId);
+    try {
+      const result = await operationsService.acknowledgeEmergencyAlert(alertId);
+      if (result.success) {
+        const alreadyHandled = result.message?.toLowerCase().includes('already') ?? false;
+        const responseCooldown = getCooldownFromMessage(result.message);
+        applyAckCooldown(alertId, responseCooldown || (alreadyHandled ? 20 : 8), setAckCooldownUntilById);
+        setEmergencyAlerts((prev) => prev.filter((alert) => alert.id !== alertId));
+        await loadEmergencyAlerts();
+        Alert.alert(
+          alreadyHandled ? 'Already Acknowledged' : 'Emergency Dispatched',
+          alreadyHandled
+            ? 'This emergency alert was already acknowledged.'
+            : 'Emergency response has been dispatched.',
+        );
+      } else {
+        Alert.alert('Error', result.message || 'Failed to dispatch emergency response.');
+      }
+    } finally {
+      setAcknowledgingAlertId(null);
+    }
   };
 
   const handleLogout = async () => {
@@ -240,7 +319,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
           }}
           onNavigateToSettings={() => {
             closeDrawer();
-            navigation.navigate('AdminSettings');
+            navigateToAdminSettingsTab(navigation);
           }}
         />
       }
@@ -433,8 +512,23 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
   }
 
   // Prepare sections for FlatList
+  const renderEmergencyAlerts = () => (
+    <View style={styles.emergencySection}>
+      <EmergencyAlertsPanel
+        alerts={pendingEmergencyAlerts}
+        loading={emergencyLoading}
+        title="Active Emergency"
+        onAcknowledge={handleEmergencyAlert}
+        onAlertPress={(alertId) => navigateToEmergencyAlertResponse(navigation, alertId)}
+        acknowledgeLabel="Dispatch"
+        acknowledgingAlertId={acknowledgingAlertId}
+      />
+    </View>
+  );
+
   const sections = [
     { type: 'metrics', key: 'metrics' },
+    { type: 'emergency', key: 'emergency' },
     { type: 'quickActions', key: 'quickActions' },
     { type: 'recentActivity', key: 'recentActivity' },
   ];
@@ -443,6 +537,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
     switch (item.type) {
       case 'metrics':
         return renderMetricsOverview();
+      case 'emergency':
+        return renderEmergencyAlerts();
       case 'quickActions':
         return renderQuickActions();
       case 'recentActivity':
@@ -457,6 +553,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ navigation }) => {
       {renderHeader()}
       
       <FlatList
+        testID="admin-dashboard-screen"
         style={styles.content}
         data={sections}
         renderItem={renderSectionItem}
@@ -576,6 +673,9 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: SPACING.sm,
     justifyContent: 'space-between',
+  },
+  emergencySection: {
+    marginTop: SPACING.lg,
   },
   statCard: {
     flex: 1,

@@ -12,7 +12,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { StatusHistoryEntry, ShiftReport } from '../../types/shift.types';
-import { ArrowLeftIcon } from '../../components/ui/AppIcons';
+import { ChevronLeftIcon } from '../../components/ui/AppIcons';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -107,7 +107,7 @@ const IncidentReportDetailScreen: React.FC = () => {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <ArrowLeftIcon size={22} color={COLORS.primary} />
+          <ChevronLeftIcon size={22} color={COLORS.primary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Report Details</Text>
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor(currentStatus) + '22' }]}>

@@ -6,6 +6,11 @@ import websocketService from './services/websocketService.js';
 import notificationService from './services/notificationService.js';
 import { isFirebaseAdminInitialized, initializeFirebaseAdmin } from './config/firebase.js';
 import ChatService from './services/chatService.js';
+import { tryAcquireJobLeaderLock, releaseJobLeaderLock } from './utils/jobLeader.js';
+import { closeCache } from './utils/cache.js';
+import { closeRedisClients } from './config/redis.js';
+import { closePushRetryQueue } from './jobs/pushRetryQueue.js';
+import { startPushRetryWorker, stopPushRetryWorker } from './jobs/pushRetryWorker.js';
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 
@@ -33,15 +38,18 @@ const startServer = async () => {
 
     // Initialize WebSocket service
     websocketService.initialize(server);
+    await websocketService.attachRedisAdapter();
 
-    // Start live location broadcast
-    websocketService.startLiveLocationBroadcast();
-
-    // Retry failed emergency push notifications
-    notificationService.startPushRetryProcessor();
-
-    // Purge dead FCM tokens and cap active tokens per user
-    notificationService.startDeviceTokenCleanupProcessor();
+    const isJobLeader = await tryAcquireJobLeaderLock();
+    if (isJobLeader) {
+      logger.info('This instance is the background job leader');
+      websocketService.startLiveLocationBroadcast();
+      notificationService.startPushRetryProcessor();
+      notificationService.startDeviceTokenCleanupProcessor();
+      await startPushRetryWorker();
+    } else {
+      logger.info('Background jobs skipped — another instance holds leader lock');
+    }
 
     // Start server - listen on all interfaces (0.0.0.0) for network access
     server.listen(PORT, '0.0.0.0', () => {
@@ -51,6 +59,9 @@ const startServer = async () => {
       logger.info(`❤️  Health: http://localhost:${PORT}/api/health`);
       logger.info(`🌐 WebSocket: ws://localhost:${PORT} (or use your local IP)`);
       logger.info(`📱 For physical devices, use: http://YOUR_LOCAL_IP:${PORT}`);
+      if (process.env.REDIS_URL) {
+        logger.info('Redis enabled — OTP limits, BullMQ push retries, Socket.IO adapter');
+      }
     });
 
     // Graceful shutdown
@@ -59,7 +70,11 @@ const startServer = async () => {
       
       server.close(async () => {
         logger.info('HTTP server closed');
-        
+        await stopPushRetryWorker();
+        await closePushRetryQueue();
+        await releaseJobLeaderLock();
+        await closeCache();
+        await closeRedisClients();
         await disconnectDatabase();
         
         logger.info('Graceful shutdown complete');

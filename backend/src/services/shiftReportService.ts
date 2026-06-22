@@ -1,6 +1,5 @@
-import { PrismaClient, ReportTypeEnum, ShiftReport } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { ReportTypeEnum, ShiftReport } from '@prisma/client';
+import prisma from '../config/database.js';
 
 export interface CreateShiftReportData {
   shiftId: string;

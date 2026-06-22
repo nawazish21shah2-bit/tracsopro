@@ -14,11 +14,13 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
+import BackNavButton from '../../components/common/BackNavButton';
 import { LocationIcon, ClockIcon, CheckCircleIcon } from '../../components/ui/AppIcons';
 import { MapPinIcon, CalendarIcon } from '../../components/ui/FeatherIcons';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 import GuardProfileDrawer from '../../components/guard/GuardProfileDrawer';
-import apiService from '../../services/api';
+import { clientApi } from '../../services/api/clientApi';
+import { shiftApi } from '../../services/api/shiftApi';
 
 interface SiteDetails {
   id: string;
@@ -86,7 +88,7 @@ const GuardSiteDetailsScreen: React.FC = () => {
       }
       
       // Load site details from API
-      const siteResult = await apiService.getSiteById(siteId);
+      const siteResult = await clientApi.getSiteById(siteId);
       
       if (siteResult.success && siteResult.data) {
         const siteData = siteResult.data;
@@ -107,7 +109,7 @@ const GuardSiteDetailsScreen: React.FC = () => {
         // Load shifts for this site
         try {
           // Get shifts assigned to the current guard for this site
-          const shiftsResult = await apiService.getUpcomingShifts();
+          const shiftsResult = await shiftApi.getUpcomingShifts();
           if (shiftsResult.success && shiftsResult.data) {
             const allShifts = Array.isArray(shiftsResult.data) ? shiftsResult.data : [];
             const siteShifts = allShifts.filter((shift: any) => shift.siteId === siteId);
@@ -262,12 +264,7 @@ const GuardSiteDetailsScreen: React.FC = () => {
         />
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>Site not found</Text>
-          <TouchableOpacity 
-            style={styles.retryButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.retryButtonText}>Go Back</Text>
-          </TouchableOpacity>
+          <BackNavButton label="Go Back" onPress={() => navigation.goBack()} />
         </View>
       </SafeAreaWrapper>
     );

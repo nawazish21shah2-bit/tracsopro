@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import FormInput from '../common/FormInput';
 import { ReportType } from '../../types/shift.types';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import ReportsActionBar from './ReportsActionBar';
@@ -33,17 +34,15 @@ const ReportForm: React.FC<ReportFormProps> = ({ onSubmit, loading = false }) =>
     <View style={styles.container}>
       {/* Report Input */}
       <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.textInput}
-          placeholder="Enter your report details..."
-          placeholderTextColor={COLORS.textSecondary}
+        <FormInput
           value={content}
           onChangeText={setContent}
+          placeholder="Enter your report details..."
           multiline
           numberOfLines={4}
-          textAlignVertical="top"
+          maxLength={500}
+          helperText={`${content.length}/500`}
         />
-        <Text style={styles.characterCount}>{content.length}/500</Text>
       </View>
 
       <TouchableOpacity
@@ -82,22 +81,6 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     marginBottom: SPACING.lg,
-  },
-  textInput: {
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.md,
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.textPrimary,
-    minHeight: 100,
-    maxHeight: 150,
-  },
-  characterCount: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    color: COLORS.textSecondary,
-    textAlign: 'right',
-    marginTop: SPACING.xs,
   },
   incidentShortcut: {
     marginBottom: SPACING.md,

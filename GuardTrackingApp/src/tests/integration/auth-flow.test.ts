@@ -63,7 +63,8 @@ describe('Authentication Flow Integration', () => {
         role: mockUser.role,
       });
       expect(state.auth.isAuthenticated).toBe(true);
-      expect(state.auth.token).toBe('access-token');
+      expect(state.auth.sessionReady).toBe(true);
+      expect((state.auth as any).token).toBeUndefined();
     });
 
     it('should handle login failure and show error', async () => {

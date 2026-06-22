@@ -19,7 +19,6 @@ import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/nativ
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import ProfileAvatar from '../../components/common/ProfileAvatar';
 import { 
-  ArrowLeft, 
   Mic, 
   Smile, 
   Send,
@@ -30,6 +29,7 @@ import {
   MessageCircle,
   X,
 } from 'react-native-feather';
+import { ChevronLeftIcon } from '../../components/ui/FeatherIcons';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import WebSocketService from '../../services/WebSocketService';
 import DropdownMenu, { DropdownMenuItem } from '../../components/ui/DropdownMenu';
@@ -475,7 +475,7 @@ const IndividualChatScreen: React.FC = () => {
             style={styles.backButton}
             onPress={() => navigation.goBack()}
           >
-            <ArrowLeft width={24} height={24} color={COLORS.textInverse} />
+            <ChevronLeftIcon size={24} color={COLORS.textInverse} />
           </TouchableOpacity>
           
           <View style={styles.headerContent}>
@@ -656,6 +656,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginLeft: SPACING.sm,
+    gap: SPACING.sm,
   },
   avatarContainer: {
     width: 36,

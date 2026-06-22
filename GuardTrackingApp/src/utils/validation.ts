@@ -4,7 +4,7 @@ export interface ValidationRule {
   minLength?: number;
   maxLength?: number;
   pattern?: RegExp;
-  custom?: (value: any) => string | null;
+  custom?: (value: any, formData?: Record<string, any>) => string | null;
   message?: string;
 }
 
@@ -24,12 +24,12 @@ export class FormValidator {
     return this;
   }
 
-  validateField(field: string, value: any): string | null {
+  validateField(field: string, value: any, formData?: Record<string, any>): string | null {
     const fieldRules = this.rules[field];
     if (!fieldRules) return null;
 
     for (const rule of fieldRules) {
-      const error = this.validateRule(value, rule);
+      const error = this.validateRule(value, rule, formData);
       if (error) return error;
     }
 
@@ -40,7 +40,7 @@ export class FormValidator {
     const errors: Record<string, string> = {};
 
     for (const field in this.rules) {
-      const error = this.validateField(field, data[field]);
+      const error = this.validateField(field, data[field], data);
       if (error) {
         errors[field] = error;
       }
@@ -52,7 +52,7 @@ export class FormValidator {
     };
   }
 
-  private validateRule(value: any, rule: ValidationRule): string | null {
+  private validateRule(value: any, rule: ValidationRule, formData?: Record<string, any>): string | null {
     // Required validation
     if (rule.required && (!value || (typeof value === 'string' && value.trim() === ''))) {
       return rule.message || 'This field is required';
@@ -80,7 +80,7 @@ export class FormValidator {
 
     // Custom validation
     if (rule.custom) {
-      const customError = rule.custom(value);
+      const customError = rule.custom(value, formData);
       if (customError) {
         return customError;
       }
@@ -116,6 +116,9 @@ export const createEmailValidator = () => {
   return new FormValidator()
     .addRule('email', {
       required: true,
+      message: ValidationMessages.required,
+    })
+    .addRule('email', {
       pattern: ValidationPatterns.email,
       message: ValidationMessages.email,
     });
@@ -125,6 +128,9 @@ export const createPasswordValidator = () => {
   return new FormValidator()
     .addRule('password', {
       required: true,
+      message: ValidationMessages.required,
+    })
+    .addRule('password', {
       minLength: 8,
       pattern: ValidationPatterns.password,
       message: ValidationMessages.password,
@@ -135,6 +141,9 @@ export const createLoginValidator = () => {
   return new FormValidator()
     .addRule('email', {
       required: true,
+      message: ValidationMessages.required,
+    })
+    .addRule('email', {
       pattern: ValidationPatterns.email,
       message: ValidationMessages.email,
     })

@@ -33,26 +33,6 @@ export const useDataSync = (): UseDataSyncReturn => {
     error: null,
   });
 
-  // Monitor network status
-  useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener(state => {
-      const isOnline = state.isConnected === true;
-      
-      setSyncState(prev => ({
-        ...prev,
-        isOnline,
-        error: isOnline ? null : 'No internet connection',
-      }));
-
-      // Auto-sync when coming back online
-      if (isOnline && !syncState.isOnline) {
-        sync();
-      }
-    });
-
-    return unsubscribe;
-  }, []);
-
   // Monitor sync queue status
   useEffect(() => {
     const checkSyncQueue = () => {
@@ -130,6 +110,23 @@ export const useDataSync = (): UseDataSyncReturn => {
       setSyncState(prev => ({ ...prev, isSyncing: false }));
     }
   }, [dispatch]);
+
+  useEffect(() => {
+    let wasOnline = true;
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      const isOnline = state.isConnected === true;
+      setSyncState((prev) => ({
+        ...prev,
+        isOnline,
+        error: isOnline ? null : 'No internet connection',
+      }));
+      if (isOnline && !wasOnline) {
+        sync();
+      }
+      wasOnline = isOnline;
+    });
+    return unsubscribe;
+  }, [sync]);
 
   // Clear cache
   const clearCache = useCallback(async () => {

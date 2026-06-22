@@ -58,7 +58,7 @@ describe('Shift Slice', () => {
       const action = { type: fetchMonthlyStats.pending.type };
       const state = shiftReducer(initialState, action);
 
-      expect(state.statisticsLoading).toBe(true);
+      expect(state.loading).toBe(true);
       expect(state.error).toBeNull();
     });
 
@@ -78,7 +78,7 @@ describe('Shift Slice', () => {
       const state = shiftReducer(initialState, action);
 
       expect(state.stats).toEqual(mockStats);
-      expect(state.statisticsLoading).toBe(false);
+      expect(state.loading).toBe(false);
       expect(state.error).toBeNull();
     });
 
@@ -90,7 +90,7 @@ describe('Shift Slice', () => {
 
       const state = shiftReducer(initialState, action);
 
-      expect(state.statisticsLoading).toBe(false);
+      expect(state.loading).toBe(false);
       expect(state.error).toBe('Failed to fetch stats');
     });
   });
@@ -166,7 +166,6 @@ describe('Shift Slice', () => {
       const state = shiftReducer(initialState, action);
 
       expect(state.activeShift).toEqual(mockShift);
-      expect(state.currentShift).toEqual(mockShift);
       expect(state.loading).toBe(false);
     });
 
@@ -179,7 +178,6 @@ describe('Shift Slice', () => {
       const state = shiftReducer(initialState, action);
 
       expect(state.activeShift).toBeNull();
-      expect(state.currentShift).toBeNull();
       expect(state.loading).toBe(false);
     });
 

@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TextInput,
   TouchableOpacity,
   Alert,
   ActivityIndicator,
@@ -12,6 +11,7 @@ import {
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SharedHeader from '../../components/ui/SharedHeader';
+import FormInput from '../../components/common/FormInput';
 import { HelpCircle, ChevronRight } from 'react-native-feather';
 import { useRoleScreenHeader, RoleHeaderVariant } from '../../hooks/useRoleScreenHeader';
 import supportApiService, { SupportTicketRecord } from '../../services/supportApiService';
@@ -214,32 +214,30 @@ const SupportContactScreen: React.FC<SupportContactScreenProps> = ({
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.label}>Subject *</Text>
-          <TextInput
-            style={styles.input}
+          <FormInput
+            label="Subject"
+            required
+            icon="edit"
             value={formData.subject}
             onChangeText={(text) => setFormData({ ...formData, subject: text })}
             placeholder="Brief description of your issue"
-            placeholderTextColor={COLORS.textTertiary}
             maxLength={200}
+            helperText={`${formData.subject.length}/200 characters`}
           />
-          <Text style={styles.helperText}>{formData.subject.length}/200 characters</Text>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.label}>Message *</Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
+          <FormInput
+            label="Message"
+            required
             value={formData.message}
             onChangeText={(text) => setFormData({ ...formData, message: text })}
             placeholder="Please provide details about your issue or question..."
-            placeholderTextColor={COLORS.textTertiary}
             multiline
             numberOfLines={8}
-            textAlignVertical="top"
             maxLength={5000}
+            helperText={`${formData.message.length}/5000 characters`}
           />
-          <Text style={styles.helperText}>{formData.message.length}/5000 characters</Text>
         </View>
 
         <TouchableOpacity

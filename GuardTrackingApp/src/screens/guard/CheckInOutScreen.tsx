@@ -4,20 +4,22 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  TextInput,
   Alert,
   Dimensions,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { ArrowLeft, MapPin, Clock, CheckCircle, XCircle, Camera } from 'react-native-feather';
+import { MapPin, Clock, CheckCircle, XCircle, Camera } from 'react-native-feather';
+import { ChevronLeftIcon } from '../../components/ui/FeatherIcons';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
-import apiService from '../../services/api';
+import { shiftApi } from '../../services/api/shiftApi';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { getCurrentLocationWithRetry } from '../../utils/safeLocationHelper';
 import locationTrackingService from '../../services/locationTrackingService';
 import WebSocketService from '../../services/WebSocketService';
+import { useDataSync } from '../../hooks/useDataSync';
+import FormInput from '../../components/common/FormInput';
 
 const { width } = Dimensions.get('window');
 
@@ -38,6 +40,7 @@ const CheckInOutScreen: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { assignmentId } = route.params as { assignmentId: string };
+  const { isOnline } = useDataSync();
 
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
@@ -53,7 +56,7 @@ const CheckInOutScreen: React.FC = () => {
 
   const loadAssignment = async () => {
     try {
-      const result = await apiService.getShiftById(assignmentId);
+      const result = await shiftApi.getShiftById(assignmentId);
 
       if (result.success && result.data) {
         const shift = result.data;
@@ -104,7 +107,7 @@ const CheckInOutScreen: React.FC = () => {
         Alert.alert('Location Error', locError?.message || 'Could not get your location. Check-in will proceed without location data.');
       }
 
-      const result = await apiService.checkInToShift(assignmentId, location);
+      const result = await shiftApi.checkInToShift(assignmentId, location);
 
       if (result.success) {
         // Update local state
@@ -162,7 +165,7 @@ const CheckInOutScreen: React.FC = () => {
         Alert.alert('Location Error', locError?.message || 'Could not get your location. Check-out will proceed without location data.');
       }
 
-      const result = await apiService.checkOutFromShift(assignmentId, location, notes);
+      const result = await shiftApi.checkOutFromShift(assignmentId, location, notes);
 
       if (result.success) {
         // Update local state
@@ -239,13 +242,18 @@ const CheckInOutScreen: React.FC = () => {
 
   return (
     <SafeAreaWrapper includeTop>
+      {!isOnline && (
+        <View style={styles.offlineBanner}>
+          <Text style={styles.offlineBannerText}>Offline — check-in will queue when back online</Text>
+        </View>
+      )}
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <ArrowLeft width={24} height={24} color="#333" />
+          <ChevronLeftIcon size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>
           {isCompleted ? 'Shift Completed' : canCheckOut ? 'Check Out' : 'Check In'}
@@ -318,15 +326,12 @@ const CheckInOutScreen: React.FC = () => {
                 : 'Add any notes about your arrival or observations'
               }
             </Text>
-            <TextInput
-              style={styles.notesInput}
+            <FormInput
               value={notes}
               onChangeText={setNotes}
-              placeholder={canCheckOut ? "Shift completed successfully..." : "Arrived on time, all secure..."}
-              placeholderTextColor="#999"
+              placeholder={canCheckOut ? 'Shift completed successfully...' : 'Arrived on time, all secure...'}
               multiline
               numberOfLines={4}
-              textAlignVertical="top"
             />
           </View>
         )}
@@ -431,6 +436,16 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  offlineBanner: {
+    backgroundColor: '#FEF3C7',
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+  },
+  offlineBannerText: {
+    color: '#92400E',
+    textAlign: 'center',
+    fontSize: TYPOGRAPHY.fontSize.sm,
   },
   timeContainer: {
     backgroundColor: COLORS.primary,

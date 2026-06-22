@@ -1,12 +1,14 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
+import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
+import { PlusIcon } from './FeatherIcons';
 
 interface SectionHeaderProps {
   title: string;
   subtitle?: string;
   actionLabel?: string;
   onActionPress?: () => void;
+  showActionIcon?: boolean;
 }
 
 const SectionHeader: React.FC<SectionHeaderProps> = ({
@@ -14,6 +16,7 @@ const SectionHeader: React.FC<SectionHeaderProps> = ({
   subtitle,
   actionLabel,
   onActionPress,
+  showActionIcon = true,
 }) => (
   <View style={styles.row}>
     <View style={styles.textBlock}>
@@ -21,8 +24,14 @@ const SectionHeader: React.FC<SectionHeaderProps> = ({
       {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
     </View>
     {actionLabel && onActionPress ? (
-      <TouchableOpacity onPress={onActionPress} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-        <Text style={styles.action}>{actionLabel}</Text>
+      <TouchableOpacity
+        style={styles.actionButton}
+        onPress={onActionPress}
+        activeOpacity={0.85}
+        hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+      >
+        {showActionIcon ? <PlusIcon size={14} color={COLORS.textInverse} /> : null}
+        <Text style={styles.actionButtonText}>{actionLabel.replace(/^\+ /, '')}</Text>
       </TouchableOpacity>
     ) : null}
   </View>
@@ -31,7 +40,7 @@ const SectionHeader: React.FC<SectionHeaderProps> = ({
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: SPACING.md,
     gap: SPACING.sm,
@@ -52,10 +61,20 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontFamily: TYPOGRAPHY.fontPrimary,
   },
-  action: {
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.primary,
+    ...SHADOWS.small,
+  },
+  actionButtonText: {
     fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
-    color: COLORS.primary,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textInverse,
     fontFamily: TYPOGRAPHY.fontPrimary,
   },
 });

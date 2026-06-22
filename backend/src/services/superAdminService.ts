@@ -1,18 +1,18 @@
-import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { AuthService } from './authService.js';
 import PaymentService from './paymentService.js';
+import prisma from '../config/database.js';
+import { logger } from '../utils/logger.js';
 import {
   parsePeriod,
   getPeriodRanges,
   metricWithGrowth,
   getChartBucketCount,
   buildChartLabels,
-  getBucketDateRange,
+  bucketRevenueFromRecords,
+  bucketCumulativeUsers,
 } from '../utils/superAdminAnalyticsUtils.js';
-
-const prisma = new PrismaClient();
 
 export class SuperAdminService {
   /**
@@ -150,7 +150,7 @@ export class SuperAdminService {
         recentActivity,
       };
     } catch (error) {
-      console.error('Error getting platform overview:', error);
+      logger.error('Error getting platform overview:', error);
       throw new Error('Failed to get platform overview');
     }
   }
@@ -180,7 +180,7 @@ export class SuperAdminService {
 
       return company;
     } catch (error) {
-      console.error('Error getting security company:', error);
+      logger.error('Error getting security company:', error);
       throw new Error('Failed to get security company');
     }
   }
@@ -202,7 +202,7 @@ export class SuperAdminService {
 
       return { id: companyId };
     } catch (error) {
-      console.error('Error deleting security company:', error);
+      logger.error('Error deleting security company:', error);
       throw new Error('Failed to delete security company');
     }
   }
@@ -273,7 +273,7 @@ export class SuperAdminService {
         }
       };
     } catch (error) {
-      console.error('Error getting security companies:', error);
+      logger.error('Error getting security companies:', error);
       throw new Error('Failed to get security companies');
     }
   }
@@ -391,7 +391,7 @@ export class SuperAdminService {
 
       return result;
     } catch (error) {
-      console.error('Error creating security company:', error);
+      logger.error('Error creating security company:', error);
       if (error instanceof Error) {
         throw error;
       }
@@ -418,7 +418,7 @@ export class SuperAdminService {
 
       return updatedCompany;
     } catch (error) {
-      console.error('Error updating security company:', error);
+      logger.error('Error updating security company:', error);
       throw new Error('Failed to update security company');
     }
   }
@@ -441,7 +441,7 @@ export class SuperAdminService {
 
       return company;
     } catch (error) {
-      console.error('Error toggling company status:', error);
+      logger.error('Error toggling company status:', error);
       throw new Error('Failed to toggle company status');
     }
   }
@@ -466,34 +466,33 @@ export class SuperAdminService {
       const bucketCount = getChartBucketCount(period);
       const labels = buildChartLabels(period, startDate, bucketCount);
 
-      const revenueData: number[] = [];
-      const userData: number[] = [];
+      const [paidRecords, userCreatedAt] = await Promise.all([
+        prisma.billingRecord.findMany({
+          where: {
+            status: 'PAID',
+            paidDate: { gte: startDate, lte: endDate },
+          },
+          select: { amount: true, paidDate: true },
+        }),
+        prisma.user.findMany({
+          where: { createdAt: { lte: endDate } },
+          select: { createdAt: true },
+        }),
+      ]);
 
-      for (let i = 0; i < bucketCount; i++) {
-        const { bucketStart, bucketEnd } = getBucketDateRange(
-          period,
-          startDate,
-          endDate,
-          i,
-          bucketCount
-        );
-
-        const [revenueAgg, userCount] = await Promise.all([
-          prisma.billingRecord.aggregate({
-            where: {
-              status: 'PAID',
-              paidDate: { gte: bucketStart, lte: bucketEnd },
-            },
-            _sum: { amount: true },
-          }),
-          prisma.user.count({
-            where: { createdAt: { lte: bucketEnd } },
-          }),
-        ]);
-
-        revenueData.push(revenueAgg._sum.amount || 0);
-        userData.push(userCount);
-      }
+      const revenueData = bucketRevenueFromRecords(
+        paidRecords,
+        startDate,
+        endDate,
+        bucketCount
+      );
+      const userData = bucketCumulativeUsers(
+        userCreatedAt.map((u) => u.createdAt.getTime()),
+        period,
+        startDate,
+        endDate,
+        bucketCount
+      );
 
       const [
         revenueCurrent,
@@ -553,7 +552,7 @@ export class SuperAdminService {
         dateRange: { startDate, endDate },
       };
     } catch (error) {
-      console.error('Error getting platform analytics:', error);
+      logger.error('Error getting platform analytics:', error);
       throw new Error('Failed to get platform analytics');
     }
   }
@@ -618,7 +617,7 @@ export class SuperAdminService {
         recentTransactions
       };
     } catch (error) {
-      console.error('Error getting billing overview:', error);
+      logger.error('Error getting billing overview:', error);
       throw new Error('Failed to get billing overview');
     }
   }
@@ -693,7 +692,7 @@ export class SuperAdminService {
         },
       };
     } catch (error) {
-      console.error('Error getting audit logs:', error);
+      logger.error('Error getting audit logs:', error);
       throw new Error('Failed to get audit logs');
     }
   }
@@ -723,7 +722,7 @@ export class SuperAdminService {
         }
       });
     } catch (error) {
-      console.error('Error logging action:', error);
+      logger.error('Error logging action:', error);
     }
   }
 
@@ -752,7 +751,7 @@ export class SuperAdminService {
 
       return grouped;
     } catch (error) {
-      console.error('Error getting platform settings:', error);
+      logger.error('Error getting platform settings:', error);
       throw new Error('Failed to get platform settings');
     }
   }
@@ -797,7 +796,7 @@ export class SuperAdminService {
       await Promise.all(ops);
       return { success: true };
     } catch (error) {
-      console.error('Error updating platform settings:', error);
+      logger.error('Error updating platform settings:', error);
       throw new Error('Failed to update platform settings');
     }
   }
@@ -835,7 +834,7 @@ export class SuperAdminService {
 
       return result; // { token, refreshToken, user, expiresIn }
     } catch (error) {
-      console.error('Error impersonating user:', error);
+      logger.error('Error impersonating user:', error);
       throw new Error('Failed to impersonate user');
     }
   }
@@ -914,7 +913,7 @@ export class SuperAdminService {
         }
       };
     } catch (error) {
-      console.error('Error getting payment records:', error);
+      logger.error('Error getting payment records:', error);
       throw new Error('Failed to get payment records');
     }
   }
@@ -964,7 +963,7 @@ export class SuperAdminService {
 
       return { ...record, subscription };
     } catch (error) {
-      console.error('Error getting payment record:', error);
+      logger.error('Error getting payment record:', error);
       throw error;
     }
   }
@@ -1003,7 +1002,7 @@ export class SuperAdminService {
 
       return record;
     } catch (error) {
-      console.error('Error updating payment status:', error);
+      logger.error('Error updating payment status:', error);
       throw new Error('Failed to update payment status');
     }
   }
@@ -1127,7 +1126,7 @@ export class SuperAdminService {
         recentPayments
       };
     } catch (error) {
-      console.error('Error getting payment analytics:', error);
+      logger.error('Error getting payment analytics:', error);
       throw new Error('Failed to get payment analytics');
     }
   }
@@ -1193,7 +1192,7 @@ export class SuperAdminService {
         data: payload,
       };
     } catch (error) {
-      console.error('Error exporting platform data:', error);
+      logger.error('Error exporting platform data:', error);
       throw new Error('Failed to export platform data');
     }
   }

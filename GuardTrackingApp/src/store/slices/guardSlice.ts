@@ -1,7 +1,7 @@
 // Guard Management Redux Slice
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { Guard, GuardState, GuardForm, GuardStatus } from '../../types';
-import apiService from '../../services/api';
+import { adminApi } from '../../services/api/adminApi';
 
 // Initial state
 const initialState: GuardState = {
@@ -16,7 +16,7 @@ export const fetchGuards = createAsyncThunk(
   'guards/fetchGuards',
   async (params: { page?: number; limit?: number } = {}, { rejectWithValue }) => {
     try {
-      const response = await apiService.getGuards(params.page, params.limit);
+      const response = await adminApi.getGuards(params.page, params.limit);
       if (response.success) {
         return response.data.data;
       } else {
@@ -32,7 +32,7 @@ export const fetchGuardById = createAsyncThunk(
   'guards/fetchGuardById',
   async (guardId: string, { rejectWithValue }) => {
     try {
-      const response = await apiService.getGuard(guardId);
+      const response = await adminApi.getGuard(guardId);
       if (response.success) {
         return response.data;
       } else {
@@ -48,7 +48,7 @@ export const createGuard = createAsyncThunk(
   'guards/createGuard',
   async (guardData: GuardForm, { rejectWithValue }) => {
     try {
-      const response = await apiService.createGuard(guardData);
+      const response = await adminApi.createGuard(guardData);
       if (response.success) {
         return response.data;
       } else {
@@ -64,7 +64,7 @@ export const updateGuard = createAsyncThunk(
   'guards/updateGuard',
   async ({ id, guardData }: { id: string; guardData: Partial<GuardForm> }, { rejectWithValue }) => {
     try {
-      const response = await apiService.updateGuard(id, guardData);
+      const response = await adminApi.updateGuard(id, guardData);
       if (response.success) {
         return response.data;
       } else {
@@ -80,7 +80,7 @@ export const deleteGuard = createAsyncThunk(
   'guards/deleteGuard',
   async (guardId: string, { rejectWithValue }) => {
     try {
-      const response = await apiService.deleteGuard(guardId);
+      const response = await adminApi.deleteGuard(guardId);
       if (response.success) {
         return guardId;
       } else {

@@ -207,22 +207,7 @@ const styles = StyleSheet.create({
   guardInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: COLORS.secondary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: SPACING.sm,
-    borderWidth: 1,
-    borderColor: COLORS.borderCard,
-  },
-  avatarImage: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    gap: SPACING.md,
   },
   guardDetails: {
     flex: 1,

@@ -8,19 +8,19 @@ import authReducer, {
   clearAuth,
 } from '../../store/slices/authSlice';
 import { AuthState } from '../../types';
-import { createMockFulfilledThunk, createMockRejectedThunk } from '../../utils/testUtils';
 
 describe('Auth Slice', () => {
   const initialState: AuthState = {
     user: null,
-    token: null,
-    refreshToken: null,
     tempUserId: null,
     tempEmail: null,
     isAuthenticated: false,
     isEmailVerified: false,
     isLoading: false,
     error: null,
+    impersonationActive: false,
+    impersonatorLabel: null,
+    sessionReady: false,
   };
 
   it('should return initial state', () => {
@@ -30,12 +30,11 @@ describe('Auth Slice', () => {
   it('should handle loginUser.pending', () => {
     const action = { type: loginUser.pending.type };
     const state = authReducer(initialState, action);
-    
     expect(state.isLoading).toBe(true);
     expect(state.error).toBe(null);
   });
 
-  it('should handle loginUser.fulfilled', () => {
+  it('should handle loginUser.fulfilled without storing tokens in state', () => {
     const mockUser = {
       id: '1',
       email: 'test@example.com',
@@ -44,30 +43,21 @@ describe('Auth Slice', () => {
       phone: '+1234567890',
       role: 'guard' as const,
       isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
 
     const action = {
       type: loginUser.fulfilled.type,
-      payload: {
-        user: mockUser,
-        token: 'mock-token',
-        refreshToken: 'mock-refresh-token',
-        isAuthenticated: true,
-        isLoading: false,
-        error: null,
-      },
+      payload: { user: mockUser },
     };
 
     const state = authReducer(initialState, action);
-    
     expect(state.user).toEqual(mockUser);
-    expect(state.token).toBe('mock-token');
-    expect(state.refreshToken).toBe('mock-refresh-token');
     expect(state.isAuthenticated).toBe(true);
+    expect(state.sessionReady).toBe(true);
     expect(state.isLoading).toBe(false);
-    expect(state.error).toBe(null);
+    expect((state as any).token).toBeUndefined();
   });
 
   it('should handle loginUser.rejected', () => {
@@ -75,89 +65,72 @@ describe('Auth Slice', () => {
       type: loginUser.rejected.type,
       payload: 'Login failed',
     };
-
     const state = authReducer(initialState, action);
-    
     expect(state.isLoading).toBe(false);
     expect(state.error).toBe('Login failed');
     expect(state.isAuthenticated).toBe(false);
   });
 
-  it('should handle registerUser.fulfilled', () => {
-    const mockUser = {
-      id: '1',
-      email: 'test@example.com',
-      firstName: 'John',
-      lastName: 'Doe',
-      phone: '+1234567890',
-      role: 'guard' as const,
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
+  it('should handle registerUser.fulfilled with OTP pending', () => {
     const action = {
       type: registerUser.fulfilled.type,
-      payload: {
-        user: mockUser,
-        token: 'mock-token',
-        refreshToken: 'mock-refresh-token',
-        isAuthenticated: true,
-        isLoading: false,
-        error: null,
-      },
+      payload: { userId: 'u1', email: 'test@example.com' },
     };
-
     const state = authReducer(initialState, action);
-    
-    expect(state.user).toEqual(mockUser);
-    expect(state.isAuthenticated).toBe(true);
+    expect(state.tempUserId).toBe('u1');
+    expect(state.tempEmail).toBe('test@example.com');
+    expect(state.isAuthenticated).toBe(false);
   });
 
   it('should handle logoutUser.fulfilled', () => {
     const stateWithUser: AuthState = {
+      ...initialState,
       user: {
         id: '1',
         email: 'test@example.com',
         firstName: 'John',
         lastName: 'Doe',
-        phone: '+1234567890',
-        role: 'guard',
+        role: 'GUARD',
         isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       },
-      token: 'mock-token',
-      refreshToken: 'mock-refresh-token',
       isAuthenticated: true,
-      isLoading: false,
-      error: null,
+      sessionReady: true,
     };
 
-    const action = {
-      type: logoutUser.fulfilled.type,
-      payload: null,
-    };
-
+    const action = { type: logoutUser.fulfilled.type, payload: null };
     const state = authReducer(stateWithUser, action);
-    
     expect(state.user).toBe(null);
-    expect(state.token).toBe(null);
-    expect(state.refreshToken).toBe(null);
     expect(state.isAuthenticated).toBe(false);
-    expect(state.error).toBe(null);
+    expect(state.sessionReady).toBe(false);
   });
 
   it('should handle clearError', () => {
-    const stateWithError: AuthState = {
-      ...initialState,
-      error: 'Some error',
-    };
-
-    const action = clearError();
-    const state = authReducer(stateWithError, action);
-    
+    const stateWithError: AuthState = { ...initialState, error: 'Some error' };
+    const state = authReducer(stateWithError, clearError());
     expect(state.error).toBe(null);
+  });
+
+  it('should handle clearAuth', () => {
+    const stateWithUser: AuthState = {
+      ...initialState,
+      user: {
+        id: '1',
+        email: 'test@example.com',
+        firstName: 'John',
+        lastName: 'Doe',
+        role: 'GUARD',
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      isAuthenticated: true,
+      sessionReady: true,
+    };
+    const state = authReducer(stateWithUser, clearAuth());
+    expect(state.user).toBe(null);
+    expect(state.isAuthenticated).toBe(false);
   });
 
   it('should handle setUser', () => {
@@ -166,53 +139,14 @@ describe('Auth Slice', () => {
       email: 'test@example.com',
       firstName: 'John',
       lastName: 'Doe',
-      phone: '+1234567890',
-      role: 'guard' as const,
+      role: 'GUARD' as const,
       isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
-
-    const action = setUser(mockUser);
-    const state = authReducer(initialState, action);
-    
-    // User object includes computed name field
-    expect(state.user).toMatchObject({
-      id: mockUser.id,
-      email: mockUser.email,
-      firstName: mockUser.firstName,
-      lastName: mockUser.lastName,
-    });
+    const state = authReducer(initialState, setUser(mockUser));
+    expect(state.user?.name).toBe('John Doe');
     expect(state.isAuthenticated).toBe(true);
-  });
-
-  it('should handle clearAuth', () => {
-    const stateWithUser: AuthState = {
-      user: {
-        id: '1',
-        email: 'test@example.com',
-        firstName: 'John',
-        lastName: 'Doe',
-        phone: '+1234567890',
-        role: 'guard',
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
-      token: 'mock-token',
-      refreshToken: 'mock-refresh-token',
-      isAuthenticated: true,
-      isLoading: false,
-      error: null,
-    };
-
-    const action = clearAuth();
-    const state = authReducer(stateWithUser, action);
-    
-    expect(state.user).toBe(null);
-    expect(state.token).toBe(null);
-    expect(state.refreshToken).toBe(null);
-    expect(state.isAuthenticated).toBe(false);
-    expect(state.error).toBe(null);
+    expect(state.sessionReady).toBe(true);
   });
 });

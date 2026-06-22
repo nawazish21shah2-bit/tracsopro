@@ -2,6 +2,8 @@ import { Router } from 'express';
 import authController from '../controllers/authController.js';
 import { authenticate } from '../middleware/auth.js';
 import { authRateLimiter } from '../middleware/rateLimit.js';
+import { validate } from '../middleware/validate.js';
+import { loginSchema, refreshTokenSchema } from '../validators/authSchemas.js';
 import SuperAdminService from '../services/superAdminService.js';
 
 const router = Router();
@@ -126,7 +128,7 @@ router.post('/register', authController.register);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/login', authController.login);
+router.post('/login', validate(loginSchema), authController.login);
 
 /**
  * @swagger
@@ -176,7 +178,7 @@ router.post('/login', authController.login);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/refresh', authController.refreshToken);
+router.post('/refresh', validate(refreshTokenSchema), authController.refreshToken);
 
 /**
  * @swagger

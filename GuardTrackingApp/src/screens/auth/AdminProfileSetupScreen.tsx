@@ -17,7 +17,7 @@ import AuthInput from '../../components/auth/AuthInput';
 import { AuthStackParamList } from '../../types';
 import { AppDispatch } from '../../store';
 import { getCurrentUser } from '../../store/slices/authSlice';
-import apiService from '../../services/api';
+import { clientApi } from '../../services/api/clientApi';
 import { authStyles } from '../../styles/authStyles';
 import { COLORS, SPACING } from '../../styles/globalStyles';
 
@@ -123,7 +123,7 @@ const AdminProfileSetupScreen: React.FC = () => {
 
       // Call API to update admin profile (using client profile API for now, or create admin-specific)
       // Note: You may need to create updateAdminProfile API method
-      const result = await apiService.updateClientProfile(profileUpdateData);
+      const result = await clientApi.updateClientProfile(profileUpdateData);
       
       if (result.success) {
         // Refresh user data to get updated profile

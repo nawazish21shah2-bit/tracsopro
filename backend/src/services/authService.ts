@@ -2,10 +2,29 @@ import bcrypt from 'bcryptjs';
 import { v4 as uuid } from 'uuid';
 import prisma from '../config/database.js';
 import { signAccessToken, signRefreshToken, verifyToken, getTokenExpiresIn, getRefreshTokenExpiresIn } from '../utils/jwt.js';
-import { UnauthorizedError, ConflictError, ValidationError } from '../utils/errors.js';
+import { UnauthorizedError, ConflictError, ValidationError, ForbiddenError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 import otpService from './otpService.js';
 import clientService from './clientService.js';
+import { resolveProfilePictureUrlForClient } from './storageService.js';
+
+function mapUserProfilePictures<
+  T extends {
+    profilePictureUrl?: string | null;
+    guard?: { profilePictureUrl?: string | null } | null;
+  },
+>(user: T): T {
+  return {
+    ...user,
+    profilePictureUrl: resolveProfilePictureUrlForClient(user.profilePictureUrl),
+    guard: user.guard
+      ? {
+          ...user.guard,
+          profilePictureUrl: resolveProfilePictureUrlForClient(user.guard.profilePictureUrl),
+        }
+      : user.guard,
+  };
+}
 
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '10');
 const OTP_ENABLED = process.env.OTP_ENABLED !== 'false';
@@ -392,6 +411,10 @@ export class AuthService {
       throw new UnauthorizedError('Invalid credentials');
     }
 
+    if (!user.isEmailVerified) {
+      logger.warn('Login with unverified email', { email: user.email });
+    }
+
     const refreshTokenId = uuid();
     const token = signAccessToken(user.id);
     const refreshToken = signRefreshToken(user.id, refreshTokenId);
@@ -408,7 +431,7 @@ export class AuthService {
     return {
       token,
       refreshToken,
-      user: {
+      user: mapUserProfilePictures({
         id: user.id,
         email: user.email,
         firstName: user.firstName,
@@ -416,6 +439,7 @@ export class AuthService {
         phone: user.phone,
         role: user.role,
         isActive: user.isActive,
+        isEmailVerified: user.isEmailVerified,
         profilePictureUrl: user.profilePictureUrl,
         createdAt: user.createdAt,
         guard: user.guard ? {
@@ -428,8 +452,14 @@ export class AuthService {
           id: user.client.id,
           accountType: user.client.accountType,
         } : undefined,
-      },
+      }),
       expiresIn: getTokenExpiresIn(),
+      ...(user.isEmailVerified
+        ? {}
+        : {
+            emailVerificationWarning:
+              'Your email is not verified yet. You can verify it later from your account settings.',
+          }),
     };
   }
 
@@ -457,13 +487,33 @@ export class AuthService {
         throw new UnauthorizedError('User not found or inactive');
       }
 
+      const newRefreshTokenId = uuid();
       const newToken = signAccessToken(user.id);
+      const newRefreshToken = signRefreshToken(user.id, newRefreshTokenId);
+
+      await prisma.$transaction([
+        prisma.refreshToken.update({
+          where: { jti: payload.jti },
+          data: { revokedAt: new Date() },
+        }),
+        prisma.refreshToken.create({
+          data: {
+            userId: user.id,
+            jti: newRefreshTokenId,
+            expiresAt: new Date(Date.now() + getRefreshTokenExpiresIn() * 1000),
+          },
+        }),
+      ]);
 
       return {
         token: newToken,
+        refreshToken: newRefreshToken,
         expiresIn: getTokenExpiresIn(),
       };
     } catch (error) {
+      if (error instanceof UnauthorizedError) {
+        throw error;
+      }
       throw new UnauthorizedError('Invalid refresh token');
     }
   }
@@ -498,7 +548,7 @@ export class AuthService {
       throw new UnauthorizedError('User not found');
     }
 
-    return user;
+    return mapUserProfilePictures(user);
   }
 
   async updateProfile(userId: string, data: {
@@ -550,7 +600,7 @@ export class AuthService {
 
     logger.info(`Profile updated for user: ${updatedUser.email}`);
 
-    return updatedUser;
+    return mapUserProfilePictures(updatedUser);
   }
 
   async changePassword(userId: string, currentPassword: string, newPassword: string) {
@@ -622,7 +672,7 @@ export class AuthService {
     return {
       token,
       refreshToken,
-      user,
+      user: mapUserProfilePictures(user),
       expiresIn: getTokenExpiresIn(),
     };
   }

@@ -6,7 +6,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  TextInput,
   Alert,
   Platform,
   Modal,
@@ -25,7 +24,8 @@ import ReportMediaPicker from '../../components/reports/ReportMediaPicker';
 import { ReportMediaItem, uploadReportMediaItems } from '../../utils/reportMediaUtils';
 import { LocationIcon } from '../../components/ui/AppIcons';
 import { CalendarIcon } from '../../components/ui/FeatherIcons';
-import apiService from '../../services/api';
+import { incidentApi } from '../../services/api/incidentApi';
+import FormInput from '../../components/common/FormInput';
 
 type AddIncidentReportScreenNavigationProp = StackNavigationProp<any, 'AddIncidentReport'>;
 
@@ -185,16 +185,16 @@ const AddIncidentReportScreen: React.FC = () => {
         mediaFiles: uploadedMedia,
       };
 
-      const response = await apiService.post<any>('/incident-reports', reportData);
+      const response = await incidentApi.createIncidentReport(reportData);
 
-      if (response.data?.success !== false) {
+      if (response.success) {
         Alert.alert(
           'Success',
           'Your incident report has been submitted successfully',
           [{ text: 'OK', onPress: () => navigation.goBack() }],
         );
       } else {
-        Alert.alert('Error', response.data?.message || 'Failed to submit report');
+        Alert.alert('Error', response.message || 'Failed to submit report');
       }
     } catch (error: any) {
       console.error('Submit error:', error);
@@ -260,15 +260,12 @@ const AddIncidentReportScreen: React.FC = () => {
         {/* Description Section */}
         <View style={styles.section}>
           <SectionHeader title="Description" subtitle="What happened on site?" />
-          <TextInput
-            style={styles.descriptionInput}
-            placeholder="Write report description"
-            placeholderTextColor="#A0A0A0"
+          <FormInput
             value={description}
             onChangeText={setDescription}
+            placeholder="Write report description"
             multiline
             numberOfLines={6}
-            textAlignVertical="top"
           />
         </View>
 

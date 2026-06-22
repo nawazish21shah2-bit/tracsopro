@@ -14,7 +14,7 @@ import SharedHeader from '../../components/ui/SharedHeader';
 import SegmentTabs from '../../components/shifts/SegmentTabs';
 import { useRoleScreenHeader, RoleHeaderVariant } from '../../hooks/useRoleScreenHeader';
 import supportApiService, { SupportTicketRecord } from '../../services/supportApiService';
-import apiService from '../../services/api';
+import { chatApi } from '../../services/api/chatApi';
 import { EmptyState, InlineLoading } from '../../components/ui/LoadingStates';
 import { formatRelativeTime } from '../../utils/formatRelativeTime';
 import { MessageCircle, Headphones, Plus } from 'react-native-feather';
@@ -54,6 +54,12 @@ const SupportHubScreen: React.FC<SupportHubScreenProps> = ({
         : 'Support Center';
 
   const { headerProps } = useRoleScreenHeader(title, variant);
+  const canGoBack = navigation.canGoBack();
+  const handleBackPress = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    }
+  };
   const [tab, setTab] = useState<HubTab>('tickets');
   const [tickets, setTickets] = useState<SupportTicketRecord[]>([]);
   const [chats, setChats] = useState<any[]>([]);
@@ -67,7 +73,7 @@ const SupportHubScreen: React.FC<SupportHubScreenProps> = ({
     } else if (resolvedMode === 'platform') {
       const [inbox, chatsRes] = await Promise.all([
         supportApiService.getInbox(1, 50).catch(() => ({ tickets: [] })),
-        apiService.getSupportChats(),
+        chatApi.getSupportChats(),
       ]);
       setTickets(inbox.tickets);
       if (chatsRes.success) setChats(chatsRes.data || []);
@@ -78,7 +84,7 @@ const SupportHubScreen: React.FC<SupportHubScreenProps> = ({
   }, [resolvedMode]);
 
   const loadChats = useCallback(async () => {
-    const response = await apiService.getSupportChats();
+    const response = await chatApi.getSupportChats();
     if (response.success) {
       setChats(response.data || []);
     } else {
@@ -141,7 +147,7 @@ const SupportHubScreen: React.FC<SupportHubScreenProps> = ({
 
     try {
       if (variant === 'admin' && resolvedMode === 'platform') {
-        const res = await apiService.openSupportChat();
+        const res = await chatApi.openSupportChat();
         if (res.success && res.data) {
           navigation.navigate('IndividualChatScreen', {
             chatId: res.data.id,
@@ -160,7 +166,7 @@ const SupportHubScreen: React.FC<SupportHubScreenProps> = ({
           });
         }
       } else if (variant === 'guard' || variant === 'client') {
-        const res = await apiService.openCompanySupportChat();
+        const res = await chatApi.openCompanySupportChat();
         if (res.success && res.data) {
           navigation.navigate('IndividualChatScreen', {
             chatId: res.data.id || res.data.conversationId,
@@ -210,7 +216,13 @@ const SupportHubScreen: React.FC<SupportHubScreenProps> = ({
 
   return (
     <SafeAreaWrapper>
-      <SharedHeader {...headerProps} />
+      <SharedHeader
+        {...headerProps}
+        showBackButton={canGoBack}
+        onBackPress={handleBackPress}
+        onMenuPress={canGoBack ? undefined : headerProps.onMenuPress}
+        hideProfileDrawer={canGoBack}
+      />
       {showChatTab && (
         <SegmentTabs
           tabs={[

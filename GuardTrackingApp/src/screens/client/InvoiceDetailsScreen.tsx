@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { DownloadIcon, CheckCircleIcon, ClockIcon, ErrorCircleIcon } from '../../components/ui/AppIcons';
+import BackNavButton from '../../components/common/BackNavButton';
 import paymentService, { Invoice } from '../../services/paymentService';
 
 const InvoiceDetailsScreen: React.FC = () => {
@@ -167,9 +168,7 @@ const InvoiceDetailsScreen: React.FC = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>Invoice not found</Text>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Text style={styles.backButtonText}>Go Back</Text>
-          </TouchableOpacity>
+          <BackNavButton label="Go Back" onPress={() => navigation.goBack()} />
         </View>
       </SafeAreaView>
     );

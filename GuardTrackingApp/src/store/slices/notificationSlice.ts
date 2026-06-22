@@ -1,7 +1,7 @@
 // Notification Management Redux Slice
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { Notification, NotificationState, NotificationType } from '../../types';
-import apiService from '../../services/api';
+import { notificationApi } from '../../services/api/notificationApi';
 
 // Initial state
 const initialState: NotificationState = {
@@ -25,7 +25,7 @@ export const fetchNotifications = createAsyncThunk(
   'notifications/fetchNotifications',
   async (options: FetchNotificationsOptions | undefined, { rejectWithValue }) => {
     try {
-      const response = await apiService.getNotifications({
+      const response = await notificationApi.getNotifications({
         unreadOnly: options?.unreadOnly,
         page: 1,
         limit: 50,
@@ -47,7 +47,7 @@ export const fetchUnreadCount = createAsyncThunk(
   'notifications/fetchUnreadCount',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await apiService.getUnreadNotificationCount();
+      const response = await notificationApi.getUnreadNotificationCount();
       if (response.success) {
         return response.data;
       }
@@ -62,7 +62,7 @@ export const markNotificationAsRead = createAsyncThunk(
   'notifications/markAsRead',
   async (notificationId: string, { rejectWithValue }) => {
     try {
-      const response = await apiService.markNotificationAsRead(notificationId);
+      const response = await notificationApi.markNotificationAsRead(notificationId);
       if (response.success) {
         return notificationId;
       }
@@ -77,7 +77,7 @@ export const markAllNotificationsAsRead = createAsyncThunk(
   'notifications/markAllAsReadAsync',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await apiService.markAllNotificationsAsRead();
+      const response = await notificationApi.markAllNotificationsAsRead();
       if (response.success) {
         return response.data?.count ?? 0;
       }
@@ -92,7 +92,7 @@ export const deleteNotification = createAsyncThunk(
   'notifications/deleteNotification',
   async (notificationId: string, { rejectWithValue }) => {
     try {
-      const response = await apiService.deleteNotification(notificationId);
+      const response = await notificationApi.deleteNotification(notificationId);
       if (response.success) {
         return notificationId;
       }
@@ -107,7 +107,7 @@ export const clearAllNotifications = createAsyncThunk(
   'notifications/clearAllNotifications',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await apiService.clearAllNotifications();
+      const response = await notificationApi.clearAllNotifications();
       if (response.success) {
         return response.data?.count ?? 0;
       }

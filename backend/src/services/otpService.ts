@@ -4,9 +4,7 @@ import prisma from '../config/database.js';
 import { logger } from '../utils/logger.js';
 import { ValidationError } from '../utils/errors.js';
 
-// Rate limiting storage (in production, use Redis)
-const otpAttempts = new Map<string, { count: number; lastAttempt: number }>();
-const emailAttempts = new Map<string, { count: number; lastAttempt: number }>();
+import { cacheIncr, cacheDel } from '../utils/cache.js';
 
 // Configure email transporter with enhanced settings
 const createTransporter = () => {
@@ -100,38 +98,21 @@ export const getOTPExpiry = (): Date => {
 };
 
 /**
- * Check rate limiting for OTP requests
+ * Check rate limiting for OTP requests (Redis-backed when REDIS_URL is set).
  */
-export const checkRateLimit = (identifier: string, type: 'otp' | 'email'): boolean => {
-  const storage = type === 'otp' ? otpAttempts : emailAttempts;
-  const windowMs = parseInt(process.env.OTP_RATE_LIMIT_WINDOW || '300000'); // 5 minutes
-  const maxAttempts = parseInt(process.env.OTP_RATE_LIMIT_MAX || '3');
-  const now = Date.now();
-  
-  const attempts = storage.get(identifier);
-  
-  if (!attempts) {
-    storage.set(identifier, { count: 1, lastAttempt: now });
-    return true;
-  }
-  
-  // Reset if window has passed
-  if (now - attempts.lastAttempt > windowMs) {
-    storage.set(identifier, { count: 1, lastAttempt: now });
-    return true;
-  }
-  
-  // Check if limit exceeded
-  if (attempts.count >= maxAttempts) {
+export const checkRateLimit = async (identifier: string, type: 'otp' | 'email'): Promise<boolean> => {
+  const windowMs = parseInt(process.env.OTP_RATE_LIMIT_WINDOW || '300000', 10);
+  const maxAttempts = parseInt(process.env.OTP_RATE_LIMIT_MAX || '3', 10);
+  const ttlSeconds = Math.max(1, Math.ceil(windowMs / 1000));
+  const key = `otp-rate:${type}:${identifier}`;
+
+  const count = await cacheIncr(key, ttlSeconds);
+
+  if (count > maxAttempts) {
     logger.warn(`Rate limit exceeded for ${type}: ${identifier}`);
     return false;
   }
-  
-  // Increment count
-  attempts.count++;
-  attempts.lastAttempt = now;
-  storage.set(identifier, attempts);
-  
+
   return true;
 };
 
@@ -139,6 +120,17 @@ export const checkRateLimit = (identifier: string, type: 'otp' | 'email'): boole
  * Send OTP email to user
  */
 export const sendOTPEmail = async (email: string, otp: string, userName?: string): Promise<void> => {
+  const transporter = getOrCreateTransporter();
+  if (!transporter) {
+    if (process.env.NODE_ENV !== 'production') {
+      logger.info(`[DEV] Email verification OTP for ${email}: ${otp}`);
+      return;
+    }
+    throw new Error(
+      'SMTP credentials not configured. Set SMTP_USER and SMTP_PASS in backend/.env'
+    );
+  }
+
   if (process.env.NODE_ENV !== 'production') {
     logger.debug('OTP generated for email verification', { email, otpLength: otp.length });
   }
@@ -377,12 +369,11 @@ export const sendOTPEmail = async (email: string, otp: string, userName?: string
   };
 
   // Check rate limiting
-  if (!checkRateLimit(email, 'email')) {
+  if (!(await checkRateLimit(email, 'email'))) {
     throw new ValidationError('Too many email requests. Please wait before requesting another OTP.');
   }
 
   try {
-    const transporter = requireTransporter();
     await transporter.verify();
 
     const info = await transporter.sendMail(mailOptions);
@@ -435,7 +426,7 @@ export const storeOTP = async (userId: string, otp: string): Promise<void> => {
  */
 export const verifyOTP = async (userId: string, otp: string): Promise<boolean> => {
   // Check rate limiting for OTP attempts
-  if (!checkRateLimit(userId, 'otp')) {
+  if (!(await checkRateLimit(userId, 'otp'))) {
     logger.warn(`OTP verification rate limit exceeded for user: ${userId}`);
     throw new ValidationError('Too many OTP attempts. Please wait before trying again.');
   }
@@ -505,9 +496,9 @@ export const verifyOTP = async (userId: string, otp: string): Promise<boolean> =
     });
 
     logger.info(`Email verified successfully for user: ${userId}`);
-    
-    // Clear rate limiting attempts on successful verification
-    otpAttempts.delete(userId);
+
+    await cacheDel(`otp-rate:otp:${userId}`);
+    await cacheDel(`otp-rate:email:${userId}`);
     
     return true;
   } catch (error: any) {
@@ -541,7 +532,7 @@ export const verifyOTPByEmail = async (email: string, otp: string): Promise<bool
  */
 export const sendPasswordResetOTP = async (email: string): Promise<void> => {
   // Check rate limiting
-  if (!checkRateLimit(email, 'email')) {
+  if (!(await checkRateLimit(email, 'email'))) {
     throw new ValidationError('Too many password reset requests. Please wait before trying again.');
   }
 

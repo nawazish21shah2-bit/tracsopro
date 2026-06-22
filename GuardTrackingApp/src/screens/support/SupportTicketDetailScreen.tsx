@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TextInput,
   TouchableOpacity,
   Alert,
   ActivityIndicator,
@@ -19,6 +18,7 @@ import { RootState } from '../../store';
 import { formatRelativeTime } from '../../utils/formatRelativeTime';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../styles/globalStyles';
 import { MessageCircle, Send } from 'react-native-feather';
+import FormInput from '../../components/common/FormInput';
 
 interface RouteParams {
   ticketId: string;
@@ -34,6 +34,12 @@ const SupportTicketDetailScreen: React.FC = () => {
   const { ticketId, variant = 'client', mode = 'mine' } = (route.params || {}) as RouteParams;
   const { user } = useSelector((state: RootState) => state.auth);
   const { headerProps } = useRoleScreenHeader('Support Ticket', variant);
+  const canGoBack = navigation.canGoBack();
+  const handleBackPress = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    }
+  };
 
   const [ticket, setTicket] = useState<SupportTicketRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -107,7 +113,7 @@ const SupportTicketDetailScreen: React.FC = () => {
   if (loading || !ticket) {
     return (
       <SafeAreaWrapper>
-        <SharedHeader {...headerProps} />
+        <SharedHeader {...headerProps} showBackButton={canGoBack} onBackPress={handleBackPress} />
         <View style={styles.center}>
           <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
@@ -117,7 +123,7 @@ const SupportTicketDetailScreen: React.FC = () => {
 
   return (
     <SafeAreaWrapper>
-      <SharedHeader {...headerProps} />
+      <SharedHeader {...headerProps} showBackButton={canGoBack} onBackPress={handleBackPress} />
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         <View style={styles.card}>
           <Text style={styles.subject}>{ticket.subject}</Text>
@@ -157,13 +163,12 @@ const SupportTicketDetailScreen: React.FC = () => {
                 <Text style={styles.chatBtnText}>Open Live Chat</Text>
               </TouchableOpacity>
             </View>
-            <TextInput
-              style={styles.input}
+            <FormInput
               value={reply}
               onChangeText={setReply}
               placeholder="Type a simple reply…"
-              placeholderTextColor={COLORS.textTertiary}
               multiline
+              containerStyle={styles.replyInput}
             />
             <TouchableOpacity
               style={[styles.sendBtn, (!reply.trim() || submitting) && styles.sendBtnDisabled]}
@@ -290,15 +295,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
   },
   chatBtnText: { color: COLORS.primary, fontWeight: TYPOGRAPHY.fontWeight.semibold },
-  input: {
-    minHeight: 90,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.md,
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.textPrimary,
-    textAlignVertical: 'top',
+  replyInput: {
     marginBottom: SPACING.sm,
   },
   sendBtn: {

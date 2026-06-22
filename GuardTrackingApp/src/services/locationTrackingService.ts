@@ -11,7 +11,8 @@ import { cacheService } from './cacheService';
 import notificationService from './notificationService';
 import WebSocketService from './WebSocketService';
 import { store } from '../store';
-import apiService from './api';
+import { shiftApi } from './api/shiftApi';
+import { trackingApi } from './api/trackingApi';
 import { getAuthGuardId } from '../utils/getAuthGuardId';
 
 interface LocationData {
@@ -249,7 +250,7 @@ class LocationTrackingService {
 
   private async loadShiftRadiusGeofence(shiftId: string): Promise<void> {
     try {
-      const result = await apiService.getShiftById(shiftId);
+      const result = await shiftApi.getShiftById(shiftId);
       const site = result.data?.site;
       if (
         result.success &&
@@ -619,7 +620,7 @@ class LocationTrackingService {
       }
 
       this.lastBackendSyncAt = now;
-      await apiService.recordLocation(guardId, {
+      await trackingApi.recordLocation(guardId, {
         latitude: payload.latitude,
         longitude: payload.longitude,
         accuracy: payload.accuracy,

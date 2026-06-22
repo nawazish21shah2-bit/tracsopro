@@ -8,8 +8,8 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, Ac
 import { StackNavigationProp } from '@react-navigation/stack';
 import { ChevronRight, User, Bell, HelpCircle, LogOut, Lock, Trash2, Download } from 'react-native-feather';
 import { useNavigation } from '@react-navigation/native';
-import { useDispatch } from 'react-redux';
-import type { AppDispatch } from '../../store';
+import { useDispatch, useSelector } from 'react-redux';
+import type { AppDispatch, RootState } from '../../store';
 import { logoutUser } from '../../store/slices/authSlice';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
@@ -17,6 +17,8 @@ import { useRoleScreenHeader } from '../../hooks/useRoleScreenHeader';
 import { superAdminService } from '../../services/superAdminService';
 import { cacheService } from '../../services/cacheService';
 import { SuperAdminStackParamList } from '../../navigation/SuperAdminNavigator';
+import { navigateToEmailVerification } from '../../utils/navigationHelpers';
+import { getEmailVerificationSettingItems } from '../../utils/emailVerificationSettingItem';
 
 // Hardcoded colors to avoid module load issues
 const COLORS = {
@@ -56,6 +58,7 @@ const defaultSettings = {
 const SystemSettingsScreen: React.FC = () => {
   const navigation = useNavigation<StackNavigationProp<SuperAdminStackParamList>>();
   const dispatch = useDispatch<AppDispatch>();
+  const { user } = useSelector((state: RootState) => state.auth);
   const { headerProps } = useRoleScreenHeader('System Settings', 'superAdmin');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -164,6 +167,10 @@ const SystemSettingsScreen: React.FC = () => {
     navigation.navigate('SupportHubScreen', { variant: 'superAdmin', mode: 'platform' });
   };
 
+  const handleEmailVerification = () => {
+    navigateToEmailVerification(navigation);
+  };
+
   const handleClearCache = async () => {
     Alert.alert(
       'Clear Cache',
@@ -221,6 +228,7 @@ const SystemSettingsScreen: React.FC = () => {
   };
 
   const menuItems: MenuItem[] = [
+    ...getEmailVerificationSettingItems(Boolean(user?.isEmailVerified), handleEmailVerification, COLORS.textSecondary),
     { id: '1', title: 'SuperAdmin Profile', icon: <User width={20} height={20} color={COLORS.textSecondary} />, onPress: handleProfile },
     { id: '2', title: 'Notifications', icon: <Bell width={20} height={20} color={COLORS.textSecondary} />, onPress: handleNotifications },
     { id: '3', title: 'Change Password', icon: <Lock width={20} height={20} color={COLORS.textSecondary} />, onPress: handleChangePassword },

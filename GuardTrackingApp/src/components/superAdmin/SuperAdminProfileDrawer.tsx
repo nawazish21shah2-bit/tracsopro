@@ -22,12 +22,14 @@ import {
   NotificationIcon,
   LogoutIcon,
   DashboardIcon,
-  CheckCircleIcon,
 } from '../ui/AppIcons';
 import { FeatherIcon } from '../ui/FeatherIcons';
 import { COLORS, SPACING, TYPOGRAPHY } from '../../styles/globalStyles';
 import { ProfileAvatar } from '../common/ProfileAvatar';
-import apiService from '../../services/api';
+import { EmailVerificationBadge } from '../common/VerifiedBadge';
+import { navigateToEmailVerification } from '../../utils/navigationHelpers';
+import { useSafeTopPadding } from '../../hooks/useSafeTopPadding';
+import { userApi } from '../../services/api/userApi';
 
 interface SuperAdminProfileDrawerProps {
   visible: boolean;
@@ -65,6 +67,7 @@ export const SuperAdminProfileDrawer: React.FC<SuperAdminProfileDrawerProps> = (
   const { user } = useSelector((state: RootState) => state.auth);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isUploadingPicture, setIsUploadingPicture] = useState(false);
+  const drawerTopPadding = useSafeTopPadding();
   
   // Animation for slide from left
   const slideAnim = useRef(new Animated.Value(-Dimensions.get('window').width)).current;
@@ -136,7 +139,7 @@ export const SuperAdminProfileDrawer: React.FC<SuperAdminProfileDrawerProps> = (
       setIsUploadingPicture(true);
       
       // Upload the image
-      const uploadResponse = await apiService.uploadProfilePicture(imageUri);
+      const uploadResponse = await userApi.uploadProfilePicture(imageUri);
       
       if (uploadResponse.success && uploadResponse.data?.url) {
         // Update user profile with new picture URL
@@ -241,7 +244,12 @@ export const SuperAdminProfileDrawer: React.FC<SuperAdminProfileDrawerProps> = (
   ];
 
   const userName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email : 'Super Admin';
-  const isVerified = user?.isActive ?? true;
+  const isEmailVerified = Boolean(user?.isEmailVerified);
+
+  const handleEmailVerificationPress = () => {
+    onClose();
+    navigateToEmailVerification(navigation);
+  };
 
   return (
     <Modal
@@ -261,6 +269,7 @@ export const SuperAdminProfileDrawer: React.FC<SuperAdminProfileDrawerProps> = (
             styles.drawerContainer,
             {
               transform: [{ translateX: slideAnim }],
+              paddingTop: drawerTopPadding,
             },
           ]}
           onStartShouldSetResponder={() => true}
@@ -280,12 +289,10 @@ export const SuperAdminProfileDrawer: React.FC<SuperAdminProfileDrawerProps> = (
                 />
               </View>
               <Text style={styles.userName}>{userName}</Text>
-              {isVerified && (
-                <View style={styles.verifiedContainer}>
-                  <Text style={styles.verifiedText}>Verified</Text>
-                  <CheckCircleIcon size={14} color={COLORS.textPrimary} />
-                </View>
-              )}
+              <EmailVerificationBadge
+                isVerified={isEmailVerified}
+                onPress={isEmailVerified ? undefined : handleEmailVerificationPress}
+              />
               <View style={styles.separator} />
             </View>
 
@@ -328,7 +335,6 @@ const styles = StyleSheet.create({
     width: '70%',
     maxWidth: 320,
     backgroundColor: COLORS.backgroundPrimary,
-    paddingTop: SPACING.xl * 2,
     paddingHorizontal: SPACING.lg,
     paddingBottom: SPACING.lg,
     height: '100%',
@@ -361,17 +367,6 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     marginBottom: SPACING.sm,
     fontFamily: TYPOGRAPHY.fontPrimary,
-  },
-  verifiedContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-  },
-  verifiedText: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.textSecondary,
-    fontFamily: TYPOGRAPHY.fontPrimary,
-    fontWeight: TYPOGRAPHY.fontWeight.regular,
   },
   separator: {
     width: '100%',

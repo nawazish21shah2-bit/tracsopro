@@ -21,7 +21,7 @@ import SharedHeader from '../../components/ui/SharedHeader';
 import { useRoleScreenHeader } from '../../hooks/useRoleScreenHeader';
 import SubscriptionSummaryCard from '../../components/admin/SubscriptionSummaryCard';
 import paymentService from '../../services/paymentService';
-import apiService from '../../services/api';
+import { adminApi } from '../../services/api/adminApi';
 import {
   SubscriptionOverview,
   PLAN_HIGHLIGHTS,
@@ -54,17 +54,17 @@ const AdminSubscriptionScreen: React.FC = () => {
       setLoading(true);
       
       // Single consolidated API call - gets company, subscription, and plans in one request
-      const response = await apiService.get('/admin/subscription');
-      const { company, availablePlans, overview: overviewData } = response.data.data;
-
-      if (!company) {
+      const response = await adminApi.getAdminSubscription();
+      if (!response.success || !response.data) {
         Alert.alert(
           'Company Not Found',
-          'Your account is not associated with a security company. Please contact support.',
+          response.message || 'Your account is not associated with a security company. Please contact support.',
           [{ text: 'OK' }]
         );
         return;
       }
+
+      const { company, availablePlans, overview: overviewData } = response.data;
 
       setSecurityCompanyId(company.id);
       setOverview(overviewData ?? null);

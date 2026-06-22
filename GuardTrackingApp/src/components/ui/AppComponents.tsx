@@ -12,6 +12,7 @@ import {
   Image,
 } from 'react-native';
 import { globalStyles, COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
+import { authInputStyles } from '../../styles/authStyles';
 import Logo from '../../assets/images/tracSOpro-logo.png';
 
 // Logo Component
@@ -121,17 +122,25 @@ export const AppInput: React.FC<AppInputProps> = ({
   onSubmitEditing,
   blurOnSubmit = true,
 }) => {
+  const [focused, setFocused] = React.useState(false);
+
   return (
     <View style={[globalStyles.inputContainer, style]}>
-      <View style={globalStyles.inputWrapper}>
-        {leftIcon && (
+      <View
+        style={[
+          authInputStyles.inputWrapper,
+          focused && authInputStyles.inputFocused,
+          disabled && { opacity: 0.65 },
+        ]}
+      >
+        {leftIcon ? (
           <View style={globalStyles.iconContainer}>
             <Text style={styles.iconText}>{leftIcon}</Text>
           </View>
-        )}
+        ) : null}
         <TextInput
           ref={inputRef}
-          style={globalStyles.textInput}
+          style={authInputStyles.textInput}
           placeholder={placeholder}
           placeholderTextColor={COLORS.textSecondary}
           value={value}
@@ -144,8 +153,10 @@ export const AppInput: React.FC<AppInputProps> = ({
           returnKeyType={returnKeyType}
           onSubmitEditing={onSubmitEditing}
           blurOnSubmit={blurOnSubmit}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
         />
-        {rightIcon && (
+        {rightIcon ? (
           <TouchableOpacity
             style={styles.rightIconContainer}
             onPress={onRightIconPress}
@@ -153,7 +164,7 @@ export const AppInput: React.FC<AppInputProps> = ({
           >
             <Text style={styles.iconText}>{rightIcon}</Text>
           </TouchableOpacity>
-        )}
+        ) : null}
       </View>
     </View>
   );

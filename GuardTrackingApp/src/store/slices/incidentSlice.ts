@@ -1,7 +1,7 @@
 // Incident Management Redux Slice
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { Incident, IncidentState, IncidentForm, IncidentStatus, IncidentType, SeverityLevel } from '../../types';
-import apiService from '../../services/api';
+import { incidentApi } from '../../services/api/incidentApi';
 
 // Initial state
 const initialState: IncidentState = {
@@ -16,7 +16,7 @@ export const fetchIncidents = createAsyncThunk(
   'incidents/fetchIncidents',
   async (params: { page?: number; limit?: number } = {}, { rejectWithValue }) => {
     try {
-      const response = await apiService.getIncidents(params.page, params.limit);
+      const response = await incidentApi.getIncidents(params.page, params.limit);
       if (response.success) {
         return response.data.data;
       } else {
@@ -32,7 +32,7 @@ export const createIncident = createAsyncThunk(
   'incidents/createIncident',
   async (incidentData: IncidentForm, { rejectWithValue }) => {
     try {
-      const response = await apiService.createIncident(incidentData);
+      const response = await incidentApi.createIncident(incidentData);
       if (response.success) {
         return response.data;
       } else {
@@ -48,7 +48,7 @@ export const updateIncident = createAsyncThunk(
   'incidents/updateIncident',
   async ({ id, incidentData }: { id: string; incidentData: Partial<IncidentForm> }, { rejectWithValue }) => {
     try {
-      const response = await apiService.updateIncident(id, incidentData);
+      const response = await incidentApi.updateIncident(id, incidentData);
       if (response.success) {
         return response.data;
       } else {

@@ -3,6 +3,7 @@ import { verifyToken, TokenPayload } from '../utils/jwt.js';
 import { UnauthorizedError, ForbiddenError } from '../utils/errors.js';
 import prisma from '../config/database.js';
 import SuperAdminService from '../services/superAdminService.js';
+import { cacheGet, cacheSet } from '../utils/cache.js';
 
 export interface AuthRequest extends Request {
   userId?: string;
@@ -31,31 +32,40 @@ export const authenticate = async (
       throw new UnauthorizedError('Invalid token type');
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: payload.sub },
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        role: true,
-        isActive: true,
-        client: {
-          select: { id: true }
-        },
-        guard: {
-          select: { id: true }
-        },
-        companyUsers: {
-          where: { isActive: true },
-          select: {
-            securityCompanyId: true,
-            role: true
+    const cacheKey = `auth:user:${payload.sub}`;
+    const cachedUser = await cacheGet(cacheKey);
+    let user = cachedUser ? JSON.parse(cachedUser) : null;
+
+    if (!user) {
+      user = await prisma.user.findUnique({
+        where: { id: payload.sub },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          role: true,
+          isActive: true,
+          client: {
+            select: { id: true },
           },
-          take: 1
-        }
-      },
-    });
+          guard: {
+            select: { id: true },
+          },
+          companyUsers: {
+            where: { isActive: true },
+            select: {
+              securityCompanyId: true,
+              role: true,
+            },
+            take: 1,
+          },
+        },
+      });
+      if (user) {
+        await cacheSet(cacheKey, JSON.stringify(user), 60);
+      }
+    }
 
     if (!user) {
       throw new UnauthorizedError('User not found');
@@ -65,7 +75,14 @@ export const authenticate = async (
       throw new UnauthorizedError('User account is inactive');
     }
 
-    const maintenanceEnabled = await SuperAdminService.isMaintenanceModeEnabled();
+    const maintenanceCacheKey = 'platform:maintenance';
+    let maintenanceFlag = await cacheGet(maintenanceCacheKey);
+    if (maintenanceFlag === null) {
+      const enabled = await SuperAdminService.isMaintenanceModeEnabled();
+      maintenanceFlag = enabled ? '1' : '0';
+      await cacheSet(maintenanceCacheKey, maintenanceFlag, 60);
+    }
+    const maintenanceEnabled = maintenanceFlag === '1';
     if (maintenanceEnabled && user.role !== 'SUPER_ADMIN') {
       res.status(503).json({
         success: false,

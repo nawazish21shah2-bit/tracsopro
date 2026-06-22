@@ -888,7 +888,7 @@ export class ClientService {
           }
 
           // ShiftReport doesn't have status field, default to 'New'
-          let status: 'Respond' | 'New' | 'Reviewed' = 'New';
+          const status: 'Respond' | 'New' | 'Reviewed' = 'New';
 
           const siteName = report.shift?.site?.name || 'Unknown Site';
           const checkInTime = report.shift?.actualStartTime;

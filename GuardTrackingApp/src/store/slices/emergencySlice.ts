@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import api from '../../services/api';
+import { emergencyApi } from '../../services/api/emergencyApi';
 
 export interface EmergencyAlert {
   id: string;
@@ -19,6 +19,7 @@ export interface EmergencyAlert {
   resolvedAt?: string;
   acknowledgedBy?: string;
   resolvedBy?: string;
+  responderName?: string;
 }
 
 export interface EmergencyState {
@@ -28,12 +29,27 @@ export interface EmergencyState {
   loading: boolean;
   submitting: boolean;
   error: string | null;
+  lastRealtimeUpdate: EmergencyStatusUpdate | null;
   statistics: {
     totalAlerts: number;
     activeAlerts: number;
     criticalAlerts: number;
     resolvedToday: number;
   } | null;
+}
+
+export interface EmergencyStatusUpdate {
+  alertId: string;
+  guardId?: string;
+  guardName?: string;
+  siteName?: string;
+  action: 'ACKNOWLEDGED' | 'RESOLVED' | 'FALSE_ALARM';
+  actorUserId?: string;
+  actorName?: string;
+  actorRole?: string;
+  actorRoleLabel?: string;
+  resolution?: string;
+  timestamp: string;
 }
 
 const initialState: EmergencyState = {
@@ -43,23 +59,24 @@ const initialState: EmergencyState = {
   loading: false,
   submitting: false,
   error: null,
+  lastRealtimeUpdate: null,
   statistics: null,
 };
 
 // Async thunks
 export const triggerEmergencyAlert = createAsyncThunk(
   'emergency/triggerAlert',
-  async (payload: {
+  async (
     alertData: {
       type: EmergencyAlert['type'];
       severity: EmergencyAlert['severity'];
       location: EmergencyAlert['location'];
       message?: string;
       shiftId?: string;
-    };
-    options?: { signal?: AbortSignal; retries?: number };
-  }) => {
-    const response = await api.triggerEmergencyAlert(payload.alertData, payload.options);
+    },
+    { signal },
+  ) => {
+    const response = await emergencyApi.triggerEmergencyAlert(alertData, { signal, retries: 1 });
 
     if (!response.success) {
       if (
@@ -85,7 +102,7 @@ export const triggerEmergencyAlert = createAsyncThunk(
 export const fetchGuardActiveEmergencyAlert = createAsyncThunk(
   'emergency/fetchGuardActiveAlert',
   async () => {
-    const response = await api.getMyActiveEmergencyAlert();
+    const response = await emergencyApi.getMyActiveEmergencyAlert();
 
     if (!response.success) {
       throw new Error(response.message || 'Failed to fetch active emergency alert');
@@ -98,7 +115,7 @@ export const fetchGuardActiveEmergencyAlert = createAsyncThunk(
 export const acknowledgeEmergencyAlert = createAsyncThunk(
   'emergency/acknowledgeAlert',
   async (alertId: string) => {
-    const response = await api.acknowledgeEmergencyAlert(alertId);
+    const response = await emergencyApi.acknowledgeEmergencyAlert(alertId);
 
     if (!response.success) {
       throw new Error(response.message || 'Failed to acknowledge emergency alert');
@@ -185,6 +202,37 @@ const emergencySlice = createSlice({
       state.alerts = state.alerts.filter(alert => alert.id !== action.payload);
       state.activeAlerts = state.activeAlerts.filter(alert => alert.id !== action.payload);
     },
+    applyEmergencyStatusUpdate: (state, action: PayloadAction<EmergencyStatusUpdate>) => {
+      state.lastRealtimeUpdate = action.payload;
+      const { alertId, action: statusAction, actorName } = action.payload;
+
+      if (state.guardActiveAlert?.id === alertId) {
+        if (statusAction === 'ACKNOWLEDGED') {
+          state.guardActiveAlert = {
+            ...state.guardActiveAlert,
+            status: 'ACKNOWLEDGED',
+            acknowledgedAt: action.payload.timestamp,
+            responderName: actorName,
+          };
+        } else {
+          state.guardActiveAlert = null;
+        }
+      }
+
+      if (statusAction === 'ACKNOWLEDGED') {
+        const activeIndex = state.activeAlerts.findIndex(alert => alert.id === alertId);
+        if (activeIndex !== -1) {
+          state.activeAlerts[activeIndex] = {
+            ...state.activeAlerts[activeIndex],
+            status: 'ACKNOWLEDGED',
+            acknowledgedAt: action.payload.timestamp,
+            responderName: actorName,
+          };
+        }
+      } else {
+        state.activeAlerts = state.activeAlerts.filter(alert => alert.id !== alertId);
+      }
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -234,18 +282,14 @@ const emergencySlice = createSlice({
       .addCase(acknowledgeEmergencyAlert.fulfilled, (state, action) => {
         state.loading = false;
         const { alertId, acknowledgedAt } = action.payload;
-        
+
         const alertIndex = state.alerts.findIndex(alert => alert.id === alertId);
         if (alertIndex !== -1) {
           state.alerts[alertIndex].status = 'ACKNOWLEDGED';
           state.alerts[alertIndex].acknowledgedAt = acknowledgedAt;
         }
-        
-        const activeIndex = state.activeAlerts.findIndex(alert => alert.id === alertId);
-        if (activeIndex !== -1) {
-          state.activeAlerts[activeIndex].status = 'ACKNOWLEDGED';
-          state.activeAlerts[activeIndex].acknowledgedAt = acknowledgedAt;
-        }
+
+        state.activeAlerts = state.activeAlerts.filter(alert => alert.id !== alertId);
       })
       .addCase(acknowledgeEmergencyAlert.rejected, (state, action) => {
         state.loading = false;
@@ -324,6 +368,7 @@ export const {
   addEmergencyAlert,
   updateEmergencyAlert,
   removeEmergencyAlert,
+  applyEmergencyStatusUpdate,
 } = emergencySlice.actions;
 
 export default emergencySlice.reducer;

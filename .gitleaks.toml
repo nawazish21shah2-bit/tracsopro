@@ -10,7 +10,8 @@ paths = [
   '''(^|/)backend/\.env\.example$''',
   '''(^|/)GuardTrackingApp/\.env\.example$''',
   '''(^|/)audit-docs/''',
-  '''\.md$''',
+  '''(^|/)docs/DEPLOYMENT_GUIDE\.md$''',
+  '''(^|/)ENVIRONMENT_VARIABLES\.md$''',
   '''(^|/)backend/tests/''',
   '''(^|/)backend/scripts/scan-secrets\.mjs$''',
 ]

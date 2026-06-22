@@ -86,7 +86,7 @@ const CheckInScreen: React.FC<CheckInScreenProps> = () => {
       setLocationError(null);
 
       // Mock location for demo purposes
-      // In real implementation, you would use expo-location here
+      // Uses react-native-geolocation-service via locationValidationService
       const mockLocation = {
         coords: {
           latitude: 37.7749,

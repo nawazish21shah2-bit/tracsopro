@@ -6,12 +6,12 @@ import {
   TouchableOpacity,
   Modal,
   FlatList,
-  TextInput,
   ActivityIndicator,
 } from 'react-native';
-import { ChevronDown, Search, X } from 'react-native-feather';
+import { ChevronDown, X } from 'react-native-feather';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../styles/globalStyles';
-import apiService from '../../services/api';
+import { adminApi } from '../../services/api/adminApi';
+import FormInput from './FormInput';
 
 interface Client {
   id: string;
@@ -52,7 +52,7 @@ const ClientSelector: React.FC<ClientSelectorProps> = ({
   const loadClients = async () => {
     try {
       setLoading(true);
-      const response = await apiService.getAdminClients();
+      const response = await adminApi.getAdminClients();
       if (response.success && response.data) {
         const clientsData = response.data.clients || response.data.items || [];
         setClients(clientsData);
@@ -153,11 +153,9 @@ const ClientSelector: React.FC<ClientSelectorProps> = ({
             </View>
 
             <View style={styles.searchContainer}>
-              <Search size={20} color={COLORS.textSecondary} />
-              <TextInput
-                style={styles.searchInput}
+              <FormInput
+                icon="search"
                 placeholder="Search clients..."
-                placeholderTextColor={COLORS.textSecondary}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
               />
@@ -230,11 +228,9 @@ const ClientSelector: React.FC<ClientSelectorProps> = ({
           </View>
 
           <View style={styles.searchContainer}>
-            <Search size={20} color={COLORS.textSecondary} />
-            <TextInput
-              style={styles.searchInput}
+            <FormInput
+              icon="search"
               placeholder="Search clients..."
-              placeholderTextColor={COLORS.textSecondary}
               value={searchQuery}
               onChangeText={setSearchQuery}
             />

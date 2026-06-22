@@ -4,19 +4,21 @@ import {
   Text,
   StyleSheet,
   Modal,
-  TextInput,
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
-import { X, Search } from 'react-native-feather';
+import { X } from 'react-native-feather';
 import ProfileAvatar from '../common/ProfileAvatar';
 import { parseDisplayName } from '../../utils/parseDisplayName';
 import { pickProfilePictureUrl } from '../../utils/profilePictureUtils';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
-import apiService from '../../services/api';
+import { adminApi } from '../../services/api/adminApi';
+import { clientApi } from '../../services/api/clientApi';
+import { chatApi } from '../../services/api/chatApi';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
+import FormInput from '../common/FormInput';
 
 interface UserOption {
   id: string;
@@ -77,8 +79,8 @@ const NewChatModal: React.FC<NewChatModalProps> = ({
       if (currentUserRole === 'ADMIN' || currentUserRole === 'SUPER_ADMIN') {
         // Admins can chat with guards and clients
         const [guardsResponse, clientsResponse] = await Promise.all([
-          apiService.getGuards(1, 100),
-          apiService.getClients(1, 100),
+          adminApi.getGuards(1, 100),
+          adminApi.getClients(1, 100),
         ]);
 
         if (guardsResponse.success && guardsResponse.data) {
@@ -114,7 +116,7 @@ const NewChatModal: React.FC<NewChatModalProps> = ({
         }
       } else if (currentUserRole === 'CLIENT') {
         // Clients can chat with guards assigned to their sites
-        const guardsResponse = await apiService.getClientGuards(1, 100);
+        const guardsResponse = await clientApi.getClientGuards(1, 100);
         if (guardsResponse.success && guardsResponse.data) {
           const guards = guardsResponse.data.items || guardsResponse.data || [];
           guards.forEach((guard: any) => {
@@ -132,7 +134,7 @@ const NewChatModal: React.FC<NewChatModalProps> = ({
         }
 
         // Also add existing admins from chats
-        const chatsResponse = await apiService.getChatRooms();
+        const chatsResponse = await chatApi.getChatRooms();
         if (chatsResponse.success && chatsResponse.data) {
           const chats = chatsResponse.data as any[];
           chats.forEach((chat: any) => {
@@ -158,7 +160,7 @@ const NewChatModal: React.FC<NewChatModalProps> = ({
         }
       } else if (currentUserRole === 'GUARD') {
         // Guards can see admins and clients from their chats
-        const chatsResponse = await apiService.getChatRooms();
+        const chatsResponse = await chatApi.getChatRooms();
         if (chatsResponse.success && chatsResponse.data) {
           const chats = chatsResponse.data as any[];
           chats.forEach((chat: any) => {
@@ -237,16 +239,12 @@ const NewChatModal: React.FC<NewChatModalProps> = ({
 
           {/* Search Bar */}
           <View style={styles.searchContainer}>
-            <View style={styles.searchInputContainer}>
-              <Search width={20} height={20} color={COLORS.textTertiary} style={styles.searchIcon} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search users..."
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholderTextColor={COLORS.textTertiary}
-              />
-            </View>
+            <FormInput
+              icon="search"
+              placeholder="Search users..."
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
           </View>
 
           {/* User List */}

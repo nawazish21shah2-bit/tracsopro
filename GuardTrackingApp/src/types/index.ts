@@ -13,6 +13,7 @@ export interface User {
   updatedAt: string;
   // Profile picture URL (optional)
   profilePictureUrl?: string | null;
+  isEmailVerified?: boolean;
   // Guard profile when role is GUARD
   guard?: {
     id: string;
@@ -32,8 +33,6 @@ export enum UserRole {
 
 export interface AuthState {
   user: User | null;
-  token: string | null;
-  refreshToken: string | null;
   tempUserId: string | null;
   tempEmail: string | null;
   isAuthenticated: boolean;
@@ -42,6 +41,7 @@ export interface AuthState {
   error: string | null;
   impersonationActive?: boolean;
   impersonatorLabel?: string | null;
+  sessionReady?: boolean;
 }
 
 // Guard Management Types

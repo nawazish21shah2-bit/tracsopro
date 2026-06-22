@@ -26,6 +26,7 @@ export interface ButtonProps {
   textStyle?: TextStyle;
   fullWidth?: boolean;
   hitSlop?: Insets;
+  testID?: string;
 }
 
 const Button: React.FC<ButtonProps> = ({
@@ -41,6 +42,7 @@ const Button: React.FC<ButtonProps> = ({
   textStyle,
   fullWidth = false,
   hitSlop,
+  testID,
 }) => {
   const { theme } = useTheme();
   const getButtonStyle = () => {
@@ -101,6 +103,10 @@ const Button: React.FC<ButtonProps> = ({
       disabled={disabled || loading}
       hitSlop={hitSlop}
       activeOpacity={0.8}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityState={{ disabled: disabled || loading }}
+      testID={testID}
     >
       {loading ? (
         <ActivityIndicator

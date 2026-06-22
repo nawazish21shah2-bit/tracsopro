@@ -16,7 +16,6 @@ import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { logoutUser, updateUserProfile } from '../../store/slices/authSlice';
 import { 
-  CheckCircleIcon,
   UserIcon,
   ShiftsIcon,
   LocationIcon,
@@ -29,7 +28,10 @@ import { FeatherIcon } from '../ui/FeatherIcons';
 import { GuardStackParamList } from '../../navigation/GuardStackNavigator';
 import { COLORS, SPACING, TYPOGRAPHY } from '../../styles/globalStyles';
 import { ProfileAvatar } from '../common/ProfileAvatar';
-import apiService from '../../services/api';
+import { EmailVerificationBadge } from '../common/VerifiedBadge';
+import { navigateToEmailVerification } from '../../utils/navigationHelpers';
+import { useSafeTopPadding } from '../../hooks/useSafeTopPadding';
+import { userApi } from '../../services/api/userApi';
 
 interface GuardProfileDrawerProps {
   visible: boolean;
@@ -67,7 +69,8 @@ export const GuardProfileDrawer: React.FC<GuardProfileDrawerProps> = ({
   const { user } = useSelector((state: RootState) => state.auth);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isUploadingPicture, setIsUploadingPicture] = useState(false);
-  
+  const drawerTopPadding = useSafeTopPadding();
+
   // Animation for slide from left
   const slideAnim = useRef(new Animated.Value(-Dimensions.get('window').width)).current;
   
@@ -144,11 +147,11 @@ export const GuardProfileDrawer: React.FC<GuardProfileDrawerProps> = ({
       setIsUploadingPicture(true);
       
       // Upload the image
-      const uploadResponse = await apiService.uploadProfilePicture(imageUri);
+      const uploadResponse = await userApi.uploadProfilePicture(imageUri);
       
       if (uploadResponse.success && uploadResponse.data?.url) {
         // For guards, also update the guard profile
-        await apiService.updateGuardProfile({ 
+        await userApi.updateGuardProfile({ 
           profilePictureUrl: uploadResponse.data.url 
         });
         
@@ -248,7 +251,12 @@ export const GuardProfileDrawer: React.FC<GuardProfileDrawerProps> = ({
   ];
 
   const fullName = user ? `${user.firstName} ${user.lastName}`.trim() : 'Guard';
-  const isVerified = user?.isActive ?? true;
+  const isEmailVerified = Boolean(user?.isEmailVerified);
+
+  const handleEmailVerificationPress = () => {
+    onClose();
+    navigateToEmailVerification(navigation);
+  };
 
   return (
     <Modal
@@ -268,6 +276,7 @@ export const GuardProfileDrawer: React.FC<GuardProfileDrawerProps> = ({
             styles.drawer,
             {
               transform: [{ translateX: slideAnim }],
+              paddingTop: drawerTopPadding,
             },
           ]}
           onStartShouldSetResponder={() => true}
@@ -286,12 +295,10 @@ export const GuardProfileDrawer: React.FC<GuardProfileDrawerProps> = ({
               />
             </View>
             <Text style={styles.userName}>{fullName}</Text>
-            {isVerified && (
-              <View style={styles.verifiedContainer}>
-                <Text style={styles.verifiedText}>Verified</Text>
-                <CheckCircleIcon size={14} color={COLORS.textPrimary} />
-              </View>
-            )}
+            <EmailVerificationBadge
+              isVerified={isEmailVerified}
+              onPress={isEmailVerified ? undefined : handleEmailVerificationPress}
+            />
             <View style={styles.separator} />
           </View>
 
@@ -333,7 +340,6 @@ const styles = StyleSheet.create({
     width: '70%',
     maxWidth: 320,
     backgroundColor: COLORS.backgroundPrimary,
-    paddingTop: SPACING.xl * 2,
     paddingHorizontal: SPACING.lg,
     paddingBottom: SPACING.lg,
     height: '100%',
@@ -363,17 +369,6 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     marginBottom: SPACING.sm,
     fontFamily: TYPOGRAPHY.fontPrimary,
-  },
-  verifiedContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-  },
-  verifiedText: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.textSecondary,
-    fontFamily: TYPOGRAPHY.fontPrimary,
-    fontWeight: TYPOGRAPHY.fontWeight.regular,
   },
   separator: {
     width: '100%',

@@ -15,9 +15,11 @@ import ImpersonationBanner from '../components/superAdmin/ImpersonationBanner';
 import IncidentDetailScreen from '../screens/main/IncidentDetailScreen';
 import CreateIncidentScreen from '../screens/main/CreateIncidentScreen';
 import AddIncidentReportScreen from '../screens/dashboard/AddIncidentReportScreen';
+import EmailVerificationScreen from '../screens/common/EmailVerificationScreen';
 
 export type MainStackParamList = {
   RootDrawer: undefined;
+  EmailVerification: undefined;
   IncidentDetail: { incidentId: string };
   CreateIncident: undefined;
   AddIncidentReport: undefined;
@@ -30,7 +32,7 @@ const MainTabNavigator: React.FC = () => {
 
   const userRole = user?.role as string | undefined;
   const isClient = userRole === UserRole.CLIENT || userRole === 'CLIENT';
-  const isAdmin = userRole === UserRole.ADMIN || userRole === 'ADMIN' || user?.email === 'admin@test.com';
+  const isAdmin = userRole === UserRole.ADMIN || userRole === 'ADMIN';
   const isSuperAdmin = userRole === 'SUPER_ADMIN';
 
   if (isSuperAdmin) {
@@ -66,6 +68,11 @@ const MainNavigator: React.FC = () => {
       <Stack.Screen
         name="RootDrawer"
         component={MainContentNavigator}
+      />
+      <Stack.Screen
+        name="EmailVerification"
+        component={EmailVerificationScreen}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="IncidentDetail"

@@ -18,7 +18,7 @@ import Button from '../../components/common/Button';
 import { AuthStackParamList, UserRole } from '../../types';
 import { AppDispatch } from '../../store';
 import { getCurrentUser } from '../../store/slices/authSlice';
-import apiService from '../../services/api';
+import { userApi } from '../../services/api/userApi';
 import Logo from '../../assets/images/tracSOpro-logo.png';
 import { CameraIcon, IDCardIcon, CertificationIcon, PersonIcon, AppIcon } from '../../components/ui/AppIcons';
 
@@ -133,7 +133,7 @@ const GuardProfileSetupScreen: React.FC = () => {
       };
 
       // Call API to update guard profile
-      const result = await apiService.updateGuardProfile(profileDataToSend);
+      const result = await userApi.updateGuardProfile(profileDataToSend);
       
       if (result.success) {
         // Refresh user data to get updated profile

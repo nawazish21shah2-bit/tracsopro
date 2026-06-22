@@ -1,5 +1,6 @@
-import * as Location from 'expo-location';
-import { Alert } from 'react-native';
+import Geolocation from 'react-native-geolocation-service';
+import { Alert, Linking, PermissionsAndroid, Platform } from 'react-native';
+import { requestLocationPermission } from '../utils/safeLocationHelper';
 
 export interface LocationData {
   latitude: number;
@@ -16,10 +17,18 @@ export interface GeofenceArea {
   name: string;
 }
 
+interface CachedPosition {
+  coords: {
+    latitude: number;
+    longitude: number;
+    accuracy: number;
+  };
+}
+
 class LocationValidationService {
   private static instance: LocationValidationService;
-  private watchId: Location.LocationSubscription | null = null;
-  private currentLocation: Location.LocationObject | null = null;
+  private watchId: number | null = null;
+  private currentLocation: CachedPosition | null = null;
 
   static getInstance(): LocationValidationService {
     if (!LocationValidationService.instance) {
@@ -28,29 +37,44 @@ class LocationValidationService {
     return LocationValidationService.instance;
   }
 
-  /**
-   * Request location permissions
-   */
   async requestLocationPermissions(): Promise<boolean> {
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      
-      if (status !== 'granted') {
+      if (Platform.OS === 'ios') {
+        const status = await Geolocation.requestAuthorization('whenInUse');
+        if (status === 'granted' || status === 'disabled') {
+          return status === 'granted';
+        }
         Alert.alert(
           'Location Permission Required',
           'This app needs location access to verify your check-in/out location.',
           [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Settings', onPress: () => Location.requestForegroundPermissionsAsync() },
-          ]
+            { text: 'Settings', onPress: () => Linking.openSettings() },
+          ],
         );
         return false;
       }
 
-      // Also request background permissions for continuous tracking
-      const backgroundStatus = await Location.requestBackgroundPermissionsAsync();
-      if (backgroundStatus.status !== 'granted') {
-        console.warn('Background location permission not granted');
+      const granted = await requestLocationPermission();
+      if (!granted) {
+        Alert.alert(
+          'Location Permission Required',
+          'This app needs location access to verify your check-in/out location.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Settings', onPress: () => Linking.openSettings() },
+          ],
+        );
+        return false;
+      }
+
+      if (Platform.OS === 'android' && Number(Platform.Version) >= 29) {
+        const backgroundGranted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION,
+        );
+        if (backgroundGranted !== PermissionsAndroid.RESULTS.GRANTED) {
+          console.warn('Background location permission not granted');
+        }
       }
 
       return true;
@@ -60,9 +84,6 @@ class LocationValidationService {
     }
   }
 
-  /**
-   * Get current location with high accuracy
-   */
   async getCurrentLocation(): Promise<LocationData | null> {
     try {
       const hasPermission = await this.requestLocationPermissions();
@@ -70,34 +91,27 @@ class LocationValidationService {
         throw new Error('Location permission not granted');
       }
 
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-        timeInterval: 5000,
-        distanceInterval: 1,
+      const location = await new Promise<CachedPosition>((resolve, reject) => {
+        Geolocation.getCurrentPosition(
+          (position) => resolve(position),
+          (error) => reject(error),
+          {
+            enableHighAccuracy: true,
+            timeout: 15000,
+            maximumAge: 5000,
+          },
+        );
       });
 
       this.currentLocation = location;
 
-      // Get address from coordinates
-      let address = '';
-      try {
-        const [addressResult] = await Location.reverseGeocodeAsync({
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-        });
-        
-        if (addressResult) {
-          address = `${addressResult.street || ''} ${addressResult.city || ''} ${addressResult.region || ''}`.trim();
-        }
-      } catch (addressError) {
-        console.warn('Could not get address:', addressError);
-      }
+      const { latitude, longitude, accuracy } = location.coords;
 
       return {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        accuracy: location.coords.accuracy || 0,
-        address,
+        latitude,
+        longitude,
+        accuracy: accuracy || 0,
+        address: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
         timestamp: new Date().toISOString(),
       };
     } catch (error) {
@@ -106,12 +120,9 @@ class LocationValidationService {
     }
   }
 
-  /**
-   * Start watching location changes
-   */
   async startLocationWatching(
     onLocationUpdate: (location: LocationData) => void,
-    onError?: (error: Error) => void
+    onError?: (error: Error) => void,
   ): Promise<boolean> {
     try {
       const hasPermission = await this.requestLocationPermissions();
@@ -119,24 +130,27 @@ class LocationValidationService {
         return false;
       }
 
-      this.watchId = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.High,
-          timeInterval: 30000, // Update every 30 seconds
-          distanceInterval: 10, // Update every 10 meters
-        },
-        (location) => {
-          this.currentLocation = location;
-          
-          const locationData: LocationData = {
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude,
-            accuracy: location.coords.accuracy || 0,
-            timestamp: new Date().toISOString(),
-          };
+      this.watchId = Geolocation.watchPosition(
+        (position) => {
+          this.currentLocation = position;
 
-          onLocationUpdate(locationData);
-        }
+          onLocationUpdate({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy || 0,
+            timestamp: new Date().toISOString(),
+          });
+        },
+        (error) => {
+          console.error('Error watching location:', error);
+          onError?.(new Error(error.message || 'Location watch failed'));
+        },
+        {
+          enableHighAccuracy: true,
+          interval: 30000,
+          distanceFilter: 10,
+          fastestInterval: 15000,
+        },
       );
 
       return true;
@@ -147,26 +161,20 @@ class LocationValidationService {
     }
   }
 
-  /**
-   * Stop watching location changes
-   */
   stopLocationWatching(): void {
-    if (this.watchId) {
-      this.watchId.remove();
+    if (this.watchId !== null) {
+      Geolocation.clearWatch(this.watchId);
       this.watchId = null;
     }
   }
 
-  /**
-   * Calculate distance between two coordinates (Haversine formula)
-   */
   calculateDistance(
     lat1: number,
     lon1: number,
     lat2: number,
-    lon2: number
+    lon2: number,
   ): number {
-    const R = 6371e3; // Earth's radius in meters
+    const R = 6371e3;
     const φ1 = (lat1 * Math.PI) / 180;
     const φ2 = (lat2 * Math.PI) / 180;
     const Δφ = ((lat2 - lat1) * Math.PI) / 180;
@@ -177,30 +185,24 @@ class LocationValidationService {
       Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-    return R * c; // Distance in meters
+    return R * c;
   }
 
-  /**
-   * Check if current location is within a geofence area
-   */
   isWithinGeofence(
     currentLat: number,
     currentLon: number,
-    geofence: GeofenceArea
+    geofence: GeofenceArea,
   ): boolean {
     const distance = this.calculateDistance(
       currentLat,
       currentLon,
       geofence.latitude,
-      geofence.longitude
+      geofence.longitude,
     );
 
     return distance <= geofence.radius;
   }
 
-  /**
-   * Validate location accuracy for check-in/out
-   */
   validateLocationAccuracy(accuracy: number): {
     isValid: boolean;
     level: 'excellent' | 'good' | 'poor' | 'unacceptable';
@@ -212,36 +214,34 @@ class LocationValidationService {
         level: 'excellent',
         message: 'Excellent GPS accuracy',
       };
-    } else if (accuracy <= 10) {
+    }
+    if (accuracy <= 10) {
       return {
         isValid: true,
         level: 'good',
         message: 'Good GPS accuracy',
       };
-    } else if (accuracy <= 20) {
+    }
+    if (accuracy <= 20) {
       return {
         isValid: true,
         level: 'poor',
         message: 'Poor GPS accuracy - consider moving to open area',
       };
-    } else {
-      return {
-        isValid: false,
-        level: 'unacceptable',
-        message: 'GPS accuracy too low - please move to an area with better signal',
-      };
     }
+    return {
+      isValid: false,
+      level: 'unacceptable',
+      message: 'GPS accuracy too low - please move to an area with better signal',
+    };
   }
 
-  /**
-   * Validate check-in location against site location
-   */
   async validateCheckInLocation(
     siteLocation: { latitude: number; longitude: number; radius?: number },
     options: {
       allowedRadius?: number;
       requireHighAccuracy?: boolean;
-    } = {}
+    } = {},
   ): Promise<{
     isValid: boolean;
     distance: number;
@@ -257,7 +257,6 @@ class LocationValidationService {
         throw new Error('Could not get current location');
       }
 
-      // Validate accuracy
       const accuracyValidation = this.validateLocationAccuracy(currentLocation.accuracy);
       if (requireHighAccuracy && !accuracyValidation.isValid) {
         return {
@@ -269,12 +268,11 @@ class LocationValidationService {
         };
       }
 
-      // Calculate distance to site
       const distance = this.calculateDistance(
         currentLocation.latitude,
         currentLocation.longitude,
         siteLocation.latitude,
-        siteLocation.longitude
+        siteLocation.longitude,
       );
 
       const maxAllowedRadius = siteLocation.radius || allowedRadius;
@@ -290,27 +288,19 @@ class LocationValidationService {
         location: currentLocation,
       };
     } catch (error) {
-      throw new Error(`Location validation failed: ${error.message}`);
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Location validation failed: ${message}`);
     }
   }
 
-  /**
-   * Get formatted location string
-   */
   formatLocation(location: LocationData): string {
     return `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)} (±${location.accuracy.toFixed(1)}m)`;
   }
 
-  /**
-   * Get current cached location
-   */
-  getCachedLocation(): Location.LocationObject | null {
+  getCachedLocation(): CachedPosition | null {
     return this.currentLocation;
   }
 
-  /**
-   * Clear cached location
-   */
   clearCache(): void {
     this.currentLocation = null;
   }

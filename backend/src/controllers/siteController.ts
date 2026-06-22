@@ -89,7 +89,7 @@ export class SiteController {
       const site = await siteService.getSiteById(
         id,
         req.userId!,
-        req.user?.role!,
+        req.user!.role,
         req.securityCompanyId,
         req.guardId
       );

@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { MapPin } from 'react-native-feather';
-import apiService from '../../services/api';
+import { clientApi } from '../../services/api/clientApi';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SectionHeader from '../../components/ui/SectionHeader';
@@ -66,7 +66,7 @@ const CreateShiftScreen: React.FC = () => {
 
   const fetchSiteInfo = async () => {
     try {
-      const result = await apiService.getClientSites(1, 100);
+      const result = await clientApi.getClientSites(1, 100);
       if (result.success && result.data?.sites) {
         const site = result.data.sites.find((s: any) => s.id === siteId);
         if (site) {
@@ -86,7 +86,7 @@ const CreateShiftScreen: React.FC = () => {
 
   const fetchAvailableGuards = async () => {
     try {
-      const result = await apiService.getClientGuards(1, 100);
+      const result = await clientApi.getClientGuards(1, 100);
       if (result.success && result.data) {
         const guards = result.data.guards || result.data.items || [];
         setAvailableGuards(guards);
@@ -140,7 +140,7 @@ const CreateShiftScreen: React.FC = () => {
           : {}),
       };
 
-      const result = await apiService.createClientShift(shiftData);
+      const result = await clientApi.createClientShift(shiftData);
 
       if (result.success) {
         Alert.alert('Success', getRepeatSuccessMessage(formValues.scheduleRepeat), [

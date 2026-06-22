@@ -1,40 +1,7 @@
-import apiService from './api';
+import { supportApi, SupportTicketRecord, SupportTicketReply } from './api/supportApi';
+import { chatApi } from './api/chatApi';
 
-export interface SupportTicketRecord {
-  id: string;
-  userId?: string;
-  subject: string;
-  message: string;
-  category: string;
-  status: string;
-  priority: string;
-  audience?: string;
-  conversationId?: string | null;
-  createdAt: string;
-  updatedAt?: string;
-  user?: {
-    id: string;
-    firstName: string;
-    lastName: string;
-    email?: string;
-    role?: string;
-  };
-  replies?: SupportTicketReply[];
-}
-
-export interface SupportTicketReply {
-  id: string;
-  ticketId: string;
-  senderId: string;
-  message: string;
-  createdAt: string;
-  sender?: {
-    id: string;
-    firstName: string;
-    lastName: string;
-    role: string;
-  };
-}
+export type { SupportTicketRecord, SupportTicketReply };
 
 class SupportApiService {
   async createTicket(data: {
@@ -43,10 +10,7 @@ class SupportApiService {
     category: string;
     audience?: 'COMPANY' | 'PLATFORM';
   }) {
-    const response = await apiService.post<{ success: boolean; data: SupportTicketRecord; message?: string }>(
-      '/support/tickets',
-      data,
-    );
+    const response = await supportApi.createTicket(data);
     const body = response.data;
     if (!body?.success || !body.data) {
       throw new Error(body?.message || 'Failed to create support ticket');
@@ -55,7 +19,7 @@ class SupportApiService {
   }
 
   async getMyTickets(page = 1, limit = 20) {
-    const response = await apiService.get(`/support/tickets/mine?page=${page}&limit=${limit}`);
+    const response = await supportApi.getMyTickets(page, limit);
     return response.data.data as {
       tickets: SupportTicketRecord[];
       pagination: { page: number; limit: number; total: number; pages: number };
@@ -63,8 +27,7 @@ class SupportApiService {
   }
 
   async getInbox(page = 1, limit = 20, status?: string) {
-    const qs = status ? `&status=${status}` : '';
-    const response = await apiService.get(`/support/tickets/inbox?page=${page}&limit=${limit}${qs}`);
+    const response = await supportApi.getInbox(page, limit, status);
     return response.data.data as {
       tickets: SupportTicketRecord[];
       pagination: { page: number; limit: number; total: number; pages: number };
@@ -72,28 +35,31 @@ class SupportApiService {
   }
 
   async getTicketById(ticketId: string) {
-    const response = await apiService.get(`/support/tickets/${ticketId}`);
+    const response = await supportApi.getTicketById(ticketId);
     return response.data.data as SupportTicketRecord;
   }
 
   async replyToTicket(ticketId: string, message: string) {
-    const response = await apiService.post(`/support/tickets/${ticketId}/replies`, { message });
+    const response = await supportApi.replyToTicket(ticketId, message);
     return response.data.data as SupportTicketReply;
   }
 
   async updateTicketStatus(ticketId: string, status: string) {
-    const response = await apiService.patch(`/support/tickets/${ticketId}`, { status });
+    const response = await supportApi.updateTicketStatus(ticketId, status);
     return response.data.data as SupportTicketRecord;
   }
 
   async openTicketChat(ticketId: string) {
-    const response = await apiService.post(`/support/tickets/${ticketId}/chat`);
+    const response = await supportApi.openTicketChat(ticketId);
     return response.data.data as { conversationId: string; ticket: SupportTicketRecord };
   }
 
   async openCompanySupportChat() {
-    const response = await apiService.post('/chat/support/company');
-    return response.data.data;
+    const response = await chatApi.openCompanySupportChat();
+    if (!response.success) {
+      throw new Error(response.message || 'Failed to open company support chat');
+    }
+    return response.data;
   }
 }
 

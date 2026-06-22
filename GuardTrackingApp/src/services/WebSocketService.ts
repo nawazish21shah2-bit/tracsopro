@@ -4,6 +4,11 @@ import { logger } from '../utils/logger';
 import { store } from '../store';
 import { updateLiveLocations, setGeofenceEvent } from '../store/slices/locationSlice';
 import { addNotification, fetchUnreadCount } from '../store/slices/notificationSlice';
+import {
+  applyEmergencyStatusUpdate,
+  fetchGuardActiveEmergencyAlert,
+  EmergencyStatusUpdate,
+} from '../store/slices/emergencySlice';
 import { NotificationType } from '../types';
 import { securityManager } from '../utils/security';
 
@@ -490,10 +495,17 @@ class WebSocketService {
 
   private onEmergencyAlert(data: any): void {
     logger.warn('EMERGENCY ALERT received:', data);
-    
-    // Handle emergency alerts - show notifications, alerts, etc.
-    // This would typically trigger immediate UI responses
   }
+
+  private onEmergencyStatusUpdate = (data: EmergencyStatusUpdate): void => {
+    logger.info('Emergency status update:', data);
+    store.dispatch(applyEmergencyStatusUpdate(data));
+
+    const authState = store.getState().auth;
+    if (authState.user?.role === 'GUARD') {
+      store.dispatch(fetchGuardActiveEmergencyAlert() as any);
+    }
+  };
 
   private onLiveLocationsUpdate(data: any[]): void {
     logger.debug('Received live locations update');
@@ -531,6 +543,9 @@ class WebSocketService {
     this.socket.on('guard_location_update', this.onGuardLocationUpdate);
     this.socket.on('geofence_event', this.onGeofenceEvent);
     this.socket.on('emergency_alert', this.onEmergencyAlert);
+    this.socket.on('emergency_acknowledged', this.onEmergencyStatusUpdate);
+    this.socket.on('emergency_resolved', this.onEmergencyStatusUpdate);
+    this.socket.on('emergency_status_update', this.onEmergencyStatusUpdate);
     this.socket.on('live_locations_update', this.onLiveLocationsUpdate);
     this.socket.on('live_locations_data', this.onLiveLocationsUpdate);
     this.listenersRegistered = true;
@@ -625,6 +640,9 @@ class WebSocketService {
     this.socket.off('guard_location_update', this.onGuardLocationUpdate);
     this.socket.off('geofence_event', this.onGeofenceEvent);
     this.socket.off('emergency_alert', this.onEmergencyAlert);
+    this.socket.off('emergency_acknowledged', this.onEmergencyStatusUpdate);
+    this.socket.off('emergency_resolved', this.onEmergencyStatusUpdate);
+    this.socket.off('emergency_status_update', this.onEmergencyStatusUpdate);
     this.socket.off('live_locations_update', this.onLiveLocationsUpdate);
     this.socket.off('live_locations_data', this.onLiveLocationsUpdate);
     this.listenersRegistered = false;

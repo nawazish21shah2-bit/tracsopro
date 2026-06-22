@@ -15,6 +15,17 @@ import shiftService from '../../services/shiftService';
 // Mock services
 jest.mock('../../services/shiftService');
 jest.mock('../../services/LocationService');
+jest.mock('../../utils/security', () => ({
+  securityManager: {
+    areTokensValid: jest.fn().mockResolvedValue(true),
+    getTokens: jest.fn().mockResolvedValue({
+      accessToken: 'test-token',
+      refreshToken: 'refresh-token',
+      expiresAt: Date.now() + 3600000,
+      tokenType: 'Bearer',
+    }),
+  },
+}));
 jest.mock('react-native-geolocation-service');
 
 describe('Shift Management Flow Integration', () => {
@@ -59,10 +70,7 @@ describe('Shift Management Flow Integration', () => {
       expect(fetchActiveShift.fulfilled.match(fetchResult)).toBe(true);
 
       // Step 2: Check in
-      (shiftService.checkIn as jest.Mock).mockResolvedValue({
-        message: 'Checked in successfully',
-        shift: mockActiveShift,
-      });
+      (shiftService.checkInToShift as jest.Mock).mockResolvedValue(mockActiveShift);
 
       const checkInResult = await store.dispatch(
         checkInToShift({
@@ -94,10 +102,7 @@ describe('Shift Management Flow Integration', () => {
       expect(state.locations.currentLocation).toBeDefined();
 
       // Step 4: Check out
-      (shiftService.checkOut as jest.Mock).mockResolvedValue({
-        message: 'Checked out successfully',
-        shift: mockCompletedShift,
-      });
+      (shiftService.checkOutFromShift as jest.Mock).mockResolvedValue(mockCompletedShift);
 
       const checkOutResult = await store.dispatch(
         checkOutFromShift({
@@ -117,7 +122,7 @@ describe('Shift Management Flow Integration', () => {
     });
 
     it('should handle check-in failure when shift not found', async () => {
-      (shiftService.checkIn as jest.Mock).mockRejectedValue({
+      (shiftService.checkInToShift as jest.Mock).mockRejectedValue({
         response: {
           status: 404,
           data: { error: 'Shift not found' },

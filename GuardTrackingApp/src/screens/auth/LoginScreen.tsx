@@ -93,12 +93,12 @@ const LoginScreen: React.FC = () => {
 
       const result = await dispatch(loginUser(formData));
       if (loginUser.fulfilled.match(result)) {
-        // Log success for debugging
         if (__DEV__) {
           console.log('✅ Login successful, user:', result.payload.user?.email, 'role:', result.payload.user?.role);
         }
-        // Navigation will be handled by AppNavigator based on auth state
-        // The AppNavigator will detect isAuthenticated change and navigate to Main
+        if (result.payload.emailVerificationWarning) {
+          Alert.alert('Email Not Verified', result.payload.emailVerificationWarning);
+        }
       } else {
         const errorMessage = result.payload as string;
         if (__DEV__) {
@@ -169,6 +169,7 @@ const LoginScreen: React.FC = () => {
           <View style={styles.form}>
             <View style={styles.inputContainer}>
               <AuthInput
+                testID="login-email-input"
                 ref={emailInputRef as any}
                 icon="mail-outline"
                 placeholder="Email Address"
@@ -186,6 +187,7 @@ const LoginScreen: React.FC = () => {
 
             <View style={styles.inputContainer}>
               <AuthInput
+                testID="login-password-input"
                 ref={passwordInputRef as any}
                 icon="lock-outline"
                 placeholder="Password"
@@ -228,6 +230,7 @@ const LoginScreen: React.FC = () => {
             </View>
 
             <Button
+              testID="login-submit-button"
               title={isLoading ? 'Signing In...' : 'Login'}
               onPress={handleLogin}
               disabled={isLoading}

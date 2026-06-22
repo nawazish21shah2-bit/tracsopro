@@ -9,17 +9,18 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  TextInput,
   Alert,
   ActivityIndicator,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
-import apiService from '../../services/api';
+import { shiftApi } from '../../services/api/shiftApi';
+import { clientApi } from '../../services/api/clientApi';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SectionHeader from '../../components/ui/SectionHeader';
+import FormInput from '../../components/common/FormInput';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { ClockIcon, FileTextIcon } from '../../components/ui/FeatherIcons';
 import { formatShiftTimeRange } from '../../utils/shiftStatusUtils';
@@ -58,7 +59,7 @@ const EditShiftScreen: React.FC = () => {
   const loadShift = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiService.getShiftById(shiftId);
+      const response = await shiftApi.getShiftById(shiftId);
       if (response.success && response.data) {
         if (response.data.status !== 'SCHEDULED') {
           Alert.alert('Cannot edit', 'Only scheduled shifts can be edited.', [
@@ -112,8 +113,8 @@ const EditShiftScreen: React.FC = () => {
 
       const result =
         role === 'ADMIN'
-          ? await apiService.updateAdminShift(shiftId, payload)
-          : await apiService.updateClientShift(shiftId, payload);
+          ? await shiftApi.updateAdminShift(shiftId, payload)
+          : await clientApi.updateClientShift(shiftId, payload);
 
       if (result.success) {
         Alert.alert('Saved', 'Shift updated successfully.', [
@@ -170,67 +171,58 @@ const EditShiftScreen: React.FC = () => {
         <SectionHeader title="Schedule" subtitle="Update shift start and end" />
 
         <View style={styles.formCard}>
-          <Text style={styles.fieldLabel}>Start date</Text>
-          <TextInput
-            style={styles.input}
+          <FormInput
+            label="Start date"
             value={startDate}
             onChangeText={setStartDate}
             placeholder="YYYY-MM-DD"
-            placeholderTextColor={COLORS.textTertiary}
+            containerStyle={styles.fieldSpacing}
           />
 
-          <Text style={styles.fieldLabel}>Start time (24h)</Text>
-          <TextInput
-            style={styles.input}
+          <FormInput
+            label="Start time (24h)"
             value={startTime}
             onChangeText={setStartTime}
             placeholder="HH:MM"
-            placeholderTextColor={COLORS.textTertiary}
+            containerStyle={styles.fieldSpacing}
           />
 
-          <Text style={styles.fieldLabel}>End date</Text>
-          <TextInput
-            style={styles.input}
+          <FormInput
+            label="End date"
             value={endDate}
             onChangeText={setEndDate}
             placeholder="YYYY-MM-DD"
-            placeholderTextColor={COLORS.textTertiary}
+            containerStyle={styles.fieldSpacing}
           />
 
-          <Text style={styles.fieldLabel}>End time (24h)</Text>
-          <TextInput
-            style={styles.input}
+          <FormInput
+            label="End time (24h)"
             value={endTime}
             onChangeText={setEndTime}
             placeholder="HH:MM"
-            placeholderTextColor={COLORS.textTertiary}
+            containerStyle={styles.fieldSpacing}
           />
         </View>
 
         <SectionHeader title="Details" subtitle="Optional shift notes" />
 
         <View style={styles.formCard}>
-          <View style={styles.fieldHeader}>
-            <FileTextIcon size={16} color={COLORS.primary} />
-            <Text style={styles.fieldLabelInline}>Description</Text>
-          </View>
-          <TextInput
-            style={[styles.input, styles.multiline]}
+          <FormInput
+            label="Description"
             value={description}
             onChangeText={setDescription}
             placeholder="Shift instructions for the guard..."
-            placeholderTextColor={COLORS.textTertiary}
             multiline
+            containerStyle={styles.fieldSpacing}
           />
 
-          <Text style={styles.fieldLabel}>Internal notes</Text>
-          <TextInput
-            style={[styles.input, styles.multiline]}
+          <FormInput
+            label="Internal notes"
             value={notes}
             onChangeText={setNotes}
             placeholder="Notes visible to your team..."
-            placeholderTextColor={COLORS.textTertiary}
             multiline
+            containerStyle={styles.fieldSpacing}
           />
         </View>
 
@@ -313,6 +305,9 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: COLORS.primary,
     ...SHADOWS.small,
+  },
+  fieldSpacing: {
+    marginBottom: SPACING.md,
   },
   fieldHeader: {
     flexDirection: 'row',

@@ -1,6 +1,8 @@
 // Incident Report Service
+import { IncidentReportStatus } from '@prisma/client';
 import prisma from '../config/database.js';
 import notificationService from './notificationService.js';
+import { logger } from '../utils/logger.js';
 
 interface CreateIncidentReportData {
   guardId: string;
@@ -58,7 +60,7 @@ class IncidentReportService {
           locationAddress: location?.address,
           locationLatitude: location?.latitude,
           locationLongitude: location?.longitude,
-          status: 'SUBMITTED',
+          status: IncidentReportStatus.SUBMITTED,
           submittedAt: new Date(),
         },
         include: {
@@ -124,7 +126,7 @@ class IncidentReportService {
         }
       }
     } catch (err) {
-      console.error('Failed to notify admins of new incident report:', err);
+      logger.error('Failed to notify admins of new incident report:', err);
     }
 
     return this.formatIncidentReport(report);
@@ -612,7 +614,12 @@ class IncidentReportService {
         ? `\n\n[Response by ${userRole} - ${status}]: ${responseNotes}`
         : `\n\n[Response by ${userRole} - ${status}]`;
 
-      const newStatus = status === 'REVIEWED' ? 'REVIEWED' : status === 'RESOLVED' ? 'RESOLVED' : report.status;
+      const newStatus =
+        status === 'REVIEWED'
+          ? IncidentReportStatus.REVIEWED
+          : status === 'RESOLVED'
+            ? IncidentReportStatus.RESOLVED
+            : report.status;
       
       const historyEntry = {
         status: newStatus,
@@ -621,7 +628,7 @@ class IncidentReportService {
         timestamp: new Date().toISOString()
       };
 
-      // @ts-ignore - Prisma types might not be perfectly in sync due to locked node_modules
+      // @ts-expect-error Prisma Json field typing for statusHistory
       const currentHistory = report.statusHistory ? (report.statusHistory as any[]) : [];
       const newHistory = [...currentHistory, historyEntry];
 
@@ -661,12 +668,12 @@ class IncidentReportService {
           sendPush: true,
         }, undefined, userId);
       } catch (err) {
-        console.error('Failed to send notification to guard:', err);
+        logger.error('Failed to send notification to guard:', err);
       }
 
       return this.formatIncidentReport(updatedReport);
     } catch (error) {
-      console.error('Error responding to report:', error);
+      logger.error('Error responding to report:', error);
       throw error;
     }
   }

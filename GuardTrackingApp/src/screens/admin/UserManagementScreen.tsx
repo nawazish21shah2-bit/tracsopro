@@ -3,7 +3,7 @@
  * Manage guards, clients, and admin users with role-based permissions
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,6 @@ import {
   TouchableOpacity,
   Alert,
   Modal,
-  TextInput,
 } from 'react-native';
 import { useSelector } from 'react-redux';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,9 +23,9 @@ import {
   TrashIcon,
   CheckCircleIcon,
   AlertTriangleIcon,
+  MessageCircleIcon,
 } from '../../components/ui/FeatherIcons';
-import { MessageCircle } from 'react-native-feather';
-import apiService from '../../services/api';
+import { adminApi } from '../../services/api/adminApi';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
@@ -38,17 +37,10 @@ import { SubscriptionResource } from '../../utils/subscriptionUtils';
 import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
 import { RefreshControl } from 'react-native';
 import { findOrCreateAdminGuardChat, findOrCreateClientAdminChat } from '../../utils/chatHelper';
+import { useUserList, UserListItem } from '../../features/user-management/hooks/useUserList';
+import FormInput from '../../components/common/FormInput';
 
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: 'admin' | 'guard' | 'client';
-  status: 'active' | 'inactive' | 'suspended';
-  department?: string;
-  lastLogin?: string;
-  createdAt: string;
-}
+type User = UserListItem;
 
 interface UserManagementScreenProps {
   navigation: any;
@@ -77,11 +69,9 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
   const BUTTON_SPACING = 16;
   const buttonBottom = TAB_BAR_HEIGHT + insets.bottom + BUTTON_SPACING;
 
-  const [users, setUsers] = useState<User[]>([]);
   const [selectedRole, setSelectedRole] = useState<'all' | 'admin' | 'guard' | 'client'>('all');
+  const { users, loading, error, refresh: loadUsers, setUsers } = useUserList(selectedRole);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [newUser, setNewUser] = useState({
     name: '',
@@ -100,74 +90,10 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
   const [updatingUser, setUpdatingUser] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadUsers();
-  }, []);
-
-  const loadUsers = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const roleMap: Record<string, 'ADMIN' | 'GUARD' | 'CLIENT' | 'SUPER_ADMIN' | undefined> = {
-        'all': undefined,
-        'admin': 'ADMIN',
-        'guard': 'GUARD',
-        'client': 'CLIENT',
-      };
-
-      const response = await apiService.getAdminUsers({
-        role: roleMap[selectedRole],
-      });
-
-      if (!response.success || !response.data) {
-        throw new Error(response.message || 'Failed to load users');
-      }
-
-      const backendUsers = response.data.users as any[];
-
-      const mappedUsers: User[] = backendUsers.map((u) => {
-        const fullName = `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email;
-        const roleMap: Record<string, User['role']> = {
-          ADMIN: 'admin',
-          GUARD: 'guard',
-          CLIENT: 'client',
-          SUPER_ADMIN: 'super_admin', // Added for completeness
-        };
-
-        return {
-          id: u.id,
-          name: fullName,
-          email: u.email,
-          role: roleMap[u.role] || 'guard',
-          status: u.isActive ? 'active' : 'inactive',
-          department: u.guard?.department,
-          createdAt: u.createdAt,
-          lastLogin: undefined,
-        };
-      });
-
-      setUsers(mappedUsers);
-    } catch (error: any) {
-      console.error('Failed to load users:', error);
-      const errorMessage = error.message || 'Failed to load users';
-      setError(errorMessage);
-      if (!refreshing) {
-        Alert.alert('Error', errorMessage);
-      }
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  useEffect(() => {
-    loadUsers();
-  }, [selectedRole]);
-
   const onRefresh = async () => {
     setRefreshing(true);
     await loadUsers();
+    setRefreshing(false);
   };
 
   const userResource = (role: User['role']): SubscriptionResource | null => {
@@ -213,7 +139,7 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
 
     setCreatingUser(true);
     try {
-      const response = await apiService.createAdminUser({
+      const response = await adminApi.createAdminUser({
         email: newUser.email.trim().toLowerCase(),
         password: tempPassword,
         firstName,
@@ -315,7 +241,7 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
   const updateUserStatus = async (userId: string, isActive: boolean) => {
     setActionLoading(userId);
     try {
-      const response = await apiService.updateAdminUserStatus(userId, isActive);
+      const response = await adminApi.updateAdminUserStatus(userId, isActive);
       if (!response.success) {
         Alert.alert('Error', response.message || `Failed to ${isActive ? 'activate' : 'suspend'} user`);
         return;
@@ -334,7 +260,7 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
   const deleteUser = async (userId: string) => {
     setActionLoading(userId);
     try {
-      const response = await apiService.deleteAdminUser(userId);
+      const response = await adminApi.deleteAdminUser(userId);
       if (!response.success) {
         Alert.alert('Error', response.message || 'Failed to delete user');
         return;
@@ -366,7 +292,7 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
 
     setUpdatingUser(true);
     try {
-      const response = await apiService.updateAdminUser(editingUserId, {
+      const response = await adminApi.updateAdminUser(editingUserId, {
         firstName,
         lastName,
         email: editUser.email.trim().toLowerCase(),
@@ -566,7 +492,7 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
           renderUserCardAction(
             'Chat',
             () => handleUserChat(item),
-            <MessageCircle size={ACTION_ICON_SIZE} color={COLORS.primary} />,
+            <MessageCircleIcon size={ACTION_ICON_SIZE} color={COLORS.primary} />,
           )}
 
         {renderUserCardAction(
@@ -667,6 +593,7 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
           </View>
         ) : (
           <FlatList
+            testID="admin-user-management-screen"
             data={filteredUsers}
             renderItem={renderUserItem}
             keyExtractor={(item) => item.id}
@@ -724,29 +651,26 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
           </View>
 
           <View style={styles.modalContent}>
-            <View style={styles.formField}>
-              <Text style={styles.fieldLabel}>Full Name</Text>
-              <TextInput
-                style={styles.fieldInput}
-                value={newUser.name}
-                onChangeText={(text) => setNewUser(prev => ({ ...prev, name: text }))}
-                placeholder="Enter full name"
-                editable={!creatingUser}
-              />
-            </View>
+            <FormInput
+              label="Full Name"
+              value={newUser.name}
+              onChangeText={(text) => setNewUser(prev => ({ ...prev, name: text }))}
+              placeholder="Enter full name"
+              editable={!creatingUser}
+              containerStyle={styles.formField}
+            />
 
-            <View style={styles.formField}>
-              <Text style={styles.fieldLabel}>Email</Text>
-              <TextInput
-                style={styles.fieldInput}
-                value={newUser.email}
-                onChangeText={(text) => setNewUser(prev => ({ ...prev, email: text }))}
-                placeholder="Enter email address"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                editable={!creatingUser}
-              />
-            </View>
+            <FormInput
+              label="Email"
+              icon="mail-outline"
+              value={newUser.email}
+              onChangeText={(text) => setNewUser(prev => ({ ...prev, email: text }))}
+              placeholder="Enter email address"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              editable={!creatingUser}
+              containerStyle={styles.formField}
+            />
 
             <View style={styles.formField}>
               <Text style={styles.fieldLabel}>Role</Text>
@@ -775,16 +699,14 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
             </View>
 
             {newUser.role === 'guard' && (
-              <View style={styles.formField}>
-                <Text style={styles.fieldLabel}>Department</Text>
-                <TextInput
-                  style={styles.fieldInput}
-                  value={newUser.department}
-                  onChangeText={(text) => setNewUser(prev => ({ ...prev, department: text }))}
-                  placeholder="Enter department"
-                  editable={!creatingUser}
-                />
-              </View>
+              <FormInput
+                label="Department"
+                value={newUser.department}
+                onChangeText={(text) => setNewUser(prev => ({ ...prev, department: text }))}
+                placeholder="Enter department"
+                editable={!creatingUser}
+                containerStyle={styles.formField}
+              />
             )}
 
             <TouchableOpacity
@@ -822,29 +744,26 @@ const UserManagementScreen: React.FC<UserManagementScreenProps> = ({ navigation 
           </View>
 
           <View style={styles.modalContent}>
-            <View style={styles.formField}>
-              <Text style={styles.fieldLabel}>Full Name</Text>
-              <TextInput
-                style={styles.fieldInput}
-                value={editUser.name}
-                onChangeText={(text) => setEditUser(prev => ({ ...prev, name: text }))}
-                placeholder="Enter full name"
-                editable={!updatingUser}
-              />
-            </View>
+            <FormInput
+              label="Full Name"
+              value={editUser.name}
+              onChangeText={(text) => setEditUser(prev => ({ ...prev, name: text }))}
+              placeholder="Enter full name"
+              editable={!updatingUser}
+              containerStyle={styles.formField}
+            />
 
-            <View style={styles.formField}>
-              <Text style={styles.fieldLabel}>Email</Text>
-              <TextInput
-                style={styles.fieldInput}
-                value={editUser.email}
-                onChangeText={(text) => setEditUser(prev => ({ ...prev, email: text }))}
-                placeholder="Enter email address"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                editable={!updatingUser}
-              />
-            </View>
+            <FormInput
+              label="Email"
+              icon="mail-outline"
+              value={editUser.email}
+              onChangeText={(text) => setEditUser(prev => ({ ...prev, email: text }))}
+              placeholder="Enter email address"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              editable={!updatingUser}
+              containerStyle={styles.formField}
+            />
 
             <View style={styles.formField}>
               <Text style={styles.fieldLabel}>Role</Text>

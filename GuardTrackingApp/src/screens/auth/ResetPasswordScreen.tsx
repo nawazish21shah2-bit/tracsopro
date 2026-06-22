@@ -17,7 +17,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootState, AppDispatch } from '../../store';
 import { clearError } from '../../store/slices/authSlice';
-import apiService from '../../services/api';
+import { authApi } from '../../services/api/authApi';
 import { AuthStackParamList } from '../../types';
 import Button from '../../components/common/Button';
 import AuthHeader from '../../components/auth/AuthHeader';
@@ -77,7 +77,7 @@ const ResetPasswordScreen: React.FC = () => {
 
     setIsLoading(true);
     try {
-      const result = await apiService.resetPassword(email, otp, formData.password);
+      const result = await authApi.resetPassword(email, otp, formData.password);
 
       if (result.success) {
         Alert.alert(

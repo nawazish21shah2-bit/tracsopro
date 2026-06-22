@@ -17,15 +17,18 @@ import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch } from '../../store';
 import { AuthStackParamList } from '../../types';
 import { RootState } from '../../store';
-import { verifyOTP, resendOTP } from '../../store/slices/authSlice';
+import { verifyOTP, resendOTP, forgotPassword } from '../../store/slices/authSlice';
 import Button from '../../components/common/Button';
 import AuthOtpInput from '../../components/auth/AuthOtpInput';
+import AuthFooter from '../../components/auth/AuthFooter';
 import Logo from '../../assets/images/tracSOpro-logo.png';
 import { authStyles, AUTH_HEADING_TO_FORM } from '../../styles/authStyles';
 import { COLORS, SPACING } from '../../styles/globalStyles';
 
 type AdminOTPScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'AdminOTP'>;
 type AdminOTPScreenRouteProp = RouteProp<AuthStackParamList, 'AdminOTP'>;
+
+const RESEND_COOLDOWN_SECONDS = 60;
 
 const AdminOTPScreen: React.FC = () => {
   const navigation = useNavigation<AdminOTPScreenNavigationProp>();
@@ -42,6 +45,11 @@ const AdminOTPScreen: React.FC = () => {
   const [canResend, setCanResend] = useState(true);
   const [resendTimer, setResendTimer] = useState(0);
   const inputRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    setCanResend(false);
+    setResendTimer(RESEND_COOLDOWN_SECONDS);
+  }, []);
 
   useEffect(() => {
     // Auto-focus the input when screen loads
@@ -67,6 +75,10 @@ const AdminOTPScreen: React.FC = () => {
     // Only allow numbers and limit to 6 digits
     const numericValue = value.replace(/[^0-9]/g, '').slice(0, 6);
     setOtp(numericValue);
+  };
+
+  const navigateToLogin = () => {
+    navigation.navigate('Login');
   };
 
   const handleVerifyOtp = async () => {
@@ -114,23 +126,40 @@ const AdminOTPScreen: React.FC = () => {
   };
 
   const handleResendOtp = async () => {
-    if (!canResend || (!tempUserId && !isPasswordReset)) return;
+    if (!canResend) return;
+    if (!isPasswordReset && !tempUserId) return;
 
     setCanResend(false);
-    setResendTimer(60);
-    
+    setResendTimer(RESEND_COOLDOWN_SECONDS);
+
     try {
       if (isPasswordReset) {
-        // For password reset, we need to implement forgot password resend
-        // For now, show message to use forgot password again
-        Alert.alert('Resend Code', 'Please use the "Forgot Password" option from the login screen to receive a new code.');
-        setCanResend(true);
-        setResendTimer(0);
+        if (!email) {
+          Alert.alert('Error', 'Email not found. Please start the password reset process again.');
+          setCanResend(true);
+          setResendTimer(0);
+          return;
+        }
+
+        const result = await dispatch(forgotPassword(email));
+
+        if (forgotPassword.fulfilled.match(result)) {
+          Alert.alert('OTP Sent', 'A new password reset code has been sent to your email address');
+        } else {
+          const errorMessage = result.payload as string;
+          if (errorMessage.includes('rate limit') || errorMessage.includes('Too many')) {
+            Alert.alert('Rate Limit Exceeded', errorMessage);
+          } else {
+            Alert.alert('Error', errorMessage || 'Failed to resend OTP. Please try again.');
+          }
+          setCanResend(true);
+          setResendTimer(0);
+        }
         return;
       }
 
       const result = await dispatch(resendOTP(tempUserId!));
-      
+
       if (resendOTP.fulfilled.match(result)) {
         Alert.alert('OTP Sent', 'A new OTP has been sent to your email address');
       } else {
@@ -214,6 +243,13 @@ const AdminOTPScreen: React.FC = () => {
           disabled={otp.length !== 6}
           style={styles.verifyButton}
         />
+
+        <AuthFooter
+          text="Remember your password?"
+          linkText="Login"
+          onLinkPress={navigateToLogin}
+          disabled={isLoading}
+        />
       </ScrollView>
     </View>
   );
@@ -276,7 +312,6 @@ const styles = StyleSheet.create({
   },
   verifyButton: {
     marginTop: 'auto',
-    marginBottom: 20,
   },
 });
 

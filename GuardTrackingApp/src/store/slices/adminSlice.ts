@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import apiService from '../../services/api';
+import { adminApi } from '../../services/api/adminApi';
 
 // Types
 export interface DashboardMetrics {
@@ -55,7 +55,7 @@ export const fetchDashboardStats = createAsyncThunk(
   'admin/fetchDashboardStats',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await apiService.getAdminDashboardStats();
+      const response = await adminApi.getAdminDashboardStats();
       if (!response.success || !response.data) {
         return rejectWithValue(response.message || 'Failed to fetch dashboard statistics');
       }
@@ -73,7 +73,7 @@ export const fetchRecentActivity = createAsyncThunk(
   'admin/fetchRecentActivity',
   async (limit: number = 10, { rejectWithValue }) => {
     try {
-      const response = await apiService.getAdminRecentActivity(limit);
+      const response = await adminApi.getAdminRecentActivity(limit);
       if (!response.success || !response.data) {
         return rejectWithValue(response.message || 'Failed to fetch recent activity');
       }

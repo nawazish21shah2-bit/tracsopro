@@ -1,7 +1,7 @@
 // Location and Tracking Redux Slice
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { Location, LocationState, TrackingData, Coordinates } from '../../types';
-import apiService from '../../services/api';
+import { trackingApi } from '../../services/api/trackingApi';
 
 // Initial state
 const initialState: LocationState = {
@@ -18,7 +18,7 @@ export const fetchLocations = createAsyncThunk(
   'locations/fetchLocations',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await apiService.getLocations();
+      const response = await trackingApi.getLocations();
       if (response.success) {
         return response.data;
       } else {
@@ -34,7 +34,7 @@ export const updateLocation = createAsyncThunk(
   'locations/updateLocation',
   async (locationData: Partial<Location>, { rejectWithValue }) => {
     try {
-      const response = await apiService.updateLocation(locationData);
+      const response = await trackingApi.updateLocation(locationData);
       if (response.success) {
         return response.data;
       } else {
@@ -55,7 +55,7 @@ export const sendLocationUpdate = createAsyncThunk(
     batteryLevel: number;
   }, { rejectWithValue }) => {
     try {
-      const response = await apiService.sendLocationUpdate(trackingData);
+      const response = await trackingApi.sendLocationUpdate(trackingData);
       if (response.success) {
         return trackingData;
       } else {
@@ -71,7 +71,7 @@ export const fetchTrackingHistory = createAsyncThunk(
   'locations/fetchTrackingHistory',
   async (params: { guardId: string; startDate?: Date; endDate?: Date }, { rejectWithValue }) => {
     try {
-      const response = await apiService.getTrackingHistory(params.guardId, params.startDate, params.endDate);
+      const response = await trackingApi.getTrackingHistory(params.guardId, params.startDate, params.endDate);
       if (response.success) {
         return response.data;
       } else {
@@ -94,7 +94,7 @@ export const recordLocationData = createAsyncThunk(
     timestamp: number;
   }, { rejectWithValue }) => {
     try {
-      const response = await apiService.recordLocation(locationData.guardId, locationData);
+      const response = await trackingApi.recordLocation(locationData.guardId, locationData);
       if (response.success) {
         return { ...locationData, id: response.data.id };
       } else {
@@ -121,7 +121,7 @@ export const recordGeofenceEvent = createAsyncThunk(
     timestamp: number;
   }, { rejectWithValue }) => {
     try {
-      const response = await apiService.recordGeofenceEvent(eventData);
+      const response = await trackingApi.recordGeofenceEvent(eventData);
       if (response.success) {
         return response.data;
       } else {
@@ -137,7 +137,7 @@ export const getLiveLocations = createAsyncThunk(
   'locations/getLiveLocations',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await apiService.getLiveLocations();
+      const response = await trackingApi.getLiveLocations();
       if (response.success) {
         return response.data;
       } else {

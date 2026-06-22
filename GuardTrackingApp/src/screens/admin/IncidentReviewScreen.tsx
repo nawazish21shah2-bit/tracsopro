@@ -12,12 +12,11 @@ import {
   TouchableOpacity,
   Alert,
   Modal,
-  TextInput,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { logoutUser } from '../../store/slices/authSlice';
-import apiService from '../../services/api';
+import { incidentApi } from '../../services/api/incidentApi';
 import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
 import { RefreshControl } from 'react-native';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
@@ -28,6 +27,7 @@ import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 import { useNotificationBell } from '../../hooks/useNotificationBell';
 import { ReportsIcon, EmergencyIcon, CheckCircleIcon } from '../../components/ui/AppIcons';
 import { CameraIcon, MicIcon, CloudIcon } from '../../components/ui/FeatherIcons';
+import FormInput from '../../components/common/FormInput';
 import SegmentTabs from '../../components/shifts/SegmentTabs';
 import { getReportSourceLabel, getReportTypeLabel } from '../../utils/reportUtils';
 
@@ -178,9 +178,9 @@ const IncidentReviewScreen: React.FC<IncidentReviewScreenProps> = ({ navigation 
       setError(null);
 
       const [incidentResponse, shiftResponse] = await Promise.all([
-        apiService.getAllIncidentReports({ page: 1, limit: 100 }),
+        incidentApi.getAllIncidentReports({ page: 1, limit: 100 }),
         sourceFilter !== 'incident'
-          ? apiService.getCompanyShiftReports(1, 100)
+          ? incidentApi.getCompanyShiftReports(1, 100)
           : Promise.resolve({ success: true, data: { reports: [] } }),
       ]);
 
@@ -244,7 +244,7 @@ const IncidentReviewScreen: React.FC<IncidentReviewScreenProps> = ({ navigation 
     if (!selectedItem || selectedItem.source !== 'incident') return;
 
     try {
-      const response = await apiService.respondToReport(
+      const response = await incidentApi.respondToReport(
         selectedItem.id, 
         'REVIEWED',
         reviewNotes.trim() || undefined
@@ -272,7 +272,7 @@ const IncidentReviewScreen: React.FC<IncidentReviewScreenProps> = ({ navigation 
     }
 
     try {
-      const response = await apiService.respondToReport(
+      const response = await incidentApi.respondToReport(
         selectedItem.id,
         'RESOLVED',
         reviewNotes.trim()
@@ -436,13 +436,14 @@ const IncidentReviewScreen: React.FC<IncidentReviewScreenProps> = ({ navigation 
               <Text style={styles.mediaTitle}>Media Files: {selectedItem.mediaFiles.length}</Text>
             </View>
             
-            <TextInput
-              style={styles.reviewInput}
-              placeholder="Add review notes..."
+            <FormInput
+              label="Review notes"
               value={reviewNotes}
               onChangeText={setReviewNotes}
+              placeholder="Add review notes..."
               multiline
               numberOfLines={3}
+              containerStyle={styles.reviewInputContainer}
             />
             
             <View style={styles.reviewActions}>
@@ -880,15 +881,8 @@ const styles = StyleSheet.create({
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
     color: COLORS.textPrimary,
   },
-  reviewInput: {
-    backgroundColor: COLORS.backgroundSecondary,
-    borderRadius: 8,
-    padding: SPACING.md,
-    fontSize: TYPOGRAPHY.fontSize.md,
-    color: COLORS.textPrimary,
+  reviewInputContainer: {
     marginBottom: SPACING.lg,
-    minHeight: 80,
-    textAlignVertical: 'top',
   },
   reviewActions: {
     flexDirection: 'row',

@@ -1,6 +1,7 @@
 import prisma from '../config/database.js';
 import websocketService from './websocketService.js';
 import { ConflictError, NotFoundError } from '../utils/errors.js';
+import { logger } from '../utils/logger.js';
 
 export interface EmergencyAlert {
   id: string;
@@ -20,6 +21,7 @@ export interface EmergencyAlert {
   resolvedAt?: Date;
   acknowledgedBy?: string;
   resolvedBy?: string;
+  responderName?: string;
 }
 
 export class EmergencyService {
@@ -73,6 +75,19 @@ export class EmergencyService {
       return null;
     }
 
+    let responderName: string | undefined;
+    if (incident.acknowledgedBy) {
+      const responder = await prisma.user.findUnique({
+        where: { id: incident.acknowledgedBy },
+        select: { firstName: true, lastName: true, role: true },
+      });
+      if (responder) {
+        const roleLabel =
+          responder.role === 'CLIENT' ? 'Client' : responder.role === 'ADMIN' ? 'Admin' : 'Responder';
+        responderName = `${responder.firstName || ''} ${responder.lastName || ''}`.trim() || roleLabel;
+      }
+    }
+
     return {
       id: incident.id,
       guardId,
@@ -83,6 +98,7 @@ export class EmergencyService {
       status: incident.status === 'REPORTED' ? 'ACTIVE' : 'ACKNOWLEDGED',
       createdAt: incident.createdAt,
       acknowledgedAt: incident.acknowledgedAt || undefined,
+      responderName,
     };
   }
 
@@ -294,11 +310,11 @@ export class EmergencyService {
       });
 
       // Log emergency event
-      console.log(`🚨 EMERGENCY ALERT: ${data.type} - Guard: ${guard.user.firstName} ${guard.user.lastName} (${guard.employeeId})`);
+      logger.info(`🚨 EMERGENCY ALERT: ${data.type} - Guard: ${guard.user.firstName} ${guard.user.lastName} (${guard.employeeId})`);
 
       return emergencyAlert;
     } catch (error) {
-      console.error('Error triggering emergency alert:', error);
+      logger.error('Error triggering emergency alert:', error);
       throw error;
     }
   }
@@ -342,15 +358,11 @@ export class EmergencyService {
         throw new ConflictError('Unable to acknowledge emergency alert');
       }
 
-      websocketService.broadcastToAdmins('emergency_acknowledged', {
-        alertId,
-        acknowledgedBy,
-        acknowledgedAt: new Date().toISOString(),
-      });
+      await this.notifyEmergencyStatusChange(alertId, acknowledgedBy, 'ACKNOWLEDGED');
 
-      console.log(`✓ Emergency alert ${alertId} acknowledged by ${acknowledgedBy}`);
+      logger.info(`✓ Emergency alert ${alertId} acknowledged by ${acknowledgedBy}`);
     } catch (error) {
-      console.error('Error acknowledging emergency alert:', error);
+      logger.error('Error acknowledging emergency alert:', error);
       throw error;
     }
   }
@@ -469,16 +481,12 @@ export class EmergencyService {
         throw new ConflictError('Unable to resolve emergency alert');
       }
 
-      websocketService.broadcastToAdmins('emergency_resolved', {
-        alertId,
-        resolvedBy,
-        status: targetStatus,
-        resolvedAt: new Date().toISOString(),
-      });
+      const resolvedStatus = status === 'FALSE_ALARM' ? 'FALSE_ALARM' : 'RESOLVED';
+      await this.notifyEmergencyStatusChange(alertId, resolvedBy, resolvedStatus, resolution);
 
-      console.log(`✓ Emergency alert ${alertId} resolved by ${resolvedBy}: ${status}`);
+      logger.info(`✓ Emergency alert ${alertId} resolved by ${resolvedBy}: ${status}`);
     } catch (error) {
-      console.error('Error resolving emergency alert:', error);
+      logger.error('Error resolving emergency alert:', error);
       throw error;
     }
   }
@@ -585,7 +593,7 @@ export class EmergencyService {
         };
       });
     } catch (error) {
-      console.error('Error getting active emergency alerts:', error);
+      logger.error('Error getting active emergency alerts:', error);
       throw error;
     }
   }
@@ -647,7 +655,7 @@ export class EmergencyService {
         resolvedAt: incident.resolvedAt || undefined,
       }));
     } catch (error) {
-      console.error('Error getting guard emergency history:', error);
+      logger.error('Error getting guard emergency history:', error);
       throw error;
     }
   }
@@ -705,11 +713,11 @@ export class EmergencyService {
           );
 
           if (sent) {
-            console.log(`📱 Emergency notification sent to client: ${client.user.email}`);
+            logger.info(`📱 Emergency notification sent to client: ${client.user.email}`);
           }
         }
       } else {
-        console.warn(`⚠️  No client found for site (Site ID: ${siteId}) - client notification skipped`);
+        logger.warn(`⚠️  No client found for site (Site ID: ${siteId}) - client notification skipped`);
       }
 
       // Get admins related to this specific site
@@ -771,12 +779,12 @@ export class EmergencyService {
             actorUserId
           );
 
-          console.log(
+          logger.info(
             `📱 Emergency notifications sent to ${sent.length} admin(s) for site: ${siteName || 'Unknown'}`
           );
         }
       } else {
-        console.warn(`⚠️  Guard ${guard.id} not linked to a company - admin notifications skipped`);
+        logger.warn(`⚠️  Guard ${guard.id} not linked to a company - admin notifications skipped`);
       }
 
       // Get emergency contacts for the guard (always notify these)
@@ -785,14 +793,14 @@ export class EmergencyService {
       });
 
       if (emergencyContacts.length > 0) {
-        console.log(`📞 Guard has ${emergencyContacts.length} emergency contact(s) configured`);
+        logger.info(`📞 Guard has ${emergencyContacts.length} emergency contact(s) configured`);
         // TODO: Send SMS/email notifications to emergency contacts if configured
       }
 
       // Send push notifications (if configured)
       // await NotificationService.sendPushNotifications(adminNotifications);
     } catch (error) {
-      console.error('Error sending emergency notifications:', error);
+      logger.error('Error sending emergency notifications:', error);
       throw error;
     }
   }
@@ -803,6 +811,157 @@ export class EmergencyService {
       select: { description: true },
     });
     return incident?.description || '';
+  }
+
+  /**
+   * Notify guard, client, and admins when an emergency is acknowledged or resolved.
+   */
+  private async notifyEmergencyStatusChange(
+    alertId: string,
+    actorUserId: string,
+    action: 'ACKNOWLEDGED' | 'RESOLVED' | 'FALSE_ALARM',
+    resolution?: string,
+  ): Promise<void> {
+    try {
+      const incident = await prisma.incident.findUnique({
+        where: { id: alertId },
+        include: {
+          reporter: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              guard: { select: { id: true } },
+            },
+          },
+          location: { select: { name: true } },
+        },
+      });
+
+      if (!incident?.reporter?.guard) {
+        return;
+      }
+
+      const guardId = incident.reporter.guard.id;
+      const guardUserId = incident.reporter.id;
+      const guardName =
+        `${incident.reporter.firstName || ''} ${incident.reporter.lastName || ''}`.trim() ||
+        'Guard';
+
+      const actor = await prisma.user.findUnique({
+        where: { id: actorUserId },
+        select: { id: true, firstName: true, lastName: true, role: true },
+      });
+
+      const actorName = actor
+        ? `${actor.firstName || ''} ${actor.lastName || ''}`.trim() || 'Responder'
+        : 'Responder';
+      const actorRoleLabel =
+        actor?.role === 'CLIENT' ? 'Client' : actor?.role === 'ADMIN' ? 'Admin' : 'Responder';
+
+      const shift = await prisma.shift.findFirst({
+        where: { guardId },
+        orderBy: { updatedAt: 'desc' },
+        select: {
+          clientId: true,
+          client: { select: { userId: true } },
+          site: { select: { name: true, clientId: true } },
+        },
+      });
+
+      const siteName = shift?.site?.name || incident.location?.name || 'the site';
+      const clientUserId = shift?.client?.userId || null;
+
+      const guardCompany = await prisma.companyGuard.findFirst({
+        where: { guardId, isActive: true },
+        select: { securityCompanyId: true },
+      });
+
+      const securityCompanyId = guardCompany?.securityCompanyId || undefined;
+      let adminUserIds: string[] = [];
+
+      if (securityCompanyId) {
+        const companyAdmins = await prisma.companyUser.findMany({
+          where: { securityCompanyId, isActive: true },
+          select: { userId: true },
+        });
+        adminUserIds = companyAdmins.map((cu) => cu.userId).filter(Boolean);
+      }
+
+      const statusPayload = {
+        alertId,
+        guardId,
+        guardName,
+        siteName,
+        action,
+        actorUserId,
+        actorName,
+        actorRole: actor?.role || 'ADMIN',
+        actorRoleLabel,
+        resolution: resolution || undefined,
+        timestamp: new Date().toISOString(),
+      };
+
+      let title = '';
+      let message = '';
+
+      if (action === 'ACKNOWLEDGED') {
+        title = 'Emergency Response Dispatched';
+        message = `${actorName} (${actorRoleLabel}) acknowledged the emergency for ${guardName} at ${siteName}. Assistance is being dispatched.`;
+      } else if (action === 'FALSE_ALARM') {
+        title = 'Emergency Closed — False Alarm';
+        message = `${actorName} (Admin) marked the emergency for ${guardName} at ${siteName} as a false alarm.`;
+      } else {
+        title = 'Emergency Resolved';
+        message = `${actorName} (Admin) resolved the emergency for ${guardName} at ${siteName}.`;
+      }
+
+      if (resolution && action !== 'ACKNOWLEDGED') {
+        message += ` Notes: ${resolution}`;
+      }
+
+      const recipientIds = new Set<string>([
+        guardUserId,
+        ...adminUserIds,
+        ...(clientUserId ? [clientUserId] : []),
+      ]);
+
+      const NotificationService = (await import('./notificationService.js')).default;
+      await NotificationService.createBulkNotifications(
+        Array.from(recipientIds),
+        {
+          type: 'EMERGENCY',
+          title,
+          message,
+          data: {
+            ...statusPayload,
+            type: 'emergency',
+            alertId,
+          },
+          priority: action === 'ACKNOWLEDGED' ? 'high' : 'normal',
+          sendPush: true,
+        },
+        securityCompanyId,
+        actorUserId,
+      );
+
+      for (const userId of recipientIds) {
+        websocketService.broadcastToUser(userId, 'emergency_status_update', statusPayload);
+      }
+
+      websocketService.sendToSpecificGuard(
+        guardId,
+        action === 'ACKNOWLEDGED' ? 'emergency_acknowledged' : 'emergency_resolved',
+        statusPayload,
+      );
+
+      websocketService.broadcastToAdmins(
+        action === 'ACKNOWLEDGED' ? 'emergency_acknowledged' : 'emergency_resolved',
+        statusPayload,
+      );
+    } catch (error) {
+      logger.error('Error notifying emergency status change:', error);
+    }
   }
 
   private mapIncidentTypeToEmergencyType(type: string): EmergencyAlert['type'] {

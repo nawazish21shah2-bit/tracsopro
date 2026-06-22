@@ -6,7 +6,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  TextInput,
   Alert,
   Image,
 } from 'react-native';
@@ -18,6 +17,7 @@ import { createIncident } from '../../store/slices/incidentSlice';
 import { fetchLocations } from '../../store/slices/locationSlice';
 import { IncidentType, SeverityLevel, Location } from '../../types';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
+import FormInput from '../../components/common/FormInput';
 
 type CreateIncidentScreenNavigationProp = StackNavigationProp<any, 'CreateIncident'>;
 
@@ -231,12 +231,10 @@ const CreateIncidentScreen: React.FC = () => {
       {/* Description */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Description *</Text>
-        <TextInput
-          style={styles.descriptionInput}
-          placeholder="Describe what happened in detail..."
-          placeholderTextColor="#999"
+        <FormInput
           value={formData.description}
           onChangeText={(value) => handleInputChange('description', value)}
+          placeholder="Describe what happened in detail..."
           multiline
           numberOfLines={4}
           maxLength={1000}
@@ -249,12 +247,10 @@ const CreateIncidentScreen: React.FC = () => {
       {/* Notes */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Additional Notes</Text>
-        <TextInput
-          style={styles.notesInput}
-          placeholder="Any additional information..."
-          placeholderTextColor="#999"
+        <FormInput
           value={formData.notes}
           onChangeText={(value) => handleInputChange('notes', value)}
+          placeholder="Any additional information..."
           multiline
           numberOfLines={3}
           maxLength={500}

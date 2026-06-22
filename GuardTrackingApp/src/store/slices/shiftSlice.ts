@@ -178,9 +178,9 @@ export const checkInToShift = createAsyncThunk(
     try {
       // Use checkInToShift which calls the correct endpoint /shifts/:id/check-in
       const shift = await shiftService.checkInToShift(data.shiftId, {
-        latitude: data.location?.latitude || 0,
-        longitude: data.location?.longitude || 0,
-        accuracy: data.location?.accuracy || 10,
+        latitude: data.location?.latitude ?? data.latitude ?? 0,
+        longitude: data.location?.longitude ?? data.longitude ?? 0,
+        accuracy: data.location?.accuracy ?? 10,
         address: data.location?.address,
       });
       return shift;
@@ -254,9 +254,9 @@ export const checkOutFromShift = createAsyncThunk(
     try {
       // Use checkOutFromShift which calls the correct endpoint /shifts/:id/check-out
       const shift = await shiftService.checkOutFromShift(data.shiftId, {
-        latitude: data.location?.latitude || 0,
-        longitude: data.location?.longitude || 0,
-        accuracy: data.location?.accuracy || 10,
+        latitude: data.location?.latitude ?? data.latitude ?? 0,
+        longitude: data.location?.longitude ?? data.longitude ?? 0,
+        accuracy: data.location?.accuracy ?? 10,
         address: data.location?.address,
       }, data.notes);
       return shift;

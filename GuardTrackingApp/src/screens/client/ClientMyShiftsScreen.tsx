@@ -18,8 +18,8 @@ import { ClientStackParamList } from '../../navigation/ClientStackNavigator';
 import { ErrorState, NetworkError, EmptyState, InlineLoading } from '../../components/ui/LoadingStates';
 import { COLORS, SPACING } from '../../styles/globalStyles';
 import { ClockIcon } from '../../components/ui/FeatherIcons';
-import { ArrowLeftIcon } from '../../components/ui/AppIcons';
-import apiService from '../../services/api';
+import { ChevronLeftIcon } from '../../components/ui/AppIcons';
+import { clientApi } from '../../services/api/clientApi';
 
 type TabKey = 'upcoming' | 'active' | 'past';
 
@@ -61,7 +61,7 @@ const ClientMyShiftsScreen: React.FC = () => {
   const loadShifts = useCallback(async () => {
     try {
       setError(null);
-      const response = await apiService.getClientShifts({ page: 1, limit: 100 });
+      const response = await clientApi.getClientShifts({ page: 1, limit: 100 });
       if (response.success && response.data?.shifts) {
         setShifts(response.data.shifts);
       } else {
@@ -131,7 +131,7 @@ const ClientMyShiftsScreen: React.FC = () => {
         title="My Shifts"
         leftIcon={
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <ArrowLeftIcon size={22} color={COLORS.textPrimary} />
+            <ChevronLeftIcon size={22} color={COLORS.textPrimary} />
           </TouchableOpacity>
         }
         onNotificationPress={onNotificationPress}

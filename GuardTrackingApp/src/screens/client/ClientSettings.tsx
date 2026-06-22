@@ -18,6 +18,8 @@ import { logoutUser } from '../../store/slices/authSlice';
 import SharedHeader from '../../components/ui/SharedHeader';
 import ClientProfileDrawer from '../../components/client/ClientProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import { navigateToEmailVerification } from '../../utils/navigationHelpers';
+import { getEmailVerificationSettingItems } from '../../utils/emailVerificationSettingItem';
 import * as theme from '../../styles/globalStyles';
 
 // Safely access design tokens for StyleSheet.create
@@ -35,6 +37,7 @@ const TYPOGRAPHY = theme.TYPOGRAPHY || {
 };
 const SPACING = theme.SPACING || { xs: 4, sm: 8, md: 12, lg: 16 };
 const BORDER_RADIUS = theme.BORDER_RADIUS || { lg: 12 };
+const SETTINGS_BOTTOM_SPACER = 120;
 
 interface SettingItem {
   id: string;
@@ -85,6 +88,10 @@ const ClientSettings: React.FC = () => {
     navigation.navigate('SupportHubScreen', { variant: 'client', mode: 'mine' });
   };
 
+  const handleEmailVerification = () => {
+    navigateToEmailVerification(navigation);
+  };
+
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
       { text: 'Cancel', style: 'cancel' },
@@ -93,6 +100,7 @@ const ClientSettings: React.FC = () => {
   };
 
   const items: SettingItem[] = [
+    ...getEmailVerificationSettingItems(Boolean(user?.isEmailVerified), handleEmailVerification, '#666666'),
     { id: '1', title: 'My Profile', icon: <User width={20} height={20} color="#666666" />, onPress: handleProfile },
     { id: '2', title: 'Company Details', icon: <Briefcase width={20} height={20} color="#666666" />, onPress: handleCompanyDetails },
     { id: '3', title: 'Manage Sites & Shifts', icon: <MapPin width={20} height={20} color="#666666" />, onPress: handleManageSites },
@@ -118,7 +126,11 @@ const ClientSettings: React.FC = () => {
         }
       />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.card}>
           {items.map((item, idx) => (
             <TouchableOpacity
@@ -163,7 +175,10 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     backgroundColor: COLORS.backgroundSecondary,
+  },
+  contentContainer: {
     padding: SPACING.lg,
+    paddingBottom: SETTINGS_BOTTOM_SPACER,
   },
   card: {
     backgroundColor: COLORS.backgroundPrimary,

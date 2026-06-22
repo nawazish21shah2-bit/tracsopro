@@ -1,41 +1,16 @@
 /**
  * Admin Multi-Site and Multi-Guard Tracking Tests
- * Tests that admin can manage multiple sites and track all guards simultaneously
+ * Uses the shared axios mock from jest.setup.js (global.__mockAxiosInstance).
  */
 
-// Mock dependencies - must be before imports
-// Use a global to store the mock instance so it's accessible to both mock and tests
-(global as any).__mockAxiosInstance = {
-  get: jest.fn(),
-  post: jest.fn(),
-  put: jest.fn(),
-  delete: jest.fn(),
-  interceptors: {
-    request: {
-      use: jest.fn(),
-      eject: jest.fn(),
-    },
-    response: {
-      use: jest.fn(),
-      eject: jest.fn(),
-    },
+jest.mock('../../utils/security', () => ({
+  securityManager: {
+    getTokens: jest.fn(),
+    areTokensValid: jest.fn(),
+    storeTokens: jest.fn(),
+    clearTokens: jest.fn(),
   },
-};
-
-jest.mock('axios', () => {
-  const mockInstance = (global as any).__mockAxiosInstance;
-  const axiosMock = {
-    create: jest.fn(() => mockInstance),
-  };
-  
-  return {
-    __esModule: true,
-    default: axiosMock,
-    ...axiosMock,
-  };
-});
-
-jest.mock('../../utils/security');
+}));
 jest.mock('../../config/apiConfig', () => ({
   getApiBaseUrl: () => 'http://localhost:3000/api',
   getConfigInfo: () => ({
@@ -65,8 +40,12 @@ describe('Admin Multi-Site and Multi-Guard Tracking', () => {
     (securityManager.getTokens as jest.Mock).mockResolvedValue({
       accessToken: 'admin-token',
       refreshToken: 'admin-refresh-token',
+      expiresAt: Date.now() + 3600000,
+      tokenType: 'Bearer',
     });
   });
+
+  const mockAxios = () => (global as any).__mockAxiosInstance;
 
   describe('Admin Multi-Site Management', () => {
     it('should retrieve multiple sites simultaneously', async () => {
@@ -123,7 +102,7 @@ describe('Admin Multi-Site and Multi-Guard Tracking', () => {
         },
       };
 
-      (global as any).__mockAxiosInstance.get.mockResolvedValue({ data: mockSites });
+      mockAxios().get.mockResolvedValue({ data: mockSites });
 
       const response = await apiService.getAdminSites({
         page: 1,
@@ -135,9 +114,7 @@ describe('Admin Multi-Site and Multi-Guard Tracking', () => {
       expect(response.data.sites[0].name).toBe('Downtown Office');
       expect(response.data.sites[1].name).toBe('Warehouse District');
       expect(response.data.sites[2].name).toBe('Shopping Mall');
-      expect((global as any).__mockAxiosInstance.get).toHaveBeenCalledWith(
-        expect.stringContaining('/admin/sites')
-      );
+      expect(String(mockAxios().get.mock.calls[0][0])).toContain('/admin/sites');
     });
 
     it('should filter sites by active status', async () => {
@@ -165,7 +142,7 @@ describe('Admin Multi-Site and Multi-Guard Tracking', () => {
         },
       };
 
-      mockAxiosInstance.get.mockResolvedValue({ data: mockActiveSites });
+      mockAxios().get.mockResolvedValue({ data: mockActiveSites });
 
       const response = await apiService.getAdminSites({
         isActive: true,
@@ -174,9 +151,7 @@ describe('Admin Multi-Site and Multi-Guard Tracking', () => {
       expect(response.success).toBe(true);
       expect(response.data.sites).toHaveLength(2);
       expect(response.data.sites.every((site: any) => site.isActive)).toBe(true);
-      expect((global as any).__mockAxiosInstance.get).toHaveBeenCalledWith(
-        expect.stringContaining('isActive=true')
-      );
+      expect(String(mockAxios().get.mock.calls[0][0])).toContain('isActive=true');
     });
 
     it('should search sites across multiple sites', async () => {
@@ -204,7 +179,7 @@ describe('Admin Multi-Site and Multi-Guard Tracking', () => {
         },
       };
 
-      mockAxiosInstance.get.mockResolvedValue({ data: mockSearchResults });
+      mockAxios().get.mockResolvedValue({ data: mockSearchResults });
 
       const response = await apiService.getAdminSites({
         search: 'Downtown',
@@ -273,7 +248,7 @@ describe('Admin Multi-Site and Multi-Guard Tracking', () => {
         ],
       };
 
-      mockAxiosInstance.get.mockResolvedValue({ data: mockGuardStatuses });
+      mockAxios().get.mockResolvedValue({ data: mockGuardStatuses });
 
       const guardStatuses = await operationsService.getGuardStatuses();
 
@@ -284,9 +259,7 @@ describe('Admin Multi-Site and Multi-Guard Tracking', () => {
       expect(guardStatuses[1].currentSite).toBe('Warehouse District');
       expect(guardStatuses[2].guardName).toBe('Bob Johnson');
       expect(guardStatuses[2].currentSite).toBe('Shopping Mall');
-      expect((global as any).__mockAxiosInstance.get).toHaveBeenCalledWith(
-        expect.stringContaining('/admin/operations/guards')
-      );
+      expect(String(mockAxios().get.mock.calls[0][0])).toContain('/admin/operations/guards');
     });
 
     it('should track guards from different sites on the same map', async () => {
@@ -326,7 +299,7 @@ describe('Admin Multi-Site and Multi-Guard Tracking', () => {
         ],
       };
 
-      mockAxiosInstance.get.mockResolvedValue({ data: mockGuardStatuses });
+      mockAxios().get.mockResolvedValue({ data: mockGuardStatuses });
 
       const guardStatuses = await operationsService.getGuardStatuses();
 
@@ -399,7 +372,7 @@ describe('Admin Multi-Site and Multi-Guard Tracking', () => {
         ],
       };
 
-      mockAxiosInstance.get.mockResolvedValue({ data: mockGuardStatuses });
+      mockAxios().get.mockResolvedValue({ data: mockGuardStatuses });
 
       const guardStatuses = await operationsService.getGuardStatuses();
 
@@ -433,16 +406,14 @@ describe('Admin Multi-Site and Multi-Guard Tracking', () => {
         },
       };
 
-      mockAxiosInstance.get.mockResolvedValue({ data: mockMetrics });
+      mockAxios().get.mockResolvedValue({ data: mockMetrics });
 
       const metrics = await operationsService.getOperationsMetrics();
 
       expect(metrics.totalGuards).toBe(10);
       expect(metrics.activeGuards).toBe(7);
       expect(metrics.siteCoverage).toBe(85.5);
-      expect((global as any).__mockAxiosInstance.get).toHaveBeenCalledWith(
-        expect.stringContaining('/admin/operations/metrics')
-      );
+      expect(String(mockAxios().get.mock.calls[0][0])).toContain('/admin/operations/metrics');
     });
 
     it('should track all guards simultaneously in real-time', async () => {
@@ -518,7 +489,7 @@ describe('Admin Multi-Site and Multi-Guard Tracking', () => {
         ],
       };
 
-      mockAxiosInstance.get.mockResolvedValue({ data: mockRealTimeData });
+      mockAxios().get.mockResolvedValue({ data: mockRealTimeData });
 
       const realTimeData = await operationsService.getRealTimeLocationData();
 
@@ -535,9 +506,7 @@ describe('Admin Multi-Site and Multi-Guard Tracking', () => {
         expect(data.guard).toBeDefined();
       });
 
-      expect((global as any).__mockAxiosInstance.get).toHaveBeenCalledWith(
-        expect.stringContaining('/tracking/realtime')
-      );
+      expect(String(mockAxios().get.mock.calls[0][0])).toContain('/tracking/realtime');
     });
 
     it('should handle multiple guards updating locations simultaneously', async () => {
@@ -606,12 +575,12 @@ describe('Admin Multi-Site and Multi-Guard Tracking', () => {
       };
 
       // First call
-      (global as any).__mockAxiosInstance.get.mockResolvedValueOnce({ data: firstUpdate });
+      mockAxios().get.mockResolvedValueOnce({ data: firstUpdate });
       const firstStatuses = await operationsService.getGuardStatuses();
       expect(firstStatuses).toHaveLength(2);
 
       // Second call (simulating real-time update)
-      (global as any).__mockAxiosInstance.get.mockResolvedValueOnce({ data: secondUpdate });
+      mockAxios().get.mockResolvedValueOnce({ data: secondUpdate });
       const secondStatuses = await operationsService.getGuardStatuses();
       expect(secondStatuses).toHaveLength(2);
 
@@ -678,7 +647,7 @@ describe('Admin Multi-Site and Multi-Guard Tracking', () => {
         ],
       };
 
-      mockAxiosInstance.get.mockResolvedValue({ data: mockGuardStatuses });
+      mockAxios().get.mockResolvedValue({ data: mockGuardStatuses });
 
       const guardStatuses = await operationsService.getGuardStatuses();
 
@@ -708,7 +677,7 @@ describe('Admin Multi-Site and Multi-Guard Tracking', () => {
         data: [],
       };
 
-      mockAxiosInstance.get.mockResolvedValue({ data: mockEmptyResponse });
+      mockAxios().get.mockResolvedValue({ data: mockEmptyResponse });
 
       const guardStatuses = await operationsService.getGuardStatuses();
 
@@ -717,7 +686,7 @@ describe('Admin Multi-Site and Multi-Guard Tracking', () => {
     });
 
     it('should handle API errors when fetching multiple guards', async () => {
-      (global as any).__mockAxiosInstance.get.mockRejectedValue({
+      mockAxios().get.mockRejectedValue({
         response: {
           status: 500,
           data: { message: 'Internal server error' },

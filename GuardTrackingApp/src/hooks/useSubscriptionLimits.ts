@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
-import apiService from '../services/api';
+import { adminApi } from '../services/api/adminApi';
 import {
   SubscriptionOverview,
   SubscriptionResource,
@@ -47,7 +47,7 @@ export const useSubscriptionLimits = (options?: { autoLoad?: boolean }) => {
 
     setLoading(true);
     try {
-      const response = await apiService.getSubscriptionOverview();
+      const response = await adminApi.getSubscriptionOverview();
       if (response.success && response.data) {
         setOverview(response.data);
         return response.data as SubscriptionOverview;

@@ -254,10 +254,11 @@ class ApiService {
             if (tokens?.refreshToken) {
               this.retryCount++;
               const response = await this.refreshAuthToken(tokens.refreshToken);
+              const refreshData = response.data?.data ?? response.data;
               const newTokens = {
-                accessToken: response.data.token,
-                refreshToken: (response.data as any).refreshToken || tokens.refreshToken,
-                expiresAt: Date.now() + ((response.data as any).expiresIn * 1000),
+                accessToken: refreshData.token,
+                refreshToken: refreshData.refreshToken || tokens.refreshToken,
+                expiresAt: Date.now() + ((refreshData.expiresIn ?? 1800) * 1000),
                 tokenType: 'Bearer',
               };
               
@@ -334,7 +335,7 @@ class ApiService {
       };
 
       const response = await this.api.post('/auth/login', sanitizedCredentials);
-      const { token, refreshToken, user, expiresIn } = response.data.data;
+      const { token, refreshToken, user, expiresIn, emailVerificationWarning } = response.data.data;
       
       // Store tokens securely
       const tokenData = {
@@ -361,15 +362,14 @@ class ApiService {
         success: true,
         data: {
           user,
-          token,
-          refreshToken,
           tempUserId: null,
           tempEmail: null,
           isAuthenticated: true,
-          isEmailVerified: true,
+          isEmailVerified: Boolean(user.isEmailVerified),
           isLoading: false,
-          error: null
-        }
+          error: null,
+        },
+        message: emailVerificationWarning,
       };
     } catch (error: any) {
       return {
@@ -797,7 +797,7 @@ class ApiService {
     }
   }
 
-  async refreshAuthToken(refreshToken: string): Promise<AxiosResponse<{ token: string }>> {
+  async refreshAuthToken(refreshToken: string): Promise<AxiosResponse<{ success: boolean; data: { token: string; refreshToken: string; expiresIn: number } }>> {
     return this.api.post('/auth/refresh', { refreshToken });
   }
 
@@ -1966,6 +1966,32 @@ class ApiService {
         };
       }
 
+      return {
+        success: false,
+        data: null,
+        message,
+      };
+    }
+  }
+
+  async resolveEmergencyAlert(
+    alertId: string,
+    resolution: string,
+    status: 'RESOLVED' | 'FALSE_ALARM' = 'RESOLVED',
+  ): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.post(`/emergency/alert/${alertId}/resolve`, {
+        resolution,
+        status,
+      });
+      return {
+        success: true,
+        data: response.data.data,
+        message: response.data.message || 'Emergency alert resolved',
+      };
+    } catch (error: any) {
+      const message =
+        error?.response?.data?.message || 'Failed to resolve emergency alert';
       return {
         success: false,
         data: null,

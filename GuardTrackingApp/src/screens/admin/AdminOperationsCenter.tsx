@@ -28,10 +28,24 @@ import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
-import operationsService, { GuardStatus, OperationsMetrics, EmergencyAlert } from '../../services/operationsService';
+import {
+  applyAckCooldown,
+  filterPendingEmergencyAlerts,
+  getCooldownFromMessage,
+  getRemainingCooldownSeconds,
+  navigateToEmergencyAlertResponse,
+} from '../../utils/emergencyAlertUtils';
+import { navigateToAdminSettingsTab } from '../../utils/tabNavigationHelpers';
+import { useEmergencyRealtimeRefresh } from '../../hooks/useEmergencyRealtimeRefresh';
 import { useLiveGuardLocations } from '../../hooks/useLiveGuardLocations';
 import { isValidCoordinate } from '../../utils/liveGuardLocationMapper';
 import EmergencyAlertsPanel from '../../components/emergency/EmergencyAlertsPanel';
+import operationsService, {
+  GuardStatus,
+  OperationsMetrics,
+  EmergencyAlert,
+  OperationsActivityItem,
+} from '../../services/operationsService';
 
 interface AdminOperationsCenterProps {
   navigation: any;
@@ -125,14 +139,14 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
     }
   };
 
-  const loadEmergencyAlerts = async () => {
+  const loadEmergencyAlerts = useCallback(async () => {
     try {
       const alerts = await operationsService.getActiveEmergencyAlerts();
       setEmergencyAlerts(alerts);
     } catch (error) {
       console.error('Error loading emergency alerts:', error);
     }
-  };
+  }, []);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -140,29 +154,8 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
     setRefreshing(false);
   }, []);
 
-  const getCooldownFromMessage = (message?: string): number => {
-    if (!message) return 0;
-    const match = message.match(/(\d+)\s*second/i);
-    return match ? Number(match[1]) : 0;
-  };
-
-  const getRemainingCooldownSeconds = (alertId: string): number => {
-    const until = ackCooldownUntilById[alertId];
-    if (!until) return 0;
-    const remainingMs = until - Date.now();
-    return remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0;
-  };
-
-  const applyAckCooldown = (alertId: string, seconds: number) => {
-    if (seconds <= 0) return;
-    setAckCooldownUntilById((prev) => ({
-      ...prev,
-      [alertId]: Date.now() + seconds * 1000,
-    }));
-  };
-
   const handleEmergencyAlert = (alertId: string) => {
-    const remaining = getRemainingCooldownSeconds(alertId);
+    const remaining = getRemainingCooldownSeconds(alertId, ackCooldownUntilById);
     if (remaining > 0) {
       Alert.alert('Please Wait', `You can retry this action in ${remaining} seconds.`);
       return;
@@ -183,9 +176,11 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
   };
 
   const pendingEmergencyAlerts = useMemo(
-    () => emergencyAlerts.filter((alert) => !alert.acknowledged),
-    [emergencyAlerts]
+    () => filterPendingEmergencyAlerts(emergencyAlerts),
+    [emergencyAlerts],
   );
+
+  useEmergencyRealtimeRefresh(loadEmergencyAlerts);
 
   const acknowledgeEmergency = async (alertId: string) => {
     if (acknowledgingAlertId) {
@@ -198,7 +193,8 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
       if (result.success) {
         const alreadyHandled = result.message?.toLowerCase().includes('already') ?? false;
         const responseCooldown = getCooldownFromMessage(result.message);
-        applyAckCooldown(alertId, responseCooldown || (alreadyHandled ? 20 : 8));
+        applyAckCooldown(alertId, responseCooldown || (alreadyHandled ? 20 : 8), setAckCooldownUntilById);
+        setEmergencyAlerts((prev) => prev.filter((alert) => alert.id !== alertId));
         await loadEmergencyAlerts();
         await loadGuardStatuses();
         await loadOperationsMetrics();
@@ -247,6 +243,20 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
 
   const handleGuardSelect = (guardId: string) => {
     setSelectedGuard(selectedGuard === guardId ? null : guardId);
+  };
+
+  const openEmergencyResponse = (alertId: string) => {
+    navigateToEmergencyAlertResponse(navigation, alertId);
+  };
+
+  const handleActivityPress = (activity: OperationsActivityItem) => {
+    if (activity.type === 'emergency') {
+      openEmergencyResponse(activity.id);
+      return;
+    }
+    if (activity.type === 'incident') {
+      navigation.navigate('IncidentReview');
+    }
   };
 
   const renderOperationsOverview = () => {
@@ -303,6 +313,7 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
           alerts={pendingEmergencyAlerts}
           title="Active Emergency"
           onAcknowledge={handleEmergencyAlert}
+          onAlertPress={openEmergencyResponse}
           acknowledgeLabel="Dispatch"
           compact
           acknowledgingAlertId={acknowledgingAlertId}
@@ -467,11 +478,22 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
       case 'alerts':
         return (
           <View style={styles.alertsContainer}>
+            <EmergencyAlertsPanel
+              alerts={pendingEmergencyAlerts}
+              title="Active Emergencies"
+              onAcknowledge={handleEmergencyAlert}
+              onAlertPress={openEmergencyResponse}
+              acknowledgeLabel="Dispatch"
+              compact
+              acknowledgingAlertId={acknowledgingAlertId}
+            />
+            <Text style={styles.sectionTitle}>Recent Activity</Text>
             <LiveActivityFeed
               maxItems={20}
               showFilters={true}
               useOperationsApi
-              onActivityPress={(activity) => console.log('Activity:', activity)}
+              scrollEnabled={false}
+              onActivityPress={handleActivityPress}
             />
           </View>
         );
@@ -527,7 +549,7 @@ const AdminOperationsCenter: React.FC<AdminOperationsCenterProps> = ({ navigatio
             }}
             onNavigateToSettings={() => {
               closeDrawer();
-              navigation.navigate('AdminSettings');
+              navigateToAdminSettingsTab(navigation);
             }}
           />
         }

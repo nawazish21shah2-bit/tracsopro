@@ -292,17 +292,16 @@ export const globalStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     width: LAYOUT.containerWidth,
-    height: LAYOUT.inputHeight,
-    backgroundColor: COLORS.backgroundPrimary,
+    height: 56,
+    backgroundColor: COLORS.backgroundSecondary,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
-    borderRadius: BORDER_RADIUS.lg,
+    borderRadius: BORDER_RADIUS.md,
     paddingHorizontal: SPACING.lg,
   },
   
   inputWrapperFocused: {
     borderColor: COLORS.primary,
-    borderWidth: 2,
   },
   
   iconContainer: {
@@ -314,11 +313,10 @@ export const globalStyles = StyleSheet.create({
   textInput: {
     flex: 1,
     fontFamily: TYPOGRAPHY.fontPrimary,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    lineHeight: 17,
-    letterSpacing: TYPOGRAPHY.letterSpacing.tight,
+    fontWeight: TYPOGRAPHY.fontWeight.regular,
+    fontSize: TYPOGRAPHY.fontSize.md,
     color: COLORS.textPrimary,
+    paddingVertical: 0,
   },
   
   // Button Styles

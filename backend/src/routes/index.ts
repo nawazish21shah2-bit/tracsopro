@@ -29,14 +29,14 @@ const router = Router();
 
 // Health check
 router.get('/health', (req, res) => {
-  res.json({
-    success: true,
-    data: {
-      status: 'ok',
-      time: new Date().toISOString(),
-      environment: process.env.NODE_ENV || 'development',
-    },
-  });
+  const payload: Record<string, string> = {
+    status: 'ok',
+    time: new Date().toISOString(),
+  };
+  if (process.env.NODE_ENV !== 'production') {
+    payload.environment = process.env.NODE_ENV || 'development';
+  }
+  res.json({ success: true, data: payload });
 });
 
 // API routes
@@ -67,32 +67,6 @@ router.use('/admin', adminRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/subscription', subscriptionRoutes);
 router.use('/support', supportRoutes);
-// Test route for Super Admin
-router.get('/super-admin-test', (req, res) => {
-  res.json({ success: true, message: 'Super Admin routes are working!' });
-});
-
-// Super Admin routes with simple test
-router.get('/super-admin/test', (req, res) => {
-  res.json({ success: true, message: 'Super Admin endpoint working!' });
-});
-
 router.use('/super-admin', superAdminRoutes);
-
-// Legacy routes for backward compatibility with in-memory server
-router.get('/locations', (req, res) => {
-  res.json({ success: true, data: [] });
-});
-
-router.get('/messages', (req, res) => {
-  res.json({ success: true, data: [] });
-});
-
-router.post('/messages', (req, res) => {
-  res.json({ success: true, data: { id: 'msg-1', ...req.body } });
-});
-
-// Notification routes are now handled by notificationRoutes
-// Legacy routes removed - use /api/notifications instead
 
 export default router;

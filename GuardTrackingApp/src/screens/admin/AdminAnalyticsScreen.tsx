@@ -3,7 +3,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
 import { fetchDashboardStats } from '../../store/slices/adminSlice';
@@ -207,7 +207,7 @@ const AdminAnalyticsScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
             <ActivityIndicator size="small" color={COLORS.primary} />
           </View>
         ) : (
-          <StatsGrid contentStyle={styles.metricsGrid}>
+          <StatsGrid>
             <StatsCard
               icon={<ReportsIcon size={24} color={COLORS.primary} />}
               value={metrics.totalReports.toString()}
@@ -374,20 +374,9 @@ const styles = StyleSheet.create({
     color: COLORS.textInverse,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
-  metricsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: SPACING.sm,
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingTop: SPACING.md,
-  },
   metricsLoading: {
     paddingVertical: SPACING.xl,
     alignItems: 'center',
-  },
-  metricCardWrapper: {
-    width: (Dimensions.get('window').width - (SPACING.lg * 2) - SPACING.md) / 2,
   },
   section: {
     backgroundColor: COLORS.backgroundPrimary,

@@ -19,7 +19,7 @@ import SharedHeader from '../../components/ui/SharedHeader';
 import ProfileAvatar from '../../components/common/ProfileAvatar';
 import SectionHeader from '../../components/ui/SectionHeader';
 import StatusBadge from '../../components/client/StatusBadge';
-import apiService from '../../services/api';
+import { clientApi } from '../../services/api/clientApi';
 import { getClientGuardChatParams } from '../../utils/chatHelper';
 import { parseDisplayName } from '../../utils/parseDisplayName';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
@@ -67,7 +67,7 @@ const ClientGuardDetailsScreen: React.FC = () => {
   const loadProfile = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiService.getClientGuardProfile(params.guardId);
+      const response = await clientApi.getClientGuardProfile(params.guardId);
       if (response.success && response.data) {
         setProfile(response.data);
       } else {

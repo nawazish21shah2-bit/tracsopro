@@ -58,7 +58,7 @@ const LEGACY_ICON_MAP: Record<string, FeatherIconName> = {
   'keyboard-arrow-up': 'chevronUp',
   'keyboard-arrow-down': 'chevronDown',
   logout: 'logOut',
-  'arrow-back': 'arrowLeft',
+  'arrow-back': 'chevronLeft',
   save: 'save',
   'attach-money': 'dollarSign',
   'credit-card': 'creditCard',
@@ -146,6 +146,7 @@ export const EditIcon = createFeatherIcon('edit');
 export const PlusIcon = createFeatherIcon('plus');
 export const ChevronRightIcon = createFeatherIcon('chevronRight');
 export const ChevronDownIcon = createFeatherIcon('chevronDown');
+export const ChevronLeftIcon = createFeatherIcon('chevronLeft');
 export const LogoutIcon = createFeatherIcon('logOut');
 export const ArrowLeftIcon = createFeatherIcon('arrowLeft');
 export const SaveIcon = createFeatherIcon('save');
@@ -199,6 +200,7 @@ const AppIcons = {
   PlusIcon,
   ChevronRightIcon,
   ChevronDownIcon,
+  ChevronLeftIcon,
   LogoutIcon,
   ArrowLeftIcon,
   SaveIcon,

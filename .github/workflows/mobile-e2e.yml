@@ -1,0 +1,180 @@
+name: Mobile E2E (Detox)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'GuardTrackingApp/**'
+      - 'backend/scripts/seed-e2e-user.ts'
+      - '.github/workflows/mobile-e2e.yml'
+
+jobs:
+  detox-android:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: GuardTrackingApp
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: tracsopro
+          POSTGRES_PASSWORD: tracsopro
+          POSTGRES_DB: tracsopro_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tracsopro -d tracsopro_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://tracsopro:tracsopro@localhost:5432/tracsopro_e2e
+      DIRECT_DATABASE_URL: postgresql://tracsopro:tracsopro@localhost:5432/tracsopro_e2e
+      JWT_SECRET: e2e-jwt-secret-minimum-32-characters-long
+      JWT_REFRESH_SECRET: e2e-refresh-secret-minimum-32-chars
+      NODE_ENV: test
+      OTP_ENABLED: 'false'
+      E2E_GUARD_EMAIL: e2e-guard@tracsopro.e2e
+      E2E_GUARD_PASSWORD: E2eGuardPass123!
+      E2E_CLIENT_EMAIL: e2e-client@tracsopro.e2e
+      E2E_CLIENT_PASSWORD: E2eGuardPass123!
+      E2E_ADMIN_EMAIL: e2e-admin@tracsopro.e2e
+      E2E_ADMIN_PASSWORD: E2eGuardPass123!
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: |
+            GuardTrackingApp/package-lock.json
+            backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Prepare E2E database
+        working-directory: backend
+        run: |
+          npx prisma generate
+          npx prisma db push --skip-generate
+          npm run seed:e2e
+
+      - name: Start backend API
+        working-directory: backend
+        run: |
+          npx tsx src/server-db.ts &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3000/api/health && break
+            sleep 2
+          done
+
+      - name: Install mobile dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          profile: pixel_6
+          avd-name: TracSOpro_E2E
+          script: |
+            cd GuardTrackingApp
+            npm run e2e:android
+
+  detox-ios:
+    runs-on: macos-14
+    continue-on-error: true
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: GuardTrackingApp
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: tracsopro
+          POSTGRES_PASSWORD: tracsopro
+          POSTGRES_DB: tracsopro_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tracsopro -d tracsopro_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://tracsopro:tracsopro@localhost:5432/tracsopro_e2e
+      DIRECT_DATABASE_URL: postgresql://tracsopro:tracsopro@localhost:5432/tracsopro_e2e
+      JWT_SECRET: e2e-jwt-secret-minimum-32-characters-long
+      JWT_REFRESH_SECRET: e2e-refresh-secret-minimum-32-chars
+      NODE_ENV: test
+      OTP_ENABLED: 'false'
+      E2E_GUARD_EMAIL: e2e-guard@tracsopro.e2e
+      E2E_GUARD_PASSWORD: E2eGuardPass123!
+      E2E_CLIENT_EMAIL: e2e-client@tracsopro.e2e
+      E2E_CLIENT_PASSWORD: E2eGuardPass123!
+      E2E_ADMIN_EMAIL: e2e-admin@tracsopro.e2e
+      E2E_ADMIN_PASSWORD: E2eGuardPass123!
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: |
+            GuardTrackingApp/package-lock.json
+            backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Prepare E2E database
+        working-directory: backend
+        run: |
+          npx prisma generate
+          npx prisma db push --skip-generate
+          npm run seed:e2e
+
+      - name: Start backend API
+        working-directory: backend
+        run: |
+          npx tsx src/server-db.ts &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3000/api/health && break
+            sleep 2
+          done
+
+      - name: Install mobile dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Install CocoaPods
+        working-directory: GuardTrackingApp/ios
+        run: pod install
+
+      - name: Start Metro bundler
+        run: |
+          npm start -- --reset-cache &
+          sleep 15
+
+      - name: Run Detox iOS E2E (role smoke)
+        run: npm run e2e:ios:ci

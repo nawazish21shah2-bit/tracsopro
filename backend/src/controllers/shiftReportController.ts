@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import shiftReportService from '../services/shiftReportService';
 import { ReportTypeEnum } from '@prisma/client';
 import { AuthRequest } from '../middleware/auth.js';
+import { logger } from '../utils/logger.js';
 import { resolveSecurityCompanyId } from '../utils/companyAuth.js';
 
 /**
@@ -63,7 +64,7 @@ export const createShiftReport = async (req: Request, res: Response) => {
       report,
     });
   } catch (error: any) {
-    console.error('Error creating shift report:', error);
+    logger.error('Error creating shift report:', error);
     res.status(400).json({ error: error.message || 'Failed to create shift report' });
   }
 };
@@ -101,7 +102,7 @@ export const getGuardReports = async (req: Request, res: Response) => {
 
     res.json(reports);
   } catch (error: any) {
-    console.error('Error getting guard reports:', error);
+    logger.error('Error getting guard reports:', error);
     res.status(500).json({ error: error.message || 'Failed to get guard reports' });
   }
 };
@@ -150,7 +151,7 @@ export const getShiftReportById = async (req: Request, res: Response) => {
 
     res.json(report);
   } catch (error: any) {
-    console.error('Error getting shift report:', error);
+    logger.error('Error getting shift report:', error);
     res.status(500).json({ error: error.message || 'Failed to get shift report' });
   }
 };
@@ -188,7 +189,7 @@ export const getShiftReports = async (req: Request, res: Response) => {
 
     res.json(reports);
   } catch (error: any) {
-    console.error('Error getting shift reports:', error);
+    logger.error('Error getting shift reports:', error);
     res.status(500).json({ error: error.message || 'Failed to get shift reports' });
   }
 };
@@ -250,7 +251,7 @@ export const updateShiftReport = async (req: Request, res: Response) => {
       report,
     });
   } catch (error: any) {
-    console.error('Error updating shift report:', error);
+    logger.error('Error updating shift report:', error);
     res.status(400).json({ error: error.message || 'Failed to update shift report' });
   }
 };
@@ -292,7 +293,7 @@ export const deleteShiftReport = async (req: Request, res: Response) => {
       message: 'Report deleted successfully',
     });
   } catch (error: any) {
-    console.error('Error deleting shift report:', error);
+    logger.error('Error deleting shift report:', error);
     res.status(400).json({ error: error.message || 'Failed to delete shift report' });
   }
 };
@@ -324,7 +325,7 @@ export const getCompanyShiftReports = async (req: AuthRequest, res: Response) =>
       data: result,
     });
   } catch (error: any) {
-    console.error('Error getting company shift reports:', error);
+    logger.error('Error getting company shift reports:', error);
     res.status(500).json({ error: error.message || 'Failed to get company shift reports' });
   }
 };

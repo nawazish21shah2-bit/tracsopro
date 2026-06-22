@@ -1,4 +1,4 @@
-import apiService from '../services/api';
+import { userApi } from '../services/api/userApi';
 
 export interface ReportMediaItem {
   id: string;
@@ -41,7 +41,7 @@ export async function uploadReportMediaItems(
       continue;
     }
 
-    const result = await apiService.uploadProfilePicture(item.uri);
+    const result = await userApi.uploadProfilePicture(item.uri);
     if (result.success && result.data?.url) {
       uploaded.push({ url: result.data.url, type: 'image', name: item.fileName });
     }

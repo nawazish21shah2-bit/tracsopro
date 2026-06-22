@@ -1,3 +1,5 @@
+import { createTabResetListener } from '../utils/tabNavigationHelpers';
+
 /**
  * Super Admin Navigator - Complete super admin navigation system
  */
@@ -166,10 +168,14 @@ const SuperAdminTabNavigator: React.FC = () => (
       })}
     >
       <Tab.Screen name="Dashboard" component={SuperAdminDashboard} />
-      <Tab.Screen name="Companies" component={CompanyStack} />
-      <Tab.Screen name="Analytics" component={AnalyticsStack} />
-      <Tab.Screen name="Billing" component={BillingStack} />
-      <Tab.Screen name="Settings" component={SuperAdminSettingsStack} />
+      <Tab.Screen name="Companies" component={CompanyStack} listeners={createTabResetListener({ tabName: 'Companies', rootScreen: 'CompanyManagement' })} />
+      <Tab.Screen name="Analytics" component={AnalyticsStack} listeners={createTabResetListener({ tabName: 'Analytics', rootScreen: 'PlatformAnalytics' })} />
+      <Tab.Screen name="Billing" component={BillingStack} listeners={createTabResetListener({ tabName: 'Billing', rootScreen: 'BillingManagement' })} />
+      <Tab.Screen
+        name="Settings"
+        component={SuperAdminSettingsStack}
+        listeners={createTabResetListener({ tabName: 'Settings', rootScreen: 'SystemSettings' })}
+      />
     </Tab.Navigator>
   </SuperAdminShell>
 );

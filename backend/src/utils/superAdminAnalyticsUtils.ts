@@ -107,3 +107,59 @@ export function getBucketDateRange(
       : new Date(startDate.getTime() + (bucketIndex + 1) * bucketMs - 1);
   return { bucketStart, bucketEnd };
 }
+
+export function getBucketIndexForDate(
+  date: Date,
+  startDate: Date,
+  endDate: Date,
+  bucketCount: number
+): number {
+  const t = date.getTime();
+  const start = startDate.getTime();
+  const end = endDate.getTime();
+  if (t < start || t > end) {
+    return -1;
+  }
+  const totalMs = end - start;
+  const bucketMs = totalMs / bucketCount;
+  const idx = Math.floor((t - start) / bucketMs);
+  return Math.min(idx, bucketCount - 1);
+}
+
+export function bucketRevenueFromRecords(
+  records: { amount: number; paidDate: Date | null }[],
+  startDate: Date,
+  endDate: Date,
+  bucketCount: number
+): number[] {
+  const buckets = new Array<number>(bucketCount).fill(0);
+  for (const record of records) {
+    if (!record.paidDate) continue;
+    const idx = getBucketIndexForDate(record.paidDate, startDate, endDate, bucketCount);
+    if (idx >= 0) {
+      buckets[idx] += record.amount;
+    }
+  }
+  return buckets;
+}
+
+export function bucketCumulativeUsers(
+  createdAtTimestamps: number[],
+  period: PeriodKey,
+  startDate: Date,
+  endDate: Date,
+  bucketCount: number
+): number[] {
+  const sorted = [...createdAtTimestamps].sort((a, b) => a - b);
+  const result: number[] = [];
+  let ptr = 0;
+  for (let i = 0; i < bucketCount; i++) {
+    const { bucketEnd } = getBucketDateRange(period, startDate, endDate, i, bucketCount);
+    const endMs = bucketEnd.getTime();
+    while (ptr < sorted.length && sorted[ptr] <= endMs) {
+      ptr++;
+    }
+    result.push(ptr);
+  }
+  return result;
+}

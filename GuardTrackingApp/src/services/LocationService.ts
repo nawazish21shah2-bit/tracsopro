@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PermissionsAndroid, Platform, Alert } from 'react-native';
 import BackgroundJob from 'react-native-background-job';
 import { logger } from '../utils/logger';
-import apiService from './api';
+import { trackingApi } from './api/trackingApi';
 
 export interface LocationData {
   latitude: number;
@@ -268,7 +268,7 @@ class LocationService {
 
       // Upload locations in batch
       for (const location of this.locationBuffer) {
-        await apiService.recordLocation(guardId, location);
+        await trackingApi.recordLocation(guardId, location);
       }
 
       // Clear buffer after successful upload
@@ -347,7 +347,7 @@ class LocationService {
       logger.info(`Entered geofence: ${geofence.name}`);
       
       // Notify server about geofence entry
-      await apiService.recordGeofenceEvent({
+      await trackingApi.recordGeofenceEvent({
         guardId,
         geofenceId: geofence.id,
         eventType: 'ENTER',
@@ -374,7 +374,7 @@ class LocationService {
       logger.info(`Exited geofence: ${geofence.name}`);
       
       // Notify server about geofence exit
-      await apiService.recordGeofenceEvent({
+      await trackingApi.recordGeofenceEvent({
         guardId,
         geofenceId: geofence.id,
         eventType: 'EXIT',

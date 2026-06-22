@@ -8,7 +8,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TextInput,
   TouchableOpacity,
   Alert,
   ActivityIndicator,
@@ -18,6 +17,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SharedHeader from '../../components/ui/SharedHeader';
+import FormInput from '../../components/common/FormInput';
 import CompanyPlanLimitsFields from '../../components/superAdmin/CompanyPlanLimitsFields';
 import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { superAdminService } from '../../services/superAdminService';
@@ -227,58 +227,52 @@ const CreateCompanyScreen: React.FC = () => {
         <Text style={styles.formHint}>Add a new security company to the platform</Text>
 
         <View style={styles.form}>
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Company Name *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter company name"
-              value={formData.name}
-              onChangeText={(value) => handleInputChange('name', value)}
-              editable={!loading}
-            />
-          </View>
+          <FormInput
+            label="Company Name"
+            required
+            placeholder="Enter company name"
+            value={formData.name}
+            onChangeText={(value) => handleInputChange('name', value)}
+            editable={!loading}
+            containerStyle={styles.formGroup}
+          />
 
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Email *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="company@example.com"
-              value={formData.email}
-              onChangeText={(value) => handleInputChange('email', value)}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              editable={!loading}
-            />
-          </View>
+          <FormInput
+            label="Email"
+            required
+            icon="mail-outline"
+            placeholder="company@example.com"
+            value={formData.email}
+            onChangeText={(value) => handleInputChange('email', value)}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            editable={!loading}
+            containerStyle={styles.formGroup}
+          />
 
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Phone</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="+1-555-0123"
-              value={formData.phone}
-              onChangeText={(value) => handleInputChange('phone', value)}
-              keyboardType="phone-pad"
-              editable={!loading}
-            />
-          </View>
+          <FormInput
+            label="Phone"
+            placeholder="+1-555-0123"
+            value={formData.phone}
+            onChangeText={(value) => handleInputChange('phone', value)}
+            keyboardType="phone-pad"
+            editable={!loading}
+            containerStyle={styles.formGroup}
+          />
 
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Address</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Street address"
-              value={formData.address}
-              onChangeText={(value) => handleInputChange('address', value)}
-              editable={!loading}
-            />
-          </View>
+          <FormInput
+            label="Address"
+            placeholder="Street address"
+            value={formData.address}
+            onChangeText={(value) => handleInputChange('address', value)}
+            editable={!loading}
+            containerStyle={styles.formGroup}
+          />
 
           <View style={styles.row}>
             <View style={[styles.formGroup, styles.flex1, styles.marginRight]}>
-              <Text style={styles.label}>City</Text>
-              <TextInput
-                style={styles.input}
+              <FormInput
+                label="City"
                 placeholder="City"
                 value={formData.city}
                 onChangeText={(value) => handleInputChange('city', value)}
@@ -286,9 +280,8 @@ const CreateCompanyScreen: React.FC = () => {
               />
             </View>
             <View style={[styles.formGroup, styles.flex1]}>
-              <Text style={styles.label}>State</Text>
-              <TextInput
-                style={styles.input}
+              <FormInput
+                label="State"
                 placeholder="State"
                 value={formData.state}
                 onChangeText={(value) => handleInputChange('state', value)}
@@ -299,9 +292,8 @@ const CreateCompanyScreen: React.FC = () => {
 
           <View style={styles.row}>
             <View style={[styles.formGroup, styles.flex1, styles.marginRight]}>
-              <Text style={styles.label}>Zip Code</Text>
-              <TextInput
-                style={styles.input}
+              <FormInput
+                label="Zip Code"
                 placeholder="12345"
                 value={formData.zipCode}
                 onChangeText={(value) => handleInputChange('zipCode', value)}
@@ -310,9 +302,8 @@ const CreateCompanyScreen: React.FC = () => {
               />
             </View>
             <View style={[styles.formGroup, styles.flex1]}>
-              <Text style={styles.label}>Country</Text>
-              <TextInput
-                style={styles.input}
+              <FormInput
+                label="Country"
                 placeholder="Country"
                 value={formData.country}
                 onChangeText={(value) => handleInputChange('country', value)}
@@ -338,22 +329,18 @@ const CreateCompanyScreen: React.FC = () => {
 
           <View style={styles.row}>
             <View style={[styles.formGroup, styles.flex1, styles.marginRight]}>
-              <Text style={styles.label}>Admin First Name</Text>
-              <TextInput
-                style={styles.input}
+              <FormInput
+                label="Admin First Name"
                 placeholder="First name"
-                placeholderTextColor={COLORS.textSecondary}
                 value={formData.adminFirstName}
                 onChangeText={(value) => handleInputChange('adminFirstName', value)}
                 editable={!loading}
               />
             </View>
             <View style={[styles.formGroup, styles.flex1]}>
-              <Text style={styles.label}>Admin Last Name</Text>
-              <TextInput
-                style={styles.input}
+              <FormInput
+                label="Admin Last Name"
                 placeholder="Last name"
-                placeholderTextColor={COLORS.textSecondary}
                 value={formData.adminLastName}
                 onChangeText={(value) => handleInputChange('adminLastName', value)}
                 editable={!loading}
@@ -361,19 +348,17 @@ const CreateCompanyScreen: React.FC = () => {
             </View>
           </View>
 
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Admin Login Email</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Defaults to company email if left blank"
-              placeholderTextColor={COLORS.textSecondary}
-              value={formData.adminEmail}
-              onChangeText={(value) => handleInputChange('adminEmail', value)}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              editable={!loading}
-            />
-          </View>
+          <FormInput
+            label="Admin Login Email"
+            icon="mail-outline"
+            placeholder="Defaults to company email if left blank"
+            value={formData.adminEmail}
+            onChangeText={(value) => handleInputChange('adminEmail', value)}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            editable={!loading}
+            containerStyle={styles.formGroup}
+          />
         </View>
 
         <View style={styles.buttonContainer}>

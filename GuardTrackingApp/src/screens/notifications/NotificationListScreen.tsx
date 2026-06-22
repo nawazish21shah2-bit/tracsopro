@@ -29,6 +29,8 @@ import ProfileAvatar from '../../components/common/ProfileAvatar';
 import { parseDisplayName } from '../../utils/parseDisplayName';
 import { pickProfilePictureUrl } from '../../utils/profilePictureUtils';
 import { useRoleScreenHeader, RoleHeaderVariant } from '../../hooks/useRoleScreenHeader';
+import { isEmergencyNotification, navigateToEmergencyAlertResponse } from '../../utils/emergencyAlertUtils';
+import { navigateToSupportTicket, SupportHubVariant } from '../../utils/tabNavigationHelpers';
 
 interface NotificationItem {
   id: string;
@@ -125,6 +127,17 @@ const NotificationListScreen: React.FC<{ variant?: 'client' | 'guard' | 'admin' 
     // Navigate based on notification type and data
     const data = parseNotificationData(notification.data);
 
+    if (isEmergencyNotification(notification.type, data) && data.alertId) {
+      if (variant === 'admin' || variant === 'superAdmin') {
+        navigateToEmergencyAlertResponse(navigation as any, String(data.alertId));
+        return;
+      }
+      if (variant === 'client') {
+        (navigation as any).navigate('ClientTabs', { screen: 'Dashboard' });
+        return;
+      }
+    }
+
     // Navigation map for cleaner routing
     const navigationTargets: Array<{ screen: string; params: any }> = [];
     
@@ -132,18 +145,19 @@ const NotificationListScreen: React.FC<{ variant?: 'client' | 'guard' | 'admin' 
       navigationTargets.push({ screen: 'ShiftDetails', params: { shiftId: data.shiftId } });
     } else if (data.incidentId) {
       navigationTargets.push({ screen: 'IncidentDetail', params: { incidentId: data.incidentId } });
-    } else if (data.alertId) {
-      navigationTargets.push({ screen: 'SupportHubScreen', params: { mode: 'mine' } });
     } else if (data.conversationId) {
       navigationTargets.push({ 
         screen: 'IndividualChatScreen', 
         params: { chatId: data.conversationId, chatName: notification.title } 
       });
     } else if (data.ticketId) {
-      navigationTargets.push({
-        screen: 'SupportTicketDetailScreen',
-        params: { ticketId: data.ticketId },
-      });
+      const supportVariant = variant as SupportHubVariant;
+      navigateToSupportTicket(
+        navigation as any,
+        String(data.ticketId),
+        supportVariant,
+      );
+      return;
     } else if (data.chatId) {
       navigationTargets.push({
         screen: 'IndividualChatScreen',

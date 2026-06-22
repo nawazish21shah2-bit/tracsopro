@@ -13,7 +13,7 @@ import {
 import { launchImageLibrary, launchCamera, MediaType, ImagePickerResponse } from 'react-native-image-picker';
 import { CameraIcon } from '../ui/AppIcons';
 import { COLORS, SPACING, TYPOGRAPHY } from '../../styles/globalStyles';
-import { pickProfilePictureUrl } from '../../utils/profilePictureUtils';
+import { pickProfilePictureUrl, resolveAuthenticatedProfilePictureUrl } from '../../utils/profilePictureUtils';
 
 interface ProfileAvatarProps {
   /** User's first name */
@@ -57,6 +57,34 @@ export const ProfileAvatar: React.FC<ProfileAvatarProps> = ({
 }) => {
   const [imageError, setImageError] = useState(false);
   const [localImageUri, setLocalImageUri] = useState<string | null>(null);
+  const [authenticatedImageUrl, setAuthenticatedImageUrl] = useState<string | undefined>();
+
+  const remoteImageUrl = useMemo(
+    () => pickProfilePictureUrl({ profilePictureUrl, avatar }),
+    [profilePictureUrl, avatar],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadUrl = async () => {
+      if (!remoteImageUrl) {
+        setAuthenticatedImageUrl(undefined);
+        return;
+      }
+      const url = await resolveAuthenticatedProfilePictureUrl(remoteImageUrl);
+      if (!cancelled) {
+        setAuthenticatedImageUrl(url);
+      }
+    };
+    loadUrl();
+    return () => {
+      cancelled = true;
+    };
+  }, [remoteImageUrl]);
+
+  useEffect(() => {
+    setImageError(false);
+  }, [remoteImageUrl]);
 
   const requestCameraPermission = async (): Promise<boolean> => {
     if (Platform.OS !== 'android') return true;
@@ -90,15 +118,6 @@ export const ProfileAvatar: React.FC<ProfileAvatarProps> = ({
     }
   };
 
-  const remoteImageUrl = useMemo(
-    () => pickProfilePictureUrl({ profilePictureUrl, avatar }),
-    [profilePictureUrl, avatar],
-  );
-
-  useEffect(() => {
-    setImageError(false);
-  }, [remoteImageUrl]);
-
   // Generate initials from name
   const getInitials = (): string => {
     const firstInitial = firstName?.charAt(0)?.toUpperCase() || '';
@@ -106,7 +125,7 @@ export const ProfileAvatar: React.FC<ProfileAvatarProps> = ({
     return firstInitial + lastInitial || 'U';
   };
 
-  const imageSource = localImageUri || remoteImageUrl;
+  const imageSource = localImageUri || authenticatedImageUrl || remoteImageUrl;
   const shouldShowImage = Boolean(imageSource && !imageError);
 
   // Handle image picker options

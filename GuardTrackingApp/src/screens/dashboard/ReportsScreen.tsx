@@ -6,7 +6,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  TextInput,
   Alert,
   StatusBar,
   RefreshControl,
@@ -37,7 +36,8 @@ import { LoadingOverlay, ErrorState, NetworkError, EmptyState, InlineLoading } f
 import { useNotificationBell } from '../../hooks/useNotificationBell';
 import ReportMediaPicker from '../../components/reports/ReportMediaPicker';
 import { ReportMediaItem, uploadReportMediaItems } from '../../utils/reportMediaUtils';
-import apiService from '../../services/api';
+import { incidentApi } from '../../services/api/incidentApi';
+import FormInput from '../../components/common/FormInput';
 
 type ReportsScreenNavigationProp = StackNavigationProp<GuardStackParamList, 'GuardTabs'>;
 
@@ -123,7 +123,7 @@ const ReportsScreen: React.FC = () => {
       if (reportMedia.length > 0) {
         const uploaded = await uploadReportMediaItems(reportMedia);
         if (uploaded.length > 0) {
-          await apiService.post('/incident-reports', {
+          await incidentApi.createIncidentReport({
             reportType: 'Shift Documentation',
             description: reportText.trim(),
             location: {
@@ -231,15 +231,13 @@ const ReportsScreen: React.FC = () => {
           </Text>
         </View>
 
-        <TextInput
-          style={styles.reportInput}
+        <FormInput
           placeholder="Write shift report"
-          placeholderTextColor={COLORS.textTertiary}
           multiline
           numberOfLines={4}
           value={reportText}
           onChangeText={setReportText}
-          textAlignVertical="top"
+          containerStyle={styles.reportInputContainer}
         />
 
         <ReportMediaPicker
@@ -482,18 +480,8 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     fontFamily: TYPOGRAPHY.fontPrimary,
   },
-  reportInput: {
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.lg,
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.textPrimary,
-    backgroundColor: COLORS.backgroundSecondary,
+  reportInputContainer: {
     marginBottom: SPACING.lg,
-    minHeight: 115,
-    textAlignVertical: 'top',
-    fontFamily: TYPOGRAPHY.fontPrimary,
   },
   submitButton: {
     backgroundColor: COLORS.primary,

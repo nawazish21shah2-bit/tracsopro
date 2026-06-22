@@ -39,6 +39,35 @@ jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 );
 
+global.__mockAxiosInstance = {
+  get: jest.fn(),
+  post: jest.fn(),
+  put: jest.fn(),
+  patch: jest.fn(),
+  delete: jest.fn(),
+  interceptors: {
+    request: { use: jest.fn(), eject: jest.fn() },
+    response: { use: jest.fn(), eject: jest.fn() },
+  },
+};
+
+jest.mock('axios', () => {
+  const mockInstance = global.__mockAxiosInstance;
+  return {
+    __esModule: true,
+    default: { create: jest.fn(() => mockInstance) },
+    create: jest.fn(() => mockInstance),
+  };
+});
+
+jest.mock('react-native-keychain', () => ({
+  getSupportedBiometryType: jest.fn(() => Promise.reject(new Error('unavailable'))),
+  setGenericPassword: jest.fn(() => Promise.resolve(true)),
+  getGenericPassword: jest.fn(() => Promise.resolve(false)),
+  resetGenericPassword: jest.fn(() => Promise.resolve(true)),
+  ACCESSIBLE: { WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'WhenUnlockedThisDeviceOnly' },
+}));
+
 // Mock react-native-geolocation-service
 jest.mock('react-native-geolocation-service', () => ({
   getCurrentPosition: jest.fn(),
@@ -153,13 +182,40 @@ jest.mock(
   { virtual: true }
 );
 
-// Mock crypto-js
-jest.mock('crypto-js', () => ({
-  AES: {
-    encrypt: jest.fn((data, key) => ({ toString: () => `encrypted_${data}` })),
-    decrypt: jest.fn((data, key) => ({ toString: () => data.toString().replace('encrypted_', '') })),
-  },
-}));
+// Mock crypto-js (virtual — package not required at runtime in app)
+jest.mock(
+  'crypto-js',
+  () => ({
+    AES: {
+      encrypt: jest.fn((data, key) => ({ toString: () => `encrypted_${data}` })),
+      decrypt: jest.fn((data, key) => ({
+        toString: () => data.toString().replace('encrypted_', ''),
+      })),
+    },
+    enc: { Utf8: 'utf8' },
+    PBKDF2: jest.fn((password, salt) => ({
+      toString: () => `hashed_${password}_${salt}`,
+    })),
+  }),
+  { virtual: true }
+);
+
+// Mock FeatherIcons (react-native-feather uses ESM)
+jest.mock('./src/components/ui/FeatherIcons', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  const MockIcon = (props) => React.createElement(View, { testID: 'feather-icon', ...props });
+  return new Proxy(
+    {},
+    {
+      get: (_target, prop) => {
+        if (prop === '__esModule') return true;
+        if (prop === 'default') return MockIcon;
+        return MockIcon;
+      },
+    },
+  );
+});
 
 // Mock AppIcons to avoid SVG rendering issues in tests
 jest.mock('./src/components/ui/AppIcons', () => {

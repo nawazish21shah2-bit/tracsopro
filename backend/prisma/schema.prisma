@@ -4,8 +4,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 model User {
@@ -302,6 +303,7 @@ model Message {
   updatedAt      DateTime    @updatedAt
 
   sender User @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@index([senderId])
   @@index([conversationId])
@@ -328,6 +330,7 @@ model Conversation {
 
   creator      User                      @relation("ConversationCreator", fields: [createdBy], references: [id])
   participants ConversationParticipant[]
+  messages     Message[]
 
   @@index([securityCompanyId])
   @@index([lastMessageAt])
@@ -576,12 +579,20 @@ enum ReportType {
   CUSTOM
 }
 
+enum IncidentReportStatus {
+  SUBMITTED
+  PENDING
+  REVIEWED
+  RESOLVED
+  DISMISSED
+}
+
 model IncidentReport {
-  id                String   @id @default(uuid())
+  id                String               @id @default(uuid())
   guardId           String
   reportType        String
   description       String
-  status            String   @default("SUBMITTED")
+  status            IncidentReportStatus @default(SUBMITTED)
   statusHistory     Json?    // Added to keep track of status changes
   locationName      String?
   locationAddress   String?

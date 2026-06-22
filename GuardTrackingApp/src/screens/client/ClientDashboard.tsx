@@ -38,8 +38,16 @@ import { liveGuardMapById } from '../../utils/liveGuardLocationMapper';
 import { isValidCoordinate } from '../../utils/liveGuardLocationMapper';
 import { parseCoordinate } from '../../utils/mapRegionUtils';
 import EmergencyAlertsPanel from '../../components/emergency/EmergencyAlertsPanel';
-import apiService from '../../services/api';
+import { clientApi } from '../../services/api/clientApi';
+import { emergencyApi } from '../../services/api/emergencyApi';
 import { useSubscriptionLimits } from '../../hooks/useSubscriptionLimits';
+import { useEmergencyRealtimeRefresh } from '../../hooks/useEmergencyRealtimeRefresh';
+import {
+  applyAckCooldown,
+  filterPendingEmergencyAlerts,
+  getCooldownFromMessage,
+  getRemainingCooldownSeconds,
+} from '../../utils/emergencyAlertUtils';
 
 const { width } = Dimensions.get('window');
 
@@ -131,7 +139,7 @@ const ClientDashboard: React.FC = () => {
   const loadEmergencyAlerts = useCallback(async () => {
     setEmergencyLoading(true);
     try {
-      const response = await apiService.getActiveEmergencyAlerts();
+      const response = await emergencyApi.getActiveEmergencyAlerts();
       if (response.success && Array.isArray(response.data)) {
         setEmergencyAlerts(response.data);
       } else {
@@ -144,6 +152,8 @@ const ClientDashboard: React.FC = () => {
       setEmergencyLoading(false);
     }
   }, []);
+
+  useEmergencyRealtimeRefresh(loadEmergencyAlerts);
 
   const loadDashboardData = useCallback(async () => {
     try {
@@ -188,33 +198,17 @@ const ClientDashboard: React.FC = () => {
     }
   }, [loadDashboardData, refreshLiveLocations]);
 
-  const getCooldownFromMessage = (message?: string): number => {
-    if (!message) return 0;
-    const match = message.match(/(\d+)\s*second/i);
-    return match ? Number(match[1]) : 0;
-  };
-
-  const getRemainingCooldownSeconds = (alertId: string): number => {
-    const until = ackCooldownUntilById[alertId];
-    if (!until) return 0;
-    const remainingMs = until - Date.now();
-    return remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0;
-  };
-
-  const applyAckCooldown = (alertId: string, seconds: number) => {
-    if (seconds <= 0) return;
-    setAckCooldownUntilById((prev) => ({
-      ...prev,
-      [alertId]: Date.now() + seconds * 1000,
-    }));
-  };
+  const pendingEmergencyAlerts = useMemo(
+    () => filterPendingEmergencyAlerts(emergencyAlerts),
+    [emergencyAlerts],
+  );
 
   const handleAcknowledgeEmergency = (alertId: string) => {
     if (acknowledgingAlertId) {
       return;
     }
 
-    const remaining = getRemainingCooldownSeconds(alertId);
+    const remaining = getRemainingCooldownSeconds(alertId, ackCooldownUntilById);
     if (remaining > 0) {
       Alert.alert('Please Wait', `You can retry this action in ${remaining} seconds.`);
       return;
@@ -234,17 +228,18 @@ const ClientDashboard: React.FC = () => {
 
             setAcknowledgingAlertId(alertId);
             try {
-              const result = await apiService.acknowledgeEmergencyAlert(alertId);
+              const result = await emergencyApi.acknowledgeEmergencyAlert(alertId);
               if (result.success) {
                 const alreadyHandled =
                   result.message?.toLowerCase().includes('already') ?? false;
                 const responseCooldown = getCooldownFromMessage(result.message);
-                applyAckCooldown(alertId, responseCooldown || (alreadyHandled ? 20 : 8));
+                applyAckCooldown(alertId, responseCooldown || (alreadyHandled ? 20 : 8), setAckCooldownUntilById);
+                setEmergencyAlerts((prev) => prev.filter((alert) => alert.id !== alertId));
                 Alert.alert(
                   alreadyHandled ? 'Already Acknowledged' : 'Acknowledged',
                   alreadyHandled
                     ? 'This emergency alert was already acknowledged.'
-                    : 'Emergency alert has been acknowledged.'
+                    : 'Emergency alert has been acknowledged. Responders are taking action.'
                 );
                 await loadEmergencyAlerts();
               } else {
@@ -324,6 +319,7 @@ const ClientDashboard: React.FC = () => {
       />
 
       <ScrollView
+        testID="client-dashboard-screen"
         style={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -363,7 +359,7 @@ const ClientDashboard: React.FC = () => {
         </StatsGrid>
 
         <EmergencyAlertsPanel
-          alerts={emergencyAlerts}
+          alerts={pendingEmergencyAlerts}
           loading={emergencyLoading}
           title="Active Emergency"
           onAcknowledge={handleAcknowledgeEmergency}

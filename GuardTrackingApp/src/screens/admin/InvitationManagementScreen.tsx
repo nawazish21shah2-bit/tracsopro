@@ -12,7 +12,6 @@ import {
   TouchableOpacity,
   Alert,
   Modal,
-  TextInput,
   Clipboard,
 } from 'react-native';
 import { useSelector } from 'react-redux';
@@ -23,7 +22,7 @@ import { RootState } from '../../store';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { UserIcon, UsersIcon, SettingsIcon, EmergencyIcon, PlusIcon, CopyIcon, TrashIcon } from '../../components/ui/AppIcons';
 import { Copy, Trash2, X } from 'react-native-feather';
-import apiService from '../../services/api';
+import { adminApi } from '../../services/api/adminApi';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
@@ -34,6 +33,7 @@ import { showActionErrorAlert } from '../../utils/subscriptionLimitAlert';
 import { SubscriptionResource } from '../../utils/subscriptionUtils';
 import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
 import { RefreshControl } from 'react-native';
+import FormInput from '../../components/common/FormInput';
 
 interface Invitation {
   id: string;
@@ -110,7 +110,7 @@ const InvitationManagementScreen: React.FC = () => {
         filters.isActive = false;
       }
 
-      const response = await apiService.getInvitations(filters);
+      const response = await adminApi.getInvitations(filters);
 
       if (!response.success || !response.data) {
         throw new Error(response.message || 'Failed to load invitations');
@@ -195,7 +195,7 @@ const InvitationManagementScreen: React.FC = () => {
 
     setCreatingInvitation(true);
     try {
-      const response = await apiService.createInvitation({
+      const response = await adminApi.createInvitation({
         email: newInvitation.email.trim() || undefined,
         role: newInvitation.role,
         expiresInDays,
@@ -275,7 +275,7 @@ const InvitationManagementScreen: React.FC = () => {
           onPress: async () => {
             setActionLoading(invitationId);
             try {
-              const response = await apiService.revokeInvitation(invitationId);
+              const response = await adminApi.revokeInvitation(invitationId);
               if (!response.success) {
                 Alert.alert('Error', response.message || 'Failed to revoke invitation');
                 return;
@@ -311,7 +311,7 @@ const InvitationManagementScreen: React.FC = () => {
           onPress: async () => {
             setActionLoading(invitationId);
             try {
-              const response = await apiService.deleteInvitation(invitationId);
+              const response = await adminApi.deleteInvitation(invitationId);
               if (!response.success) {
                 Alert.alert('Error', response.message || 'Failed to delete invitation');
                 return;
@@ -663,44 +663,41 @@ const InvitationManagementScreen: React.FC = () => {
               </View>
             </View>
 
-            <View style={styles.formField}>
-              <Text style={styles.fieldLabel}>Email (Optional)</Text>
-              <Text style={styles.fieldHint}>Leave empty for open invitation, or specify email for specific user</Text>
-              <TextInput
-                style={styles.fieldInput}
-                value={newInvitation.email}
-                onChangeText={(text) => setNewInvitation(prev => ({ ...prev, email: text }))}
-                placeholder="user@example.com"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                editable={!creatingInvitation}
-              />
-            </View>
+            <FormInput
+              label="Email (Optional)"
+              helperText="Leave empty for open invitation, or specify email for specific user"
+              icon="mail-outline"
+              value={newInvitation.email}
+              onChangeText={(text) => setNewInvitation(prev => ({ ...prev, email: text }))}
+              placeholder="user@example.com"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              editable={!creatingInvitation}
+              containerStyle={styles.formField}
+            />
 
-            <View style={styles.formField}>
-              <Text style={styles.fieldLabel}>Expires In (Days) *</Text>
-              <TextInput
-                style={styles.fieldInput}
-                value={newInvitation.expiresInDays}
-                onChangeText={(text) => setNewInvitation(prev => ({ ...prev, expiresInDays: text }))}
-                placeholder="7"
-                keyboardType="numeric"
-                editable={!creatingInvitation}
-              />
-            </View>
+            <FormInput
+              label="Expires In (Days)"
+              required
+              value={newInvitation.expiresInDays}
+              onChangeText={(text) => setNewInvitation(prev => ({ ...prev, expiresInDays: text }))}
+              placeholder="7"
+              keyboardType="numeric"
+              editable={!creatingInvitation}
+              containerStyle={styles.formField}
+            />
 
-            <View style={styles.formField}>
-              <Text style={styles.fieldLabel}>Max Uses *</Text>
-              <Text style={styles.fieldHint}>Number of times this invitation can be used (1 = single use)</Text>
-              <TextInput
-                style={styles.fieldInput}
-                value={newInvitation.maxUses}
-                onChangeText={(text) => setNewInvitation(prev => ({ ...prev, maxUses: text }))}
-                placeholder="1"
-                keyboardType="numeric"
-                editable={!creatingInvitation}
-              />
-            </View>
+            <FormInput
+              label="Max Uses"
+              required
+              helperText="Number of times this invitation can be used (1 = single use)"
+              value={newInvitation.maxUses}
+              onChangeText={(text) => setNewInvitation(prev => ({ ...prev, maxUses: text }))}
+              placeholder="1"
+              keyboardType="numeric"
+              editable={!creatingInvitation}
+              containerStyle={styles.formField}
+            />
 
             <TouchableOpacity
               style={[styles.createButton, creatingInvitation && styles.createButtonDisabled]}

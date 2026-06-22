@@ -2,7 +2,12 @@
  * Super Admin Service - Frontend service for Super Admin functionality
  */
 
-import apiService from './api';
+import { superAdminApi } from './api/superAdminApi';
+import {
+  normalizePagination,
+  PaginationMeta,
+  unwrapApiPayload,
+} from '../utils/paginationUtils';
 
 export interface MetricGrowth {
   current: number;
@@ -124,8 +129,13 @@ function safeParseJson(value: unknown): unknown {
 class SuperAdminService {
   static async getPlatformOverview(params: { period?: string } = {}): Promise<PlatformOverview> {
     try {
-      const response = await apiService.get('/super-admin/overview', { params });
-      const data = response.data;
+      const response = await superAdminApi.get('/super-admin/overview', { params });
+      const data = unwrapApiPayload<{
+        period?: string;
+        overview?: Record<string, number>;
+        growth?: PlatformOverview['growth'];
+        recentActivity?: PlatformOverview['recentActivity'];
+      }>(response);
 
       return {
         period: data.period,
@@ -163,13 +173,26 @@ class SuperAdminService {
     plan?: string;
   } = {}): Promise<{
     companies: SecurityCompany[];
-    pagination: { page: number; limit: number; total: number; pages: number };
+    pagination: PaginationMeta;
   }> {
-    const response = await apiService.get('/super-admin/companies', { params });
-    const companies = (response.data.companies || []).map((company: any) =>
+    const page = params.page ?? 1;
+    const limit = params.limit ?? 20;
+    const response = await superAdminApi.get('/super-admin/companies', { params });
+    const payload = unwrapApiPayload<{
+      companies?: unknown[];
+      pagination?: Partial<PaginationMeta>;
+    }>(response);
+    const companies = (payload.companies || []).map((company: any) =>
       SuperAdminService.transformCompany(company)
     );
-    return { companies, pagination: response.data.pagination };
+    return {
+      companies,
+      pagination: normalizePagination(payload.pagination, {
+        page,
+        limit,
+        total: payload.pagination?.total ?? companies.length,
+      }),
+    };
   }
 
   async createSecurityCompany(data: {
@@ -194,8 +217,8 @@ class SuperAdminService {
     company: SecurityCompany;
     adminCredentials?: { email: string; temporaryPassword: string };
   }> {
-    const response = await apiService.post('/super-admin/companies', data);
-    const payload = response.data?.data ?? response.data ?? {};
+    const response = await superAdminApi.post('/super-admin/companies', data);
+    const payload = unwrapApiPayload<Record<string, unknown>>(response) ?? {};
     const companyPayload = payload.company ?? payload;
     const adminCredentials =
       payload.adminCredentials ??
@@ -213,18 +236,18 @@ class SuperAdminService {
   }
 
   async updateSecurityCompany(companyId: string, data: Partial<SecurityCompany>): Promise<SecurityCompany> {
-    const response = await apiService.put(`/super-admin/companies/${companyId}`, data);
-    return SuperAdminService.transformCompany(response.data);
+    const response = await superAdminApi.put(`/super-admin/companies/${companyId}`, data);
+    return SuperAdminService.transformCompany(unwrapApiPayload(response));
   }
 
   async deleteSecurityCompany(companyId: string): Promise<{ id: string }> {
-    const response = await apiService.delete(`/super-admin/companies/${companyId}`);
-    return response.data;
+    const response = await superAdminApi.delete(`/super-admin/companies/${companyId}`);
+    return unwrapApiPayload(response);
   }
 
   async toggleCompanyStatus(companyId: string, isActive: boolean): Promise<SecurityCompany> {
-    const response = await apiService.patch(`/super-admin/companies/${companyId}/status`, { isActive });
-    return SuperAdminService.transformCompany(response.data);
+    const response = await superAdminApi.patch(`/super-admin/companies/${companyId}/status`, { isActive });
+    return SuperAdminService.transformCompany(unwrapApiPayload(response));
   }
 
   async getPlatformAnalytics(params: {
@@ -232,13 +255,13 @@ class SuperAdminService {
     endDate?: string;
     period?: string;
   } = {}): Promise<PlatformAnalyticsResponse> {
-    const response = await apiService.get('/super-admin/analytics', { params });
-    return response.data;
+    const response = await superAdminApi.get('/super-admin/analytics', { params });
+    return unwrapApiPayload(response);
   }
 
   async getBillingOverview(): Promise<BillingOverview> {
-    const response = await apiService.get('/super-admin/billing');
-    return response.data;
+    const response = await superAdminApi.get('/super-admin/billing');
+    return unwrapApiPayload(response);
   }
 
   async getPaymentRecords(params: {
@@ -252,15 +275,29 @@ class SuperAdminService {
     search?: string;
   } = {}): Promise<{
     records: any[];
-    pagination: { page: number; limit: number; total: number; pages: number };
+    pagination: PaginationMeta;
   }> {
-    const response = await apiService.get('/super-admin/payments', { params });
-    return response.data;
+    const page = params.page ?? 1;
+    const limit = params.limit ?? 20;
+    const response = await superAdminApi.get('/super-admin/payments', { params });
+    const payload = unwrapApiPayload<{
+      records?: any[];
+      pagination?: Partial<PaginationMeta>;
+    }>(response);
+    const records = payload.records || [];
+    return {
+      records,
+      pagination: normalizePagination(payload.pagination, {
+        page,
+        limit,
+        total: payload.pagination?.total ?? records.length,
+      }),
+    };
   }
 
   async getPaymentRecordById(paymentId: string): Promise<any> {
-    const response = await apiService.get(`/super-admin/payments/${paymentId}`);
-    return response.data;
+    const response = await superAdminApi.get(`/super-admin/payments/${paymentId}`);
+    return unwrapApiPayload(response);
   }
 
   async updatePaymentStatus(
@@ -269,12 +306,12 @@ class SuperAdminService {
     paidDate?: string,
     paymentMethod?: string
   ): Promise<any> {
-    const response = await apiService.patch(`/super-admin/payments/${paymentId}/status`, {
+    const response = await superAdminApi.patch(`/super-admin/payments/${paymentId}/status`, {
       status,
       paidDate,
       paymentMethod,
     });
-    return response.data;
+    return unwrapApiPayload(response);
   }
 
   async getPaymentAnalytics(params: {
@@ -282,8 +319,8 @@ class SuperAdminService {
     endDate?: string;
     companyId?: string;
   } = {}): Promise<any> {
-    const response = await apiService.get('/super-admin/payments/analytics', { params });
-    return response.data;
+    const response = await superAdminApi.get('/super-admin/payments/analytics', { params });
+    return unwrapApiPayload(response);
   }
 
   async getAuditLogs(params: {
@@ -296,10 +333,16 @@ class SuperAdminService {
     search?: string;
   } = {}): Promise<{
     logs: AuditLog[];
-    pagination: { page: number; limit: number; total: number; pages: number };
+    pagination: PaginationMeta;
   }> {
-    const response = await apiService.get('/super-admin/audit-logs', { params });
-    const logs = (response.data.logs || []).map((log: any) => {
+    const page = params.page ?? 1;
+    const limit = params.limit ?? 20;
+    const response = await superAdminApi.get('/super-admin/audit-logs', { params });
+    const payload = unwrapApiPayload<{
+      logs?: any[];
+      pagination?: Partial<PaginationMeta>;
+    }>(response);
+    const logs = (payload.logs || []).map((log: any) => {
       const user = log.user;
       const userName = user
         ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email
@@ -322,43 +365,50 @@ class SuperAdminService {
         userAgent: log.userAgent,
       };
     });
-    return { logs, pagination: response.data.pagination };
+    return {
+      logs,
+      pagination: normalizePagination(payload.pagination, {
+        page,
+        limit,
+        total: payload.pagination?.total ?? logs.length,
+      }),
+    };
   }
 
   async getPlatformSettings(): Promise<any> {
-    const response = await apiService.get('/super-admin/settings');
-    return response.data;
+    const response = await superAdminApi.get('/super-admin/settings');
+    return unwrapApiPayload(response);
   }
 
   async updatePlatformSettings(settings: any): Promise<{ success: boolean }> {
-    const response = await apiService.put('/super-admin/settings', settings);
-    return response.data;
+    const response = await superAdminApi.put('/super-admin/settings', settings);
+    return unwrapApiPayload(response);
   }
 
   async getCompanyById(companyId: string): Promise<SecurityCompany> {
-    const response = await apiService.get(`/super-admin/companies/${companyId}`);
-    return SuperAdminService.transformCompany(response.data);
+    const response = await superAdminApi.get(`/super-admin/companies/${companyId}`);
+    return SuperAdminService.transformCompany(unwrapApiPayload(response));
   }
 
   async getCompanySubscription(companyId: string): Promise<any> {
-    const response = await apiService.get(`/super-admin/companies/${companyId}/subscription`);
-    return response.data;
+    const response = await superAdminApi.get(`/super-admin/companies/${companyId}/subscription`);
+    return unwrapApiPayload(response);
   }
 
   async createCompanySubscriptionCheckout(
     companyId: string,
     data: { priceId: string; trialDays?: number }
   ): Promise<{ id: string; url: string | null }> {
-    const response = await apiService.post(
+    const response = await superAdminApi.post(
       `/super-admin/companies/${companyId}/subscription/checkout`,
       data
     );
-    return response.data;
+    return unwrapApiPayload(response);
   }
 
   async getCompanyBillingPortal(companyId: string): Promise<{ url: string }> {
-    const response = await apiService.get(`/super-admin/companies/${companyId}/billing-portal`);
-    return response.data;
+    const response = await superAdminApi.get(`/super-admin/companies/${companyId}/billing-portal`);
+    return unwrapApiPayload(response);
   }
 
   async searchUsers(params: {
@@ -374,20 +424,41 @@ class SuperAdminService {
       role: string;
       isActive: boolean;
     }>;
-    pagination: { page: number; limit: number; total: number; pages: number };
+    pagination: PaginationMeta;
   }> {
-    const response = await apiService.get('/super-admin/users', { params });
-    return response.data;
+    const page = params.page ?? 1;
+    const limit = params.limit ?? 20;
+    const response = await superAdminApi.get('/super-admin/users', { params });
+    const payload = unwrapApiPayload<{
+      users?: Array<{
+        id: string;
+        email: string;
+        firstName: string;
+        lastName: string;
+        role: string;
+        isActive: boolean;
+      }>;
+      pagination?: Partial<PaginationMeta>;
+    }>(response);
+    const users = payload.users || [];
+    return {
+      users,
+      pagination: normalizePagination(payload.pagination, {
+        page,
+        limit,
+        total: payload.pagination?.total ?? users.length,
+      }),
+    };
   }
 
   async impersonateUser(targetUserId: string): Promise<any> {
-    const response = await apiService.post('/super-admin/impersonate', { targetUserId });
-    return response.data;
+    const response = await superAdminApi.post('/super-admin/impersonate', { targetUserId });
+    return unwrapApiPayload(response);
   }
 
   async exportPlatformData(): Promise<any> {
-    const response = await apiService.post('/super-admin/export-data');
-    return response.data;
+    const response = await superAdminApi.post('/super-admin/export-data');
+    return unwrapApiPayload(response);
   }
 
   private static transformCompany(data: any): SecurityCompany {

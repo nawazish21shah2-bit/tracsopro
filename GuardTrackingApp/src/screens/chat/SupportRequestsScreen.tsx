@@ -18,7 +18,7 @@ import SuperAdminProfileDrawer from '../../components/superAdmin/SuperAdminProfi
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 import { useNotificationBell } from '../../hooks/useNotificationBell';
 import { RootState } from '../../store';
-import apiService from '../../services/api';
+import { chatApi } from '../../services/api/chatApi';
 import { EmptyState, ErrorState, InlineLoading } from '../../components/ui/LoadingStates';
 import { formatRelativeTime } from '../../utils/formatRelativeTime';
 import { parseDisplayName } from '../../utils/parseDisplayName';
@@ -63,7 +63,7 @@ const SupportRequestsScreen: React.FC = () => {
   const loadSupportChats = useCallback(async () => {
     try {
       setError(null);
-      const response = await apiService.getSupportChats();
+      const response = await chatApi.getSupportChats();
       if (!response.success) {
         setError(response.message || 'Failed to load support chats');
         setChats([]);
@@ -106,7 +106,7 @@ const SupportRequestsScreen: React.FC = () => {
 
     try {
       setOpening(true);
-      const response = await apiService.openSupportChat();
+      const response = await chatApi.openSupportChat();
       if (response.success && response.data) {
         navigation.navigate('IndividualChatScreen', {
           chatId: response.data.id,

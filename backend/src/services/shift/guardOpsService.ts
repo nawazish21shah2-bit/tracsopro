@@ -1,228 +1,18 @@
-// Simplified Shift Service for Phase 2 Testing
-import prisma from '../config/database.js';
-import { NotFoundError, BadRequestError, ValidationError } from '../utils/errors.js';
-import { logger } from '../utils/logger.js';
+// Guard shift operations (check-in/out, breaks, guard-facing schedule)
+import prisma from '../../config/database.js';
+import { NotFoundError, BadRequestError, ValidationError } from '../../utils/errors.js';
+import { logger } from '../../utils/logger.js';
 import { ShiftStatus, BreakType } from '@prisma/client';
+import { assertWithinSiteRadius } from './geofenceService.js';
+import type {
+  CheckInData,
+  CheckOutData,
+  ShiftStats,
+} from './types.js';
 
-export interface CreateShiftData {
-  guardId?: string; // Optional: Admin assigns directly, client can leave empty for admin to assign later
-  locationName: string;
-  locationAddress: string;
-  scheduledStartTime: Date;
-  scheduledEndTime: Date;
-  description?: string;
-  notes?: string;
-  siteId?: string; // Optional: if provided, link shift to site and client
-  clientId?: string; // Optional: if provided, link shift to client directly
-}
-
-export interface CheckInData {
-  shiftId: string;
-  guardId: string;
-  location: {
-    latitude: number;
-    longitude: number;
-    accuracy: number;
-    address?: string;
-  };
-  timestamp: Date;
-}
-
-export interface CheckOutData {
-  shiftId: string;
-  guardId: string;
-  location: {
-    latitude: number;
-    longitude: number;
-    accuracy: number;
-    address?: string;
-  };
-  timestamp: Date;
-  notes?: string;
-}
-
-export interface ShiftStats {
-  completedShifts: number;
-  missedShifts: number;
-  totalSites: number;
-  incidentReports: number;
-  totalHours: number;
-  averageShiftDuration: number;
-}
+export type { CheckInData, CheckOutData, ShiftStats } from './types.js';
 
 class ShiftServiceSimple {
-  private calculateDistanceMeters(
-    lat1: number,
-    lon1: number,
-    lat2: number,
-    lon2: number,
-  ): number {
-    const R = 6371e3;
-    const phi1 = (lat1 * Math.PI) / 180;
-    const phi2 = (lat2 * Math.PI) / 180;
-    const dPhi = ((lat2 - lat1) * Math.PI) / 180;
-    const dLambda = ((lon2 - lon1) * Math.PI) / 180;
-
-    const a =
-      Math.sin(dPhi / 2) * Math.sin(dPhi / 2) +
-      Math.cos(phi1) * Math.cos(phi2) * Math.sin(dLambda / 2) * Math.sin(dLambda / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-    return R * c;
-  }
-
-  /**
-   * Create a new shift
-   */
-  async createShift(data: CreateShiftData, securityCompanyId?: string) {
-    // Validate guard exists if guardId is provided
-    if (data.guardId) {
-      const guard = await prisma.guard.findUnique({
-        where: { id: data.guardId },
-        include: {
-          companyGuards: {
-            where: { isActive: true },
-            select: { securityCompanyId: true },
-          },
-        },
-      });
-
-      if (!guard) {
-        throw new NotFoundError('Guard not found');
-      }
-
-      // Multi-tenant: Verify guard belongs to company if securityCompanyId provided
-      if (securityCompanyId) {
-        const guardCompany = guard.companyGuards.find(
-          cg => cg.securityCompanyId === securityCompanyId
-        );
-        if (!guardCompany) {
-          throw new ValidationError('Guard does not belong to your company');
-        }
-      }
-    }
-
-    // If siteId is provided, validate and get clientId from site
-    let siteId: string | null = null;
-    let clientId: string | null = null;
-    
-    if (data.siteId) {
-      const site = await prisma.site.findUnique({
-        where: { id: data.siteId },
-        include: {
-          client: {
-            include: {
-              companyClients: {
-                where: { isActive: true },
-                select: { securityCompanyId: true },
-              },
-            },
-          },
-          companySites: {
-            select: { securityCompanyId: true },
-          },
-        },
-      });
-
-      if (!site) {
-        throw new NotFoundError('Site not found');
-      }
-
-      // Multi-tenant: Verify site belongs to company if securityCompanyId provided
-      if (securityCompanyId) {
-        const siteCompany = site.companySites.find(
-          cs => cs.securityCompanyId === securityCompanyId
-        );
-        if (!siteCompany) {
-          throw new ValidationError('Site does not belong to your company');
-        }
-      }
-
-      siteId = site.id;
-      clientId = site.clientId;
-      
-      // Use site's name and address if not provided
-      if (!data.locationName) {
-        data.locationName = site.name;
-      }
-      if (!data.locationAddress) {
-        data.locationAddress = site.address;
-      }
-    }
-
-    const shift = await prisma.shift.create({
-      data: {
-        guardId: data.guardId,
-        siteId: siteId,
-        clientId: clientId,
-        locationName: data.locationName,
-        locationAddress: data.locationAddress,
-        scheduledStartTime: data.scheduledStartTime,
-        scheduledEndTime: data.scheduledEndTime,
-        description: data.description,
-        notes: data.notes,
-      } as any,
-      include: {
-        site: {
-          include: {
-            client: {
-              include: {
-                user: {
-                  select: { firstName: true, lastName: true, email: true }
-                }
-              }
-            }
-          }
-        },
-        client: {
-          include: {
-            user: {
-              select: { firstName: true, lastName: true, email: true }
-            }
-          }
-        },
-      },
-    });
-
-    logger.info(`Shift created for guard ${data.guardId}${siteId ? ` at site ${siteId}` : ''}: ${shift.id}`, {
-      shiftId: shift.id,
-      guardId: shift.guardId,
-      scheduledStartTime: shift.scheduledStartTime,
-      scheduledEndTime: shift.scheduledEndTime,
-      status: shift.status,
-    });
-
-    // Send notification to guard if shift is assigned
-    if (shift.guardId) {
-      const guard = await prisma.guard.findUnique({
-        where: { id: shift.guardId },
-        select: { userId: true },
-      });
-
-      if (guard?.userId) {
-        try {
-          const notificationService = (await import('./notificationService.js')).default;
-          await notificationService.notifyShiftAssigned(
-            guard.userId,
-            {
-              id: shift.id,
-              scheduledStartTime: shift.scheduledStartTime,
-              scheduledEndTime: shift.scheduledEndTime,
-              locationName: shift.locationName,
-              locationAddress: shift.locationAddress,
-            },
-            securityCompanyId
-          );
-        } catch (error) {
-          logger.error('Failed to send shift assignment notification:', error);
-          // Don't throw - notification failure shouldn't break shift creation
-        }
-      }
-    }
-
-    return shift;
-  }
-
   /**
    * Check in to shift (simplified)
    */
@@ -252,29 +42,12 @@ class ShiftServiceSimple {
     }
 
     if (shift.site?.latitude != null && shift.site?.longitude != null) {
-      const allowedRadiusMeters = Math.max(20, shift.site.radiusMeters || 100);
-      const distanceMeters = this.calculateDistanceMeters(
+      assertWithinSiteRadius(
         data.location.latitude,
         data.location.longitude,
-        shift.site.latitude,
-        shift.site.longitude,
+        shift.site,
+        'Check-in denied',
       );
-
-      if (distanceMeters > allowedRadiusMeters) {
-        const roundedDistance = Math.round(distanceMeters);
-        const message = `Check-in denied. You are ${roundedDistance}m away from ${shift.site.name}; maximum allowed radius is ${allowedRadiusMeters}m.`;
-        const error = new BadRequestError(message) as BadRequestError & {
-          details?: Record<string, unknown>;
-        };
-        error.details = {
-          reason: 'OUTSIDE_SITE_RADIUS',
-          siteId: shift.site.id,
-          siteName: shift.site.name,
-          distanceMeters: roundedDistance,
-          allowedRadiusMeters,
-        };
-        throw error;
-      }
     }
 
     // Allow check-in if:
@@ -357,7 +130,7 @@ class ShiftServiceSimple {
           const adminUserIds = companyAdmins.map(cu => cu.userId).filter(Boolean);
 
           if (adminUserIds.length > 0 && shiftWithDetails.guard?.userId) {
-            const notificationService = (await import('./notificationService.js')).default;
+            const notificationService = (await import('../notificationService.js')).default;
             await notificationService.notifyCheckIn(
               shiftWithDetails.guard.userId,
               {
@@ -460,7 +233,7 @@ class ShiftServiceSimple {
           const adminUserIds = companyAdmins.map(cu => cu.userId).filter(Boolean);
 
           if (adminUserIds.length > 0 && shiftWithDetails.guard?.userId) {
-            const notificationService = (await import('./notificationService.js')).default;
+            const notificationService = (await import('../notificationService.js')).default;
             await notificationService.notifyCheckOut(
               shiftWithDetails.guard.userId,
               {

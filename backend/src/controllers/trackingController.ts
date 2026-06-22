@@ -7,7 +7,8 @@ import prisma from '../config/database.js';
 export class TrackingController {
   async recordLocation(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { guardId, latitude, longitude, accuracy, batteryLevel, timestamp } = req.body;
+      const { latitude, longitude, accuracy, batteryLevel, timestamp } = req.body;
+      const guardId = req.body.guardId || req.guardId;
       
       const record = await trackingService.recordLocation(guardId, {
         latitude,
@@ -134,7 +135,8 @@ export class TrackingController {
 
   async recordGeofenceEvent(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { guardId, geofenceId, eventType, location, timestamp } = req.body;
+      const { geofenceId, eventType, location, timestamp } = req.body;
+      const guardId = req.body.guardId || req.guardId;
       
       const event = await trackingService.recordGeofenceEvent({
         guardId,

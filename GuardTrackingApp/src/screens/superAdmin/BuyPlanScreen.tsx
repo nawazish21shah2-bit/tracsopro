@@ -17,6 +17,7 @@ import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { SuperAdminStackParamList } from '../../navigation/SuperAdminNavigator';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SharedHeader from '../../components/ui/SharedHeader';
+import BackNavButton from '../../components/common/BackNavButton';
 import { superAdminService } from '../../services/superAdminService';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../styles/globalStyles';
 
@@ -115,9 +116,10 @@ const BuyPlanScreen: React.FC = () => {
   return (
     <SafeAreaWrapper>
       <SharedHeader variant="superAdmin" title="Manage Subscription" />
-      <TouchableOpacity style={styles.backRow} onPress={() => navigation.goBack()}>
-        <Text style={styles.backText}>← Back</Text>
-      </TouchableOpacity>
+      <BackNavButton
+        style={styles.backRow}
+        onPress={() => navigation.goBack()}
+      />
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Text style={styles.companyLabel}>{companyName}</Text>
 
@@ -165,7 +167,6 @@ const BuyPlanScreen: React.FC = () => {
 const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   backRow: { paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm },
-  backText: { color: COLORS.primary, fontSize: TYPOGRAPHY.fontSize.md },
   scrollContent: { padding: SPACING.lg, paddingBottom: SPACING.xxxxxl },
   companyLabel: {
     fontSize: TYPOGRAPHY.fontSize.lg,

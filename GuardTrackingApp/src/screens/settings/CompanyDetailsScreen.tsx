@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TextInput,
   TouchableOpacity,
   Alert,
   ActivityIndicator,
@@ -15,6 +14,7 @@ import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
 import { Briefcase } from 'react-native-feather';
 import { settingsService } from '../../services/settingsService';
+import FormInput from '../../components/common/FormInput';
 
 interface CompanyDetailsScreenProps {
   variant?: 'client' | 'guard' | 'admin';
@@ -145,108 +145,96 @@ const CompanyDetailsScreen: React.FC<CompanyDetailsScreenProps> = ({
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.label}>Company Name *</Text>
-          <TextInput
-            style={styles.input}
+          <FormInput
+            label="Company Name"
+            required
             value={formData.companyName}
             onChangeText={(text) => setFormData({ ...formData, companyName: text })}
             placeholder="Enter company name"
-            placeholderTextColor="#999"
+            containerStyle={styles.inputGroup}
           />
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.label}>Registration Number</Text>
-          <TextInput
-            style={styles.input}
+          <FormInput
+            label="Registration Number"
             value={formData.companyRegistrationNumber}
             onChangeText={(text) => setFormData({ ...formData, companyRegistrationNumber: text })}
             placeholder="Enter registration number"
-            placeholderTextColor="#999"
+            containerStyle={styles.inputGroup}
           />
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.label}>Tax ID</Text>
-          <TextInput
-            style={styles.input}
+          <FormInput
+            label="Tax ID"
             value={formData.taxId}
             onChangeText={(text) => setFormData({ ...formData, taxId: text })}
             placeholder="Enter tax ID"
-            placeholderTextColor="#999"
+            containerStyle={styles.inputGroup}
           />
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.label}>Address</Text>
-          <TextInput
-            style={styles.input}
+          <FormInput
+            label="Address"
             value={formData.address}
             onChangeText={(text) => setFormData({ ...formData, address: text })}
             placeholder="Enter street address"
-            placeholderTextColor="#999"
+            containerStyle={styles.inputGroup}
           />
         </View>
 
         <View style={styles.row}>
           <View style={[styles.card, styles.halfCard]}>
-            <Text style={styles.label}>City</Text>
-            <TextInput
-              style={styles.input}
+            <FormInput
+              label="City"
               value={formData.city}
               onChangeText={(text) => setFormData({ ...formData, city: text })}
               placeholder="City"
-              placeholderTextColor="#999"
             />
           </View>
 
           <View style={[styles.card, styles.halfCard]}>
-            <Text style={styles.label}>State</Text>
-            <TextInput
-              style={styles.input}
+            <FormInput
+              label="State"
               value={formData.state}
               onChangeText={(text) => setFormData({ ...formData, state: text })}
               placeholder="State"
-              placeholderTextColor="#999"
             />
           </View>
         </View>
 
         <View style={styles.row}>
           <View style={[styles.card, styles.halfCard]}>
-            <Text style={styles.label}>Zip Code</Text>
-            <TextInput
-              style={styles.input}
+            <FormInput
+              label="Zip Code"
               value={formData.zipCode}
               onChangeText={(text) => setFormData({ ...formData, zipCode: text })}
               placeholder="Zip Code"
-              placeholderTextColor="#999"
               keyboardType="numeric"
             />
           </View>
 
           <View style={[styles.card, styles.halfCard]}>
-            <Text style={styles.label}>Country</Text>
-            <TextInput
-              style={styles.input}
+            <FormInput
+              label="Country"
               value={formData.country}
               onChangeText={(text) => setFormData({ ...formData, country: text })}
               placeholder="Country"
-              placeholderTextColor="#999"
             />
           </View>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.label}>Website</Text>
-          <TextInput
-            style={styles.input}
+          <FormInput
+            label="Website"
             value={formData.website}
             onChangeText={(text) => setFormData({ ...formData, website: text })}
             placeholder="https://example.com"
-            placeholderTextColor="#999"
             keyboardType="url"
             autoCapitalize="none"
+            containerStyle={styles.inputGroup}
           />
         </View>
 
@@ -304,21 +292,8 @@ const styles = StyleSheet.create({
     color: '#666666',
     lineHeight: 20,
   },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333333',
-    marginBottom: 8,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: '#333333',
-    backgroundColor: '#FFFFFF',
+  inputGroup: {
+    marginBottom: 0,
   },
   row: {
     flexDirection: 'row',

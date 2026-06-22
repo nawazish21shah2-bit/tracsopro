@@ -27,6 +27,29 @@ const Stack = createStackNavigator<RootStackParamList>();
 // Export navigation ref for use in notification service
 export const navigationRef = React.createRef<any>();
 
+const linking = {
+  prefixes: ['tracsopro://', 'https://app.tracsopro.com'],
+  config: {
+    screens: {
+      Auth: {
+        screens: {
+          Login: 'login',
+          ForgotPassword: 'forgot-password',
+        },
+      },
+      Main: {
+        screens: {
+          RootDrawer: {
+            screens: {
+              Notifications: 'notifications',
+            },
+          },
+        },
+      },
+    },
+  },
+};
+
 const AppNavigator: React.FC = () => {
   const { isAuthenticated, isLoading } = useSelector((state: RootState) => state.auth);
   const internalNavigationRef = useRef<any>(null);
@@ -162,7 +185,8 @@ const AppNavigator: React.FC = () => {
   }
 
   return (
-    <NavigationContainer 
+    <NavigationContainer
+      linking={linking}
       ref={(ref) => {
         internalNavigationRef.current = ref;
         navigationRef.current = ref;

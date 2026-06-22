@@ -18,10 +18,13 @@ import { RootState, AppDispatch } from '../../store';
 import { logoutUser } from '../../store/slices/authSlice';
 import SharedHeader from '../../components/ui/SharedHeader';
 import { useRoleScreenHeader } from '../../hooks/useRoleScreenHeader';
+import { navigateToEmailVerification } from '../../utils/navigationHelpers';
+import { getEmailVerificationSettingItems } from '../../utils/emailVerificationSettingItem';
 
 // Hardcoded colors to avoid module load issues
 const ICON_COLOR = '#828282';
 const ERROR_COLOR = '#F44336';
+const SETTINGS_BOTTOM_SPACER = 120;
 
 interface SettingItem {
   id: string;
@@ -52,6 +55,10 @@ const GuardSettingsScreen: React.FC = () => {
     navigation.navigate('SupportHubScreen', { variant: 'guard', mode: 'mine' });
   };
 
+  const handleEmailVerification = () => {
+    navigateToEmailVerification(navigation);
+  };
+
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
       { text: 'Cancel', style: 'cancel' },
@@ -60,6 +67,7 @@ const GuardSettingsScreen: React.FC = () => {
   };
 
   const items: SettingItem[] = [
+    ...getEmailVerificationSettingItems(Boolean(user?.isEmailVerified), handleEmailVerification, ICON_COLOR),
     { id: '1', title: 'My Profile', icon: <User width={20} height={20} color={ICON_COLOR} />, onPress: handleProfile },
     { id: '2', title: 'Notifications', icon: <Bell width={20} height={20} color={ICON_COLOR} />, onPress: handleNotifications },
     { id: '3', title: 'Change Password', icon: <Lock width={20} height={20} color={ICON_COLOR} />, onPress: handleChangePassword },
@@ -70,7 +78,11 @@ const GuardSettingsScreen: React.FC = () => {
     <SafeAreaWrapper>
       <SharedHeader {...headerProps} />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.card}>
           {items.map((item, idx) => (
             <TouchableOpacity
@@ -101,7 +113,10 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     backgroundColor: '#F8F9FA',
+  },
+  contentContainer: {
     padding: 16,
+    paddingBottom: SETTINGS_BOTTOM_SPACER,
   },
   card: {
     backgroundColor: '#FFFFFF',

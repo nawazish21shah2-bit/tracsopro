@@ -12,7 +12,6 @@ import {
   TouchableOpacity,
   Alert,
   Modal,
-  TextInput,
   FlatList,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,7 +21,8 @@ import { logoutUser } from '../../store/slices/authSlice';
 import { globalStyles, COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { ErrorHandler } from '../../utils/errorHandler';
 import { showSchedulingErrorAlert, showShiftActionError } from '../../utils/schedulingErrorAlert';
-import apiService from '../../services/api';
+import { shiftApi } from '../../services/api/shiftApi';
+import { adminApi } from '../../services/api/adminApi';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
@@ -31,6 +31,7 @@ import { ShiftsIcon, UserIcon, EmergencyIcon, LocationIcon, ClockIcon, PlusIcon,
 import { ArrowLeftIcon, ArrowRightIcon, RefreshCwIcon, AlertTriangleIcon, EditIcon, TrashIcon } from '../../components/ui/FeatherIcons';
 import SectionHeader from '../../components/ui/SectionHeader';
 import ShiftFormFields, { ShiftFormValues } from '../../components/shifts/ShiftFormFields';
+import FormInput from '../../components/common/FormInput';
 import ShiftOptionPicker from '../../components/shifts/ShiftOptionPicker';
 import {
   combineDateTime,
@@ -38,6 +39,7 @@ import {
   getRepeatSuccessMessage,
   validateShiftSchedule,
 } from '../../utils/shiftFormUtils';
+import { useShiftScheduling } from '../../features/shift-scheduling/hooks/useShiftScheduling';
 
 interface ScheduledShift {
   id: string;
@@ -124,13 +126,14 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
     );
   };
 
-  const [shifts, setShifts] = useState<ScheduledShift[]>([]);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const { shifts, loading: shiftsLoading, refresh: reloadShifts, setShifts } = useShiftScheduling(selectedDate);
   const [guards, setGuards] = useState<Guard[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedView, setSelectedView] = useState<'calendar' | 'conflicts' | 'guards' | 'unassigned'>('calendar');
-  const [loading, setLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+  const isBusy = actionLoading || shiftsLoading;
   const [unassignedShifts, setUnassignedShifts] = useState<ScheduledShift[]>([]);
   const [showAssignGuardModal, setShowAssignGuardModal] = useState(false);
   const [selectedShiftForAssignment, setSelectedShiftForAssignment] = useState<ScheduledShift | null>(null);
@@ -166,7 +169,7 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
 
   const initializeScheduling = async () => {
     try {
-      setLoading(true);
+      setActionLoading(true);
       await Promise.all([
         loadShifts(),
         loadUnassignedShifts(),
@@ -178,13 +181,13 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
     } catch (error) {
       ErrorHandler.handleError(error, 'initialize_scheduling');
     } finally {
-      setLoading(false);
+      setActionLoading(false);
     }
   };
 
   const loadUnassignedShifts = async () => {
     try {
-      const response = await apiService.getUnassignedShifts(selectedDate);
+      const response = await shiftApi.getUnassignedShifts(selectedDate);
       
       if (response.success && response.data) {
         const transformedShifts: ScheduledShift[] = (response.data as any[]).map((shift: any) => {
@@ -235,79 +238,12 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
   };
 
   const loadShifts = async () => {
-    try {
-      setLoading(true);
-      const response = await apiService.getAdminShifts(selectedDate);
-      
-      if (response.success && response.data) {
-        // Transform backend shifts to ScheduledShift format
-        const transformedShifts: ScheduledShift[] = (response.data as any[]).map((shift: any) => {
-          const guard = shift.guard;
-          const guardName = guard?.user 
-            ? `${guard.user.firstName || ''} ${guard.user.lastName || ''}`.trim() || guard.user.email
-            : 'Unassigned';
-          
-          const site = shift.site;
-          const siteName = site?.name || shift.locationName || 'Unknown Site';
-          const siteId = site?.id || shift.siteId || '';
-
-          // Extract time from scheduledStartTime and scheduledEndTime
-          const startDate = new Date(shift.scheduledStartTime);
-          const endDate = new Date(shift.scheduledEndTime);
-          const startTime = `${String(startDate.getHours()).padStart(2, '0')}:${String(startDate.getMinutes()).padStart(2, '0')}`;
-          const endTime = `${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}`;
-          
-          // Map status
-          let status: ScheduledShift['status'] = 'scheduled';
-          if (shift.status === 'IN_PROGRESS') status = 'in_progress';
-          else if (shift.status === 'COMPLETED') status = 'completed';
-          else if (shift.status === 'CANCELLED') status = 'cancelled';
-          else if (shift.status === 'CONFIRMED') status = 'confirmed';
-
-          // Determine if shift was created by client (has clientId but might not have guard initially)
-          const clientName = shift.client?.user 
-            ? `${shift.client.user.firstName || ''} ${shift.client.user.lastName || ''}`.trim() || shift.client.user.email
-            : null;
-
-          return {
-            id: shift.id,
-            guardId: shift.guardId || null,
-            guardName: shift.guardId ? guardName : 'Unassigned',
-            siteId,
-            siteName,
-            startTime,
-            endTime,
-            date: selectedDate,
-            status,
-            shiftType: 'regular' as ScheduledShift['shiftType'],
-            notes: shift.notes,
-            conflicts: [], // Conflicts can be detected on the fly
-            // Add client info for display
-            clientName: clientName || undefined,
-            isClientCreated: !!shift.client, // Flag to identify client-created shifts
-          };
-        });
-
-        setShifts(transformedShifts);
-      } else {
-        // If API fails, set empty array instead of mock data
-        setShifts([]);
-        if (__DEV__) {
-          console.warn('Failed to load shifts from backend:', response.message);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading shifts:', error);
-      setShifts([]);
-      ErrorHandler.handleError(error, 'load_shifts');
-    } finally {
-      setLoading(false);
-    }
+    await reloadShifts();
   };
 
   const loadGuards = async () => {
     try {
-      const response = await apiService.getGuards(1, 50);
+      const response = await adminApi.getGuards(1, 50);
       const responseData = response.data as any;
       if (!response.success || !responseData || !responseData.items) {
         console.warn('Failed to load guards, falling back to mock guards');
@@ -348,7 +284,7 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
 
   const loadSites = async () => {
     try {
-      const response = await apiService.getAdminSites();
+      const response = await adminApi.getAdminSites();
       if (!response.success || !response.data) {
         console.warn('Failed to load sites for scheduling, keeping mock sites');
         return;
@@ -490,7 +426,7 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
     }
 
     try {
-      setLoading(true);
+      setActionLoading(true);
       const conflicts = newShift.guardId ? detectConflicts(newShift) : [];
       const hasErrors = conflicts.some((c) => c.severity === 'error');
 
@@ -510,7 +446,7 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
 
       const apiResponse =
         newShift.scheduleRepeat === 'week' || newShift.scheduleRepeat === 'month'
-          ? await apiService.createAdminBulkShifts({
+          ? await shiftApi.createAdminBulkShifts({
               guardId: newShift.guardId || undefined,
               siteId: site.id,
               scheduledStartTime,
@@ -519,7 +455,7 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
               notes,
               repeatPattern: newShift.scheduleRepeat,
             })
-          : await apiService.createAdminShift({
+          : await shiftApi.createAdminShift({
               guardId: newShift.guardId || undefined,
               siteId: site.id,
               locationName: site.name,
@@ -551,14 +487,14 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
       ErrorHandler.handleError(error, 'create_shift', false);
       showShiftActionError('Create Shift', error);
     } finally {
-      setLoading(false);
+      setActionLoading(false);
     }
   };
 
   const handleAssignGuard = async (shiftId: string, guardId: string) => {
     try {
-      setLoading(true);
-      const response = await apiService.assignGuardToShift(shiftId, guardId);
+      setActionLoading(true);
+      const response = await shiftApi.assignGuardToShift(shiftId, guardId);
 
       if (response.success) {
         Alert.alert('Success', 'Guard assigned to shift successfully');
@@ -573,7 +509,7 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
       ErrorHandler.handleError(error, 'assign_guard', false);
       showShiftActionError('Assign Guard', error);
     } finally {
-      setLoading(false);
+      setActionLoading(false);
     }
   };
 
@@ -607,11 +543,11 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
     }
 
     try {
-      setLoading(true);
+      setActionLoading(true);
       const scheduledStartTime = combineDateTime(editingShift.date, editForm.startTime);
       const scheduledEndTime = combineDateTime(editingShift.date, editForm.endTime);
 
-      const response = await apiService.updateAdminShift(editingShift.id, {
+      const response = await shiftApi.updateAdminShift(editingShift.id, {
         scheduledStartTime,
         scheduledEndTime,
         notes: editForm.notes.trim() || undefined,
@@ -628,7 +564,7 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
     } catch (error) {
       showShiftActionError('Update Shift', error);
     } finally {
-      setLoading(false);
+      setActionLoading(false);
     }
   };
 
@@ -643,8 +579,8 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
           style: 'destructive',
           onPress: async () => {
             try {
-              setLoading(true);
-              const response = await apiService.deleteAdminShift(shift.id);
+              setActionLoading(true);
+              const response = await shiftApi.deleteAdminShift(shift.id);
               if (response.success) {
                 await Promise.all([loadShifts(), loadUnassignedShifts()]);
                 Alert.alert('Deleted', 'Shift deleted successfully');
@@ -654,7 +590,7 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
             } catch (error) {
               showShiftActionError('Delete Shift', error);
             } finally {
-              setLoading(false);
+              setActionLoading(false);
             }
           },
         },
@@ -723,13 +659,13 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
             prevDate.setDate(prevDate.getDate() - 1);
             setSelectedDate(prevDate.toISOString().split('T')[0]);
           }}
-          disabled={loading}
+          disabled={isBusy}
         >
           <ArrowLeftIcon size={20} color={COLORS.textInverse} />
         </TouchableOpacity>
         
         <View style={styles.dateTextContainer}>
-          {loading && (
+          {shiftsLoading && (
             <RefreshCwIcon size={16} color={COLORS.primary} style={{ marginRight: SPACING.xs }} />
           )}
           <Text style={styles.selectedDate}>
@@ -749,7 +685,7 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
             nextDate.setDate(nextDate.getDate() + 1);
             setSelectedDate(nextDate.toISOString().split('T')[0]);
           }}
-          disabled={loading}
+          disabled={isBusy}
         >
           <ArrowRightIcon size={20} color={COLORS.textInverse} />
         </TouchableOpacity>
@@ -829,7 +765,7 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
             <Text style={styles.emptyStateSubtext}>Tap the + button below to create a new shift</Text>
           </View>
         }
-        refreshing={loading}
+        refreshing={shiftsLoading}
         onRefresh={loadShifts}
       />
     </View>
@@ -839,7 +775,7 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
     <View style={styles.calendarContainer}>
       <View style={styles.dateSelector}>
         <View style={styles.dateTextContainer}>
-          {loading && (
+          {shiftsLoading && (
             <RefreshCwIcon size={16} color={COLORS.primary} style={{ marginRight: SPACING.xs }} />
           )}
           <Text style={styles.selectedDate}>
@@ -906,7 +842,7 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
             <Text style={styles.emptyStateSubtext}>All shifts have guards assigned</Text>
           </View>
         }
-        refreshing={loading}
+        refreshing={shiftsLoading}
         onRefresh={() => loadUnassignedShifts()}
       />
     </View>
@@ -981,21 +917,21 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
             </View>
 
             <TouchableOpacity
-              style={[styles.createButton, (!selectedGuardIdForAssignment || loading) && styles.createButtonDisabled]}
+              style={[styles.createButton, (!selectedGuardIdForAssignment || actionLoading) && styles.createButtonDisabled]}
               onPress={() => {
                 if (selectedGuardIdForAssignment && selectedShiftForAssignment) {
                   handleAssignGuard(selectedShiftForAssignment.id, selectedGuardIdForAssignment);
                 }
               }}
-              disabled={!selectedGuardIdForAssignment || loading}
+              disabled={!selectedGuardIdForAssignment || actionLoading}
             >
-              {loading ? (
+              {actionLoading ? (
                 <RefreshCwIcon size={20} color={COLORS.textInverse} style={{ marginRight: SPACING.xs }} />
               ) : (
                 <CheckCircleIcon size={20} color={COLORS.textInverse} style={{ marginRight: SPACING.xs }} />
               )}
               <Text style={styles.createButtonText}>
-                {loading ? 'Assigning...' : 'Assign Guard'}
+                {actionLoading ? 'Assigning...' : 'Assign Guard'}
               </Text>
             </TouchableOpacity>
           </ScrollView>
@@ -1052,67 +988,45 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
             </View>
 
             <View style={styles.timeSection}>
-              <View style={styles.timeInput}>
-                <View style={styles.formLabelContainer}>
-                  <ClockIcon size={18} color={COLORS.primary} style={{ marginRight: SPACING.xs }} />
-                  <Text style={styles.formLabel}>Start Time</Text>
-                </View>
-                <View style={styles.timeInputContainer}>
-                  <TextInput
-                    style={styles.timeField}
-                    value={editForm.startTime}
-                    onChangeText={(value) => setEditForm((prev) => ({ ...prev, startTime: value }))}
-                    placeholder="09:00"
-                    placeholderTextColor={COLORS.textSecondary}
-                  />
-                </View>
-              </View>
+              <FormInput
+                label="Start Time"
+                value={editForm.startTime}
+                onChangeText={(value) => setEditForm((prev) => ({ ...prev, startTime: value }))}
+                placeholder="09:00"
+                containerStyle={styles.timeInput}
+              />
 
-              <View style={styles.timeInput}>
-                <View style={styles.formLabelContainer}>
-                  <ClockIcon size={18} color={COLORS.primary} style={{ marginRight: SPACING.xs }} />
-                  <Text style={styles.formLabel}>End Time</Text>
-                </View>
-                <View style={styles.timeInputContainer}>
-                  <TextInput
-                    style={styles.timeField}
-                    value={editForm.endTime}
-                    onChangeText={(value) => setEditForm((prev) => ({ ...prev, endTime: value }))}
-                    placeholder="17:00"
-                    placeholderTextColor={COLORS.textSecondary}
-                  />
-                </View>
-              </View>
+              <FormInput
+                label="End Time"
+                value={editForm.endTime}
+                onChangeText={(value) => setEditForm((prev) => ({ ...prev, endTime: value }))}
+                placeholder="17:00"
+                containerStyle={styles.timeInput}
+              />
             </View>
 
-            <View style={styles.formSection}>
-              <Text style={styles.formLabel}>Notes</Text>
-              <View style={styles.timeInputContainer}>
-                <TextInput
-                  style={[styles.timeField, styles.notesField]}
-                  value={editForm.notes}
-                  onChangeText={(value) => setEditForm((prev) => ({ ...prev, notes: value }))}
-                  placeholder="Optional shift notes"
-                  placeholderTextColor={COLORS.textSecondary}
-                  multiline
-                  numberOfLines={3}
-                  textAlignVertical="top"
-                />
-              </View>
-            </View>
+            <FormInput
+              label="Notes"
+              value={editForm.notes}
+              onChangeText={(value) => setEditForm((prev) => ({ ...prev, notes: value }))}
+              placeholder="Optional shift notes"
+              multiline
+              numberOfLines={3}
+              containerStyle={styles.formSection}
+            />
 
             <TouchableOpacity
-              style={[styles.createButton, loading && styles.createButtonDisabled]}
+              style={[styles.createButton, actionLoading && styles.createButtonDisabled]}
               onPress={handleEditShift}
-              disabled={loading}
+              disabled={isBusy}
             >
-              {loading ? (
+              {actionLoading ? (
                 <RefreshCwIcon size={20} color={COLORS.textInverse} style={{ marginRight: SPACING.xs }} />
               ) : (
                 <CheckCircleIcon size={20} color={COLORS.textInverse} style={{ marginRight: SPACING.xs }} />
               )}
               <Text style={styles.createButtonText}>
-                {loading ? 'Saving...' : 'Save Changes'}
+                {actionLoading ? 'Saving...' : 'Save Changes'}
               </Text>
             </TouchableOpacity>
           </ScrollView>
@@ -1216,17 +1130,17 @@ const ShiftSchedulingScreen: React.FC<ShiftSchedulingScreenProps> = ({ navigatio
             ) : null}
 
             <TouchableOpacity
-              style={[styles.createButton, loading && styles.createButtonDisabled]}
+              style={[styles.createButton, actionLoading && styles.createButtonDisabled]}
               onPress={handleCreateShift}
-              disabled={loading}
+              disabled={isBusy}
             >
-              {loading ? (
+              {actionLoading ? (
                 <RefreshCwIcon size={20} color={COLORS.textInverse} style={{ marginRight: SPACING.xs }} />
               ) : (
                 <PlusIcon size={20} color={COLORS.textInverse} style={{ marginRight: SPACING.xs }} />
               )}
               <Text style={styles.createButtonText}>
-                {loading ? 'Creating...' : 'Create Shift'}
+                {actionLoading ? 'Creating...' : 'Create Shift'}
               </Text>
             </TouchableOpacity>
           </ScrollView>

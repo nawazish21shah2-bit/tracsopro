@@ -319,11 +319,12 @@ class NotificationService {
       this.navigateToScreen('IncidentDetail', {
         incidentId: data.incidentId || data.reportId,
       });
-    } else if (data.alertId) {
-      // Route to a valid cross-role screen to avoid navigation crashes from unknown emergency detail routes.
-      this.navigateToScreen('SupportHubScreen', { mode: 'mine' });
+    } else if (data.alertId || data.type === 'emergency') {
+      this.navigateToScreen('EmergencyAlertResponse', {
+        alertId: data.alertId,
+      });
     } else if (data.ticketId) {
-      this.navigateToScreen('SupportTicketDetailScreen', { ticketId: data.ticketId });
+      this.navigateToSupportTicket(String(data.ticketId));
     } else if (data.conversationId || data.chatId) {
       this.navigateToScreen('IndividualChatScreen', {
         chatId: data.conversationId || data.chatId,
@@ -339,6 +340,45 @@ class NotificationService {
       Linking.openURL(data.url);
     } else if (data?.screen) {
       this.navigateToScreen(data.screen, data.params);
+    }
+  }
+
+  private navigateToSupportTicket(ticketId: string): void {
+    const role = store.getState().auth.user?.role;
+    if (role === 'ADMIN') {
+      this.navigateToScreen('AdminTabs', {
+        screen: 'Settings',
+        params: {
+          screen: 'SupportTicketDetailScreen',
+          params: { ticketId, variant: 'admin', mode: 'inbox' },
+        },
+      });
+    } else if (role === 'SUPER_ADMIN') {
+      this.navigateToScreen('SuperAdminTabs', {
+        screen: 'Settings',
+        params: {
+          screen: 'SupportTicketDetailScreen',
+          params: { ticketId, variant: 'superAdmin', mode: 'platform' },
+        },
+      });
+    } else if (role === 'CLIENT') {
+      this.navigateToScreen('ClientTabs', {
+        screen: 'Settings',
+        params: {
+          screen: 'SupportTicketDetailScreen',
+          params: { ticketId, variant: 'client', mode: 'mine' },
+        },
+      });
+    } else if (role === 'GUARD') {
+      this.navigateToScreen('GuardTabs', {
+        screen: 'Settings',
+        params: {
+          screen: 'SupportTicketDetailScreen',
+          params: { ticketId, variant: 'guard', mode: 'mine' },
+        },
+      });
+    } else {
+      this.navigateToScreen('SupportTicketDetailScreen', { ticketId });
     }
   }
 

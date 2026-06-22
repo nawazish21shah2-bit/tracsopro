@@ -33,6 +33,7 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://test:test@localhost:5432/guard_tracking_test?schema=public
+      DIRECT_DATABASE_URL: postgresql://test:test@localhost:5432/guard_tracking_test?schema=public
       JWT_SECRET: ci-integration-test-jwt-secret-min-32-chars-long
       NODE_ENV: test
       RATE_LIMIT_MAX: '10000'
@@ -57,6 +58,22 @@ jobs:
         working-directory: backend
         run: npx prisma db push
 
-      - name: Tenant isolation integration tests
+      - name: Run all tests
         working-directory: backend
-        run: npm run test:tenant
+        run: npm test
+
+      - name: Coverage gate (core modules)
+        working-directory: backend
+        run: npm run test:coverage
+
+      - name: Coverage gate (full codebase)
+        working-directory: backend
+        run: npm run test:coverage:all
+
+      - name: Lint
+        working-directory: backend
+        run: npm run lint
+
+      - name: Typecheck
+        working-directory: backend
+        run: npm run typecheck

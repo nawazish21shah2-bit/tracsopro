@@ -1,5 +1,5 @@
 import { securityManager } from '../utils/security';
-import api from './api';
+import { clientApi } from './api/clientApi';
 
 import { getApiBaseUrl } from '../config/apiConfig';
 import { extractErrorMessage } from '../utils/errorHandler';
@@ -99,7 +99,7 @@ class SiteService {
     };
   }> {
     try {
-      const resp = await api.getClientSites(page, limit);
+      const resp = await clientApi.getClientSites(page, limit);
       if (!resp.success) {
         throw new Error(resp.message || 'Failed to fetch sites');
       }

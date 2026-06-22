@@ -13,6 +13,7 @@ import {
   SUPPORT_CONTACT,
   type PlanLimits,
 } from '../utils/planLimits.js';
+import { usageRow } from '../utils/usageMetrics.js';
 import type { SubscriptionPlan, SubscriptionStatus } from '@prisma/client';
 
 export interface ResourceCounts {
@@ -45,6 +46,11 @@ export interface SubscriptionOverview {
     email: string;
     phone: string | null;
   } | null;
+  canAdd: {
+    guards: { allowed: boolean; reason?: string };
+    clients: { allowed: boolean; reason?: string };
+    sites: { allowed: boolean; reason?: string };
+  };
 }
 
 class SubscriptionService {
@@ -124,14 +130,6 @@ class SubscriptionService {
     };
   }
 
-  private usageRow(used: number, max: number) {
-    return {
-      used,
-      max,
-      percent: max > 0 ? Math.min(100, Math.round((used / max) * 100)) : 0,
-    };
-  }
-
   async getSubscriptionInfo(securityCompanyId: string): Promise<SubscriptionOverview> {
     const company = await prisma.securityCompany.findUnique({
       where: { id: securityCompanyId },
@@ -174,9 +172,9 @@ class SubscriptionService {
       limits,
       counts,
       usage: {
-        guards: this.usageRow(counts.guardsCount, limits.maxGuards),
-        clients: this.usageRow(counts.clientsCount, limits.maxClients),
-        sites: this.usageRow(counts.sitesCount, limits.maxSites),
+        guards: usageRow(counts.guardsCount, limits.maxGuards),
+        clients: usageRow(counts.clientsCount, limits.maxClients),
+        sites: usageRow(counts.sitesCount, limits.maxSites),
       },
       trialEndsAt: company.subscriptionEndDate?.toISOString() ?? null,
       subscriptionEndDate: company.subscriptionEndDate?.toISOString() ?? null,

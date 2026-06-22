@@ -1,52 +1,114 @@
 name: Deploy Backend to DigitalOcean
 
+
+
 on:
+
   push:
+
     branches:
+
       - main
+
     paths:
+
       - 'backend/**'
+
   workflow_dispatch:
 
+
+
 jobs:
+
   deploy:
+
     runs-on: ubuntu-latest
-    
+
+
+
+    env:
+
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER || 'root' }}
+
+      DEPLOY_DIR: ${{ secrets.DEPLOY_DIR || '/root' }}
+
+
+
     steps:
+
     - name: Checkout code
+
       uses: actions/checkout@v4
-      
+
+
+
     - name: Setup Node.js
+
       uses: actions/setup-node@v4
+
       with:
+
         node-version: '20'
-        
+
+
+
     - name: Deploy to DigitalOcean
+
       uses: appleboy/scp-action@v0.1.7
+
       with:
+
         host: ${{ secrets.DROPLET_IP }}
-        username: root
+
+        username: ${{ env.DEPLOY_USER }}
+
         key: ${{ secrets.DROPLET_SSH_KEY }}
+
         source: "backend/"
-        target: "/root/"
+
+        target: "${{ env.DEPLOY_DIR }}/"
+
         strip_components: 1
+
         exclude: |
+
           backend/node_modules
+
           backend/logs
+
           backend/*.log
+
           backend/prisma/dev.db
+
           backend/.env
-        
+
+
+
     - name: Run deployment commands
+
       uses: appleboy/ssh-action@v1.2.0
+
       with:
+
         host: ${{ secrets.DROPLET_IP }}
-        username: root
+
+        username: ${{ env.DEPLOY_USER }}
+
         key: ${{ secrets.DROPLET_SSH_KEY }}
+
         script: |
-          cd /root/backend
+
+          cd ${{ env.DEPLOY_DIR }}
+
           npm ci
+
           npx prisma generate
+
           npx prisma migrate deploy
+
           pm2 restart guard-tracking-api || pm2 start npm --name "guard-tracking-api" -- start
+
+          sleep 5
+
+          curl -f http://localhost:3000/api/health || exit 1
 

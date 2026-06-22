@@ -25,6 +25,8 @@ interface LiveActivityFeedProps {
   onActivityPress?: (activity: ActivityItem) => void;
   /** Load from /admin/operations/activity (Operations Center) */
   useOperationsApi?: boolean;
+  /** Set false when rendered inside a parent ScrollView */
+  scrollEnabled?: boolean;
 }
 
 const LiveActivityFeed: React.FC<LiveActivityFeedProps> = ({
@@ -32,6 +34,7 @@ const LiveActivityFeed: React.FC<LiveActivityFeedProps> = ({
   showFilters = true,
   onActivityPress,
   useOperationsApi = false,
+  scrollEnabled = true,
 }) => {
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [filteredActivities, setFilteredActivities] = useState<ActivityItem[]>([]);
@@ -287,8 +290,10 @@ const LiveActivityFeed: React.FC<LiveActivityFeedProps> = ({
         data={filteredActivities}
         renderItem={renderActivityItem}
         keyExtractor={(item) => item.id}
+        scrollEnabled={scrollEnabled}
+        nestedScrollEnabled={!scrollEnabled}
         refreshControl={
-          useOperationsApi ? (
+          useOperationsApi && scrollEnabled ? (
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={handleRefresh}

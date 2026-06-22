@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TextInput,
   TouchableOpacity,
   Alert,
   ActivityIndicator,
@@ -13,8 +12,9 @@ import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SharedHeader from '../../components/ui/SharedHeader';
+import FormInput from '../../components/common/FormInput';
 import { settingsService } from '../../services/settingsService';
-import { Lock, Eye, EyeOff } from 'react-native-feather';
+import { Lock } from 'react-native-feather';
 import { useRoleScreenHeader, RoleHeaderVariant } from '../../hooks/useRoleScreenHeader';
 
 // Hardcoded colors to avoid module load issues
@@ -160,81 +160,46 @@ const ChangePasswordScreen: React.FC<ChangePasswordScreenProps> = ({
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.label}>Current Password *</Text>
-          <View style={styles.passwordContainer}>
-            <TextInput
-              style={styles.input}
-              value={currentPassword}
-              onChangeText={setCurrentPassword}
-              placeholder="Enter current password"
-              placeholderTextColor={COLORS.textTertiary}
-              secureTextEntry={!showCurrentPassword}
-              autoCapitalize="none"
-            />
-            <TouchableOpacity
-              style={styles.eyeIcon}
-              onPress={() => setShowCurrentPassword(!showCurrentPassword)}
-            >
-              {showCurrentPassword ? (
-                <EyeOff width={20} height={20} color={COLORS.textSecondary} />
-              ) : (
-                <Eye width={20} height={20} color={COLORS.textSecondary} />
-              )}
-            </TouchableOpacity>
-          </View>
+          <FormInput
+            label="Current Password"
+            required
+            icon="lock-outline"
+            value={currentPassword}
+            onChangeText={setCurrentPassword}
+            placeholder="Enter current password"
+            secureTextEntry
+            showPassword={showCurrentPassword}
+            onTogglePassword={() => setShowCurrentPassword(!showCurrentPassword)}
+          />
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.label}>New Password *</Text>
-          <View style={styles.passwordContainer}>
-            <TextInput
-              style={styles.input}
-              value={newPassword}
-              onChangeText={setNewPassword}
-              placeholder="Enter new password"
-              placeholderTextColor={COLORS.textTertiary}
-              secureTextEntry={!showNewPassword}
-              autoCapitalize="none"
-            />
-            <TouchableOpacity
-              style={styles.eyeIcon}
-              onPress={() => setShowNewPassword(!showNewPassword)}
-            >
-              {showNewPassword ? (
-                <EyeOff width={20} height={20} color={COLORS.textSecondary} />
-              ) : (
-                <Eye width={20} height={20} color={COLORS.textSecondary} />
-              )}
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.helperText}>
-            Must be at least 8 characters with uppercase, lowercase, and a number
-          </Text>
+          <FormInput
+            label="New Password"
+            required
+            icon="lock-outline"
+            value={newPassword}
+            onChangeText={setNewPassword}
+            placeholder="Enter new password"
+            secureTextEntry
+            showPassword={showNewPassword}
+            onTogglePassword={() => setShowNewPassword(!showNewPassword)}
+            helperText="Must be at least 8 characters with uppercase, lowercase, and a number"
+          />
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.label}>Confirm New Password *</Text>
-          <View style={styles.passwordContainer}>
-            <TextInput
-              style={styles.input}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              placeholder="Confirm new password"
-              placeholderTextColor={COLORS.textTertiary}
-              secureTextEntry={!showConfirmPassword}
-              autoCapitalize="none"
-            />
-            <TouchableOpacity
-              style={styles.eyeIcon}
-              onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-            >
-              {showConfirmPassword ? (
-                <EyeOff width={20} height={20} color={COLORS.textSecondary} />
-              ) : (
-                <Eye width={20} height={20} color={COLORS.textSecondary} />
-              )}
-            </TouchableOpacity>
-          </View>
+          <FormInput
+            label="Confirm New Password"
+            required
+            icon="lock-outline"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            placeholder="Confirm new password"
+            secureTextEntry
+            showPassword={showConfirmPassword}
+            onTogglePassword={() => setShowConfirmPassword(!showConfirmPassword)}
+          />
         </View>
 
         <TouchableOpacity

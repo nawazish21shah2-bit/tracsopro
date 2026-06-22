@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
 import { NotificationIcon } from './AppIcons';
-import { MenuIcon, ArrowLeftIcon } from './FeatherIcons';
+import { MenuIcon, ChevronLeftIcon } from './FeatherIcons';
 import { COLORS, SPACING, TYPOGRAPHY } from '../../styles/globalStyles';
 import { authStyles } from '../../styles/authStyles';
 import Logo from '../../assets/images/tracSOpro-logo.png';
@@ -124,7 +124,21 @@ interface DashboardHeaderProps extends BaseHeaderProps {
   notificationCount?: number;
 }
 
-// Client-specific props
+// Admin-specific props
+interface AdminHeaderProps extends BaseHeaderProps {
+  variant?: 'admin';
+  onNotificationPress?: () => void;
+  onMenuPress?: () => void;
+  onBackPress?: () => void;
+  showBackButton?: boolean;
+  hideProfileDrawer?: boolean;
+  leftIcon?: React.ReactNode;
+  rightIcon?: React.ReactNode;
+  notificationCount?: number;
+  profileDrawer?: React.ReactNode;
+}
+
+// Client-specific - add back support for nested stack screens
 interface ClientHeaderProps extends BaseHeaderProps {
   variant?: 'client';
   onNotificationPress?: () => void;
@@ -135,6 +149,8 @@ interface ClientHeaderProps extends BaseHeaderProps {
   onNavigateToAnalytics?: () => void;
   onNavigateToNotifications?: () => void;
   onNavigateToSupport?: () => void;
+  onBackPress?: () => void;
+  showBackButton?: boolean;
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
   notificationCount?: number;
@@ -151,22 +167,12 @@ interface GuardHeaderProps extends BaseHeaderProps {
   onNavigateToAttendance?: () => void;
   onNavigateToNotifications?: () => void;
   onNavigateToSupport?: () => void;
+  onBackPress?: () => void;
+  showBackButton?: boolean;
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
   notificationCount?: number;
   isActive?: boolean;
-  profileDrawer?: React.ReactNode;
-}
-
-// Admin-specific props
-interface AdminHeaderProps extends BaseHeaderProps {
-  variant?: 'admin';
-  onNotificationPress?: () => void;
-  onMenuPress?: () => void;
-  hideProfileDrawer?: boolean;
-  leftIcon?: React.ReactNode;
-  rightIcon?: React.ReactNode;
-  notificationCount?: number;
   profileDrawer?: React.ReactNode;
 }
 
@@ -276,11 +282,39 @@ const DashboardHeaderComponent: React.FC<DashboardHeaderProps> = ({
   );
 };
 
+function renderBackOrMenuLeft(options: {
+  leftIcon?: React.ReactNode;
+  showBackButton?: boolean;
+  onBackPress?: () => void;
+  onMenuPress: () => void;
+}) {
+  if (options.leftIcon) return options.leftIcon;
+  if (options.showBackButton) {
+    return (
+      <TouchableOpacity
+        style={sharedStyles.iconButton}
+        onPress={options.onBackPress}
+        activeOpacity={0.85}
+        disabled={!options.onBackPress}
+      >
+        <ChevronLeftIcon size={24} color={COLORS.textPrimary} />
+      </TouchableOpacity>
+    );
+  }
+  return (
+    <TouchableOpacity style={sharedStyles.iconButton} onPress={options.onMenuPress} activeOpacity={0.85}>
+      <MenuIcon size={24} color={COLORS.textPrimary} />
+    </TouchableOpacity>
+  );
+}
+
 // Client Header Component
 const ClientHeaderComponent: React.FC<ClientHeaderProps> = ({
   title,
   showLogo = false,
   onNotificationPress,
+  onBackPress,
+  showBackButton = false,
   leftIcon,
   rightIcon,
   notificationCount,
@@ -296,14 +330,13 @@ const ClientHeaderComponent: React.FC<ClientHeaderProps> = ({
 
   const drawerNode = profileDrawer ?? <ClientProfileDrawer visible={false} onClose={closeDrawer} />;
 
-  const renderLeft = () => {
-    if (leftIcon) return leftIcon;
-    return (
-      <TouchableOpacity style={sharedStyles.iconButton} onPress={openDrawer} activeOpacity={0.85}>
-        <MenuIcon size={24} color={COLORS.textPrimary} />
-      </TouchableOpacity>
-    );
-  };
+  const renderLeft = () =>
+    renderBackOrMenuLeft({
+      leftIcon,
+      showBackButton,
+      onBackPress,
+      onMenuPress: openDrawer,
+    });
 
   const renderRight = () => {
     if (rightIcon) return rightIcon;
@@ -331,6 +364,8 @@ const GuardHeaderComponent: React.FC<GuardHeaderProps> = ({
   title,
   showLogo = false,
   onNotificationPress,
+  onBackPress,
+  showBackButton = false,
   leftIcon,
   rightIcon,
   notificationCount,
@@ -347,14 +382,13 @@ const GuardHeaderComponent: React.FC<GuardHeaderProps> = ({
 
   const drawerNode = profileDrawer ?? <GuardProfileDrawer visible={false} onClose={closeDrawer} />;
 
-  const renderLeft = () => {
-    if (leftIcon) return leftIcon;
-    return (
-      <TouchableOpacity style={sharedStyles.iconButton} onPress={openDrawer} activeOpacity={0.85}>
-        <MenuIcon size={24} color={COLORS.textPrimary} />
-      </TouchableOpacity>
-    );
-  };
+  const renderLeft = () =>
+    renderBackOrMenuLeft({
+      leftIcon,
+      showBackButton,
+      onBackPress,
+      onMenuPress: openDrawer,
+    });
 
   const renderRight = () => {
     if (rightIcon) return rightIcon;
@@ -383,6 +417,8 @@ const AdminHeaderComponent: React.FC<AdminHeaderProps> = ({
   showLogo = false,
   onNotificationPress,
   onMenuPress,
+  onBackPress,
+  showBackButton = false,
   hideProfileDrawer,
   leftIcon,
   rightIcon,
@@ -400,14 +436,13 @@ const AdminHeaderComponent: React.FC<AdminHeaderProps> = ({
   const screenOwnsDrawer = Boolean(profileDrawer && onMenuPress);
   const handleMenuPress = onMenuPress ?? openDrawer;
 
-  const renderLeft = () => {
-    if (leftIcon) return leftIcon;
-    return (
-      <TouchableOpacity style={sharedStyles.iconButton} onPress={handleMenuPress} activeOpacity={0.85}>
-        <MenuIcon size={24} color={COLORS.textPrimary} />
-      </TouchableOpacity>
-    );
-  };
+  const renderLeft = () =>
+    renderBackOrMenuLeft({
+      leftIcon,
+      showBackButton,
+      onBackPress,
+      onMenuPress: handleMenuPress,
+    });
 
   const renderRight = () => {
     if (rightIcon) return rightIcon;
@@ -476,7 +511,7 @@ const SuperAdminHeaderComponent: React.FC<SuperAdminHeaderProps> = ({
           activeOpacity={0.85}
           disabled={!onBackPress}
         >
-          <ArrowLeftIcon size={24} color={COLORS.textPrimary} />
+          <ChevronLeftIcon size={24} color={COLORS.textPrimary} />
         </TouchableOpacity>
       );
     }

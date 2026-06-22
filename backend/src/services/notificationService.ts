@@ -1,6 +1,7 @@
 import prisma from '../config/database.js';
 import websocketService from './websocketService.js';
 import { logger } from '../utils/logger.js';
+import { initializeFirebaseAdmin } from '../config/firebase.js';
 import { NotificationType } from '@prisma/client';
 
 export interface CreateNotificationData {
@@ -70,7 +71,6 @@ export class NotificationService {
   private initializeFirebase(): void {
     if (this.firebaseInitialized) return;
     try {
-      const { initializeFirebaseAdmin } = require('../config/firebase.js');
       if (initializeFirebaseAdmin()) {
         this.firebaseInitialized = true;
         logger.info('Firebase Admin initialized for NotificationService');
@@ -516,6 +516,22 @@ export class NotificationService {
   /**
    * Attempt FCM delivery once. Returns delivery outcome for retry logic.
    */
+  /**
+   * Single push delivery attempt — used by BullMQ worker and DB retry processor.
+   */
+  async retryPushDelivery(
+    userId: string,
+    payload: {
+      title: string;
+      body: string;
+      type: string;
+      data?: any;
+      priority?: 'low' | 'normal' | 'high' | 'urgent';
+    },
+  ): Promise<'delivered' | 'skipped' | 'failed'> {
+    return this.deliverPush(userId, payload);
+  }
+
   private async deliverPush(
     userId: string,
     payload: {
@@ -653,6 +669,19 @@ export class NotificationService {
       priority?: 'low' | 'normal' | 'high' | 'urgent';
     }
   ): Promise<void> {
+    if (process.env.REDIS_URL) {
+      try {
+        const { enqueuePushRetry } = await import('../jobs/pushRetryQueue.js');
+        const queued = await enqueuePushRetry({ userId, ...payload });
+        if (queued) {
+          logger.warn(`Queued push retry (BullMQ) for user ${userId} (${payload.type})`);
+          return;
+        }
+      } catch (error) {
+        logger.warn('BullMQ push retry enqueue failed — falling back to DB queue', { error });
+      }
+    }
+
     try {
       await prisma.pushNotificationRetry.create({
         data: {
@@ -682,7 +711,7 @@ export class NotificationService {
     });
 
     for (const job of pending) {
-      const result = await this.deliverPush(job.userId, {
+      const result = await this.retryPushDelivery(job.userId, {
         title: job.title,
         body: job.body,
         type: job.type,

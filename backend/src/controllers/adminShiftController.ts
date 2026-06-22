@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import shiftService from '../services/shiftService.js';
+import shiftService from '../services/shift/schedulingService.js';
 import { logger } from '../utils/logger.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { resolveSecurityCompanyId } from '../utils/companyAuth.js';

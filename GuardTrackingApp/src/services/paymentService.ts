@@ -2,7 +2,7 @@
  * Payment Service - Frontend service for payment functionality
  */
 
-import apiService from './api';
+import { paymentApi } from './api/paymentApi';
 
 export interface PaymentIntent {
   id: string;
@@ -54,9 +54,6 @@ export interface SetupIntent {
 }
 
 class PaymentService {
-  /**
-   * Create payment intent for one-time payment
-   */
   async createPaymentIntent(data: {
     amount: number;
     currency?: string;
@@ -64,12 +61,7 @@ class PaymentService {
     metadata?: Record<string, string>;
   }): Promise<PaymentIntent> {
     try {
-      const response = await apiService.post('/payments/intent', {
-        amount: data.amount,
-        currency: data.currency || 'usd',
-        description: data.description,
-        metadata: data.metadata,
-      });
+      const response = await paymentApi.createPaymentIntent(data);
       return response.data.data;
     } catch (error) {
       console.error('Error creating payment intent:', error);
@@ -77,9 +69,6 @@ class PaymentService {
     }
   }
 
-  /**
-   * Get client invoices
-   */
   async getInvoices(params: {
     page?: number;
     limit?: number;
@@ -94,7 +83,7 @@ class PaymentService {
     };
   }> {
     try {
-      const response = await apiService.get('/payments/invoices', { params });
+      const response = await paymentApi.getInvoices(params);
       return {
         invoices: response.data.data || [],
         pagination: response.data.pagination || {
@@ -110,12 +99,9 @@ class PaymentService {
     }
   }
 
-  /**
-   * Get payment methods
-   */
   async getPaymentMethods(): Promise<PaymentMethod[]> {
     try {
-      const response = await apiService.get('/payments/methods');
+      const response = await paymentApi.getPaymentMethods();
       return response.data.data || [];
     } catch (error) {
       console.error('Error fetching payment methods:', error);
@@ -123,12 +109,9 @@ class PaymentService {
     }
   }
 
-  /**
-   * Create setup intent for adding payment method
-   */
   async createSetupIntent(): Promise<SetupIntent> {
     try {
-      const response = await apiService.post('/payments/setup-intent');
+      const response = await paymentApi.createSetupIntent();
       return response.data.data;
     } catch (error) {
       console.error('Error creating setup intent:', error);
@@ -136,14 +119,9 @@ class PaymentService {
     }
   }
 
-  /**
-   * Setup automatic payments
-   */
   async setupAutomaticPayments(paymentMethodId: string): Promise<{ success: boolean; message: string }> {
     try {
-      const response = await apiService.post('/payments/auto-pay', {
-        paymentMethodId,
-      });
+      const response = await paymentApi.setupAutomaticPayments(paymentMethodId);
       return response.data;
     } catch (error) {
       console.error('Error setting up automatic payments:', error);
@@ -151,9 +129,6 @@ class PaymentService {
     }
   }
 
-  /**
-   * Create invoice (Admin only)
-   */
   async createInvoice(data: {
     items: Array<{
       description: string;
@@ -166,7 +141,7 @@ class PaymentService {
     currency?: string;
   }): Promise<Invoice> {
     try {
-      const response = await apiService.post('/payments/invoice', data);
+      const response = await paymentApi.createInvoice(data);
       return response.data.data;
     } catch (error) {
       console.error('Error creating invoice:', error);
@@ -174,15 +149,9 @@ class PaymentService {
     }
   }
 
-  /**
-   * Generate monthly invoice (Admin only)
-   */
   async generateMonthlyInvoice(year: number, month: number): Promise<Invoice> {
     try {
-      const response = await apiService.post('/payments/invoice/monthly', {
-        year,
-        month,
-      });
+      const response = await paymentApi.generateMonthlyInvoice(year, month);
       return response.data.data;
     } catch (error) {
       console.error('Error generating monthly invoice:', error);
@@ -190,9 +159,6 @@ class PaymentService {
     }
   }
 
-  /**
-   * Get subscription plans (Admin/Super Admin only)
-   */
   async getPlans(): Promise<{
     currency: string;
     plans: Array<{
@@ -203,7 +169,7 @@ class PaymentService {
     }>;
   }> {
     try {
-      const response = await apiService.get('/payments/plans');
+      const response = await paymentApi.getPlans();
       return response.data.data;
     } catch (error) {
       console.error('Error fetching plans:', error);
@@ -211,27 +177,23 @@ class PaymentService {
     }
   }
 
-  /**
-   * Create subscription checkout session (Admin/Super Admin only)
-   */
   async createSubscriptionCheckout(data: {
     securityCompanyId: string;
     priceId: string;
     trialDays?: number;
   }): Promise<{ id: string; url: string | null }> {
     try {
-      const response = await apiService.post('/payments/subscriptions/checkout', data);
+      const response = await paymentApi.createSubscriptionCheckout(data);
       if (__DEV__) {
         console.log('Checkout response:', JSON.stringify(response.data, null, 2));
       }
-      
-      // Handle different response structures
+
       const checkoutData = response.data?.data || response.data;
-      
+
       if (!checkoutData) {
         throw new Error('Invalid response from checkout endpoint');
       }
-      
+
       return checkoutData;
     } catch (error: any) {
       console.error('Error creating subscription checkout:', error);
@@ -242,14 +204,9 @@ class PaymentService {
     }
   }
 
-  /**
-   * Get billing portal session (Admin/Super Admin only)
-   */
   async getBillingPortal(securityCompanyId: string): Promise<{ url: string }> {
     try {
-      const response = await apiService.get('/payments/portal', {
-        params: { securityCompanyId },
-      });
+      const response = await paymentApi.getBillingPortal(securityCompanyId);
       return response.data.data;
     } catch (error) {
       console.error('Error getting billing portal:', error);
@@ -260,4 +217,3 @@ class PaymentService {
 
 export default new PaymentService();
 export const paymentService = new PaymentService();
-

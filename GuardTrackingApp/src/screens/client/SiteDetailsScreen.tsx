@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import apiService from '../../services/api';
+import { clientApi } from '../../services/api/clientApi';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SectionHeader from '../../components/ui/SectionHeader';
@@ -56,8 +56,8 @@ const SiteDetailsScreen: React.FC = () => {
       }
 
       const [siteResult, shiftsResult] = await Promise.all([
-        apiService.getSiteById(siteId),
-        apiService.getClientShifts({ siteId, limit: 50, page: 1 }),
+        clientApi.getSiteById(siteId),
+        clientApi.getClientShifts({ siteId, limit: 50, page: 1 }),
       ]);
 
       if (siteResult.success && siteResult.data) {
@@ -144,7 +144,7 @@ const SiteDetailsScreen: React.FC = () => {
         text: 'Yes, cancel',
         style: 'destructive',
         onPress: async () => {
-          const result = await apiService.deleteClientShift(shift.id);
+          const result = await clientApi.deleteClientShift(shift.id);
           if (result.success) {
             Alert.alert('Cancelled', 'Shift was cancelled.');
             loadSiteDetails();
@@ -250,7 +250,7 @@ const SiteDetailsScreen: React.FC = () => {
               ? `${shifts.length} shift${shifts.length !== 1 ? 's' : ''} at this site`
               : 'Manage scheduled shifts'
           }
-          actionLabel="+ New Shift"
+          actionLabel="New Shift"
           onActionPress={handleCreateShift}
         />
 

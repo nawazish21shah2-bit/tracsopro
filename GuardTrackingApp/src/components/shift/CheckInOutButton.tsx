@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
-import * as Location from 'expo-location';
+import locationValidationService, { LocationData } from '../../services/locationValidationService';
 import { RootState } from '../../store';
 import {
   checkInToShiftWithLocation,
@@ -34,7 +34,7 @@ const CheckInOutButton: React.FC<CheckInOutButtonProps> = ({
   );
   
   const [locationLoading, setLocationLoading] = useState(false);
-  const [currentLocation, setCurrentLocation] = useState<Location.LocationObject | null>(null);
+  const [currentLocation, setCurrentLocation] = useState<LocationData | null>(null);
 
   const currentShift = shift || activeShift;
   const isCheckedIn = currentShift?.status === 'IN_PROGRESS';
@@ -48,22 +48,16 @@ const CheckInOutButton: React.FC<CheckInOutButtonProps> = ({
     try {
       setLocationLoading(true);
       
-      // Request location permissions
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
+      const location = await locationValidationService.getCurrentLocation();
+      if (!location) {
         Alert.alert(
           'Location Permission Required',
           'Please enable location services to check in/out of shifts.',
-          [{ text: 'OK' }]
+          [{ text: 'OK' }],
         );
         return;
       }
 
-      // Get current location
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-      });
-      
       setCurrentLocation(location);
     } catch (error) {
       console.error('Error getting location:', error);
@@ -95,9 +89,9 @@ const CheckInOutButton: React.FC<CheckInOutButtonProps> = ({
 
     try {
       const locationData = {
-        latitude: currentLocation.coords.latitude,
-        longitude: currentLocation.coords.longitude,
-        accuracy: currentLocation.coords.accuracy || 0,
+        latitude: currentLocation.latitude,
+        longitude: currentLocation.longitude,
+        accuracy: currentLocation.accuracy,
       };
 
       await dispatch(checkInToShiftWithLocation({
@@ -148,9 +142,9 @@ const CheckInOutButton: React.FC<CheckInOutButtonProps> = ({
           onPress: async () => {
             try {
               const locationData = {
-                latitude: currentLocation.coords.latitude,
-                longitude: currentLocation.coords.longitude,
-                accuracy: currentLocation.coords.accuracy || 0,
+                latitude: currentLocation.latitude,
+                longitude: currentLocation.longitude,
+                accuracy: currentLocation.accuracy,
               };
 
               await dispatch(checkOutFromShiftWithLocation({
@@ -213,7 +207,7 @@ const CheckInOutButton: React.FC<CheckInOutButtonProps> = ({
       
       {currentLocation && (
         <Text style={styles.locationText}>
-          Location: {currentLocation.coords.latitude.toFixed(6)}, {currentLocation.coords.longitude.toFixed(6)}
+          Location: {currentLocation.latitude.toFixed(6)}, {currentLocation.longitude.toFixed(6)}
         </Text>
       )}
     </View>

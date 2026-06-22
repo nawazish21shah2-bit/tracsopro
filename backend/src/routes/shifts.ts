@@ -47,7 +47,7 @@ router.get('/schedule/30-days', async (req: any, res: any) => {
       });
     }
 
-    const shiftService = (await import('../services/shiftService.js')).default;
+    const { shiftSchedulingService: shiftService } = await import('../services/shift/index.js');
     const shifts = await shiftService.get30DaySchedule(guardId, req.securityCompanyId);
     res.json({ success: true, data: shifts });
   } catch (error: any) {

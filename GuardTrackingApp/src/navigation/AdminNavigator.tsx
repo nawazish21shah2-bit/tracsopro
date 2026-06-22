@@ -33,6 +33,8 @@ import SupportHubScreen from '../screens/support/SupportHubScreen';
 import SupportTicketDetailScreen from '../screens/support/SupportTicketDetailScreen';
 import ShiftDetailsScreen from '../screens/shifts/ShiftDetailsScreen';
 import EditShiftScreen from '../screens/shifts/EditShiftScreen';
+import EmergencyAlertResponseScreen from '../screens/admin/EmergencyAlertResponseScreen';
+import { createTabResetListener } from '../utils/tabNavigationHelpers';
 
 export type AdminTabParamList = {
   Dashboard: undefined;
@@ -74,6 +76,7 @@ export type AdminStackParamList = {
   };
   ShiftDetails: { shiftId: string; shift?: any };
   EditShift: { shiftId: string; shift?: any };
+  EmergencyAlertResponse: { alertId: string };
 };
 
 const Tab = createBottomTabNavigator<AdminTabParamList>();
@@ -188,6 +191,10 @@ const AdminTabNavigator: React.FC = () => {
         options={{
           tabBarLabel: 'Management',
         }}
+        listeners={createTabResetListener({
+          tabName: 'Management',
+          rootScreen: 'UserManagement',
+        })}
       />
       <Tab.Screen 
         name="Reports" 
@@ -195,6 +202,10 @@ const AdminTabNavigator: React.FC = () => {
         options={{
           tabBarLabel: 'Reports',
         }}
+        listeners={createTabResetListener({
+          tabName: 'Reports',
+          rootScreen: 'IncidentReview',
+        })}
       />
       <Tab.Screen 
         name="Settings" 
@@ -202,6 +213,10 @@ const AdminTabNavigator: React.FC = () => {
         options={{
           tabBarLabel: 'Settings',
         }}
+        listeners={createTabResetListener({
+          tabName: 'Settings',
+          rootScreen: 'AdminSettings',
+        })}
       />
     </Tab.Navigator>
   );
@@ -272,6 +287,11 @@ const AdminNavigator: React.FC = () => {
       />
       <Stack.Screen name="ShiftDetails" component={ShiftDetailsScreen} />
       <Stack.Screen name="EditShift" component={EditShiftScreen} />
+      <Stack.Screen
+        name="EmergencyAlertResponse"
+        component={EmergencyAlertResponseScreen}
+        options={{ headerShown: false }}
+      />
     </Stack.Navigator>
   );
 };

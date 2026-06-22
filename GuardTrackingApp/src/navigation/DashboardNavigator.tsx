@@ -1,3 +1,4 @@
+import { createTabResetListener } from '../utils/tabNavigationHelpers';
 
 // Dashboard Navigator
 import React from 'react';
@@ -219,6 +220,10 @@ const DashboardNavigator: React.FC = () => {
             </Text>
           ),
         }}
+        listeners={createTabResetListener({
+          tabName: 'Settings',
+          rootScreen: 'GuardSettings',
+        })}
       />
       {/* REMOVED: Jobs tab - Job board system removed (Option B) */}
       {/* Guards now see assigned shifts in "My Shifts" tab */}

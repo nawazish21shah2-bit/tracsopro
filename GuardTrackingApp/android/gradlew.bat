@@ -31,6 +31,9 @@
 @rem Set local scope for the variables with windows NT shell
 if "%OS%"=="Windows_NT" setlocal
 
+@rem Keep Gradle caches off the system drive (C:) when space is tight
+if not defined GRADLE_USER_HOME set "GRADLE_USER_HOME=D:\gradle-cache"
+
 set DIRNAME=%~dp0
 if "%DIRNAME%"=="" set DIRNAME=.
 @rem This is normally unused

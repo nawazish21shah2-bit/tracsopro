@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import FormInput from '../common/FormInput';
 import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import {
   SUBSCRIPTION_PLANS,
@@ -69,38 +70,38 @@ const CompanyPlanLimitsFields: React.FC<CompanyPlanLimitsFieldsProps> = ({
 
       <View style={styles.row}>
         <View style={[styles.formGroup, styles.flex1, styles.marginRight]}>
-          <Text style={styles.label}>Max Guards</Text>
-          <TextInput
-            style={[styles.input, !limitsEditable && styles.inputDisabled]}
+          <FormInput
+            label="Max Guards"
             placeholder="10"
             value={maxGuards}
             onChangeText={(value) => onLimitChange('maxGuards', value)}
             keyboardType="numeric"
             editable={limitsEditable}
+            disabled={!limitsEditable}
           />
         </View>
         <View style={[styles.formGroup, styles.flex1]}>
-          <Text style={styles.label}>Max Clients</Text>
-          <TextInput
-            style={[styles.input, !limitsEditable && styles.inputDisabled]}
+          <FormInput
+            label="Max Clients"
             placeholder="5"
             value={maxClients}
             onChangeText={(value) => onLimitChange('maxClients', value)}
             keyboardType="numeric"
             editable={limitsEditable}
+            disabled={!limitsEditable}
           />
         </View>
       </View>
 
       <View style={styles.formGroup}>
-        <Text style={styles.label}>Max Sites</Text>
-        <TextInput
-          style={[styles.input, !limitsEditable && styles.inputDisabled]}
+        <FormInput
+          label="Max Sites"
           placeholder="10"
           value={maxSites}
           onChangeText={(value) => onLimitChange('maxSites', value)}
           keyboardType="numeric"
           editable={limitsEditable}
+          disabled={!limitsEditable}
         />
       </View>
     </>
@@ -116,20 +117,6 @@ const styles = StyleSheet.create({
     fontWeight: TYPOGRAPHY.fontWeight.medium,
     color: COLORS.textPrimary,
     marginBottom: SPACING.xs,
-  },
-  input: {
-    backgroundColor: COLORS.backgroundPrimary,
-    borderRadius: 8,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    fontSize: TYPOGRAPHY.fontSize.md,
-    color: COLORS.textPrimary,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-  },
-  inputDisabled: {
-    backgroundColor: '#F3F4F6',
-    color: COLORS.textSecondary,
   },
   row: {
     flexDirection: 'row',

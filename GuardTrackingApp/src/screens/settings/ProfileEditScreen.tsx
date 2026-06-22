@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TextInput,
   TouchableOpacity,
   Alert,
   ActivityIndicator,
@@ -15,6 +14,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RootState, AppDispatch } from '../../store';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SharedHeader from '../../components/ui/SharedHeader';
+import FormInput from '../../components/common/FormInput';
 import * as theme from '../../styles/globalStyles';
 import { settingsService, ProfileSettings } from '../../services/settingsService';
 import { updateUserProfile } from '../../store/slices/authSlice';
@@ -179,62 +179,52 @@ const ProfileEditScreen: React.FC<ProfileEditScreenProps> = ({
       <SharedHeader {...headerProps} />
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.card}>
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>First Name *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.firstName}
-              onChangeText={(text) => setFormData({ ...formData, firstName: text })}
-              placeholder="Enter first name"
-              placeholderTextColor="#999"
-            />
-          </View>
+          <FormInput
+            label="First Name"
+            required
+            icon="person-outline"
+            value={formData.firstName}
+            onChangeText={(text) => setFormData({ ...formData, firstName: text })}
+            placeholder="Enter first name"
+            containerStyle={styles.inputGroup}
+          />
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Last Name *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.lastName}
-              onChangeText={(text) => setFormData({ ...formData, lastName: text })}
-              placeholder="Enter last name"
-              placeholderTextColor="#999"
-            />
-          </View>
+          <FormInput
+            label="Last Name"
+            required
+            icon="person-outline"
+            value={formData.lastName}
+            onChangeText={(text) => setFormData({ ...formData, lastName: text })}
+            placeholder="Enter last name"
+            containerStyle={styles.inputGroup}
+          />
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Phone Number</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.phone}
-              onChangeText={(text) => setFormData({ ...formData, phone: text })}
-              placeholder="Enter phone number"
-              placeholderTextColor="#999"
-              keyboardType="phone-pad"
-            />
-          </View>
+          <FormInput
+            label="Phone Number"
+            value={formData.phone}
+            onChangeText={(text) => setFormData({ ...formData, phone: text })}
+            placeholder="Enter phone number"
+            keyboardType="phone-pad"
+            containerStyle={styles.inputGroup}
+          />
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={[styles.input, styles.disabledInput]}
-              value={user?.email || ''}
-              editable={false}
-              placeholderTextColor="#999"
-            />
-            <Text style={styles.helperText}>Email cannot be changed</Text>
-          </View>
+          <FormInput
+            label="Email"
+            icon="mail-outline"
+            value={user?.email || ''}
+            editable={false}
+            helperText="Email cannot be changed"
+            containerStyle={styles.inputGroup}
+          />
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Timezone</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.timezone}
-              onChangeText={(text) => setFormData({ ...formData, timezone: text })}
-              placeholder="e.g., America/New_York"
-              placeholderTextColor="#999"
-            />
-            <Text style={styles.helperText}>Optional: Your timezone (e.g., America/New_York)</Text>
-          </View>
+          <FormInput
+            label="Timezone"
+            value={formData.timezone}
+            onChangeText={(text) => setFormData({ ...formData, timezone: text })}
+            placeholder="e.g., America/New_York"
+            helperText="Optional: Your timezone (e.g., America/New_York)"
+            containerStyle={styles.inputGroup}
+          />
         </View>
 
         <TouchableOpacity
@@ -275,31 +265,6 @@ const styles = StyleSheet.create({
   },
   inputGroup: {
     marginBottom: SPACING.lg,
-  },
-  label: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.sm,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    borderRadius: BORDER_RADIUS.sm,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
-    fontSize: TYPOGRAPHY.fontSize.md,
-    color: COLORS.textPrimary,
-    backgroundColor: COLORS.backgroundPrimary,
-  },
-  disabledInput: {
-    backgroundColor: COLORS.backgroundSecondary,
-    color: COLORS.textTertiary,
-  },
-  helperText: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.xs,
   },
   saveButton: {
     backgroundColor: COLORS.primary,

@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import SectionHeader from '../ui/SectionHeader';
+import FormInput from '../common/FormInput';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { ClockIcon, FileTextIcon } from '../ui/FeatherIcons';
 import { ScheduleRepeat } from '../../utils/shiftFormUtils';
@@ -35,40 +36,35 @@ const ShiftFormFields: React.FC<ShiftFormFieldsProps> = ({
         <Text style={styles.fieldLabelInline}>When</Text>
       </View>
 
-      <Text style={styles.fieldLabel}>Start date</Text>
-      <TextInput
-        style={styles.input}
+      <FormInput
+        label="Start date"
         value={values.startDate}
         onChangeText={(text) => onChange('startDate', text)}
         placeholder="YYYY-MM-DD"
-        placeholderTextColor={COLORS.textTertiary}
+        containerStyle={styles.fieldSpacing}
       />
 
-      <Text style={styles.fieldLabel}>Start time</Text>
-      <TextInput
-        style={styles.input}
+      <FormInput
+        label="Start time"
         value={values.startTime}
         onChangeText={(text) => onChange('startTime', text)}
         placeholder="HH:MM"
-        placeholderTextColor={COLORS.textTertiary}
+        containerStyle={styles.fieldSpacing}
       />
 
-      <Text style={styles.fieldLabel}>End date</Text>
-      <TextInput
-        style={styles.input}
+      <FormInput
+        label="End date"
         value={values.endDate}
         onChangeText={(text) => onChange('endDate', text)}
         placeholder="YYYY-MM-DD"
-        placeholderTextColor={COLORS.textTertiary}
+        containerStyle={styles.fieldSpacing}
       />
 
-      <Text style={styles.fieldLabel}>End time</Text>
-      <TextInput
-        style={styles.input}
+      <FormInput
+        label="End time"
         value={values.endTime}
         onChangeText={(text) => onChange('endTime', text)}
         placeholder="HH:MM"
-        placeholderTextColor={COLORS.textTertiary}
       />
     </View>
 
@@ -103,22 +99,19 @@ const ShiftFormFields: React.FC<ShiftFormFieldsProps> = ({
         <FileTextIcon size={16} color={COLORS.primary} />
         <Text style={styles.fieldLabelInline}>Description</Text>
       </View>
-      <TextInput
-        style={[styles.input, styles.multiline]}
+      <FormInput
         value={values.description}
         onChangeText={(text) => onChange('description', text)}
         placeholder="Shift duties or instructions..."
-        placeholderTextColor={COLORS.textTertiary}
         multiline
+        containerStyle={styles.fieldSpacing}
       />
 
-      <Text style={styles.fieldLabel}>Notes</Text>
-      <TextInput
-        style={[styles.input, styles.multiline]}
+      <FormInput
+        label="Notes"
         value={values.notes}
         onChangeText={(text) => onChange('notes', text)}
         placeholder="Additional notes for your team..."
-        placeholderTextColor={COLORS.textTertiary}
         multiline
       />
     </View>
@@ -143,46 +136,25 @@ const styles = StyleSheet.create({
     gap: SPACING.xs,
     marginBottom: SPACING.xs,
   },
-  fieldLabel: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
-    color: COLORS.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-    marginBottom: SPACING.xs,
-    marginTop: SPACING.md,
-    fontFamily: TYPOGRAPHY.fontPrimary,
-  },
   fieldLabelInline: {
     fontSize: TYPOGRAPHY.fontSize.sm,
     fontWeight: TYPOGRAPHY.fontWeight.semibold,
     color: COLORS.textPrimary,
     fontFamily: TYPOGRAPHY.fontPrimary,
   },
-  input: {
-    borderWidth: 1,
-    borderColor: COLORS.borderCard,
-    borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.md,
-    fontSize: TYPOGRAPHY.fontSize.md,
-    color: COLORS.textPrimary,
-    backgroundColor: COLORS.backgroundSecondary,
-    fontFamily: TYPOGRAPHY.fontPrimary,
-  },
-  multiline: {
-    minHeight: 88,
-    textAlignVertical: 'top',
+  fieldSpacing: {
+    marginBottom: SPACING.md,
   },
   repeatRow: {
     flexDirection: 'row',
-    gap: SPACING.sm,
     flexWrap: 'wrap',
+    gap: SPACING.sm,
     marginBottom: SPACING.lg,
   },
   repeatChip: {
-    paddingHorizontal: SPACING.md,
+    paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.sm,
-    borderRadius: BORDER_RADIUS.round,
+    borderRadius: BORDER_RADIUS.md,
     borderWidth: 1,
     borderColor: COLORS.borderCard,
     backgroundColor: COLORS.backgroundPrimary,
@@ -194,11 +166,10 @@ const styles = StyleSheet.create({
   repeatChipText: {
     fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.textSecondary,
-    fontFamily: TYPOGRAPHY.fontPrimary,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
   repeatChipTextActive: {
     color: COLORS.textInverse,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
 });
 

@@ -20,6 +20,7 @@ interface EmergencyAlertsPanelProps {
   loading?: boolean;
   title?: string;
   onAcknowledge?: (alertId: string) => void;
+  onAlertPress?: (alertId: string) => void;
   onViewReports?: () => void;
   acknowledgeLabel?: string;
   compact?: boolean;
@@ -54,6 +55,7 @@ const EmergencyAlertsPanel: React.FC<EmergencyAlertsPanelProps> = ({
   loading = false,
   title = 'Active Emergency',
   onAcknowledge,
+  onAlertPress,
   onViewReports,
   acknowledgeLabel = 'Acknowledge',
   compact = false,
@@ -105,7 +107,12 @@ const EmergencyAlertsPanel: React.FC<EmergencyAlertsPanelProps> = ({
         {alerts.map((alert) => (
           <View key={alert.id} style={styles.alertCard}>
             <View style={styles.alertAccent} />
-            <View style={styles.alertBody}>
+            <TouchableOpacity
+              style={styles.alertBody}
+              activeOpacity={onAlertPress ? 0.85 : 1}
+              onPress={() => onAlertPress?.(alert.id)}
+              disabled={!onAlertPress}
+            >
               <View style={styles.alertTop}>
                 <Text style={styles.guardName}>{alert.guardName || 'Guard'}</Text>
                 <View style={styles.severityChip}>
@@ -119,7 +126,10 @@ const EmergencyAlertsPanel: React.FC<EmergencyAlertsPanelProps> = ({
                 {alert.message || `${alert.type || 'Emergency'} alert triggered`}
               </Text>
               <Text style={styles.time}>{formatTimeAgo(getAlertTimestamp(alert))}</Text>
-            </View>
+              {onAlertPress ? (
+                <Text style={styles.tapHint}>Tap to open response form</Text>
+              ) : null}
+            </TouchableOpacity>
             {onAcknowledge ? (
               <TouchableOpacity
                 style={[
@@ -305,6 +315,13 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.fontSize.xs,
     color: COLORS.textTertiary,
     marginTop: SPACING.sm,
+    fontFamily: TYPOGRAPHY.fontPrimary,
+  },
+  tapHint: {
+    marginTop: SPACING.xs,
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.primary,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
     fontFamily: TYPOGRAPHY.fontPrimary,
   },
   ackButton: {

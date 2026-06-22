@@ -149,10 +149,6 @@ export function getNetworkErrorMessage(error: any, baseURL?: string): string {
  * Get user-friendly error message based on status code
  */
 export function getStatusErrorMessage(statusCode: number, defaultMessage: string): string {
-  if (defaultMessage && defaultMessage !== 'An unexpected error occurred. Please try again.') {
-    return defaultMessage;
-  }
-
   switch (statusCode) {
     case 400:
       return 'Invalid request. Please check your input and try again.';
@@ -290,4 +286,81 @@ export function getActionableErrorMessage(error: any): {
     title: 'Error',
     message: errorMessage,
   };
+}
+
+export interface AppError {
+  message: string;
+  action: string;
+  timestamp: string;
+  statusCode?: number;
+  isNetworkError?: boolean;
+}
+
+const errorHistory: AppError[] = [];
+
+function resolveUserMessage(error: any): string {
+  if (error?.code === 'NETWORK_ERROR') {
+    return 'Network connection error. Please check your internet connection.';
+  }
+
+  const parsed = parseApiError(error);
+  return parsed.message;
+}
+
+export class ErrorHandler {
+  static handleError(error: any, action: string, _showAlert = true): AppError {
+    const appError: AppError = {
+      message: resolveUserMessage(error),
+      action,
+      timestamp: new Date().toISOString(),
+      statusCode: parseApiError(error).statusCode,
+      isNetworkError: parseApiError(error).isNetworkError,
+    };
+
+    errorHistory.unshift(appError);
+    if (errorHistory.length > 50) {
+      errorHistory.pop();
+    }
+
+    return appError;
+  }
+
+  static clearErrorHistory(): void {
+    errorHistory.length = 0;
+  }
+
+  static getErrorHistory(): AppError[] {
+    return [...errorHistory];
+  }
+
+  static async checkNetworkConnectivity(): Promise<boolean> {
+    try {
+      const NetInfo = require('@react-native-community/netinfo').default;
+      const state = await NetInfo.fetch();
+      return state.isConnected === true;
+    } catch {
+      return true;
+    }
+  }
+}
+
+export async function withRetry<T>(
+  operation: () => Promise<T>,
+  maxRetries = 3,
+  delayMs = 1000,
+): Promise<T> {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (attempt < maxRetries) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+
+  throw lastError;
 }

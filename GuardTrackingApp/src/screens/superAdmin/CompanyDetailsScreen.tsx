@@ -10,6 +10,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { superAdminService, SecurityCompany } from '../../services/superAdminService';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SharedHeader from '../../components/ui/SharedHeader';
+import BackNavButton from '../../components/common/BackNavButton';
 import { SuperAdminStackParamList } from '../../navigation/SuperAdminNavigator';
 
 type NavProp = StackNavigationProp<SuperAdminStackParamList>;
@@ -119,9 +120,7 @@ const CompanyDetailsScreen: React.FC = () => {
       <SafeAreaWrapper>
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>Company not found</Text>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Text style={styles.backButtonText}>Go Back</Text>
-          </TouchableOpacity>
+          <BackNavButton label="Go Back" onPress={() => navigation.goBack()} />
         </View>
       </SafeAreaWrapper>
     );
@@ -130,9 +129,7 @@ const CompanyDetailsScreen: React.FC = () => {
   return (
     <SafeAreaWrapper>
       <SharedHeader variant="superAdmin" title="Company Details" />
-      <TouchableOpacity style={styles.navBack} onPress={() => navigation.goBack()}>
-        <Text style={styles.navBackText}>← Back</Text>
-      </TouchableOpacity>
+      <BackNavButton style={styles.navBack} onPress={() => navigation.goBack()} />
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={styles.title}>{company.name}</Text>

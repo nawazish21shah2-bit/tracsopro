@@ -17,15 +17,18 @@ import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch } from '../../store';
 import { AuthStackParamList } from '../../types';
 import { RootState } from '../../store';
-import { verifyOTP, resendOTP } from '../../store/slices/authSlice';
+import { verifyOTP, resendOTP, forgotPassword } from '../../store/slices/authSlice';
 import Button from '../../components/common/Button';
 import AuthOtpInput from '../../components/auth/AuthOtpInput';
+import AuthFooter from '../../components/auth/AuthFooter';
 import Logo from '../../assets/images/tracSOpro-logo.png';
 import { authStyles, AUTH_HEADING_TO_FORM } from '../../styles/authStyles';
 import { COLORS, SPACING } from '../../styles/globalStyles';
 
 type GuardOTPScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'GuardOTP'>;
 type GuardOTPScreenRouteProp = RouteProp<AuthStackParamList, 'GuardOTP'>;
+
+const RESEND_COOLDOWN_SECONDS = 60;
 
 const GuardOTPScreen: React.FC = () => {
   const navigation = useNavigation<GuardOTPScreenNavigationProp>();
@@ -41,6 +44,11 @@ const GuardOTPScreen: React.FC = () => {
   const [canResend, setCanResend] = useState(true);
   const [resendTimer, setResendTimer] = useState(0);
   const inputRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    setCanResend(false);
+    setResendTimer(RESEND_COOLDOWN_SECONDS);
+  }, []);
 
   useEffect(() => {
     // Auto-focus the input when screen loads
@@ -68,13 +76,17 @@ const GuardOTPScreen: React.FC = () => {
     setOtp(numericValue);
   };
 
+  const navigateToLogin = () => {
+    navigation.navigate('Login');
+  };
+
   const handleVerifyOtp = async () => {
     if (otp.length !== 6) {
       Alert.alert('Invalid OTP', 'Please enter a 6-digit OTP code');
       return;
     }
 
-    if (!tempUserId) {
+    if (!isPasswordReset && !tempUserId) {
       Alert.alert('Error', 'User ID not found. Please try registering again.');
       return;
     }
@@ -82,21 +94,17 @@ const GuardOTPScreen: React.FC = () => {
     setIsLoading(true);
     try {
       if (isPasswordReset) {
-        // For password reset, just navigate to reset screen
         navigation.navigate('ResetPassword', { email, otp });
       } else {
-        // Use Redux action for OTP verification
-        const result = await dispatch(verifyOTP({ userId: tempUserId, otp }));
-        
+        const result = await dispatch(verifyOTP({ userId: tempUserId!, otp }));
+
         if (verifyOTP.fulfilled.match(result)) {
-          // Success - navigate to profile setup
           Alert.alert(
-            'Email Verified!', 
+            'Email Verified!',
             'Your email has been verified successfully.',
             [{ text: 'Continue', onPress: () => navigation.navigate('GuardProfileSetup') }]
           );
         } else {
-          // Handle specific error messages from backend
           const errorMessage = result.payload as string;
           if (errorMessage.includes('rate limit') || errorMessage.includes('Too many')) {
             Alert.alert('Too Many Attempts', errorMessage);
@@ -113,14 +121,40 @@ const GuardOTPScreen: React.FC = () => {
   };
 
   const handleResendOtp = async () => {
-    if (!canResend || !tempUserId) return;
+    if (!canResend) return;
+    if (!isPasswordReset && !tempUserId) return;
 
     setCanResend(false);
-    setResendTimer(60);
-    
+    setResendTimer(RESEND_COOLDOWN_SECONDS);
+
     try {
-      const result = await dispatch(resendOTP(tempUserId));
-      
+      if (isPasswordReset) {
+        if (!email) {
+          Alert.alert('Error', 'Email not found. Please start the password reset process again.');
+          setCanResend(true);
+          setResendTimer(0);
+          return;
+        }
+
+        const result = await dispatch(forgotPassword(email));
+
+        if (forgotPassword.fulfilled.match(result)) {
+          Alert.alert('OTP Sent', 'A new password reset code has been sent to your email address');
+        } else {
+          const errorMessage = result.payload as string;
+          if (errorMessage.includes('rate limit') || errorMessage.includes('Too many')) {
+            Alert.alert('Rate Limit Exceeded', errorMessage);
+          } else {
+            Alert.alert('Error', errorMessage || 'Failed to resend OTP. Please try again.');
+          }
+          setCanResend(true);
+          setResendTimer(0);
+        }
+        return;
+      }
+
+      const result = await dispatch(resendOTP(tempUserId!));
+
       if (resendOTP.fulfilled.match(result)) {
         Alert.alert('OTP Sent', 'A new OTP has been sent to your email address');
       } else {
@@ -160,8 +194,10 @@ const GuardOTPScreen: React.FC = () => {
         <View style={styles.titleContainer}>
           <Text style={[authStyles.title, styles.titleWithSubtitle]}>VERIFY EMAIL</Text>
           <Text style={authStyles.subtitle}>
-            We have sent an OTP code to your email.{'\n'}
-            Please check your email
+            {isPasswordReset
+              ? `We have sent a password reset code to${email ? `\n${email}` : ' your email'}.`
+              : 'We have sent an OTP code to your email.'}
+            {'\n'}Please check your email
           </Text>
         </View>
 
@@ -203,6 +239,13 @@ const GuardOTPScreen: React.FC = () => {
           loading={isLoading}
           disabled={otp.length !== 6}
           style={styles.verifyButton}
+        />
+
+        <AuthFooter
+          text="Remember your password?"
+          linkText="Login"
+          onLinkPress={navigateToLogin}
+          disabled={isLoading}
         />
       </ScrollView>
     </View>
@@ -266,7 +309,6 @@ const styles = StyleSheet.create({
   },
   verifyButton: {
     marginTop: 'auto',
-    marginBottom: 20,
   },
 });
 

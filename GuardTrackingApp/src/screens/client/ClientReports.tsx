@@ -12,7 +12,6 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
-  TextInput,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../store';
@@ -23,13 +22,14 @@ import { ClientStackParamList } from '../../navigation/ClientStackNavigator';
 import SharedHeader from '../../components/ui/SharedHeader';
 import ClientProfileDrawer from '../../components/client/ClientProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
+import FormInput from '../../components/common/FormInput';
 import { useNotificationBell } from '../../hooks/useNotificationBell';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { fetchMyReports } from '../../store/slices/clientSlice';
 import { LoadingOverlay, ErrorState, NetworkError, EmptyState } from '../../components/ui/LoadingStates';
 import { getClientGuardChatParams } from '../../utils/chatHelper';
 import { FileTextIcon } from '../../components/ui/FeatherIcons';
-import apiService from '../../services/api';
+import { clientApi } from '../../services/api/clientApi';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 
 interface ReportData {
@@ -128,7 +128,7 @@ const ClientReports: React.FC = () => {
 
     setIsSubmittingResponse(true);
     try {
-      const response = await apiService.respondToClientReport(
+      const response = await clientApi.respondToClientReport(
         selectedReportId, 
         'REVIEWED', 
         responseNotes.trim() || undefined
@@ -249,15 +249,13 @@ const ClientReports: React.FC = () => {
             <Text style={styles.modalTitle}>Respond to Report</Text>
             <Text style={styles.modalSubtitle}>Add a response note (optional):</Text>
             
-            <TextInput
-              style={styles.responseInput}
-              placeholder="Enter your response..."
-              placeholderTextColor={COLORS.textTertiary}
+            <FormInput
               value={responseNotes}
               onChangeText={setResponseNotes}
+              placeholder="Enter your response..."
               multiline
               numberOfLines={4}
-              textAlignVertical="top"
+              containerStyle={styles.responseInputContainer}
             />
 
             <View style={styles.modalButtons}>
@@ -393,16 +391,8 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginBottom: SPACING.lg,
   },
-  responseInput: {
-    backgroundColor: COLORS.backgroundSecondary,
-    borderRadius: BORDER_RADIUS.md,
-    padding: SPACING.md,
-    fontSize: TYPOGRAPHY.fontSize.md,
-    color: COLORS.textPrimary,
-    minHeight: 100,
+  responseInputContainer: {
     marginBottom: SPACING.lg,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
   },
   modalButtons: {
     flexDirection: 'row',

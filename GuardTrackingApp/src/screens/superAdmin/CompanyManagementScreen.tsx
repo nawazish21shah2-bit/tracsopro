@@ -12,18 +12,19 @@ import {
   TouchableOpacity,
   RefreshControl,
   Alert,
-  TextInput,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { UserIcon, ReportsIcon, ShiftsIcon, PlusIcon } from '../../components/ui/AppIcons';
 import { superAdminService, SecurityCompany } from '../../services/superAdminService';
+import { hasMorePages } from '../../utils/paginationUtils';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SuperAdminProfileDrawer from '../../components/superAdmin/SuperAdminProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 import { useNotificationBell } from '../../hooks/useNotificationBell';
+import FormInput from '../../components/common/FormInput';
 
 const CompanyManagementScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -67,7 +68,7 @@ const CompanyManagementScreen: React.FC = () => {
       } else {
         setCompanies((prev) => [...prev, ...data.companies]);
       }
-      setHasMore(data.pagination.page < data.pagination.pages);
+      setHasMore(hasMorePages(data.pagination));
     } catch (error) {
       console.error('Error loading companies:', error);
       Alert.alert('Error', 'Failed to load companies');
@@ -106,7 +107,7 @@ const CompanyManagementScreen: React.FC = () => {
         })
         .then((data) => {
           setCompanies((prev) => [...prev, ...data.companies]);
-          setHasMore(data.pagination.page < data.pagination.pages);
+          setHasMore(hasMorePages(data.pagination));
         })
         .catch(() => Alert.alert('Error', 'Failed to load more companies'))
         .finally(() => setLoadingMore(false));
@@ -231,10 +232,9 @@ const CompanyManagementScreen: React.FC = () => {
       {/* Search and Filters */}
       <View style={styles.searchSection}>
         <View style={styles.searchContainer}>
-          <TextInput
-            style={styles.searchInput}
+          <FormInput
+            icon="search"
             placeholder="Search companies..."
-            placeholderTextColor={COLORS.textSecondary}
             value={searchQuery}
             onChangeText={setSearchQuery}
           />

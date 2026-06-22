@@ -1,6 +1,6 @@
 // Simplified Shift Controller for Phase 2 Testing
 import { Request, Response } from 'express';
-import shiftService from '../services/shiftServiceSimple.js';
+import { shiftGuardOpsService as shiftService, shiftSchedulingService } from '../services/shift/index.js';
 import { logger } from '../utils/logger.js';
 import { NotFoundError } from '../utils/errors.js';
 import prisma from '../config/database.js';
@@ -397,7 +397,7 @@ export const createShift = async (req: Request, res: Response) => {
       });
     }
 
-    const shift = await shiftService.createShift({
+    const shift = await shiftSchedulingService.createShift({
       guardId,
       locationName,
       locationAddress,

@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, FlatList, TextInput, Alert, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, FlatList, Alert, ActivityIndicator, RefreshControl } from 'react-native';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
@@ -15,7 +15,8 @@ import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { SuperAdminStackParamList } from '../../navigation/SuperAdminNavigator';
 import { superAdminService } from '../../services/superAdminService';
-import { SearchIcon } from '../../components/ui/AppIcons';
+import { hasMorePages } from '../../utils/paginationUtils';
+import FormInput from '../../components/common/FormInput';
 
 interface BillingRecord {
   id: string;
@@ -106,7 +107,7 @@ const BillingManagementScreen: React.FC<{ navigation?: any }> = ({ navigation: n
         setBillingRecords((prev) => [...prev, ...records]);
       }
 
-      setHasMore(response.pagination.page < response.pagination.pages);
+      setHasMore(hasMorePages(response.pagination));
     } catch (error) {
       console.error('Error loading billing data:', error);
       Alert.alert('Error', 'Failed to load payment records');
@@ -342,16 +343,12 @@ const BillingManagementScreen: React.FC<{ navigation?: any }> = ({ navigation: n
 
       {/* Search Bar */}
       <View style={styles.searchContainer}>
-        <View style={styles.searchInputContainer}>
-          <SearchIcon size={20} color={COLORS.textSecondary} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search by company, invoice, or description..."
-            placeholderTextColor={COLORS.textSecondary}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
+        <FormInput
+          icon="search"
+          placeholder="Search by company, invoice, or description..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
       </View>
 
       {/* Analytics Summary */}

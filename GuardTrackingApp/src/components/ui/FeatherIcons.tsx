@@ -22,6 +22,7 @@ import {
   ArrowRight,
   ArrowLeft,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   ChevronUp,
   ArrowUp,
@@ -141,6 +142,7 @@ const iconMap = {
   arrowRight: ArrowRight,
   arrowLeft: ArrowLeft,
   chevronDown: ChevronDown,
+  chevronLeft: ChevronLeft,
   chevronRight: ChevronRight,
   chevronUp: ChevronUp,
   arrowUp: ArrowUp,
@@ -356,6 +358,10 @@ export const ArrowLeftIcon: React.FC<Omit<FeatherIconProps, 'name'>> = (props) =
   <FeatherIcon name="arrowLeft" {...props} />
 );
 
+export const ChevronLeftIcon: React.FC<Omit<FeatherIconProps, 'name'>> = (props) => (
+  <FeatherIcon name="chevronLeft" {...props} />
+);
+
 export const SearchIcon: React.FC<Omit<FeatherIconProps, 'name'>> = (props) => (
   <FeatherIcon name="search" {...props} />
 );
@@ -370,6 +376,10 @@ export const EditIcon: React.FC<Omit<FeatherIconProps, 'name'>> = (props) => (
 
 export const TrashIcon: React.FC<Omit<FeatherIconProps, 'name'>> = (props) => (
   <FeatherIcon name="trash2" {...props} />
+);
+
+export const MessageCircleIcon: React.FC<Omit<FeatherIconProps, 'name'>> = (props) => (
+  <FeatherIcon name="messageCircle" {...props} />
 );
 
 export const ExternalLinkIcon: React.FC<Omit<FeatherIconProps, 'name'>> = (props) => (

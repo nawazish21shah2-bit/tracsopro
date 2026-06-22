@@ -1,6 +1,5 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma from '../config/database.js';
+import { logger } from '../utils/logger.js';
 
 export interface NotificationSettings {
   pushNotifications: boolean;
@@ -57,7 +56,7 @@ export class SettingsService {
         language: userSettings.language || 'en'
       };
     } catch (error) {
-      console.error('Error getting notification settings:', error);
+      logger.error('Error getting notification settings:', error);
       throw new Error('Failed to get notification settings');
     }
   }
@@ -102,7 +101,7 @@ export class SettingsService {
         language: updatedSettings.language || 'en'
       };
     } catch (error) {
-      console.error('Error updating notification settings:', error);
+      logger.error('Error updating notification settings:', error);
       throw new Error('Failed to update notification settings');
     }
   }
@@ -163,7 +162,7 @@ export class SettingsService {
         language: user.userSettings?.language || 'en'
       };
     } catch (error) {
-      console.error('Error getting profile settings:', error);
+      logger.error('Error getting profile settings:', error);
       throw new Error('Failed to get profile settings');
     }
   }
@@ -221,7 +220,7 @@ export class SettingsService {
 
       return updatedClient;
     } catch (error) {
-      console.error('Error updating company details:', error);
+      logger.error('Error updating company details:', error);
       throw new Error('Failed to update company details');
     }
   }
@@ -285,7 +284,7 @@ export class SettingsService {
         language: userSettings?.language || 'en'
       };
     } catch (error) {
-      console.error('Error updating profile settings:', error);
+      logger.error('Error updating profile settings:', error);
       throw new Error('Failed to update profile settings');
     }
   }
@@ -304,7 +303,7 @@ export class SettingsService {
         audience,
       });
     } catch (error) {
-      console.error('Error creating support ticket:', error);
+      logger.error('Error creating support ticket:', error);
       if (error instanceof Error) throw error;
       throw new Error('Failed to create support ticket');
     }
@@ -352,7 +351,7 @@ export class SettingsService {
         }
       };
     } catch (error) {
-      console.error('Error getting support tickets:', error);
+      logger.error('Error getting support tickets:', error);
       throw new Error('Failed to get support tickets');
     }
   }
@@ -382,7 +381,7 @@ export class SettingsService {
 
       return ticket;
     } catch (error) {
-      console.error('Error getting support ticket:', error);
+      logger.error('Error getting support ticket:', error);
       if (error instanceof Error) {
         throw error;
       }
@@ -451,7 +450,7 @@ export class SettingsService {
         }
       };
     } catch (error) {
-      console.error('Error getting attendance history:', error);
+      logger.error('Error getting attendance history:', error);
       throw new Error('Failed to get attendance history');
     }
   }
@@ -523,7 +522,7 @@ export class SettingsService {
         }
       };
     } catch (error) {
-      console.error('Error getting past jobs:', error);
+      logger.error('Error getting past jobs:', error);
       throw new Error('Failed to get past jobs');
     }
   }

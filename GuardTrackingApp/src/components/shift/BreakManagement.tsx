@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Alert,
   Modal,
-  TextInput,
   ScrollView,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
@@ -16,6 +15,7 @@ import {
   endShiftBreak,
 } from '../../store/slices/shiftSlice';
 import { Shift } from '../../types/shift.types';
+import FormInput from '../common/FormInput';
 
 interface BreakManagementProps {
   shift: Shift;
@@ -229,18 +229,16 @@ const BreakManagement: React.FC<BreakManagementProps> = ({ shift, style }) => {
               </TouchableOpacity>
             ))}
 
-            <View style={styles.notesContainer}>
-              <Text style={styles.notesLabel}>Notes (Optional)</Text>
-              <TextInput
-                style={styles.notesInput}
-                value={breakNotes}
-                onChangeText={setBreakNotes}
-                placeholder="Add any notes about this break..."
-                multiline
-                numberOfLines={3}
-                maxLength={200}
-              />
-            </View>
+            <FormInput
+              label="Notes (Optional)"
+              value={breakNotes}
+              onChangeText={setBreakNotes}
+              placeholder="Add any notes about this break..."
+              multiline
+              numberOfLines={3}
+              maxLength={200}
+              containerStyle={styles.notesContainer}
+            />
           </ScrollView>
 
           <View style={styles.modalActions}>

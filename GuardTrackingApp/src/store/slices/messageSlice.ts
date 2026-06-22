@@ -1,7 +1,7 @@
 // Message Management Redux Slice
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { Message, MessageState, Conversation } from '../../types';
-import apiService from '../../services/api';
+import { chatApi } from '../../services/api/chatApi';
 
 // Initial state
 const initialState: MessageState = {
@@ -16,7 +16,7 @@ export const fetchMessages = createAsyncThunk(
   'messages/fetchMessages',
   async (conversationId?: string, { rejectWithValue }) => {
     try {
-      const response = await apiService.getMessages(conversationId);
+      const response = await chatApi.getMessages(conversationId);
       if (response.success) {
         return response.data;
       } else {
@@ -37,7 +37,7 @@ export const sendMessage = createAsyncThunk(
     attachments?: any[];
   }, { rejectWithValue }) => {
     try {
-      const response = await apiService.sendMessage(messageData);
+      const response = await chatApi.sendMessage(messageData);
       if (response.success) {
         return response.data;
       } else {

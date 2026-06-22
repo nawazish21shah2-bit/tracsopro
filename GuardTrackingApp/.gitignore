@@ -101,3 +101,7 @@ ios/link-assets-manifest.json
 
 # Coverage
 coverage/
+
+# Firebase (inject at CI build)
+android/app/google-services.json
+google-services.json.example

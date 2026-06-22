@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from '../config/apiConfig';
+import { securityManager } from './security';
 
 type PictureSource = {
   profilePictureUrl?: string | null;
@@ -30,10 +31,32 @@ export function resolveProfilePictureUrl(url?: string | null): string | undefine
     imageSource = imageSource.replace(/^http:\/\/(localhost|127\.0\.0\.1):\d+/, baseUrl);
   } else if (imageSource.startsWith('/uploads')) {
     const baseUrl = getApiBaseUrl().replace(/\/api$/, '');
-    imageSource = `${baseUrl}${imageSource}`;
+    imageSource = `${baseUrl}/api${imageSource}`;
   }
 
   return imageSource;
+}
+
+/**
+ * Append access token for authenticated profile image requests (React Native Image).
+ */
+export async function resolveAuthenticatedProfilePictureUrl(
+  url?: string | null
+): Promise<string | undefined> {
+  const resolved = resolveProfilePictureUrl(url);
+  if (!resolved || !resolved.includes('/api/uploads/')) {
+    return resolved;
+  }
+  try {
+    const tokens = await securityManager.getTokens();
+    if (tokens?.accessToken) {
+      const separator = resolved.includes('?') ? '&' : '?';
+      return `${resolved}${separator}access_token=${encodeURIComponent(tokens.accessToken)}`;
+    }
+  } catch {
+    // fall through without token
+  }
+  return resolved;
 }
 
 /**

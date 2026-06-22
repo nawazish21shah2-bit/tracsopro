@@ -26,9 +26,8 @@ import {
   fetchActiveShift,
   fetchWeeklyShiftSummary,
   fetchShiftStatistics,
-  checkInToShiftWithLocation,
-  checkOutFromShiftWithLocation,
 } from '../../store/slices/shiftSlice';
+import { useCheckInOut } from '../../features/guard-shifts/hooks/useCheckInOut';
 import { MenuIcon, BellIcon, MapPinIcon, AlertTriangleIcon, AlertCircleIcon, CheckCircleIcon, ClockIcon, FileTextIcon } from '../../components/ui/FeatherIcons';
 import { useNotificationBell } from '../../hooks/useNotificationBell';
 import { globalStyles, COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
@@ -43,6 +42,7 @@ import { ErrorState, NetworkError, EmptyState, InlineLoading } from '../../compo
 import { getShiftStatusColor, getShiftStatusLabel } from '../../utils/shiftStatusUtils';
 import { clearError } from '../../store/slices/shiftSlice';
 import { Shift } from '../../types/shift.types';
+import { navigateToGuardSettingsTab } from '../../utils/tabNavigationHelpers';
 
 type MyShiftsScreenNavigationProp = StackNavigationProp<any, 'MyShifts'>;
 
@@ -87,6 +87,7 @@ const MyShiftsScreen: React.FC = () => {
   const [currentTime, setCurrentTime] = useState('00:00:00');
   const [gettingLocation, setGettingLocation] = useState(false);
   const cancelTokenRef = useRef<{ cancelled?: boolean }>({ cancelled: false });
+  const { checkIn, checkOut, checkInLoading, checkOutLoading } = useCheckInOut();
 
   // Redux state
   const { 
@@ -98,8 +99,6 @@ const MyShiftsScreen: React.FC = () => {
     stats,
     loading, 
     error,
-    checkInLoading,
-    checkOutLoading,
   } = useSelector((state: RootState) => state.shifts);
   const { isAuthenticated } = useSelector((state: RootState) => state.auth);
 
@@ -418,10 +417,7 @@ const MyShiftsScreen: React.FC = () => {
         return;
       }
       
-      await dispatch(checkInToShiftWithLocation({
-        shiftId,
-        location,
-      })).unwrap();
+      await checkIn(shiftId, location);
 
       Alert.alert('Success', 'You have successfully checked in!');
       
@@ -476,10 +472,7 @@ const MyShiftsScreen: React.FC = () => {
                 return;
               }
               
-              await dispatch(checkOutFromShiftWithLocation({
-                shiftId,
-                location,
-              })).unwrap();
+              await checkOut(shiftId, undefined, location);
 
               Alert.alert('Success', 'You have successfully checked out!');
               
@@ -959,7 +952,7 @@ const MyShiftsScreen: React.FC = () => {
             visible={false}
             onClose={() => {}}
             onNavigateToProfile={() => {
-              (navigation as any).navigate('GuardSettings');
+              navigateToGuardSettingsTab(navigation as any);
             }}
             onNavigateToPastJobs={() => {
               (navigation as any).navigate('Jobs');

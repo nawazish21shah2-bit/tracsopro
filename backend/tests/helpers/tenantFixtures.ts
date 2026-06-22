@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { IncidentReportStatus } from '@prisma/client';
 import prisma from '../../src/config/database.js';
 import { signAccessToken } from '../../src/utils/jwt.js';
 
@@ -132,7 +133,7 @@ export async function createTenantFixture(prefix: string, runId: string): Promis
       guardId: guard.id,
       reportType: 'SAFETY',
       description: `${prefix} tenant isolation incident report`,
-      status: 'SUBMITTED',
+      status: IncidentReportStatus.SUBMITTED,
     },
   });
 
@@ -184,6 +185,31 @@ export async function createTenantFixture(prefix: string, runId: string): Promis
     incidentReportId: incidentReport.id,
     incidentId: incident.id,
   };
+}
+
+export async function enablePaidSubscription(companyId: string, runId: string): Promise<void> {
+  await prisma.subscription.create({
+    data: {
+      securityCompanyId: companyId,
+      plan: 'PROFESSIONAL',
+      status: 'ACTIVE',
+      isActive: true,
+      stripeSubscriptionId: `sub_test_${runId}`,
+      amount: 99,
+      billingCycle: 'MONTHLY',
+      startDate: new Date(),
+    },
+  });
+  await prisma.securityCompany.update({
+    where: { id: companyId },
+    data: {
+      subscriptionPlan: 'PROFESSIONAL',
+      subscriptionStatus: 'ACTIVE',
+      maxGuards: 50,
+      maxClients: 20,
+      maxSites: 50,
+    },
+  });
 }
 
 export async function destroyTenantFixture(fixture: TenantFixture): Promise<void> {

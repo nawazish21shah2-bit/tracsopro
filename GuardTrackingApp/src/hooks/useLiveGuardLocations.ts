@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import apiService from '../services/api';
+import { trackingApi } from '../services/api/trackingApi';
 
 import WebSocketService from '../services/WebSocketService';
 
@@ -214,7 +214,7 @@ export const useLiveGuardLocations = ({
 
     try {
 
-      const response = await apiService.getLiveLocations();
+      const response = await trackingApi.getLiveLocations();
 
       if (response.success && Array.isArray(response.data)) {
 

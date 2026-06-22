@@ -7,6 +7,7 @@ import express from 'express';
 import { authenticateToken, authorize, requireAdmin, AuthRequest } from '../middleware/auth';
 import adminService from '../services/adminService';
 import adminPaymentController from '../controllers/adminPaymentController';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -42,7 +43,7 @@ router.get('/dashboard/stats', requireAdmin, async (req: AuthRequest, res) => {
       data: stats,
     });
   } catch (error) {
-    console.error('Error getting admin dashboard stats:', error);
+    logger.error('Error getting admin dashboard stats:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get dashboard statistics',
@@ -64,7 +65,7 @@ router.get('/dashboard/activity', requireAdmin, async (req: AuthRequest, res) =>
       data: activities,
     });
   } catch (error) {
-    console.error('Error getting recent activity:', error);
+    logger.error('Error getting recent activity:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get recent activity',

@@ -41,7 +41,7 @@ export const resolveTenantCompanyId = (
   options?: { allowSuperAdminUnscoped?: boolean }
 ): TenantCompanyResult => {
   if (req.user?.role === 'SUPER_ADMIN') {
-    const fromQuery = req.query.securityCompanyId as string | undefined;
+    const fromQuery = req.query?.securityCompanyId as string | undefined;
     if (fromQuery) {
       return { securityCompanyId: fromQuery };
     }

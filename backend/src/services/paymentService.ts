@@ -1,9 +1,9 @@
 import Stripe from 'stripe';
-import { PrismaClient, SubscriptionPlan } from '@prisma/client';
+import { SubscriptionPlan } from '@prisma/client';
 import subscriptionService from './subscriptionService.js';
 import { planFromStripePriceId } from '../utils/planLimits.js';
-
-const prisma = new PrismaClient();
+import prisma from '../config/database.js';
+import { logger } from '../utils/logger.js';
 
 // Initialize Stripe with secret key
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
@@ -115,7 +115,7 @@ export class PaymentService {
         metadata: data.metadata,
       };
     } catch (error) {
-      console.error('Error creating payment intent:', error);
+      logger.error('Error creating payment intent:', error);
       throw error;
     }
   }
@@ -172,7 +172,7 @@ export class PaymentService {
           stripeCustomerId = customers.data[0].id;
         }
       } catch (error) {
-        console.error('Error managing Stripe customer:', error);
+        logger.error('Error managing Stripe customer:', error);
       }
 
       // Create Stripe invoice
@@ -243,11 +243,11 @@ export class PaymentService {
         items,
       };
 
-      console.log(`📧 Invoice ${invoiceNumber} created and sent to ${client.user.email}`);
+      logger.info(`📧 Invoice ${invoiceNumber} created and sent to ${client.user.email}`);
 
       return invoice;
     } catch (error) {
-      console.error('Error creating invoice:', error);
+      logger.error('Error creating invoice:', error);
       throw error;
     }
   }
@@ -354,7 +354,7 @@ export class PaymentService {
         currency: 'usd',
       });
     } catch (error) {
-      console.error('Error generating monthly invoice:', error);
+      logger.error('Error generating monthly invoice:', error);
       throw error;
     }
   }
@@ -402,9 +402,9 @@ export class PaymentService {
         },
       });
 
-      console.log(`✅ Automatic payments set up for client ${clientId}`);
+      logger.info(`✅ Automatic payments set up for client ${clientId}`);
     } catch (error) {
-      console.error('Error setting up automatic payments:', error);
+      logger.error('Error setting up automatic payments:', error);
       throw error;
     }
   }
@@ -476,16 +476,16 @@ export class PaymentService {
           break;
 
         default:
-          console.log(`Unhandled event type: ${event.type}`);
+          logger.info(`Unhandled event type: ${event.type}`);
       }
     } catch (error) {
-      console.error('Error handling webhook:', error);
+      logger.error('Error handling webhook:', error);
       throw error;
     }
   }
 
   private async handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent): Promise<void> {
-    console.log(`✅ Payment succeeded: ${paymentIntent.id}`);
+    logger.info(`✅ Payment succeeded: ${paymentIntent.id}`);
     await prisma.billingRecord.updateMany({
       where: {
         OR: [
@@ -500,7 +500,7 @@ export class PaymentService {
   }
 
   private async handlePaymentFailure(paymentIntent: Stripe.PaymentIntent): Promise<void> {
-    console.log(`❌ Payment failed: ${paymentIntent.id}`);
+    logger.info(`❌ Payment failed: ${paymentIntent.id}`);
     await prisma.billingRecord.updateMany({
       where: { stripeInvoiceId: paymentIntent.id },
       data: { status: 'OVERDUE' },
@@ -508,7 +508,7 @@ export class PaymentService {
   }
 
   private async handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
-    console.log(`💰 Invoice paid: ${invoice.id}`);
+    logger.info(`💰 Invoice paid: ${invoice.id}`);
     await prisma.billingRecord.updateMany({
       where: { stripeInvoiceId: invoice.id },
       data: { status: 'PAID', paidDate: new Date() },
@@ -536,7 +536,7 @@ export class PaymentService {
         : undefined);
 
     if (!securityCompanyId) {
-      console.warn('checkout.session.completed without securityCompanyId');
+      logger.warn('checkout.session.completed without securityCompanyId');
       return;
     }
 
@@ -592,7 +592,7 @@ export class PaymentService {
   }
 
   private async handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void> {
-    console.log(`💳 Invoice payment failed: ${invoice.id}`);
+    logger.info(`💳 Invoice payment failed: ${invoice.id}`);
     await prisma.billingRecord.updateMany({
       where: { stripeInvoiceId: invoice.id },
       data: { status: 'OVERDUE' },
@@ -648,7 +648,7 @@ export class PaymentService {
         isDefault: customers.data[0].invoice_settings?.default_payment_method === pm.id,
       }));
     } catch (error) {
-      console.error('Error getting payment methods:', error);
+      logger.error('Error getting payment methods:', error);
       throw error;
     }
   }
@@ -693,7 +693,7 @@ export class PaymentService {
         clientSecret: setupIntent.client_secret!,
       };
     } catch (error) {
-      console.error('Error creating setup intent:', error);
+      logger.error('Error creating setup intent:', error);
       throw error;
     }
   }

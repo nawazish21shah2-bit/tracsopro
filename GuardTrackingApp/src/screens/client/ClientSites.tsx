@@ -28,7 +28,7 @@ import { fetchMySites } from '../../store/slices/clientSlice';
 import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { PlusIcon } from '../../components/ui/AppIcons';
-import apiService from '../../services/api';
+import { clientApi } from '../../services/api/clientApi';
 import { getClientGuardChatParams } from '../../utils/chatHelper';
 import { useSubscriptionLimits } from '../../hooks/useSubscriptionLimits';
 
@@ -138,7 +138,7 @@ const ClientSites: React.FC = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              const response = await apiService.deleteClientSite(siteId);
+              const response = await clientApi.deleteClientSite(siteId);
               if (response.success) {
                 Alert.alert('Success', response.message || 'Site deleted successfully', [
                   {
@@ -233,8 +233,9 @@ const ClientSites: React.FC = () => {
         </View>
       )}
 
-      <ScrollView 
-        style={styles.content} 
+      <ScrollView
+        testID="client-sites-screen"
+        style={styles.content}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         refreshControl={

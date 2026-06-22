@@ -449,18 +449,16 @@ const GuardHomeScreen: React.FC = () => {
 
               const result = await dispatch(
                 triggerEmergencyAlert({
-                  alertData: {
-                    type: 'PANIC',
-                    severity: 'CRITICAL',
-                    location: {
-                      latitude: location.latitude || 0,
-                      longitude: location.longitude || 0,
-                      accuracy: location.accuracy || 1000,
-                      address: location.address || 'Emergency location',
-                    },
-                    message: `Emergency alert triggered by ${user?.firstName || 'Guard'} ${user?.lastName || ''}`,
-                    shiftId: activeShift?.id,
+                  type: 'PANIC',
+                  severity: 'CRITICAL',
+                  location: {
+                    latitude: location.latitude || 0,
+                    longitude: location.longitude || 0,
+                    accuracy: location.accuracy || 1000,
+                    address: location.address || 'Emergency location',
                   },
+                  message: `Emergency alert triggered by ${user?.firstName || 'Guard'} ${user?.lastName || ''}`,
+                  shiftId: activeShift?.id,
                 })
               );
 
@@ -577,7 +575,7 @@ const GuardHomeScreen: React.FC = () => {
           <AppCard style={styles.shiftCard}>
             <View style={styles.emptyShiftContainer}>
               <ClockIcon size={48} color={COLORS.textSecondary} />
-              <Text style={styles.emptyShiftText}>No shifts scheduled for today</Text>
+              <Text style={styles.emptyShiftText} testID="guard-no-shifts-today">No shifts scheduled for today</Text>
               <Text style={styles.emptyShiftSubtext}>Check back later for new assignments</Text>
             </View>
           </AppCard>
@@ -656,6 +654,7 @@ const GuardHomeScreen: React.FC = () => {
 
           {!isCheckedOut && (
             <TouchableOpacity
+              testID="guard-shift-action-button"
               style={[
                 styles.checkInButton,
                 (checkInLoading || gettingLocation) && styles.buttonDisabled
@@ -881,6 +880,7 @@ const GuardHomeScreen: React.FC = () => {
       />
 
       <ScrollView
+        testID="guard-home-screen"
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
@@ -890,6 +890,36 @@ const GuardHomeScreen: React.FC = () => {
       >
         {loading && (activeShift || upcomingShifts?.length) ? (
           <InlineLoading message="Updating data..." style={styles.inlineLoading} />
+        ) : null}
+
+        {guardActiveAlert ? (
+          <View
+            style={[
+              styles.emergencyStatusBanner,
+              guardActiveAlert.status === 'ACKNOWLEDGED'
+                ? styles.emergencyStatusAcknowledged
+                : styles.emergencyStatusActive,
+            ]}
+          >
+            <AlertCircleIcon
+              size={20}
+              color={guardActiveAlert.status === 'ACKNOWLEDGED' ? COLORS.success : COLORS.error}
+            />
+            <View style={styles.emergencyStatusTextWrap}>
+              <Text style={styles.emergencyStatusTitle}>
+                {guardActiveAlert.status === 'ACKNOWLEDGED'
+                  ? 'Help is on the way'
+                  : 'Emergency alert active'}
+              </Text>
+              <Text style={styles.emergencyStatusMessage}>
+                {guardActiveAlert.status === 'ACKNOWLEDGED'
+                  ? guardActiveAlert.responderName
+                    ? `${guardActiveAlert.responderName} acknowledged your alert and dispatched assistance.`
+                    : 'A responder acknowledged your alert and dispatched assistance.'
+                  : 'Responders have been notified. Stay safe and await assistance.'}
+              </Text>
+            </View>
+          </View>
         ) : null}
 
         {renderStatsSection()}
@@ -1121,6 +1151,38 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.textInverse,
     fontWeight: TYPOGRAPHY.fontWeight.medium,
+  },
+  emergencyStatusBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.md,
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.lg,
+    padding: SPACING.lg,
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1,
+  },
+  emergencyStatusActive: {
+    backgroundColor: COLORS.error + '10',
+    borderColor: COLORS.error + '40',
+  },
+  emergencyStatusAcknowledged: {
+    backgroundColor: COLORS.success + '10',
+    borderColor: COLORS.success + '40',
+  },
+  emergencyStatusTextWrap: {
+    flex: 1,
+  },
+  emergencyStatusTitle: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.textPrimary,
+    marginBottom: 4,
+  },
+  emergencyStatusMessage: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.textSecondary,
+    lineHeight: 20,
   },
   emergencyButton: {
     flex: 1,

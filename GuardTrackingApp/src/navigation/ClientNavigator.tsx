@@ -1,5 +1,4 @@
-
-import React from 'react';
+import { createTabResetListener } from '../utils/tabNavigationHelpers';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { Text, StyleSheet } from 'react-native';
@@ -121,6 +120,10 @@ const ClientNavigator: React.FC = () => {
         options={{
           tabBarLabel: 'Settings',
         }}
+        listeners={createTabResetListener({
+          tabName: 'Settings',
+          rootScreen: 'ClientSettingsHome',
+        })}
       />
     </Tab.Navigator>
   );

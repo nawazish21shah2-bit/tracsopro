@@ -1,4 +1,4 @@
-import apiService from '../../services/api';
+import { clientApi as clientDomainApi } from '../../services/api/clientApi';
 
 export interface ApiResponse<T> {
   success: boolean;
@@ -91,31 +91,24 @@ export interface NotificationResponse {
   };
 }
 
+/** Typed client dashboard API — delegates to domain clientApi facade. */
 export const clientApi = {
-  // Dashboard Stats
   getDashboardStats: (): Promise<ApiResponse<DashboardStatsResponse>> =>
-    apiService.getClientDashboardStats(),
+    clientDomainApi.getClientDashboardStats(),
 
-  // Guards
   getMyGuards: (page: number = 1, limit: number = 50): Promise<ApiResponse<GuardResponse>> =>
-    apiService.getClientGuards(page, limit),
+    clientDomainApi.getClientGuards(page, limit),
 
-  // Reports
   getMyReports: (page: number = 1, limit: number = 50): Promise<ApiResponse<ReportResponse>> =>
-    apiService.getClientReports(page, limit),
+    clientDomainApi.getClientReports(page, limit),
 
-  // Sites
   getMySites: (page: number = 1, limit: number = 50): Promise<ApiResponse<SiteResponse>> =>
-    apiService.getClientSites(page, limit),
+    clientDomainApi.getClientSites(page, limit),
 
-  // Notifications
   getMyNotifications: (page: number = 1, limit: number = 50): Promise<ApiResponse<NotificationResponse>> =>
-    apiService.getClientNotifications(page, limit),
+    clientDomainApi.getClientNotifications(page, limit),
 
-  // Profile
-  getMyProfile: (): Promise<ApiResponse<any>> =>
-    apiService.getClientProfile(),
+  getMyProfile: (): Promise<ApiResponse<any>> => clientDomainApi.getClientProfile(),
 
-  updateProfile: (data: any): Promise<ApiResponse<any>> =>
-    apiService.updateClientProfile(data),
+  updateProfile: (data: any): Promise<ApiResponse<any>> => clientDomainApi.updateClientProfile(data),
 };

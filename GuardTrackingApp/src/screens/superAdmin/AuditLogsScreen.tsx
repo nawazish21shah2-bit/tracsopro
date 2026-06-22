@@ -9,16 +9,17 @@ import {
   StyleSheet,
   TouchableOpacity,
   FlatList,
-  TextInput,
   ActivityIndicator,
 } from 'react-native';
 import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { superAdminService, AuditLog } from '../../services/superAdminService';
+import { hasMorePages } from '../../utils/paginationUtils';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SuperAdminProfileDrawer from '../../components/superAdmin/SuperAdminProfileDrawer';
 import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 import { useNotificationBell } from '../../hooks/useNotificationBell';
+import FormInput from '../../components/common/FormInput';
 
 const AuditLogsScreen: React.FC = () => {
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
@@ -59,7 +60,7 @@ const AuditLogsScreen: React.FC = () => {
         } else {
           setAuditLogs((prev) => [...prev, ...data.logs]);
         }
-        setHasMore(data.pagination.page < data.pagination.pages);
+        setHasMore(hasMorePages(data.pagination));
       } catch (error) {
         console.error('Error loading audit logs:', error);
         if (reset) setAuditLogs([]);
@@ -152,12 +153,11 @@ const AuditLogsScreen: React.FC = () => {
       />
 
       <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
+        <FormInput
+          icon="search"
           placeholder="Search logs..."
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholderTextColor={COLORS.textSecondary}
         />
       </View>
 

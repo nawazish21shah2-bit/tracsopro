@@ -7,8 +7,8 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'rea
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { ChevronRight, User, Bell, HelpCircle, LogOut, Lock, CreditCard, Settings } from 'react-native-feather';
-import { useDispatch } from 'react-redux';
-import type { AppDispatch } from '../../store';
+import { useDispatch, useSelector } from 'react-redux';
+import type { AppDispatch, RootState } from '../../store';
 import { logoutUser } from '../../store/slices/authSlice';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
@@ -17,8 +17,10 @@ import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 import { useNotificationBell } from '../../hooks/useNotificationBell';
 import { AdminStackParamList } from '../../navigation/AdminNavigator';
 import SubscriptionSummaryCard from '../../components/admin/SubscriptionSummaryCard';
-import apiService from '../../services/api';
+import { adminApi } from '../../services/api/adminApi';
 import { SubscriptionOverview } from '../../utils/subscriptionUtils';
+import { navigateToEmailVerification } from '../../utils/navigationHelpers';
+import { getEmailVerificationSettingItems } from '../../utils/emailVerificationSettingItem';
 
 interface SettingItem {
   id: string;
@@ -30,6 +32,7 @@ interface SettingItem {
 // Icon color constant for use in JSX
 const ICON_COLOR = '#828282';
 const ERROR_COLOR = '#F44336';
+const SETTINGS_BOTTOM_SPACER = 120;
 
 const AdminSettingsScreen: React.FC<{ navigation?: any }> = ({ navigation: propNavigation }) => {
   const dispatch = useDispatch<AppDispatch>();
@@ -38,14 +41,19 @@ const AdminSettingsScreen: React.FC<{ navigation?: any }> = ({ navigation: propN
     notificationsRoute: 'AdminNotifications',
   });
   const navigation = useNavigation<StackNavigationProp<AdminStackParamList>>() || propNavigation;
+  const { user } = useSelector((state: RootState) => state.auth);
   const [subscriptionOverview, setSubscriptionOverview] = useState<SubscriptionOverview | null>(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(true);
 
   const loadSubscription = useCallback(async () => {
     try {
       setSubscriptionLoading(true);
-      const response = await apiService.get('/admin/subscription');
-      setSubscriptionOverview(response.data.data?.overview ?? null);
+      const response = await adminApi.getAdminSubscription();
+      if (response.success && response.data) {
+        setSubscriptionOverview(response.data.overview ?? null);
+      } else {
+        setSubscriptionOverview(null);
+      }
     } catch {
       setSubscriptionOverview(null);
     } finally {
@@ -91,6 +99,10 @@ const AdminSettingsScreen: React.FC<{ navigation?: any }> = ({ navigation: propN
     navigation.navigate('AdminSupportContact');
   };
 
+  const handleEmailVerification = () => {
+    navigateToEmailVerification(navigation);
+  };
+
   const handleLogout = async () => {
     Alert.alert(
       'Logout',
@@ -117,6 +129,7 @@ const AdminSettingsScreen: React.FC<{ navigation?: any }> = ({ navigation: propN
   };
 
   const items: SettingItem[] = [
+    ...getEmailVerificationSettingItems(Boolean(user?.isEmailVerified), handleEmailVerification, ICON_COLOR),
     { id: '1', title: 'Admin Profile', icon: <User width={20} height={20} color={ICON_COLOR} />, onPress: handleProfile },
     { id: '2', title: 'Subscription & Billing', icon: <CreditCard width={20} height={20} color={ICON_COLOR} />, onPress: handleSubscription },
     { id: '3', title: 'Notifications', icon: <Bell width={20} height={20} color={ICON_COLOR} />, onPress: handleNotifications },
@@ -146,7 +159,11 @@ const AdminSettingsScreen: React.FC<{ navigation?: any }> = ({ navigation: propN
         }
       />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
         <Text style={styles.sectionHeading}>Your plan</Text>
         <SubscriptionSummaryCard
           overview={subscriptionOverview}
@@ -185,7 +202,10 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     backgroundColor: '#F8F9FA',
+  },
+  contentContainer: {
     padding: 16,
+    paddingBottom: SETTINGS_BOTTOM_SPACER,
   },
   sectionHeading: {
     fontSize: 14,

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { SettingsService } from '../services/SettingsService';
 import { AuthRequest } from '../middleware/auth';
+import { logger } from '../utils/logger.js';
 
 export class SettingsController {
   private settingsService: SettingsService;
@@ -51,7 +52,7 @@ export class SettingsController {
         data: settings
       });
     } catch (error) {
-      console.error('Error getting notification settings:', error);
+      logger.error('Error getting notification settings:', error);
       res.status(500).json({
         success: false,
         message: 'Failed to get notification settings'
@@ -125,7 +126,7 @@ export class SettingsController {
         message: 'Notification settings updated successfully'
       });
     } catch (error) {
-      console.error('Error updating notification settings:', error);
+      logger.error('Error updating notification settings:', error);
       res.status(500).json({
         success: false,
         message: error instanceof Error ? error.message : 'Failed to update notification settings'
@@ -155,7 +156,7 @@ export class SettingsController {
         data: profile
       });
     } catch (error) {
-      console.error('Error getting profile settings:', error);
+      logger.error('Error getting profile settings:', error);
       res.status(500).json({
         success: false,
         message: 'Failed to get profile settings'
@@ -238,7 +239,7 @@ export class SettingsController {
         message: 'Profile settings updated successfully'
       });
     } catch (error) {
-      console.error('Error updating profile settings:', error);
+      logger.error('Error updating profile settings:', error);
       res.status(500).json({
         success: false,
         message: error instanceof Error ? error.message : 'Failed to update profile settings'
@@ -325,7 +326,7 @@ export class SettingsController {
         message: 'Support request submitted successfully'
       });
     } catch (error) {
-      console.error('Error submitting support request:', error);
+      logger.error('Error submitting support request:', error);
       res.status(500).json({
         success: false,
         message: error instanceof Error ? error.message : 'Failed to submit support request'
@@ -369,7 +370,7 @@ export class SettingsController {
         data: result
       });
     } catch (error) {
-      console.error('Error getting support tickets:', error);
+      logger.error('Error getting support tickets:', error);
       res.status(500).json({
         success: false,
         message: error instanceof Error ? error.message : 'Failed to get support tickets'
@@ -401,7 +402,7 @@ export class SettingsController {
         data: ticket
       });
     } catch (error) {
-      console.error('Error getting support ticket:', error);
+      logger.error('Error getting support ticket:', error);
       res.status(500).json({
         success: false,
         message: error instanceof Error ? error.message : 'Failed to get support ticket'
@@ -453,7 +454,7 @@ export class SettingsController {
         data: history
       });
     } catch (error) {
-      console.error('Error getting attendance history:', error);
+      logger.error('Error getting attendance history:', error);
       res.status(500).json({
         success: false,
         message: 'Failed to get attendance history'
@@ -505,7 +506,7 @@ export class SettingsController {
         data: jobs
       });
     } catch (error) {
-      console.error('Error getting past jobs:', error);
+      logger.error('Error getting past jobs:', error);
       res.status(500).json({
         success: false,
         message: 'Failed to get past jobs'
@@ -544,7 +545,7 @@ export class SettingsController {
         data: profile.client || null
       });
     } catch (error) {
-      console.error('Error getting company details:', error);
+      logger.error('Error getting company details:', error);
       res.status(500).json({
         success: false,
         message: error instanceof Error ? error.message : 'Failed to get company details'
@@ -650,7 +651,7 @@ export class SettingsController {
         message: 'Company details updated successfully'
       });
     } catch (error) {
-      console.error('Error updating company details:', error);
+      logger.error('Error updating company details:', error);
       res.status(500).json({
         success: false,
         message: error instanceof Error ? error.message : 'Failed to update company details'
@@ -720,7 +721,7 @@ export class SettingsController {
         message: 'Password changed successfully'
       });
     } catch (error) {
-      console.error('Error changing password:', error);
+      logger.error('Error changing password:', error);
       res.status(500).json({
         success: false,
         message: error instanceof Error ? error.message : 'Failed to change password'

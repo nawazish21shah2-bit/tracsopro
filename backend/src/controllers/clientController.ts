@@ -1,10 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import clientService from '../services/clientService.js';
-import shiftService from '../services/shiftService.js';
+import { shiftSchedulingService as shiftService } from '../services/shift/index.js';
 import { AuthRequest } from '../middleware/auth.js';
 import prisma from '../config/database.js';
 import { resolveSecurityCompanyId } from '../utils/companyAuth.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
+import { logger } from '../utils/logger.js';
 
 export class ClientController {
   async getAllClients(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
@@ -272,7 +273,7 @@ export class ClientController {
         data: result,
       });
     } catch (error: any) {
-      console.error('Error in getMyReports controller:', {
+      logger.error('Error in getMyReports controller:', {
         error: error.message,
         stack: error.stack,
         userId: req.userId,
@@ -304,7 +305,7 @@ export class ClientController {
       
       const client = await clientService.getClientByUserId(req.userId!);
       
-      const shiftService = (await import('../services/shiftService.js')).default;
+      const shiftService = (await import('../services/shift/index.js')).shiftSchedulingService;
       
       const result = await shiftService.getClientShifts(client.id, {
         startDate: startDate ? new Date(startDate as string) : undefined,
@@ -403,23 +404,6 @@ export class ClientController {
       if (guardId) {
         const guard = await prisma.guard.findUnique({
           where: { id: guardId },
-          include: {
-            user: {
-              include: {
-                companyUsers: {
-                  include: {
-                    securityCompany: {
-                      include: {
-                        companyClients: {
-                          where: { clientId: client.id },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
         });
 
         if (!guard) {
@@ -429,11 +413,18 @@ export class ClientController {
           });
         }
 
-        // Verify guard is in same company as client
-        const guardCompanyId = guard.user.companyUsers[0]?.securityCompanyId;
-        const clientCompanyId = client.companyClients[0]?.securityCompanyId;
+        const guardCompany = await prisma.companyGuard.findFirst({
+          where: { guardId, isActive: true },
+        });
+        const clientCompany = await prisma.companyClient.findFirst({
+          where: { clientId: client.id, isActive: true },
+        });
 
-        if (!guardCompanyId || guardCompanyId !== clientCompanyId) {
+        if (
+          !guardCompany ||
+          !clientCompany ||
+          guardCompany.securityCompanyId !== clientCompany.securityCompanyId
+        ) {
           return res.status(403).json({
             success: false,
             error: 'Guard is not in the same company as client',
@@ -502,7 +493,7 @@ export class ClientController {
         select: { securityCompanyId: true },
       });
 
-      const shiftServiceModule = (await import('../services/shiftService.js')).default;
+      const shiftServiceModule = (await import('../services/shift/index.js')).shiftSchedulingService;
       const result = await shiftServiceModule.createBulkShifts(
         {
           siteId,
@@ -536,7 +527,7 @@ export class ClientController {
 
       const client = await clientService.getClientByUserId(req.userId!);
 
-      const shiftServiceModule = (await import('../services/shiftService.js')).default;
+      const shiftServiceModule = (await import('../services/shift/index.js')).shiftSchedulingService;
       const updated = await shiftServiceModule.updateShift(
         shiftId,
         {
@@ -570,7 +561,7 @@ export class ClientController {
       const { shiftId } = req.params;
       const client = await clientService.getClientByUserId(req.userId!);
 
-      const shiftServiceModule = (await import('../services/shiftService.js')).default;
+      const shiftServiceModule = (await import('../services/shift/index.js')).shiftSchedulingService;
       await shiftServiceModule.deleteShift(shiftId, { clientId: client.id });
 
       res.json({ success: true, message: 'Shift deleted successfully' });

@@ -17,6 +17,12 @@ export interface SecurityConfig {
 
 const KEYCHAIN_SERVICE = 'com.tracsopro.auth.tokens';
 const KEYCHAIN_USERNAME = 'auth_tokens';
+const IMPERSONATION_KEYCHAIN_SERVICE = 'com.tracsopro.impersonation.backup';
+
+export interface ImpersonationBackup {
+  user: any;
+  tokens: TokenData;
+}
 
 class SecurityManager {
   private config: SecurityConfig;
@@ -139,6 +145,11 @@ class SecurityManager {
         this.legacyTokenKey(),
         this.legacyUserKey(),
         `${this.config.tokenPrefix}settings`,
+        'authToken',
+        'refreshToken',
+        'userData',
+        'userRole',
+        'impersonationBackup',
       ]);
       if (__DEV__) {
         console.log('✅ Tokens cleared successfully');
@@ -168,6 +179,57 @@ class SecurityManager {
     } catch (error) {
       console.error('Error retrieving user data:', error);
       return null;
+    }
+  }
+
+  async storeImpersonationBackup(backup: ImpersonationBackup): Promise<boolean> {
+    try {
+      const payload = JSON.stringify(backup);
+      if (await this.canUseKeychain()) {
+        await Keychain.setGenericPassword('impersonation_backup', payload, {
+          service: IMPERSONATION_KEYCHAIN_SERVICE,
+          accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+        });
+        await AsyncStorage.removeItem('impersonationBackup');
+      } else {
+        await AsyncStorage.setItem('impersonationBackup', payload);
+      }
+      return true;
+    } catch (error) {
+      console.error('Error storing impersonation backup:', error);
+      return false;
+    }
+  }
+
+  async getImpersonationBackup(): Promise<ImpersonationBackup | null> {
+    try {
+      if (await this.canUseKeychain()) {
+        const credentials = await Keychain.getGenericPassword({
+          service: IMPERSONATION_KEYCHAIN_SERVICE,
+        });
+        if (credentials?.password) {
+          return JSON.parse(credentials.password) as ImpersonationBackup;
+        }
+      }
+      const legacy = await AsyncStorage.getItem('impersonationBackup');
+      if (!legacy) return null;
+      const backup = JSON.parse(legacy) as ImpersonationBackup;
+      await this.storeImpersonationBackup(backup);
+      return backup;
+    } catch (error) {
+      console.error('Error retrieving impersonation backup:', error);
+      return null;
+    }
+  }
+
+  async clearImpersonationBackup(): Promise<void> {
+    try {
+      if (await this.canUseKeychain()) {
+        await Keychain.resetGenericPassword({ service: IMPERSONATION_KEYCHAIN_SERVICE });
+      }
+      await AsyncStorage.removeItem('impersonationBackup');
+    } catch (error) {
+      console.error('Error clearing impersonation backup:', error);
     }
   }
 
@@ -261,22 +323,20 @@ class SecurityManager {
 
 export const securityManager = new SecurityManager();
 
-export const {
-  storeTokens,
-  getTokens,
-  areTokensValid,
-  clearTokens,
-  storeUserData,
-  getUserData,
-  generateSecureRandom,
-  hashPassword,
-  verifyPassword,
-  sanitizeInput,
-  isValidEmail,
-  validatePasswordStrength,
-  isDeviceSecure,
-  generateSessionId,
-  isValidSessionId,
-} = securityManager;
+export const storeTokens = securityManager.storeTokens.bind(securityManager);
+export const getTokens = securityManager.getTokens.bind(securityManager);
+export const areTokensValid = securityManager.areTokensValid.bind(securityManager);
+export const clearTokens = securityManager.clearTokens.bind(securityManager);
+export const storeUserData = securityManager.storeUserData.bind(securityManager);
+export const getUserData = securityManager.getUserData.bind(securityManager);
+export const generateSecureRandom = securityManager.generateSecureRandom.bind(securityManager);
+export const hashPassword = securityManager.hashPassword.bind(securityManager);
+export const verifyPassword = securityManager.verifyPassword.bind(securityManager);
+export const sanitizeInput = securityManager.sanitizeInput.bind(securityManager);
+export const isValidEmail = securityManager.isValidEmail.bind(securityManager);
+export const validatePasswordStrength = securityManager.validatePasswordStrength.bind(securityManager);
+export const isDeviceSecure = securityManager.isDeviceSecure.bind(securityManager);
+export const generateSessionId = securityManager.generateSessionId.bind(securityManager);
+export const isValidSessionId = securityManager.isValidSessionId.bind(securityManager);
 
 export default securityManager;

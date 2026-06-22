@@ -203,10 +203,10 @@ describe('Button Component', () => {
 
   describe('Edge Cases', () => {
     it('handles empty title', () => {
-      const { container } = renderWithProviders(
+      const { UNSAFE_root } = renderWithProviders(
         <Button {...defaultProps} title="" />
       );
-      expect(container).toBeTruthy();
+      expect(UNSAFE_root).toBeTruthy();
     });
 
     it('handles very long title', () => {

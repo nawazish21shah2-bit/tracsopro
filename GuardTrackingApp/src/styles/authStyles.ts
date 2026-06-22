@@ -11,7 +11,7 @@ export const AUTH_SUBMIT_MARGIN_TOP = SPACING.xxxxl; // 40px - Space after last 
 export const AUTH_SUBMIT_TO_FOOTER = SPACING.xxxl; // 32px - Space between submit and footer link
 export const AUTH_FOOTER_BOTTOM = 32; // 32px from bottom
 
-/** Shared bordered input styles used by Login and all auth forms */
+/** Shared bordered input styles used by auth and app forms */
 export const authInputStyles = StyleSheet.create({
   inputWrapper: {
     flexDirection: 'row',
@@ -62,6 +62,10 @@ export const authInputStyles = StyleSheet.create({
     color: COLORS.error,
   },
 });
+
+/** Alias for non-auth screens */
+export const formInputStyles = authInputStyles;
+export const FORM_INPUT_GAP = AUTH_INPUT_GAP;
 
 export const authStyles = StyleSheet.create({
   // Container

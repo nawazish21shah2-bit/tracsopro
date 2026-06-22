@@ -65,6 +65,27 @@ class WebSocketService {
     logger.info('WebSocket service initialized');
   }
 
+  /** Enable cross-instance Socket.IO when REDIS_URL is set. */
+  async attachRedisAdapter(): Promise<void> {
+    if (!this.io || !process.env.REDIS_URL) {
+      return;
+    }
+
+    try {
+      const { createAdapter } = await import('@socket.io/redis-adapter');
+      const { getRedisPubClient } = await import('../config/redis.js');
+      const pubClient = await getRedisPubClient();
+      if (!pubClient) {
+        return;
+      }
+      const subClient = (pubClient as { duplicate(): unknown }).duplicate();
+      this.io.adapter(createAdapter(pubClient as never, subClient as never));
+      logger.info('Socket.IO Redis adapter enabled');
+    } catch (error) {
+      logger.warn('Socket.IO Redis adapter unavailable', { error });
+    }
+  }
+
   private setupEventHandlers(): void {
     if (!this.io) return;
 

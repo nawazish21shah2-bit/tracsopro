@@ -3,7 +3,7 @@
  * Fetches real-time operations data from backend
  */
 
-import apiService from './api';
+import { operationsApi } from './api/operationsApi';
 
 export interface GuardStatus {
   guardId: string;
@@ -77,7 +77,7 @@ class OperationsService {
    */
   async getOperationsMetrics(): Promise<OperationsMetrics> {
     try {
-      const response = await apiService.getRaw<{
+      const response = await operationsApi.getRaw<{
         success: boolean;
         data: OperationsMetrics;
       }>('/admin/operations/metrics');
@@ -107,7 +107,7 @@ class OperationsService {
    */
   async getGuardStatuses(): Promise<GuardStatus[]> {
     try {
-      const response = await apiService.getRaw<{
+      const response = await operationsApi.getRaw<{
         success: boolean;
         data: GuardStatus[];
       }>('/admin/operations/guards');
@@ -127,7 +127,7 @@ class OperationsService {
    */
   async getActiveEmergencyAlerts(): Promise<EmergencyAlert[]> {
     try {
-      const response = await apiService.getRaw<{
+      const response = await operationsApi.getRaw<{
         success: boolean;
         data: EmergencyAlert[];
         count: number;
@@ -150,7 +150,7 @@ class OperationsService {
     alertId: string
   ): Promise<{ success: boolean; message?: string }> {
     try {
-      const response = await apiService.postRaw<{
+      const response = await operationsApi.postRaw<{
         success: boolean;
         message: string;
       }>(`/emergency/alert/${alertId}/acknowledge`, {});
@@ -178,11 +178,37 @@ class OperationsService {
   }
 
   /**
+   * Resolve emergency alert (admin only)
+   */
+  async resolveEmergencyAlert(
+    alertId: string,
+    resolution: string,
+    status: 'RESOLVED' | 'FALSE_ALARM' = 'RESOLVED',
+  ): Promise<{ success: boolean; message?: string }> {
+    try {
+      const response = await operationsApi.postRaw<{
+        success: boolean;
+        message: string;
+      }>(`/emergency/alert/${alertId}/resolve`, { resolution, status });
+
+      return {
+        success: response.data.success,
+        message: response.data.message,
+      };
+    } catch (error: any) {
+      const message =
+        error?.response?.data?.message || 'Failed to resolve emergency alert';
+      console.error('Error resolving emergency alert:', message, error);
+      return { success: false, message };
+    }
+  }
+
+  /**
    * Get live activity feed for operations center
    */
   async getOperationsActivity(limit = 50): Promise<OperationsActivityItem[]> {
     try {
-      const response = await apiService.getRaw<{
+      const response = await operationsApi.getRaw<{
         success: boolean;
         data: OperationsActivityItem[];
       }>(`/admin/operations/activity?limit=${limit}`);
@@ -202,7 +228,7 @@ class OperationsService {
    */
   async getRealTimeLocationData(): Promise<any[]> {
     try {
-      const response = await apiService.getRaw<{
+      const response = await operationsApi.getRaw<{
         success: boolean;
         data: any[];
       }>('/tracking/realtime');

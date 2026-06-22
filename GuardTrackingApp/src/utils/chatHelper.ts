@@ -3,7 +3,8 @@
  * Stable client↔guard conversation IDs (must match backend chatService.createChat)
  */
 
-import apiService from '../services/api';
+import { clientApi } from '../services/api/clientApi';
+import { chatApi } from '../services/api/chatApi';
 import { pickProfilePictureUrl } from './profilePictureUtils';
 
 export interface ChatNavigationParams {
@@ -148,7 +149,7 @@ export function parseDirectChatParticipants(
 /** Resolve guard entity id from user id using client guards list. */
 export async function resolveGuardEntityId(guardUserId: string): Promise<string | null> {
   try {
-    const response = await apiService.getClientGuards(1, 100);
+    const response = await clientApi.getClientGuards(1, 100);
     if (!response.success || !Array.isArray(response.data)) {
       return null;
     }
@@ -171,7 +172,7 @@ export async function resolveChatParticipantProfile(
   displayName?: string;
 } | null> {
   try {
-    const response = await apiService.getChatRooms();
+    const response = await chatApi.getChatRooms();
 
     if (!response.success || !Array.isArray(response.data)) {
       return null;
@@ -218,7 +219,7 @@ export async function resolveChatParticipantProfile(
 
 export async function getChatRoomById(chatId: string): Promise<ChatNavigationParams | null> {
   try {
-    const response = await apiService.getChatRooms();
+    const response = await chatApi.getChatRooms();
 
     if (!response.success || !response.data) {
       return null;

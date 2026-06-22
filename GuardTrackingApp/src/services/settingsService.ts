@@ -68,25 +68,8 @@ export interface PastJob {
 class SettingsService {
   private async getAuthToken(): Promise<string | null> {
     try {
-      // First try to get token from securityManager (preferred method)
       const tokens = await securityManager.getTokens();
-      if (tokens?.accessToken) {
-        return tokens.accessToken;
-      }
-      
-      // Fallback to direct AsyncStorage (for backward compatibility)
-      const token = await AsyncStorage.getItem('authToken');
-      if (token) {
-        return token;
-      }
-      
-      // Also check Redux store as last resort
-      const state = store.getState();
-      if (state.auth?.token) {
-        return state.auth.token;
-      }
-      
-      return null;
+      return tokens?.accessToken ?? null;
     } catch (error) {
       console.error('Error getting auth token:', error);
       return null;

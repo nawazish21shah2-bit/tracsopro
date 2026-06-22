@@ -1,6 +1,6 @@
 // Redux Store Configuration for Guard Tracking App
 import { configureStore } from '@reduxjs/toolkit';
-import { persistStore, persistReducer } from 'redux-persist';
+import { persistStore, persistReducer, createTransform } from 'redux-persist';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { combineReducers } from '@reduxjs/toolkit';
 
@@ -18,11 +18,23 @@ import emergencyReducer from './slices/emergencySlice';
 import chatReducer from './slices/chatSlice';
 import adminReducer from './slices/adminSlice';
 
+// Strip legacy token fields from persisted auth state
+const authTransform = createTransform(
+  (inboundState: Record<string, unknown>) => {
+    if (!inboundState) return inboundState;
+    const { token, refreshToken, ...safe } = inboundState;
+    return safe;
+  },
+  (outboundState) => outboundState,
+  { whitelist: ['auth'] }
+);
+
 // Persist configuration
 const persistConfig = {
   key: 'root',
   storage: AsyncStorage,
-  whitelist: ['auth'], // Only persist auth state
+  whitelist: ['auth'],
+  transforms: [authTransform],
 };
 
 // Root reducer
@@ -51,6 +63,7 @@ export const store = configureStore({
     getDefaultMiddleware({
       serializableCheck: {
         ignoredActions: ['persist/PERSIST', 'persist/REHYDRATE'],
+        ignoredPaths: ['locations.trackingData', 'incidents'],
       },
     }),
   devTools: typeof __DEV__ !== 'undefined' ? __DEV__ : false,

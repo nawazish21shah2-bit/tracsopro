@@ -15,6 +15,7 @@ import MapView, { Marker, PROVIDER_GOOGLE, PROVIDER_DEFAULT, Region, LatLng, Map
 import Geolocation from 'react-native-geolocation-service';
 import { MapPin, X, ExternalLink, Plus, Minus, Navigation, Layers } from 'react-native-feather';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../styles/globalStyles';
+import { authInputStyles } from '../../styles/authStyles';
 
 interface AddressPickerProps {
   value: string;
@@ -47,6 +48,7 @@ const AddressPicker: React.FC<AddressPickerProps> = ({
   const [selectedCoordinate, setSelectedCoordinate] = useState<LatLng | null>(null);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [mapType, setMapType] = useState<'standard' | 'satellite' | 'hybrid'>('standard');
+  const [focused, setFocused] = useState(false);
   const mapRef = useRef<MapView>(null);
 
   // Simple geocoding using reverse geocoding (you can integrate Google Places API for better results)
@@ -275,20 +277,29 @@ const AddressPicker: React.FC<AddressPickerProps> = ({
 
   return (
     <View style={styles.container}>
-      {label && (
-        <Text style={styles.label}>
-          {label} {required && <Text style={styles.required}>*</Text>}
+      {label ? (
+        <Text style={authInputStyles.label}>
+          {label}
+          {required ? <Text style={authInputStyles.required}> *</Text> : null}
         </Text>
-      )}
+      ) : null}
       
-      <View style={styles.inputContainer}>
+      <View
+        style={[
+          authInputStyles.inputWrapper,
+          styles.inputContainer,
+          focused && authInputStyles.inputFocused,
+        ]}
+      >
         <TextInput
-          style={styles.input}
+          style={[authInputStyles.textInput, styles.input]}
           value={value}
           onChangeText={onChange}
           placeholder={placeholder}
-          placeholderTextColor="#999"
+          placeholderTextColor={COLORS.textSecondary}
           multiline
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
         />
         <TouchableOpacity
           style={styles.mapButton}
@@ -442,20 +453,15 @@ const styles = StyleSheet.create({
     color: COLORS.error,
   },
   inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: BORDER_RADIUS.md,
-    backgroundColor: '#FFFFFF',
+    height: undefined,
+    minHeight: 56,
+    alignItems: 'flex-start',
+    paddingVertical: SPACING.sm,
   },
   input: {
-    flex: 1,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    fontSize: TYPOGRAPHY.fontSize.md,
-    color: COLORS.textPrimary,
-    minHeight: 44,
+    minHeight: 40,
+    paddingVertical: 4,
+    textAlignVertical: 'top',
   },
   mapButton: {
     padding: SPACING.sm,

@@ -59,8 +59,11 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
   useEffect(() => {
     return () => {
       cancelTokenRef.current.cancelled = true;
-      if (abortControllerRef.current) {
-        try { abortControllerRef.current.abort(); } catch {}
+      const pending = abortControllerRef.current as { abort?: () => void } | null;
+      if (pending?.abort) {
+        try {
+          pending.abort();
+        } catch {}
       }
     };
   }, []);
@@ -289,11 +292,11 @@ const EmergencyButton: React.FC<EmergencyButtonProps> = ({
         shiftId: activeShift?.id, // Pass active shift ID for site-specific notifications
       };
 
-      // Dispatch emergency alert using AbortController signal so we can cancel if unmounted
+      // Dispatch emergency alert; RTK provides abort via the returned promise
       if (cancelTokenRef.current.cancelled) return;
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
-      const result = await dispatch(triggerEmergencyAlert({ alertData, options: { signal: controller.signal, retries: 1 } }) as any);
+      const thunkPromise = dispatch(triggerEmergencyAlert(alertData) as any);
+      abortControllerRef.current = thunkPromise as unknown as AbortController;
+      const result = await thunkPromise;
       abortControllerRef.current = null;
 
       if (result && result.type === 'emergency/triggerAlert/fulfilled') {

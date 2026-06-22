@@ -24,7 +24,7 @@ import { ClientStackParamList } from '../../navigation/ClientStackNavigator';
 import { fetchMyGuards } from '../../store/slices/clientSlice';
 import { LoadingOverlay, ErrorState, NetworkError } from '../../components/ui/LoadingStates';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
-import apiService from '../../services/api';
+import { clientApi } from '../../services/api/clientApi';
 import { getClientGuardChatParams } from '../../utils/chatHelper';
 
 interface GuardData {
@@ -94,7 +94,7 @@ const ClientGuards: React.FC = () => {
   const handlePostNewShift = async () => {
     try {
       // Fetch client's sites first
-      const result = await apiService.getClientSites(1, 100);
+      const result = await clientApi.getClientSites(1, 100);
       if (result.success && result.data?.sites && result.data.sites.length > 0) {
         // Use the first site, or could show a selection modal
         const firstSite = result.data.sites[0];

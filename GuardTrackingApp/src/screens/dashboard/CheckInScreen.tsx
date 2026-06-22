@@ -10,7 +10,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { Clock, MapPin, Calendar, User } from 'react-native-feather';
-import apiService from '../../services/api';
+import { shiftApi } from '../../services/api/shiftApi';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import { GuardStackParamList } from '../../navigation/GuardStackNavigator';
 
@@ -35,7 +35,7 @@ const CheckInScreen: React.FC = () => {
 
   const loadTodayAssignments = async () => {
     try {
-      const result = await apiService.getUpcomingShifts();
+      const result = await shiftApi.getUpcomingShifts();
       
       if (result.success && result.data) {
         // Transform API response to match Assignment interface

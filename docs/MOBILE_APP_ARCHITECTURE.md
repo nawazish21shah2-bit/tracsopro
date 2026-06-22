@@ -212,7 +212,7 @@ Client and admin billing screens use `@stripe/stripe-react-native`:
 
 - Unit tests: Jest (`__tests__/App.test.tsx`).
 - Lint: ESLint (`npm run lint`).
-- E2E: Planned (Detox).
+- E2E: Detox (`e2e/login.e2e.js`, `e2e/loginAuth.e2e.js`, `e2e/checkIn.e2e.js`, `e2e/shiftLifecycle.e2e.js`, `e2e/clientPortal.e2e.js`, `e2e/adminPortal.e2e.js`). Android: `npm run e2e:android` (emulator `TracSOpro_E2E`; run `cd backend && npm run seed:e2e` first). iOS (macOS only): `npm run e2e:ios` (full suite) or `npm run e2e:ios:ci` (guard/client/admin smoke). iOS Simulator uses `localhost:3000` (`USE_IOS_SIMULATOR` in `apiConfig.ts`). Credentials: guard `e2e-guard@tracsopro.e2e`, client `e2e-client@tracsopro.e2e`, admin `e2e-admin@tracsopro.e2e` (password `E2eGuardPass123!` for all). CI: `.github/workflows/mobile-e2e.yml` — Android on `ubuntu-latest`, iOS smoke on `macos-14` (both non-blocking).
 
 ## Related documents
 

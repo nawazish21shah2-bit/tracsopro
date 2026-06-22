@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../store';
 import { fetchGuardReports } from '../store/slices/shiftReportSlice';
-import apiService from '../services/api';
+import { incidentApi } from '../services/api/incidentApi';
 import {
   UnifiedReportItem,
   mergeReports,
@@ -29,7 +29,7 @@ export function useGuardReportsFeed(limit = 50): UseGuardReportsFeedResult {
     setIncidentLoading(true);
     setIncidentError(null);
     try {
-      const response = await apiService.getGuardIncidentReports(1, limit);
+      const response = await incidentApi.getGuardIncidentReports(1, limit);
       if (response.success && response.data?.reports) {
         setIncidentReports(response.data.reports);
       } else {

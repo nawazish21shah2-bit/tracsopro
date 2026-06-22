@@ -4,12 +4,12 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, Alert, ScrollView } from 'react-native';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { LocationIcon, SettingsIcon } from '../../components/ui/AppIcons';
 import AddressPicker from '../../components/common/AddressPicker';
 import ClientSelector from '../../components/common/ClientSelector';
-import apiService from '../../services/api';
+import { adminApi } from '../../services/api/adminApi';
 import SharedHeader from '../../components/ui/SharedHeader';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import AdminProfileDrawer from '../../components/admin/AdminProfileDrawer';
@@ -20,6 +20,7 @@ import { showActionErrorAlert } from '../../utils/subscriptionLimitAlert';
 import { validateSiteForm } from '../../utils/siteFormValidation';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
+import FormInput from '../../components/common/FormInput';
 
 interface Site {
   id: string;
@@ -76,7 +77,7 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
   const loadSites = async () => {
     try {
       setLoading(true);
-      const response = await apiService.getAdminSites();
+      const response = await adminApi.getAdminSites();
       if (!response.success || !response.data) {
         console.warn('Failed to load sites:', response.message);
         return;
@@ -124,7 +125,7 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     if (!allowed) return;
 
     try {
-      const response = await apiService.createAdminSite({
+      const response = await adminApi.createAdminSite({
         clientId: newSite.clientId,
         name: newSite.name.trim(),
         description: newSite.description.trim(),
@@ -185,7 +186,7 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     
     // Fetch full site details to populate description, requirements, etc if they exist
     try {
-      const response = await apiService.getAdminSites({ search: s.name });
+      const response = await adminApi.getAdminSites({ search: s.name });
       const fullSite = response.data?.sites?.find((site: any) => site.id === siteId) || s;
       
       setEditSite({
@@ -245,7 +246,7 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
         payload.clientId = editSite.clientId;
       }
 
-      const response = await apiService.updateAdminSite(editingSiteId, payload);
+      const response = await adminApi.updateAdminSite(editingSiteId, payload);
       if (!response.success || !response.data) {
         Alert.alert('Error', response.message || 'Failed to update site');
         return;
@@ -292,7 +293,7 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
           style: 'destructive',
           onPress: async () => {
             try {
-              const response = await apiService.deleteAdminSite(siteId);
+              const response = await adminApi.deleteAdminSite(siteId);
               if (!response.success) {
                 Alert.alert('Error', response.message || 'Failed to delete site');
                 return;
@@ -409,42 +410,34 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
 
             <Text style={styles.sectionTitle}>Site Information</Text>
             
-            <View style={styles.formField}>
-              <Text style={styles.fieldLabel}>Site Name *</Text>
-              <TextInput
-                style={styles.fieldInput}
-                value={newSite.name}
-                onChangeText={(text) => setNewSite(prev => ({ ...prev, name: text }))}
-                placeholder="Enter site name"
-                placeholderTextColor="#999"
-              />
-            </View>
+            <FormInput
+              label="Site Name"
+              required
+              value={newSite.name}
+              onChangeText={(text) => setNewSite(prev => ({ ...prev, name: text }))}
+              placeholder="Enter site name"
+              containerStyle={styles.formField}
+            />
 
-            <View style={styles.formField}>
-              <Text style={styles.fieldLabel}>Description</Text>
-              <TextInput
-                style={[styles.fieldInput, styles.textArea]}
-                value={newSite.description}
-                onChangeText={(text) => setNewSite(prev => ({ ...prev, description: text }))}
-                placeholder="Brief description of the site"
-                placeholderTextColor="#999"
-                multiline
-                numberOfLines={3}
-              />
-            </View>
+            <FormInput
+              label="Description"
+              value={newSite.description}
+              onChangeText={(text) => setNewSite(prev => ({ ...prev, description: text }))}
+              placeholder="Brief description of the site"
+              multiline
+              numberOfLines={3}
+              containerStyle={styles.formField}
+            />
 
-            <View style={styles.formField}>
-              <Text style={styles.fieldLabel}>Security Requirements</Text>
-              <TextInput
-                style={[styles.fieldInput, styles.textArea]}
-                value={newSite.requirements}
-                onChangeText={(text) => setNewSite(prev => ({ ...prev, requirements: text }))}
-                placeholder="Specific security requirements"
-                placeholderTextColor="#999"
-                multiline
-                numberOfLines={3}
-              />
-            </View>
+            <FormInput
+              label="Security Requirements"
+              value={newSite.requirements}
+              onChangeText={(text) => setNewSite(prev => ({ ...prev, requirements: text }))}
+              placeholder="Specific security requirements"
+              multiline
+              numberOfLines={3}
+              containerStyle={styles.formField}
+            />
 
             <Text style={styles.sectionTitle}>Location</Text>
             <View style={styles.formField}>
@@ -462,62 +455,51 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
 
             <View style={styles.row}>
               <View style={[styles.formField, styles.flex1]}>
-                <Text style={styles.fieldLabel}>City *</Text>
-                <TextInput
-                  style={styles.fieldInput}
+                <FormInput
+                  label="City"
+                  required
                   value={newSite.city}
                   onChangeText={(text) => setNewSite(prev => ({ ...prev, city: text }))}
                   placeholder="City"
-                  placeholderTextColor="#999"
                 />
               </View>
               <View style={[styles.formField, styles.flex1, styles.marginLeft]}>
-                <Text style={styles.fieldLabel}>State</Text>
-                <TextInput
-                  style={styles.fieldInput}
+                <FormInput
+                  label="State"
                   value={newSite.state}
                   onChangeText={(text) => setNewSite(prev => ({ ...prev, state: text }))}
                   placeholder="State"
-                  placeholderTextColor="#999"
                 />
               </View>
             </View>
 
-            <View style={styles.formField}>
-              <Text style={styles.fieldLabel}>ZIP Code</Text>
-              <TextInput
-                style={styles.fieldInput}
-                value={newSite.zipCode}
-                onChangeText={(text) => setNewSite(prev => ({ ...prev, zipCode: text }))}
-                placeholder="ZIP Code"
-                placeholderTextColor="#999"
-                keyboardType="numeric"
-              />
-            </View>
+            <FormInput
+              label="ZIP Code"
+              value={newSite.zipCode}
+              onChangeText={(text) => setNewSite(prev => ({ ...prev, zipCode: text }))}
+              placeholder="ZIP Code"
+              keyboardType="numeric"
+              containerStyle={styles.formField}
+            />
 
             <Text style={styles.sectionTitle}>Contact Information</Text>
-            <View style={styles.formField}>
-              <Text style={styles.fieldLabel}>Contact Person *</Text>
-              <TextInput
-                style={styles.fieldInput}
-                value={newSite.contactPerson}
-                onChangeText={(text) => setNewSite(prev => ({ ...prev, contactPerson: text }))}
-                placeholder="Site manager or contact person"
-                placeholderTextColor="#999"
-              />
-            </View>
+            <FormInput
+              label="Contact Person"
+              required
+              value={newSite.contactPerson}
+              onChangeText={(text) => setNewSite(prev => ({ ...prev, contactPerson: text }))}
+              placeholder="Site manager or contact person"
+              containerStyle={styles.formField}
+            />
 
-            <View style={styles.formField}>
-              <Text style={styles.fieldLabel}>Contact Phone</Text>
-              <TextInput
-                style={styles.fieldInput}
-                value={newSite.contactPhone}
-                onChangeText={(text) => setNewSite(prev => ({ ...prev, contactPhone: text }))}
-                placeholder="Phone number"
-                placeholderTextColor="#999"
-                keyboardType="phone-pad"
-              />
-            </View>
+            <FormInput
+              label="Contact Phone"
+              value={newSite.contactPhone}
+              onChangeText={(text) => setNewSite(prev => ({ ...prev, contactPhone: text }))}
+              placeholder="Phone number"
+              keyboardType="phone-pad"
+              containerStyle={styles.formField}
+            />
 
             <TouchableOpacity
               style={styles.createButton}
@@ -561,42 +543,34 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
 
             <Text style={styles.sectionTitle}>Site Information</Text>
 
-            <View style={styles.formField}>
-              <Text style={styles.fieldLabel}>Site Name *</Text>
-              <TextInput
-                style={styles.fieldInput}
-                value={editSite.name}
-                onChangeText={(text) => setEditSite(prev => ({ ...prev, name: text }))}
-                placeholder="Enter site name"
-                placeholderTextColor="#999"
-              />
-            </View>
+            <FormInput
+              label="Site Name"
+              required
+              value={editSite.name}
+              onChangeText={(text) => setEditSite(prev => ({ ...prev, name: text }))}
+              placeholder="Enter site name"
+              containerStyle={styles.formField}
+            />
 
-            <View style={styles.formField}>
-              <Text style={styles.fieldLabel}>Description</Text>
-              <TextInput
-                style={[styles.fieldInput, styles.textArea]}
-                value={editSite.description}
-                onChangeText={(text) => setEditSite(prev => ({ ...prev, description: text }))}
-                placeholder="Brief description of the site"
-                placeholderTextColor="#999"
-                multiline
-                numberOfLines={3}
-              />
-            </View>
+            <FormInput
+              label="Description"
+              value={editSite.description}
+              onChangeText={(text) => setEditSite(prev => ({ ...prev, description: text }))}
+              placeholder="Brief description of the site"
+              multiline
+              numberOfLines={3}
+              containerStyle={styles.formField}
+            />
 
-            <View style={styles.formField}>
-              <Text style={styles.fieldLabel}>Security Requirements</Text>
-              <TextInput
-                style={[styles.fieldInput, styles.textArea]}
-                value={editSite.requirements}
-                onChangeText={(text) => setEditSite(prev => ({ ...prev, requirements: text }))}
-                placeholder="Specific security requirements"
-                placeholderTextColor="#999"
-                multiline
-                numberOfLines={3}
-              />
-            </View>
+            <FormInput
+              label="Security Requirements"
+              value={editSite.requirements}
+              onChangeText={(text) => setEditSite(prev => ({ ...prev, requirements: text }))}
+              placeholder="Specific security requirements"
+              multiline
+              numberOfLines={3}
+              containerStyle={styles.formField}
+            />
 
             <Text style={styles.sectionTitle}>Location</Text>
             <View style={styles.formField}>
@@ -614,62 +588,51 @@ const SiteManagementScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
 
             <View style={styles.row}>
               <View style={[styles.formField, styles.flex1]}>
-                <Text style={styles.fieldLabel}>City *</Text>
-                <TextInput
-                  style={styles.fieldInput}
+                <FormInput
+                  label="City"
+                  required
                   value={editSite.city}
                   onChangeText={(text) => setEditSite(prev => ({ ...prev, city: text }))}
                   placeholder="City"
-                  placeholderTextColor="#999"
                 />
               </View>
               <View style={[styles.formField, styles.flex1, styles.marginLeft]}>
-                <Text style={styles.fieldLabel}>State</Text>
-                <TextInput
-                  style={styles.fieldInput}
+                <FormInput
+                  label="State"
                   value={editSite.state}
                   onChangeText={(text) => setEditSite(prev => ({ ...prev, state: text }))}
                   placeholder="State"
-                  placeholderTextColor="#999"
                 />
               </View>
             </View>
 
-            <View style={styles.formField}>
-              <Text style={styles.fieldLabel}>ZIP Code</Text>
-              <TextInput
-                style={styles.fieldInput}
-                value={editSite.zipCode}
-                onChangeText={(text) => setEditSite(prev => ({ ...prev, zipCode: text }))}
-                placeholder="ZIP Code"
-                placeholderTextColor="#999"
-                keyboardType="numeric"
-              />
-            </View>
+            <FormInput
+              label="ZIP Code"
+              value={editSite.zipCode}
+              onChangeText={(text) => setEditSite(prev => ({ ...prev, zipCode: text }))}
+              placeholder="ZIP Code"
+              keyboardType="numeric"
+              containerStyle={styles.formField}
+            />
 
             <Text style={styles.sectionTitle}>Contact Information</Text>
-            <View style={styles.formField}>
-              <Text style={styles.fieldLabel}>Contact Person *</Text>
-              <TextInput
-                style={styles.fieldInput}
-                value={editSite.contactPerson}
-                onChangeText={(text) => setEditSite(prev => ({ ...prev, contactPerson: text }))}
-                placeholder="Site manager or contact person"
-                placeholderTextColor="#999"
-              />
-            </View>
+            <FormInput
+              label="Contact Person"
+              required
+              value={editSite.contactPerson}
+              onChangeText={(text) => setEditSite(prev => ({ ...prev, contactPerson: text }))}
+              placeholder="Site manager or contact person"
+              containerStyle={styles.formField}
+            />
 
-            <View style={styles.formField}>
-              <Text style={styles.fieldLabel}>Contact Phone</Text>
-              <TextInput
-                style={styles.fieldInput}
-                value={editSite.contactPhone}
-                onChangeText={(text) => setEditSite(prev => ({ ...prev, contactPhone: text }))}
-                placeholder="Phone number"
-                placeholderTextColor="#999"
-                keyboardType="phone-pad"
-              />
-            </View>
+            <FormInput
+              label="Contact Phone"
+              value={editSite.contactPhone}
+              onChangeText={(text) => setEditSite(prev => ({ ...prev, contactPhone: text }))}
+              placeholder="Phone number"
+              keyboardType="phone-pad"
+              containerStyle={styles.formField}
+            />
 
             <View style={styles.formField}>
               <Text style={styles.fieldLabel}>Status</Text>

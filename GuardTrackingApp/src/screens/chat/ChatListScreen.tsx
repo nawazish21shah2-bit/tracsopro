@@ -5,7 +5,6 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  TextInput,
   RefreshControl,
   Alert,
 } from 'react-native';
@@ -15,14 +14,17 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import ProfileAvatar from '../../components/common/ProfileAvatar';
 import { pickProfilePictureUrl } from '../../utils/profilePictureUtils';
-import { Search, ArrowLeft, MoreVertical, MessageCircle, Users, Settings } from 'react-native-feather';
+import { Search, MoreVertical, MessageCircle, Settings, Users } from 'react-native-feather';
+import { ChevronLeftIcon } from '../../components/ui/FeatherIcons';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import SharedHeader from '../../components/ui/SharedHeader';
 import NewChatModal from '../../components/chat/NewChatModal';
+import FormInput from '../../components/common/FormInput';
 import DropdownMenu, { DropdownMenuItem } from '../../components/ui/DropdownMenu';
 import { EmptyState, ErrorState, InlineLoading, NetworkError } from '../../components/ui/LoadingStates';
 import { formatRelativeTime } from '../../utils/formatRelativeTime';
 import { parseDisplayName } from '../../utils/parseDisplayName';
+import { navigateToSupportHub, roleToSupportVariant } from '../../utils/tabNavigationHelpers';
 
 interface ChatItem {
   id: string;
@@ -63,27 +65,19 @@ const ChatListScreen: React.FC = () => {
     ];
 
     // Admin / Super Admin: separate platform support from team chats
-    if (user?.role === 'ADMIN' || (user?.role as string) === 'SUPER_ADMIN') {
+    const supportVariant = roleToSupportVariant(user?.role);
+    if (supportVariant) {
+      const isStaff = supportVariant === 'admin' || supportVariant === 'superAdmin';
       baseItems.unshift({
-        id: 'support-requests',
-        label: user?.role === 'SUPER_ADMIN' ? 'Platform Support Inbox' : 'Support Center',
+        id: isStaff ? 'support-requests' : 'support-center',
+        label:
+          supportVariant === 'superAdmin'
+            ? 'Platform Support Inbox'
+            : supportVariant === 'admin'
+              ? 'Support Center'
+              : 'Support Center',
         icon: <MessageCircle width={20} height={20} color={COLORS.primary} />,
-        onPress: () =>
-          (navigation as any).navigate('SupportHubScreen', {
-            variant: user?.role === 'SUPER_ADMIN' ? 'superAdmin' : 'admin',
-            mode: user?.role === 'SUPER_ADMIN' ? 'platform' : 'inbox',
-          }),
-      });
-    } else if (user?.role === 'GUARD' || user?.role === 'CLIENT') {
-      baseItems.unshift({
-        id: 'support-center',
-        label: 'Support Center',
-        icon: <MessageCircle width={20} height={20} color={COLORS.primary} />,
-        onPress: () =>
-          (navigation as any).navigate('SupportHubScreen', {
-            variant: user?.role === 'GUARD' ? 'guard' : 'client',
-            mode: 'mine',
-          }),
+        onPress: () => navigateToSupportHub(navigation as any, supportVariant),
       });
     }
 
@@ -422,7 +416,7 @@ const ChatListScreen: React.FC = () => {
               style={styles.headerSideButton}
               onPress={() => navigation.goBack()}
             >
-              <ArrowLeft width={24} height={24} color={COLORS.textPrimary} />
+              <ChevronLeftIcon size={24} color={COLORS.textPrimary} />
             </TouchableOpacity>
           ) : (
             <View style={styles.headerSideButton} />
@@ -443,16 +437,12 @@ const ChatListScreen: React.FC = () => {
 
       {/* Search Bar */}
       <View style={styles.searchContainer}>
-        <View style={styles.searchInputContainer}>
-          <Search width={20} height={20} color={COLORS.textTertiary} style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search chats..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholderTextColor={COLORS.textTertiary}
-          />
-        </View>
+        <FormInput
+          icon="search"
+          placeholder="Search chats..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
       </View>
 
       {/* Chat List */}

@@ -2,8 +2,12 @@ import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../middleware/auth.js';
 import prisma from '../config/database.js';
 import { logger } from '../utils/logger.js';
-import path from 'path';
 import fs from 'fs';
+import {
+  storeProfilePicture,
+  deleteStoredProfilePicture,
+  clientFacingProfilePictureUrl,
+} from '../services/storageService.js';
 
 class UserController {
   /**
@@ -31,10 +35,6 @@ class UserController {
         return;
       }
 
-      // Generate the URL for the uploaded file
-      const baseUrl = process.env.API_URL || `http://localhost:${process.env.PORT || 3000}`;
-      const profilePictureUrl = `${baseUrl}/uploads/profile-pictures/${file.filename}`;
-
       // Get the user to check their role
       const user = await prisma.user.findUnique({
         where: { id: userId },
@@ -54,32 +54,26 @@ class UserController {
         return;
       }
 
-      // Delete old profile picture if exists
       if (user.profilePictureUrl) {
         try {
-          const oldFilename = user.profilePictureUrl.split('/').pop();
-          if (oldFilename) {
-            const oldFilePath = path.join(process.cwd(), 'uploads', 'profile-pictures', oldFilename);
-            if (fs.existsSync(oldFilePath)) {
-              fs.unlinkSync(oldFilePath);
-            }
-          }
+          await deleteStoredProfilePicture(user.profilePictureUrl);
         } catch (err) {
           logger.warn('Failed to delete old profile picture:', err);
         }
       }
 
-      // Update user's profile picture URL
+      const storedUrl = await storeProfilePicture(userId, file.path, file.originalname);
+      const profilePictureUrl = clientFacingProfilePictureUrl(storedUrl);
+
       await prisma.user.update({
         where: { id: userId },
-        data: { profilePictureUrl },
+        data: { profilePictureUrl: storedUrl },
       });
 
-      // If user is a guard, also update the guard profile
       if (user.role === 'GUARD') {
         await prisma.guard.updateMany({
           where: { userId },
-          data: { profilePictureUrl },
+          data: { profilePictureUrl: storedUrl },
         });
       }
 
@@ -201,16 +195,9 @@ class UserController {
         return;
       }
 
-      // Delete the profile picture file if it exists and is hosted locally
-      if (user.profilePictureUrl && user.profilePictureUrl.includes('/uploads/profile-pictures/')) {
+      if (user.profilePictureUrl) {
         try {
-          const filename = user.profilePictureUrl.split('/').pop();
-          if (filename) {
-            const filePath = path.join(process.cwd(), 'uploads', 'profile-pictures', filename);
-            if (fs.existsSync(filePath)) {
-              fs.unlinkSync(filePath);
-            }
-          }
+          await deleteStoredProfilePicture(user.profilePictureUrl);
         } catch (err) {
           logger.warn('Failed to delete profile picture file:', err);
         }

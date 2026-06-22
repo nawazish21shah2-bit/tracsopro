@@ -451,10 +451,12 @@ const styles = StyleSheet.create({
   guardInfoTouchable: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
   },
   unassignedGuardInfo: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
   },
   unassignedText: {
     fontSize: 14,
@@ -476,7 +478,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    marginRight: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },

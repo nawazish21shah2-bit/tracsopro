@@ -16,7 +16,7 @@ import {
   Platform,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
-import { useFocusEffect } from '@react-navigation/native';
+import BackNavButton from '../../components/common/BackNavButton';
 import { RootState } from '../../store';
 import { 
   setActiveRoom, 
@@ -308,9 +308,7 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ navigation, route }) => {
     >
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>← Back</Text>
-        </TouchableOpacity>
+        <BackNavButton onPress={() => navigation.goBack()} color={COLORS.textInverse} />
         <Text style={styles.headerTitle}>{roomName}</Text>
         <View style={styles.headerRight}>
           <View style={[
@@ -398,10 +396,6 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.sm,
     backgroundColor: COLORS.primary,
     paddingTop: Platform.OS === 'ios' ? 50 : SPACING.sm,
-  },
-  backButton: {
-    color: COLORS.textInverse,
-    fontSize: TYPOGRAPHY.fontSize.md,
   },
   headerTitle: {
     color: COLORS.textInverse,

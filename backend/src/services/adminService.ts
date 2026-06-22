@@ -1,5 +1,6 @@
 import prisma from '../config/database.js';
 import { GuardStatus, ShiftStatus } from '@prisma/client';
+import { logger } from '../utils/logger.js';
 
 export class AdminService {
   /**
@@ -162,7 +163,7 @@ export class AdminService {
         clientSatisfaction,
       };
     } catch (error: any) {
-      console.error('Error in getDashboardStats:', error);
+      logger.error('Error in getDashboardStats:', error);
       throw error;
     }
   }

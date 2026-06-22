@@ -5,13 +5,14 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  TextInput,
   Alert,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import { ArrowLeft, Save } from 'react-native-feather';
+import { Save } from 'react-native-feather';
+import { ChevronLeftIcon } from '../../components/ui/FeatherIcons';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import AddressPicker from '../../components/common/AddressPicker';
+import FormInput from '../../components/common/FormInput';
 import { siteService, CreateSiteData } from '../../services/siteService';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS, SHADOWS } from '../../styles/globalStyles';
 import { useSubscriptionLimits } from '../../hooks/useSubscriptionLimits';
@@ -139,7 +140,7 @@ const AddSiteScreen: React.FC = () => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <ArrowLeft width={24} height={24} color="#333" />
+          <ChevronLeftIcon size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Add New Site</Text>
         <TouchableOpacity 
@@ -164,42 +165,34 @@ const AddSiteScreen: React.FC = () => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Site Information</Text>
           
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Site Name *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.name}
-              onChangeText={(value) => handleInputChange('name', value)}
-              placeholder="Enter site name"
-              placeholderTextColor="#999"
-            />
-          </View>
+          <FormInput
+            label="Site Name"
+            required
+            value={formData.name}
+            onChangeText={(value) => handleInputChange('name', value)}
+            placeholder="Enter site name"
+            containerStyle={styles.inputGroup}
+          />
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Description</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              value={formData.description}
-              onChangeText={(value) => handleInputChange('description', value)}
-              placeholder="Brief description of the site"
-              placeholderTextColor="#999"
-              multiline
-              numberOfLines={3}
-            />
-          </View>
+          <FormInput
+            label="Description"
+            value={formData.description}
+            onChangeText={(value) => handleInputChange('description', value)}
+            placeholder="Brief description of the site"
+            multiline
+            numberOfLines={3}
+            containerStyle={styles.inputGroup}
+          />
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Security Requirements</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              value={formData.requirements}
-              onChangeText={(value) => handleInputChange('requirements', value)}
-              placeholder="Specific security requirements (e.g., licensed guard, 2+ years experience)"
-              placeholderTextColor="#999"
-              multiline
-              numberOfLines={3}
-            />
-          </View>
+          <FormInput
+            label="Security Requirements"
+            value={formData.requirements}
+            onChangeText={(value) => handleInputChange('requirements', value)}
+            placeholder="Specific security requirements (e.g., licensed guard, 2+ years experience)"
+            multiline
+            numberOfLines={3}
+            containerStyle={styles.inputGroup}
+          />
         </View>
 
         {/* Location */}
@@ -222,82 +215,67 @@ const AddSiteScreen: React.FC = () => {
 
           <View style={styles.row}>
             <View style={[styles.inputGroup, styles.flex1]}>
-              <Text style={styles.label}>City *</Text>
-              <TextInput
-                style={styles.input}
+              <FormInput
+                label="City"
+                required
                 value={formData.city}
                 onChangeText={(value) => handleInputChange('city', value)}
                 placeholder="City"
-                placeholderTextColor="#999"
               />
             </View>
             
             <View style={[styles.inputGroup, styles.flex1, styles.marginLeft]}>
-              <Text style={styles.label}>State</Text>
-              <TextInput
-                style={styles.input}
+              <FormInput
+                label="State"
                 value={formData.state}
                 onChangeText={(value) => handleInputChange('state', value)}
                 placeholder="State"
-                placeholderTextColor="#999"
               />
             </View>
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>ZIP Code</Text>
-            <TextInput
-              style={[styles.input, styles.zipInput]}
-              value={formData.zipCode}
-              onChangeText={(value) => handleInputChange('zipCode', value)}
-              placeholder="ZIP Code"
-              placeholderTextColor="#999"
-              keyboardType="numeric"
-            />
-          </View>
+          <FormInput
+            label="ZIP Code"
+            value={formData.zipCode}
+            onChangeText={(value) => handleInputChange('zipCode', value)}
+            placeholder="ZIP Code"
+            keyboardType="numeric"
+            containerStyle={styles.inputGroup}
+          />
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Site Radius (meters) *</Text>
-            <TextInput
-              style={[styles.input, styles.zipInput]}
-              value={formData.radiusMeters}
-              onChangeText={(value) => handleInputChange('radiusMeters', value.replace(/[^0-9]/g, ''))}
-              placeholder="100"
-              placeholderTextColor="#999"
-              keyboardType="numeric"
-            />
-            <Text style={styles.helperText}>
-              Guards can only check in within this radius ({MIN_SITE_RADIUS_METERS}m - {MAX_SITE_RADIUS_METERS}m).
-            </Text>
-          </View>
+          <FormInput
+            label="Site Radius (meters)"
+            required
+            value={formData.radiusMeters}
+            onChangeText={(value) => handleInputChange('radiusMeters', value.replace(/[^0-9]/g, ''))}
+            placeholder="100"
+            keyboardType="numeric"
+            helperText={`Guards can only check in within this radius (${MIN_SITE_RADIUS_METERS}m - ${MAX_SITE_RADIUS_METERS}m).`}
+            containerStyle={styles.inputGroup}
+          />
         </View>
 
         {/* Contact Information */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Contact Information</Text>
           
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Contact Person *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.contactPerson}
-              onChangeText={(value) => handleInputChange('contactPerson', value)}
-              placeholder="Site manager or contact person"
-              placeholderTextColor="#999"
-            />
-          </View>
+          <FormInput
+            label="Contact Person"
+            required
+            value={formData.contactPerson}
+            onChangeText={(value) => handleInputChange('contactPerson', value)}
+            placeholder="Site manager or contact person"
+            containerStyle={styles.inputGroup}
+          />
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Contact Phone</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.contactPhone}
-              onChangeText={(value) => handleInputChange('contactPhone', value)}
-              placeholder="Phone number"
-              placeholderTextColor="#999"
-              keyboardType="phone-pad"
-            />
-          </View>
+          <FormInput
+            label="Contact Phone"
+            value={formData.contactPhone}
+            onChangeText={(value) => handleInputChange('contactPhone', value)}
+            placeholder="Phone number"
+            keyboardType="phone-pad"
+            containerStyle={styles.inputGroup}
+          />
         </View>
 
         {/* Save Button */}

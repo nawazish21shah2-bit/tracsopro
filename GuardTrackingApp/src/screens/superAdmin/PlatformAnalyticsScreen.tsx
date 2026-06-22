@@ -2,8 +2,8 @@
  * Platform Analytics Screen - Analytics and metrics for the platform
  */
 
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
+import React, { useState, useEffect, useMemo } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, useWindowDimensions } from 'react-native';
 import LineChart from 'react-native-chart-kit/dist/line-chart/LineChart';
 import { COLORS, TYPOGRAPHY, SPACING } from '../../styles/globalStyles';
 import { superAdminService, MetricGrowth, PlatformAnalyticsResponse } from '../../services/superAdminService';
@@ -14,9 +14,108 @@ import { useProfileDrawer } from '../../hooks/useProfileDrawer';
 import { useNotificationBell } from '../../hooks/useNotificationBell';
 import { ErrorState } from '../../components/ui/LoadingStates';
 
-const { width } = Dimensions.get('window');
+const CHART_HEIGHT = 220;
+const CHART_LEFT_PADDING = 36;
+const CHART_BOTTOM_PADDING = 20;
+
+function prepareLineChartSeries(labels: string[], data: number[]) {
+  const values = data.length ? data : [0];
+  const maxValue = Math.max(...values, 0);
+
+  return {
+    labels,
+    datasets: [{ data: values }],
+    segments: maxValue === 0 ? 1 : 4,
+    formatYLabel: (label: string) => {
+      if (maxValue === 0) {
+        return '0';
+      }
+      const numericLabel = Number(label);
+      return Number.isFinite(numericLabel) ? String(Math.round(numericLabel)) : label;
+    },
+  };
+}
+
+const baseChartConfig = {
+  backgroundColor: '#FFFFFF',
+  backgroundGradientFrom: '#FFFFFF',
+  backgroundGradientTo: '#FFFFFF',
+  decimalPlaces: 0,
+  color: (opacity = 1) => `rgba(28, 108, 169, ${opacity})`,
+  labelColor: (opacity = 1) => `rgba(130, 130, 130, ${opacity})`,
+  propsForDots: { r: '4', strokeWidth: '2', stroke: COLORS.primary },
+  propsForBackgroundLines: {
+    strokeDasharray: '',
+    stroke: '#E5E7EB',
+    strokeWidth: 1,
+  },
+  propsForLabels: {
+    fontSize: 9,
+  },
+};
+
+type AnalyticsLineChartProps = {
+  title: string;
+  labels: string[];
+  data: number[];
+  width: number;
+  color: (opacity?: number) => string;
+};
+
+const AnalyticsLineChart: React.FC<AnalyticsLineChartProps> = ({
+  title,
+  labels,
+  data,
+  width,
+  color,
+}) => {
+  const series = useMemo(() => prepareLineChartSeries(labels, data), [labels, data]);
+  const labelRotation = labels.length > 8 ? -40 : 0;
+
+  return (
+    <View style={styles.chartCard}>
+      <Text style={styles.chartTitle}>{title}</Text>
+      <View style={styles.chartPlot}>
+        <LineChart
+          data={{
+            labels: series.labels,
+            datasets: series.datasets,
+          }}
+          width={width}
+          height={CHART_HEIGHT}
+          chartConfig={{
+            ...baseChartConfig,
+            color,
+            propsForDots: { ...baseChartConfig.propsForDots, stroke: color(1) },
+          }}
+          bezier
+          fromZero
+          style={[
+            styles.chart,
+            {
+              paddingBottom: labelRotation ? 28 : CHART_BOTTOM_PADDING,
+            },
+          ]}
+          withInnerLines
+          withOuterLines={false}
+          withVerticalLabels
+          withHorizontalLabels
+          withDots
+          withShadow={false}
+          segments={series.segments}
+          formatYLabel={series.formatYLabel}
+          yLabelsOffset={4}
+          xLabelsOffset={-2}
+          verticalLabelRotation={labelRotation}
+        />
+      </View>
+    </View>
+  );
+};
 
 const PlatformAnalyticsScreen: React.FC = () => {
+  const { width: screenWidth } = useWindowDimensions();
+  const chartWidth = screenWidth - SPACING.md * 2 - SPACING.lg * 2;
   const { isDrawerVisible, openDrawer, closeDrawer } = useProfileDrawer();
   const { onNotificationPress, notificationCount } = useNotificationBell({
     notificationsRoute: 'SuperAdminNotifications',
@@ -104,21 +203,8 @@ const PlatformAnalyticsScreen: React.FC = () => {
     );
   };
 
-  const chartConfig = {
-    backgroundColor: '#FFFFFF',
-    backgroundGradientFrom: '#FFFFFF',
-    backgroundGradientTo: '#FFFFFF',
-    decimalPlaces: 0,
-    color: (opacity = 1) => `rgba(28, 108, 169, ${opacity})`,
-    labelColor: (opacity = 1) => `rgba(130, 130, 130, ${opacity})`,
-    style: { borderRadius: 16 },
-    propsForDots: { r: '4', strokeWidth: '2', stroke: COLORS.primary },
-    propsForBackgroundLines: {
-      strokeDasharray: '',
-      stroke: '#E5E7EB',
-      strokeWidth: 1,
-    },
-  };
+  const revenueChart = analytics?.charts?.revenue;
+  const usersChart = analytics?.charts?.users;
 
   if (loading && !analytics) {
     return (
@@ -138,9 +224,6 @@ const PlatformAnalyticsScreen: React.FC = () => {
       </SafeAreaWrapper>
     );
   }
-
-  const revenueChart = analytics?.charts?.revenue;
-  const usersChart = analytics?.charts?.users;
 
   return (
     <SafeAreaWrapper>
@@ -171,54 +254,23 @@ const PlatformAnalyticsScreen: React.FC = () => {
         )}
 
         {revenueChart && revenueChart.labels.length > 0 && (
-          <View style={styles.chartCard}>
-            <Text style={styles.chartTitle}>Revenue Trend</Text>
-            <LineChart
-              data={{
-                labels: revenueChart.labels,
-                datasets: [{ data: revenueChart.data.length ? revenueChart.data : [0] }],
-              }}
-              width={width - SPACING.md * 4}
-              height={220}
-              chartConfig={chartConfig}
-              bezier
-              style={styles.chart}
-              withInnerLines
-              withOuterLines={false}
-              withVerticalLabels
-              withHorizontalLabels
-              withDots
-              withShadow={false}
-              segments={4}
-            />
-          </View>
+          <AnalyticsLineChart
+            title="Revenue Trend"
+            labels={revenueChart.labels}
+            data={revenueChart.data}
+            width={chartWidth}
+            color={(opacity = 1) => `rgba(28, 108, 169, ${opacity})`}
+          />
         )}
 
         {usersChart && usersChart.labels.length > 0 && (
-          <View style={styles.chartCard}>
-            <Text style={styles.chartTitle}>User Growth</Text>
-            <LineChart
-              data={{
-                labels: usersChart.labels,
-                datasets: [{ data: usersChart.data.length ? usersChart.data : [0] }],
-              }}
-              width={width - SPACING.md * 4}
-              height={220}
-              chartConfig={{
-                ...chartConfig,
-                color: (opacity = 1) => `rgba(76, 175, 80, ${opacity})`,
-              }}
-              bezier
-              style={styles.chart}
-              withInnerLines
-              withOuterLines={false}
-              withVerticalLabels
-              withHorizontalLabels
-              withDots
-              withShadow={false}
-              segments={4}
-            />
-          </View>
+          <AnalyticsLineChart
+            title="User Growth"
+            labels={usersChart.labels}
+            data={usersChart.data}
+            width={chartWidth}
+            color={(opacity = 1) => `rgba(76, 175, 80, ${opacity})`}
+          />
         )}
       </ScrollView>
     </SafeAreaWrapper>
@@ -265,7 +317,7 @@ const styles = StyleSheet.create({
     gap: SPACING.md,
   },
   metricCard: {
-    width: (width - SPACING.md * 3) / 2,
+    width: '47%',
     backgroundColor: COLORS.backgroundPrimary,
     padding: SPACING.lg,
     borderRadius: 12,
@@ -299,21 +351,28 @@ const styles = StyleSheet.create({
   chartCard: {
     backgroundColor: COLORS.backgroundPrimary,
     margin: SPACING.md,
+    marginBottom: SPACING.sm,
     padding: SPACING.lg,
+    paddingBottom: SPACING.md,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.borderCard,
+  },
+  chartPlot: {
+    width: '100%',
   },
   chartTitle: {
     fontSize: TYPOGRAPHY.fontSize.lg,
     fontWeight: TYPOGRAPHY.fontWeight.bold,
     color: COLORS.textPrimary,
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.sm,
     textAlign: 'center',
   },
   chart: {
-    marginVertical: SPACING.sm,
+    marginLeft: -SPACING.xs,
     borderRadius: 16,
+    paddingRight: CHART_LEFT_PADDING,
+    paddingBottom: CHART_BOTTOM_PADDING,
   },
 });
 

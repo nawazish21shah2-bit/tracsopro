@@ -243,20 +243,7 @@ const styles = StyleSheet.create({
   guardInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.backgroundSecondary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-  },
-  avatarImage: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    gap: SPACING.md,
   },
   guardDetails: {
     flex: 1,
@@ -279,6 +266,8 @@ const styles = StyleSheet.create({
   rightSection: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: SPACING.sm,
+    marginLeft: SPACING.sm,
   },
   chatButton: {
     width: 28,
@@ -287,7 +276,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
   },
   chatButtonText: {
     fontSize: 14,

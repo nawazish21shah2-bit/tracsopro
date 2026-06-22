@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  TextInput,
   TouchableOpacity,
   Alert,
   ActivityIndicator,
@@ -16,7 +15,9 @@ import { startImpersonation } from '../../store/slices/authSlice';
 import { superAdminService } from '../../services/superAdminService';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import SharedHeader from '../../components/ui/SharedHeader';
+import BackNavButton from '../../components/common/BackNavButton';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../styles/globalStyles';
+import FormInput from '../../components/common/FormInput';
 
 interface UserRow {
   id: string;
@@ -103,16 +104,16 @@ const ImpersonateUserScreen: React.FC = () => {
   return (
     <SafeAreaWrapper>
       <SharedHeader variant="superAdmin" title="Impersonate User" />
-      <TouchableOpacity style={styles.backRow} onPress={() => navigation.goBack()}>
-        <Text style={styles.backText}>← Back</Text>
-      </TouchableOpacity>
+      <BackNavButton
+        style={styles.backRow}
+        onPress={() => navigation.goBack()}
+      />
       <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search by name or email..."
+        <FormInput
+          icon="search"
           value={search}
           onChangeText={setSearch}
-          placeholderTextColor={COLORS.textSecondary}
+          placeholder="Search by name or email..."
           autoCapitalize="none"
         />
       </View>
@@ -140,11 +141,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
     backgroundColor: COLORS.backgroundPrimary,
-  },
-  backText: {
-    fontSize: TYPOGRAPHY.fontSize.md,
-    color: COLORS.primary,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
   searchContainer: {
     padding: SPACING.md,

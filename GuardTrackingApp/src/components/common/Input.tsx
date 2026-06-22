@@ -1,16 +1,7 @@
-// Enhanced Input Component with Validation and Accessibility
-import React, { useState, useRef } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ViewStyle,
-  TextStyle,
-  TextInputProps,
-} from 'react-native';
-import { useTheme } from '../../utils/theme';
+// Enhanced Input Component — matches auth form field design
+import React, { forwardRef, useState } from 'react';
+import { ViewStyle, TextStyle, TextInput, TextInputProps } from 'react-native';
+import FormInput from './FormInput';
 
 export interface InputProps extends Omit<TextInputProps, 'style'> {
   label?: string;
@@ -29,231 +20,52 @@ export interface InputProps extends Omit<TextInputProps, 'style'> {
   helperTextStyle?: TextStyle;
   disabled?: boolean;
   loading?: boolean;
+  icon?: string;
 }
 
-const Input: React.FC<InputProps> = ({
+const Input = forwardRef<TextInput, InputProps>(({
   label,
   error,
   helperText,
   required = false,
-  variant = 'default',
-  size = 'medium',
   leftIcon,
-  rightIcon,
+  rightIcon: _rightIcon,
   onRightIconPress,
   containerStyle,
-  inputStyle,
-  labelStyle,
-  errorStyle,
-  helperTextStyle,
   disabled = false,
   loading = false,
+  icon,
+  secureTextEntry,
+  multiline,
   ...textInputProps
-}) => {
-  const [isFocused, setIsFocused] = useState(false);
-  const inputRef = useRef<TextInput>(null);
-  const { theme } = useTheme();
+}, ref) => {
+  const isPasswordField = secureTextEntry !== undefined;
+  const [showPassword, setShowPassword] = useState(false);
 
-  const getContainerStyle = () => {
-    const baseStyle: any[] = [styles.container, styles[`${variant}Container`]];
-    
-    if (isFocused) {
-      baseStyle.push({
-        borderColor: '#1C6CA9',
-        borderWidth: 2,
-      });
-    }
-    
-    if (error) {
-      baseStyle.push({ borderColor: theme.colors.danger });
-    }
-    
-    if (disabled || loading) {
-      baseStyle.push({ backgroundColor: theme.colors.gray[100], opacity: 0.6 });
-    }
-    
-    return baseStyle;
-  };
-
-  const getInputStyle = () => {
-    const baseStyle: any[] = [styles.input, styles[`${size}Input`]];
-    
-    if (leftIcon) {
-      baseStyle.push(styles.inputWithLeftIcon);
-    }
-    
-    if (rightIcon) {
-      baseStyle.push(styles.inputWithRightIcon);
-    }
-    
-    return baseStyle;
-  };
-
-  const handleFocus = () => {
-    setIsFocused(true);
-  };
-
-  const handleBlur = () => {
-    setIsFocused(false);
+  const handleTogglePassword = () => {
+    setShowPassword((prev) => !prev);
+    onRightIconPress?.();
   };
 
   return (
-    <View style={[containerStyle]}>
-      {/* Label */}
-      {label && (
-        <Text style={[styles.label, { color: '#828282' }, labelStyle]}>
-          {label}
-          {required && <Text style={[styles.required, { color: theme.colors.danger }]}> *</Text>}
-        </Text>
-      )}
-
-      {/* Input Container */}
-      <View style={[getContainerStyle(), { borderRadius: 12 }]}>
-        {/* Left Icon */}
-        {leftIcon && (
-          <View style={styles.leftIconContainer}>
-            <Text style={[styles.icon, { color: '#9CA3AF' }]}>{leftIcon}</Text>
-          </View>
-        )}
-
-        {/* Text Input */}
-        <TextInput
-          ref={inputRef}
-          style={[getInputStyle(), { color: '#000000' }, inputStyle]}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
-          editable={!disabled && !loading}
-          placeholderTextColor={'#828282'}
-          {...textInputProps}
-        />
-
-        {/* Right Icon */}
-        {rightIcon && (
-          <TouchableOpacity
-            style={styles.rightIconContainer}
-            onPress={onRightIconPress}
-            disabled={disabled || loading}
-          >
-            <Text style={[styles.icon, { color: '#9CA3AF' }]}>{rightIcon}</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Helper Text */}
-      {helperText && !error && (
-        <Text style={[styles.helperText, { color: theme.colors.gray[500] }, helperTextStyle]}>
-          {helperText}
-        </Text>
-      )}
-
-      {/* Error Message */}
-      {error && (
-        <Text style={[styles.errorText, { color: theme.colors.danger }, errorStyle]}>
-          {error}
-        </Text>
-      )}
-    </View>
+    <FormInput
+      ref={ref}
+      label={label}
+      icon={icon || leftIcon}
+      error={error}
+      helperText={helperText}
+      required={required}
+      containerStyle={containerStyle}
+      disabled={disabled || loading}
+      secureTextEntry={isPasswordField ? !showPassword : secureTextEntry}
+      showPassword={isPasswordField ? showPassword : undefined}
+      onTogglePassword={isPasswordField ? handleTogglePassword : undefined}
+      multiline={multiline}
+      {...textInputProps}
+    />
   );
-};
-
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: 16,
-  },
-  
-  // Label styles
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  required: {
-  },
-  
-  // Container variants
-  defaultContainer: {
-    borderWidth: 1,
-    borderColor: '#ACD3F1',
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    minHeight: 50,
-    paddingHorizontal: 16,
-  },
-  outlinedContainer: {
-    borderWidth: 1,
-    borderColor: '#ACD3F1',
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    minHeight: 50,
-    paddingHorizontal: 16,
-  },
-  filledContainer: {
-    borderWidth: 1,
-    borderColor: '#ACD3F1',
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    minHeight: 50,
-    paddingHorizontal: 16,
-  },
-  
-  // Focus and error states
-  focused: {},
-  errorContainer: {},
-  disabledContainer: {},
-  
-  // Input styles
-  input: {
-    paddingHorizontal: 0,
-    fontSize: 16,
-    flex: 1,
-  },
-  
-  // Input sizes
-  smallInput: {
-    paddingVertical: 8,
-    fontSize: 14,
-  },
-  mediumInput: {
-    paddingVertical: 14,
-    fontSize: 16,
-  },
-  largeInput: {
-    paddingVertical: 18,
-    fontSize: 18,
-  },
-  
-  // Icon styles
-  leftIconContainer: {
-    paddingLeft: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  rightIconContainer: {
-    paddingRight: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  icon: {
-    fontSize: 18,
-  },
-  
-  // Input with icons
-  inputWithLeftIcon: {
-    paddingLeft: 8,
-  },
-  inputWithRightIcon: {
-    paddingRight: 8,
-  },
-  
-  // Helper and error text
-  helperText: {
-    fontSize: 12,
-    marginTop: 4,
-  },
-  errorText: {
-    fontSize: 12,
-    marginTop: 4,
-  },
 });
+
+Input.displayName = 'Input';
 
 export default Input;
